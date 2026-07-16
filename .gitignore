@@ -1,0 +1,16 @@
+# IDE / 工具缓存
+.workbuddy/
+
+# Python 字节码与缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 扫描报告输出（按需生成，不纳入版本库）
+reports/
+
+# 本地虚拟环境
+venv/
+.venv/
+env/
