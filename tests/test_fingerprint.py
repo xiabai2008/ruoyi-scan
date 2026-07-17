@@ -169,6 +169,31 @@ def test_router_resolves_spring():
     print('PASS test_router_resolves_spring: %d 个插件' % len(plugins))
 
 
+def test_detect_cms_selects_weaver():
+    """detect_cms 遍历所有注册 CMS，返回 weaver（阶段四第四个 CMS 自动路由）"""
+    # 主页含「泛微 e-cology」→ login_keywords 强命中；/login/Login.jsp 200 → 强路径命中
+    html = '<html><head><title>泛微 e-cology OA</title></head><body>Weaver 协同</body></html>'
+    sess = FakeSession({
+        'http://target/': FakeResp(html, 200, {'Content-Type': 'text/html'}),
+        'http://target/login/Login.jsp': FakeResp('<html><body>weaver login</body></html>',
+                                                   200, {'Content-Type': 'text/html'}),
+    })
+    res = detect_cms('http://target/', sess)
+    assert res.cms == 'weaver', res.cms
+    assert res.confidence > 0
+    print('PASS test_detect_cms_selects_weaver: cms=%s conf=%.2f' % (res.cms, res.confidence))
+
+
+def test_router_resolves_weaver():
+    """Router 对 weaver 指纹返回插件类列表（阶段四：6 个 POC）"""
+    from core.router import Router
+    from core.models import FingerprintResult
+    fp_result = FingerprintResult(cms='weaver', confidence=1.0, matched=['test'])
+    plugins = Router().resolve(fp_result)
+    assert len(plugins) == 6, f'应有 6 个 Weaver 插件，实际 {len(plugins)}'
+    print('PASS test_router_resolves_weaver: %d 个插件' % len(plugins))
+
+
 if __name__ == '__main__':
     test_ruoyi_login_page_keyword()
     test_ruoyi_captcha_image()
@@ -181,4 +206,6 @@ if __name__ == '__main__':
     test_router_resolves_thinkphp()
     test_detect_cms_selects_spring()
     test_router_resolves_spring()
+    test_detect_cms_selects_weaver()
+    test_router_resolves_weaver()
     print('ALL_FP_TESTS_PASS')

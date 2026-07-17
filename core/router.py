@@ -10,6 +10,7 @@ class Router:
         'ruoyi': 'plugins.ruoyi',
         'thinkphp': 'plugins.thinkphp',
         'spring': 'plugins.spring',
+        'weaver': 'plugins.weaver',
     }
 
     def resolve(self, fingerprint_result):

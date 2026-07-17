@@ -54,6 +54,18 @@ CMS_FEATURES = {
         'weight_strong': 0.5,
         'weight_weak': 0.2,
     },
+    # 泛微 e-cology OA（阶段四第四个 CMS 插件包）：/login/Login.jsp 登录页 + 主页泛微关键字
+    'weaver': {
+        'display': 'Weaver e-cology',
+        'favicon_hashes': set(),
+        'strong_paths': [
+            {'path': '/login/Login.jsp', 'expect': 'any'},  # OA 登录页
+        ],
+        'login_keywords': ['泛微', 'e-cology', 'weaver'],
+        'weak_keywords': ['ecology', 'weaver', 'OA'],
+        'weight_strong': 0.5,
+        'weight_weak': 0.2,
+    },
 }
 
 
