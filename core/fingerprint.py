@@ -9,8 +9,12 @@ from core.models import FingerprintResult
 class Fingerprint:
     """指纹识别抽象接口（新增 CMS 实现此接口即可，引擎零改动）"""
 
-    def detect(self, target, session) -> FingerprintResult:
-        """识别目标 CMS，返回 FingerprintResult（cms 空串表示未识别）"""
+    def detect(self, target, session, cache=None) -> FingerprintResult:
+        """识别目标 CMS，返回 FingerprintResult（cms 空串表示未识别）
+
+        cache（可选）：core.cache.FingerprintCache 实例，用于多 CMS 遍历时
+        共享根响应/favicon 响应，避免重复请求（阶段五指纹去重）。
+        """
         raise NotImplementedError
 
 
@@ -26,7 +30,7 @@ class FeatureBasedFingerprint(Fingerprint):
         self.cms = cms
         self.feature = get_feature(cms)
 
-    def detect(self, target, session) -> FingerprintResult:
+    def detect(self, target, session, cache=None) -> FingerprintResult:
         if not self.feature:
             return FingerprintResult(cms='', version='', confidence=0.0, matched=[])
 
@@ -37,9 +41,15 @@ class FeatureBasedFingerprint(Fingerprint):
         w_strong = f.get('weight_strong', 0.5)
         w_weak = f.get('weight_weak', 0.2)
 
+        # 阶段五：cache 存在时走缓存（多 CMS 共享根/favicon 响应），否则直接 session.get
+        def _get(url):
+            if cache is not None:
+                return cache.get(url)
+            return session.get(url)
+
         # 1. 主页特征：GET 根路径，检查标题与响应体关键字
         try:
-            resp = session.get(target)
+            resp = _get(target)
             text = resp.text or ''
             title_m = re.findall(r'<title>(.*?)</title>', text, re.IGNORECASE | re.DOTALL)
             title = title_m[0] if title_m else ''
@@ -62,7 +72,7 @@ class FeatureBasedFingerprint(Fingerprint):
             expect = item.get('expect', 'any')
             url = target + path.lstrip('/')
             try:
-                r = session.get(url)
+                r = _get(url)
                 if r.status_code != 200:
                     continue
                 ct = (r.headers.get('Content-Type') or '').lower()
@@ -81,7 +91,7 @@ class FeatureBasedFingerprint(Fingerprint):
 
         # 3. favicon hash 比对（标准库 hashlib.md5(content).hexdigest()）
         try:
-            fav = session.get(target + 'favicon.ico')
+            fav = _get(target + 'favicon.ico')
             if fav.status_code == 200 and len(fav.content) > 0:
                 h = hashlib.md5(fav.content).hexdigest()
                 if h in f.get('favicon_hashes', set()):
@@ -112,10 +122,15 @@ def detect_cms(target, session) -> FingerprintResult:
 
     用于阶段二自动路由：未知目标自动识别为对应 CMS 并加载插件包。
     多个 CMS 均弱命中时，选弱特征置信度最高者；均强命中时，选先注册者。
+
+    阶段五：内部创建 FingerprintCache 共享根响应/favicon 响应，避免多 CMS
+    遍历时重复 GET 相同 URL（detect 签名不变，向后兼容旧调用方）。
     """
+    from core.cache import FingerprintCache
+    cache = FingerprintCache(session)
     best = FingerprintResult(cms='', version='', confidence=0.0, matched=[])
     for cms in list_cms():
-        res = FeatureBasedFingerprint(cms).detect(target, session)
+        res = FeatureBasedFingerprint(cms).detect(target, session, cache=cache)
         if res.cms and res.confidence > best.confidence:
             best = res
     return best
