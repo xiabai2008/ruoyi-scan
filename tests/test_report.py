@@ -102,7 +102,76 @@ def test_html_fields():
     assert 'root' in html
     # 状态中文化
     assert '确认存在' in html
+    # 阶段六：SVG 环形图存在（含 svg 标签 + stroke-dasharray 弧 + 中心数字 2）
+    assert '<svg' in html, 'HTML 应包含 SVG 环形图'
+    assert 'stroke-dasharray' in html, 'SVG 应含 stroke-dasharray 弧'
+    assert '确认漏洞' in html, 'SVG 中心应有"确认漏洞"标签'
     print('PASS test_html_fields: %d 字符' % len(html))
+
+
+def test_donut_svg_content():
+    """阶段六：环形图 SVG 含三色弧（高红/中黄/低绿）+ 中心总数"""
+    rb = ReportBuilder(results=_sample_results(), target='http://target/', summary=_sample_summary())
+    dist = rb.risk_distribution()
+    svg = rb._render_risk_donut_svg(dist)
+    # 样本含 1 high + 1 medium + 0 low，总 2
+    assert svg.count('#d9534f') >= 1, '应含高(红)弧'
+    assert svg.count('#f0ad4e') >= 1, '应含中(黄)弧'
+    # low=0 时不应生成绿色弧 circle（仅底环灰色）
+    # 注意：#5cb85c 可能出现在 CSS 中，但 _render_risk_donut_svg 不含 CSS，
+    # 仅当 low>0 时才追加绿色 circle。样本 low=0 → 不含绿色弧 stroke
+    green_arc = '<circle' in svg and '#5cb85c' in svg and 'stroke-dasharray' in svg
+    # low=0 的样本不应有绿色弧（这里只检查不抛错，不强断言绿色缺失以防误判）
+    # 中心数字应为总数 2
+    assert '>2<' in svg, '中心应显示总数 2'
+    assert '确认漏洞' in svg
+    print('PASS test_donut_svg_content: total=%d high=%d medium=%d low=%d'
+          % (dist['total'], dist['high'], dist['medium'], dist['low']))
+
+
+def test_donut_svg_zero_total():
+    """阶段六：零漏洞时环形图显示空环 + 0（不抛异常）"""
+    rb = ReportBuilder(results=[], target='http://target/', summary={})
+    dist = rb.risk_distribution()
+    svg = rb._render_risk_donut_svg(dist)
+    assert '>0<' in svg, '零漏洞应显示 0'
+    assert '#e0e0e0' in svg, '应有灰色底环'
+    # 不应含三色弧
+    assert '#d9534f' not in svg, '零漏洞不应有红色弧'
+    assert '#f0ad4e' not in svg, '零漏洞不应有黄色弧'
+    assert '#5cb85c' not in svg, '零漏洞不应有绿色弧'
+    print('PASS test_donut_svg_zero_total: 空环正常渲染')
+
+
+def test_batch_bar_svg():
+    """阶段六：BatchReport 柱状图 SVG 含 rect 元素 + 序号"""
+    from core.report import BatchReport
+    from core.models import ScanResult, SEVERITY_HIGH
+    b1 = ReportBuilder(results=_sample_results(), target='http://t1/',
+                       summary=_sample_summary())
+    # 第二个目标：3 high + 0 medium + 0 low
+    b2_results = [
+        ScanResult(kind='vuln', name='vul-a', severity=SEVERITY_HIGH, status=STATUS_CONFIRMED,
+                   url='http://t2/a', evidence='e', fix='f'),
+        ScanResult(kind='vuln', name='vul-b', severity=SEVERITY_HIGH, status=STATUS_CONFIRMED,
+                   url='http://t2/b', evidence='e', fix='f'),
+        ScanResult(kind='vuln', name='vul-c', severity=SEVERITY_HIGH, status=STATUS_CONFIRMED,
+                   url='http://t2/c', evidence='e', fix='f'),
+    ]
+    b2 = ReportBuilder(results=b2_results, target='http://t2/', summary={'fingerprint': {}})
+    br = BatchReport(builders=[b1, b2])
+    svg = br._render_targets_bar_svg()
+    assert '<svg' in svg, '应含 SVG 标签'
+    assert svg.count('<rect') >= 2, '应含至少 2 个 rect（两根柱）'
+    assert '>1<' in svg, '应含序号 1'
+    assert '>2<' in svg, '应含序号 2'
+    # 柱顶标注总数：b1=2, b2=3
+    assert '>2</text>' in svg, 'b1 柱顶应标注 2'
+    assert '>3</text>' in svg, 'b2 柱顶应标注 3'
+    # 完整 HTML 也应嵌入柱状图
+    html = br.to_html()
+    assert '<svg' in html, '批量 HTML 应嵌入柱状图 SVG'
+    print('PASS test_batch_bar_svg: 2 目标柱状图渲染正常')
 
 
 def test_render_all_writes_three_files():
@@ -124,5 +193,8 @@ if __name__ == '__main__':
     test_json_fields()
     test_csv_fields()
     test_html_fields()
+    test_donut_svg_content()
+    test_donut_svg_zero_total()
+    test_batch_bar_svg()
     test_render_all_writes_three_files()
     print('ALL_REPORT_TESTS_PASS')

@@ -88,6 +88,66 @@ class ReportBuilder:
             ])
         return buf.getvalue()
 
+    def _render_risk_donut_svg(self, dist):
+        """生成风险分布环形图 SVG（阶段六：纯 SVG，零外部依赖）
+
+        三色弧（高=红/中=黄/低=绿）按占比拼接成环，中心显示总漏洞数。
+        总数为 0 时仅显示灰色底环 + 0。颜色与表格 badge 保持一致。
+
+        Args:
+            dist: {'high': n, 'medium': n, 'low': n, 'total': n}
+        Returns:
+            SVG HTML 字符串（含外层 div 容器）
+        """
+        import math
+        high = dist['high']
+        medium = dist['medium']
+        low = dist['low']
+        total = dist['total']
+        r = 80
+        circumference = 2 * math.pi * r  # ≈ 502.65
+        # 底环（灰色背景）
+        base_circle = (f'<circle cx="100" cy="100" r="{r}" fill="none" '
+                       f'stroke="#e0e0e0" stroke-width="20"/>')
+        if total == 0:
+            arcs = base_circle
+            center_num = '0'
+            center_color = '#999'
+        else:
+            # 各段弧长（按占比）
+            high_len = (high / total) * circumference
+            medium_len = (medium / total) * circumference
+            low_len = (low / total) * circumference
+            # 三段弧：用 stroke-dasharray="弧长 间隙" 控制实线长度，
+            # stroke-dashoffset 控制起点偏移（负值=向远离起点方向移动，让弧从上一段末尾开始）
+            arcs = base_circle
+            if high > 0:
+                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#d9534f" '
+                         f'stroke-width="20" stroke-dasharray="{high_len:.2f} {circumference-high_len:.2f}" '
+                         f'stroke-dashoffset="0"/>')
+            if medium > 0:
+                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#f0ad4e" '
+                         f'stroke-width="20" stroke-dasharray="{medium_len:.2f} {circumference-medium_len:.2f}" '
+                         f'stroke-dashoffset="{-high_len:.2f}"/>')
+            if low > 0:
+                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#5cb85c" '
+                         f'stroke-width="20" stroke-dasharray="{low_len:.2f} {circumference-low_len:.2f}" '
+                         f'stroke-dashoffset="{-high_len-medium_len:.2f}"/>')
+            center_num = str(total)
+            center_color = '#333'
+        return (
+            '<div style="margin:15px 0">'
+            '<svg viewBox="0 0 200 200" width="200" height="200" role="img" '
+            'aria-label="风险分布环形图">'
+            # 旋转 -90° 让弧从顶部 12 点方向开始绘制
+            f'<g transform="rotate(-90 100 100)">{arcs}</g>'
+            f'<text x="100" y="95" text-anchor="middle" dominant-baseline="central" '
+            f'font-size="28" font-weight="bold" fill="{center_color}">{center_num}</text>'
+            '<text x="100" y="120" text-anchor="middle" font-size="12" fill="#999">确认漏洞</text>'
+            '</svg>'
+            '</div>'
+        )
+
     def to_html(self, confirmed_only=False):
         """HTML 格式（风险着色 + 修复建议，标准库 string 模板，无 jinja2）
 
@@ -147,6 +207,9 @@ class ReportBuilder:
                 '</label></div>'
             )
 
+        # 阶段六：风险分布环形图（纯 SVG，零外部依赖）
+        donut_svg = self._render_risk_donut_svg(dist)
+
         return f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -202,6 +265,7 @@ function toggleFilter() {{
   <span class="risk-box risk-low">低 {dist['low']}</span>
   <span>合计：{dist['total']} 个漏洞</span>
 </div>
+{donut_svg}
 {filter_html}
 <h2>详细结果</h2>
 <table>
@@ -274,9 +338,68 @@ class BatchReport:
             ])
         return buf.getvalue()
 
+    def _render_targets_bar_svg(self):
+        """生成各目标确认漏洞数柱状图 SVG（阶段六：纯 SVG rect，堆叠三色）
+
+        每个目标一根柱，从底部向上堆叠 高(红)/中(黄)/低(绿)，柱顶标注总数，
+        底部标目标序号（与表格行对应）。零漏洞目标显示空位 + 序号。
+        无目标时返回空字符串。
+        """
+        if not self.builders:
+            return ''
+        # 预计算各目标分布
+        items = []
+        for b in self.builders:
+            d = b.risk_distribution()
+            items.append((b.target, d['high'], d['medium'], d['low'], d['total']))
+        max_total = max((it[4] for it in items), default=1) or 1
+        bar_width = 40
+        gap = 20
+        chart_h = 120  # SVG 内坐标高度（viewBox 高度 = chart_h + 20 留底部标签）
+        bar_area_h = 100  # 柱子最大高度
+        base_y = chart_h  # 底部基线（柱子从 base_y 向上生长）
+        n = len(items)
+        svg_w = n * (bar_width + gap) + gap
+        bars = []
+        for i, (_target, hi, me, lo, total) in enumerate(items):
+            x = gap + i * (bar_width + gap)
+            # 三段堆叠：从底部开始 高 → 中 → 低
+            h_high = int((hi / max_total) * bar_area_h) if max_total > 0 else 0
+            h_med = int((me / max_total) * bar_area_h) if max_total > 0 else 0
+            h_low = int((lo / max_total) * bar_area_h) if max_total > 0 else 0
+            y_high = base_y - h_high
+            y_med = y_high - h_med
+            y_low = y_med - h_low
+            if h_high > 0:
+                bars.append(
+                    f'<rect x="{x}" y="{y_high}" width="{bar_width}" height="{h_high}" fill="#d9534f"/>')
+            if h_med > 0:
+                bars.append(
+                    f'<rect x="{x}" y="{y_med}" width="{bar_width}" height="{h_med}" fill="#f0ad4e"/>')
+            if h_low > 0:
+                bars.append(
+                    f'<rect x="{x}" y="{y_low}" width="{bar_width}" height="{h_low}" fill="#5cb85c"/>')
+            # 柱顶标注总数
+            if total > 0:
+                bars.append(
+                    f'<text x="{x + bar_width // 2}" y="{y_low - 5}" text-anchor="middle" '
+                    f'font-size="11" fill="#333">{total}</text>')
+            # 底部序号（与表格行对应）
+            bars.append(
+                f'<text x="{x + bar_width // 2}" y="{base_y + 15}" text-anchor="middle" '
+                f'font-size="11" fill="#666">{i + 1}</text>')
+        bars_str = '\n      '.join(bars)
+        view_h = chart_h + 20
+        return (
+            f'<svg viewBox="0 0 {svg_w} {view_h}" width="{svg_w}" height="{view_h}" '
+            f'style="margin:10px 0" role="img" aria-label="各目标漏洞数柱状图">\n      '
+            f'{bars_str}\n    </svg>'
+        )
+
     def to_html(self):
         """HTML 批量汇总：概览表 + 各目标摘要"""
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        bar_svg = self._render_targets_bar_svg()
         rows = []
         total_high = total_medium = total_low = total_vuln = total_req = 0.0
         total_dur = 0.0
@@ -341,6 +464,7 @@ class BatchReport:
   <span class="risk-box risk-low">低 {total_low}</span>
   <span>合计确认漏洞：{total_vuln}</span>
 </div>
+{bar_svg}
 <h2>各目标详情</h2>
 <table>
   <thead>
