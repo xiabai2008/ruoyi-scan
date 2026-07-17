@@ -25,6 +25,8 @@ MARKER_CACHE = 'thinkphp-cache-shell-confirmed'
 MARKER_DESER = 'thinkphp-deserialize-rce-confirmed'
 MARKER_FILE = 'thinkphp-file-read-confirmed'
 MARKER_SQLI = 'thinkphp-where-inject-confirmed'
+MARKER_REQUEST_V2 = 'thinkphp-request-rce-v2-confirmed'
+MARKER_DISPATCH = 'thinkphp-dispatch-rce-confirmed'
 
 
 def is_vuln():
@@ -50,7 +52,21 @@ def dispatch(path, method):
     vuln = is_vuln()
 
     # 根路径：含 ThinkPHP Framework 标题 → 指纹识别强特征命中（vuln/safe 一致）
+    # 阶段八新增：两个探针都打到根路径 /，但带不同 query 参数，需用 request.args 区分
     if path == '/':
+        if method == 'GET':
+            s_root = request.args.get('s', '')
+            # (10) request_rce_v2：s=captcha + _method=__construct + filter[]=phpinfo
+            if 'captcha' in s_root and request.args.get('_method') == '__construct':
+                if vuln:
+                    return html_body('PHP Version 7.3.2\n' + MARKER_REQUEST_V2)
+                return html_body(thinkphp_home())
+            # (11) dispatch_rce：s 含 invokefunction + function=call_user_func_array
+            if 'invokefunction' in s_root and request.args.get('function') == 'call_user_func_array':
+                if vuln:
+                    return html_body('PHP Version 7.3.2\n' + MARKER_DISPATCH)
+                return html_body('<html><body>404 Not Found</body></html>', 404)
+        # 根路径默认：含 ThinkPHP Framework 标题 → 指纹识别强特征命中（vuln/safe 一致）
         return html_body(thinkphp_home())
 
     if path == '/index.php':

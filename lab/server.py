@@ -1,6 +1,6 @@
 # Ruoyi 漏洞扫描器 —— 本地签名靶场（仅用于合法授权测试 / 教学验证）
 #
-# 设计目标：精确复现 11 个插件命中时的「请求路径 + 响应特征」，
+# 设计目标：精确复现 13 个插件命中时的「请求路径 + 响应特征」，
 # 使扫描器可在无真实目标的情况下完成判定逻辑对拍（vuln/safe 双模式）。
 #
 # 本服务不实现任何真实漏洞利用，仅返回与插件判定规则匹配的响应签名，
@@ -29,6 +29,10 @@ DRUID_USERS = {'ruoyi', 'druid', 'admin', 'admin123', 'auth', '123456'}
 # 命中即返回 success 的弱口令集合（均存在于 password.txt 字典中）
 DRUID_OK_PASSWORDS = {'ruoyi', '123456', 'admin123', 'druid'}
 
+# Step 8 新增 POC 签名 marker（与 plugins/ruoyi/ 下插件常量一致）
+NACOS_UNAUTH_MARKER = 'ruoyi-nacos-unauth-confirmed'
+FILE_READ_PATH_MARKER = 'ruoyi-file-read-path-confirmed'
+
 
 def is_vuln():
     return MODE == 'vuln'
@@ -54,8 +58,16 @@ def dispatch(path, method):
             '<body><h1>RuoYi</h1></body></html>')
 
     # 任意文件读取（file_read + file_read_time 读取落地文件 2.txt）
+    # Step 8 新增 file_read_path：resource 参数以 ../ 开头（相对路径穿越探针）
+    #   按 resource 查询参数分流：../ 前缀 → 路径穿越签名；其余 → 原 /etc/passwd 特征
+    #   注意：query 参数不影响 request.path 路径匹配，需在端点内读取 request.args 区分
     if path == '/common/download/resource':
         if vuln:
+            resource = request.args.get('resource', '')
+            if resource.startswith('../'):
+                # file_read_path 探针：路径穿越读取任意文件
+                return Response(FILE_READ_PATH_MARKER, mimetype='text/plain; charset=utf-8')
+            # file_read / file_read_time 探针：返回含 root 与 :/ 的 /etc/passwd 特征
             return Response(PASSWD, mimetype='text/plain; charset=utf-8')
         return html_body('<html><body>404 资源不存在</body></html>', 404)
 
@@ -133,6 +145,18 @@ def dispatch(path, method):
         if vuln:
             return json_body({'code': 200, 'rows': [{'userId': 1, 'userName': 'admin'}],
                               'total': 1})
+        return json_body({'code': 401, 'msg': '请先登录'}, 401)
+
+    # Step 8 新增：Nacos 未授权访问（/nacos/v1/auth/users）
+    # query 参数（pageNo/pageSize）不影响 request.path 匹配，无需在端点内读取
+    if path == '/nacos/v1/auth/users':
+        if vuln:
+            # 未授权可获取用户列表，响应含签名 marker
+            return json_body({
+                'totalCount': 1, 'pageNumber': 1, 'pageSize': 10,
+                'pageItems': [{'username': 'nacos', 'password': '$2a$10$ruoyi-nacos-hash'}],
+                'marker': NACOS_UNAUTH_MARKER,
+            })
         return json_body({'code': 401, 'msg': '请先登录'}, 401)
 
     # Thymeleaf/SpEL 模板注入探针路径（含 __${7*7}__::.x）

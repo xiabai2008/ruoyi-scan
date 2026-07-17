@@ -24,6 +24,8 @@ MARKER_HEAP = 'spring-heapdump-leak-confirmed'
 MARKER_JOLOKIA = 'spring-jolokia-rce-confirmed'
 MARKER_SCF = 'spring-cloud-function-rce-confirmed'
 MARKER_H2 = 'spring-h2-console-rce-confirmed'
+MARKER_JOLOKIA_MLET = 'spring-jolokia-mlet-rce-confirmed'
+MARKER_TRACE = 'spring-trace-leak-confirmed'
 
 
 def is_vuln():
@@ -126,6 +128,15 @@ def dispatch(path, method):
         return json_body({'timestamp': '...', 'status': 404,
                           'error': 'Not Found', 'path': path}, 404)
 
+    # GET /actuator/jolokia/list → jolokia_mlet_rce 探针
+    # 注意：必须先于通用 /actuator/jolokia 路由匹配（path.startswith 精度低于 ==）
+    if path == '/actuator/jolokia/list':
+        if vuln:
+            return json_body({'status': 200, 'value': MARKER_JOLOKIA_MLET,
+                              'request': {'type': 'LIST'}})
+        return json_body({'timestamp': '...', 'status': 404,
+                          'error': 'Not Found', 'path': path}, 404)
+
     # GET / POST /actuator/jolokia → jolokia_rce 探针
     if path == '/actuator/jolokia' or path.startswith('/actuator/jolokia/'):
         if vuln:
@@ -168,6 +179,19 @@ def dispatch(path, method):
                         },
                     },
                 },
+            })
+        return json_body({'timestamp': '...', 'status': 404,
+                          'error': 'Not Found', 'path': path}, 404)
+
+    # GET /actuator/trace → trace_leak 探针（请求历史泄露）
+    if path == '/actuator/trace':
+        if vuln:
+            return json_body({
+                'traces': [
+                    {'request': {'method': 'GET', 'uri': '/actuator/env',
+                                 'headers': {'Cookie': ['SESSION=' + MARKER_TRACE]}},
+                     'response': {'status': 200, 'headers': {}}},
+                ],
             })
         return json_body({'timestamp': '...', 'status': 404,
                           'error': 'Not Found', 'path': path}, 404)

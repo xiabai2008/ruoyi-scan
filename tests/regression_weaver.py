@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 泛微 e-cology 插件回归验收（requests_mock 模拟响应）
 #
-# 验收范围：plugins/weaver 六个 POC 插件的 vuln→CONFIRMED / safe→SAFE 判定正确性。
+# 验收范围：plugins/weaver 八个 POC 插件的 vuln→CONFIRMED / safe→SAFE 判定正确性。
 # 运行：python tests/regression_weaver.py
 # 退出码：0 全部通过，非 0 表示有失败用例
 import os
@@ -24,6 +24,8 @@ from core.models import STATUS_CONFIRMED, STATUS_SAFE
 
 from plugins.weaver.file_upload import (
     WeaverFileUploadPlugin, UPLOAD_MARKER as MARKER_UPLOAD)
+from plugins.weaver.file_download import (
+    WeaverFileDownloadPlugin, FILE_DOWNLOAD_MARKER as MARKER_FILE_DOWNLOAD)
 from plugins.weaver.xml_rce import (
     WeaverXmlRcePlugin, XML_MARKER as MARKER_XML)
 from plugins.weaver.bsh_rce import (
@@ -33,6 +35,8 @@ from plugins.weaver.sqli import (
 from plugins.weaver.unauth import WeaverUnauthPlugin
 from plugins.weaver.info_leak import (
     WeaverInfoLeakPlugin, LEAK_MARKER as MARKER_LEAK)
+from plugins.weaver.xss import (
+    WeaverXssPlugin, XSS_MARKER as MARKER_XSS)
 
 # 统一 mock 目标
 MOCK_TARGET = 'http://weaver-mock.test'
@@ -160,6 +164,49 @@ class TestInfoLeak(unittest.TestCase):
         m.get(MOCK_TARGET + '/weaver/ecology.properties',
               text='Not Found', status_code=404)
         r = WeaverInfoLeakPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'端点不可达应判 SAFE，实际 {r.status}')
+
+
+class TestFileDownload(unittest.TestCase):
+    """任意文件下载路径穿越：GET + file 参数，响应含 FILE_DOWNLOAD_MARKER → CONFIRMED，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        # 仅注册精确 GET 匹配器；query 参数由插件自动附加，requests_mock 默认忽略 query 比对
+        m.get(MOCK_TARGET + '/weaver/weaver.file.FileDownloadForOutDoc',
+              text='{"status":200,"_marker":"' + MARKER_FILE_DOWNLOAD + '"}')
+        r = WeaverFileDownloadPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含文件下载签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_FILE_DOWNLOAD, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/weaver/weaver.file.FileDownloadForOutDoc',
+              text='{"status":404,"error":"Not Found"}', status_code=404)
+        r = WeaverFileDownloadPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'端点不可达应判 SAFE，实际 {r.status}')
+
+
+class TestXss(unittest.TestCase):
+    """反射型 XSS：GET + keyword 参数，响应含 XSS_MARKER → CONFIRMED，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        m.get(MOCK_TARGET + '/weaver/search.jsp',
+              text='<html><body>搜索结果:' + MARKER_XSS + '</body></html>')
+        r = WeaverXssPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含 XSS 签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_XSS, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/weaver/search.jsp',
+              text='{"status":404,"error":"Not Found"}', status_code=404)
+        r = WeaverXssPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 

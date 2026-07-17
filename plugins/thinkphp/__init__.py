@@ -9,6 +9,8 @@ from plugins.thinkphp.debug_info import ThinkphpDebugInfoPlugin
 from plugins.thinkphp.log_disclosure import ThinkphpLogDisclosurePlugin
 from plugins.thinkphp.file_read import ThinkphpFileReadPlugin
 from plugins.thinkphp.where_inject import ThinkphpWhereInjectPlugin
+from plugins.thinkphp.request_rce_v2 import ThinkphpRequestRceV2Plugin
+from plugins.thinkphp.dispatch_rce import ThinkphpDispatchRcePlugin
 
 plugin_list = [
     # vuln：RCE 类（high）
@@ -18,6 +20,8 @@ plugin_list = [
     Thinkphp51RcePlugin,              # 5.1.x 路由 RCE
     ThinkphpCacheWritePlugin,         # 缓存文件包含 getshell
     ThinkphpDeserializePlugin,        # 反序列化 POP 链 RCE
+    ThinkphpRequestRceV2Plugin,       # 5.0.x Request 输入 RCE 变体
+    ThinkphpDispatchRcePlugin,        # 5.1.x 路由调度 invokefunction RCE
     # vuln：信息泄露类（medium）
     ThinkphpDebugInfoPlugin,           # APP_DEBUG 信息泄露
     ThinkphpLogDisclosurePlugin,       # runtime 日志文件暴露

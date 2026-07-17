@@ -8,6 +8,7 @@
 #   4. Druid 爆破：正确口令命中，错误口令未命中
 #   5. 目录扫描：200 / 403 分类正确，标题提取正确
 #   6. Step 5 新增 POC：file_upload / job_rce / thymeleaf_ssti / unauth_batch / default_password
+#   7. Step 8 新增 POC：nacos_unauth / file_read_path
 #
 # 运行：python tests/regression_ruoyi.py
 # 退出码：0 全部通过，非 0 表示有失败用例
@@ -47,6 +48,12 @@ from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
 from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
+
+# Step 8 新增 2 个 POC 插件（含签名 marker 常量）
+from plugins.ruoyi.nacos_unauth import (
+    RuoyiNacosUnauthPlugin, NACOS_UNAUTH_MARKER)
+from plugins.ruoyi.file_read_path import (
+    RuoyiFileReadPathPlugin, FILE_READ_PATH_MARKER)
 
 
 # 统一 mock 目标（不使用真实域名，避免误发请求）
@@ -519,6 +526,62 @@ class TestDefaultPassword(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Part 3：Step 8 新增 POC 判定断言（签名 marker 模式）
+# ---------------------------------------------------------------------------
+
+class TestNacosUnauth(unittest.TestCase):
+    """Step 8：Nacos 未授权访问判定（签名 marker 模式）"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        """命中：响应含 NACOS_UNAUTH_MARKER → CONFIRMED"""
+        url = MOCK_TARGET + '/nacos/v1/auth/users?pageNo=1&pageSize=10'
+        m.get(url, text='{"totalCount":1,"pageNumber":1,"pageSize":10,'
+                        '"pageItems":[{"username":"nacos","password":"$2a$10$hash"}],'
+                        '"marker":"' + NACOS_UNAUTH_MARKER + '"}')
+        plugin = RuoyiNacosUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED,
+                         f'响应含 Nacos 未授权签名应判 CONFIRMED，实际 {result.status}')
+        self.assertIn(NACOS_UNAUTH_MARKER, result.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        """安全：HTTP 401 鉴权拦截 → SAFE"""
+        url = MOCK_TARGET + '/nacos/v1/auth/users?pageNo=1&pageSize=10'
+        m.get(url, status_code=401, text='{"code":401,"msg":"请先登录"}')
+        plugin = RuoyiNacosUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE,
+                         f'401 鉴权拦截应判 SAFE，实际 {result.status}')
+
+
+class TestFileReadPath(unittest.TestCase):
+    """Step 8：文件下载路径穿越判定（签名 marker 模式）"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        """命中：响应含 FILE_READ_PATH_MARKER → CONFIRMED"""
+        url = MOCK_TARGET + '/common/download/resource?resource=../../../etc/passwd'
+        m.get(url, text=FILE_READ_PATH_MARKER)
+        plugin = RuoyiFileReadPathPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED,
+                         f'响应含路径穿越签名应判 CONFIRMED，实际 {result.status}')
+        self.assertIn(FILE_READ_PATH_MARKER, result.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        """安全：HTTP 404 端点不存在 → SAFE"""
+        url = MOCK_TARGET + '/common/download/resource?resource=../../../etc/passwd'
+        m.get(url, status_code=404, text='404 not found')
+        plugin = RuoyiFileReadPathPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE,
+                         f'404 应判 SAFE，实际 {result.status}')
+
+
+# ---------------------------------------------------------------------------
 # 入口：直接运行或 pytest 兼容
 # ---------------------------------------------------------------------------
 
@@ -538,6 +601,9 @@ def run_all():
         TestThymeleafSsti,
         TestUnauthBatch,
         TestDefaultPassword,
+        # Step 8 新增
+        TestNacosUnauth,
+        TestFileReadPath,
     ]
     for cls in test_classes:
         suite.addTests(loader.loadTestsFromTestCase(cls))

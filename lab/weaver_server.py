@@ -1,6 +1,6 @@
 # 泛微 e-cology OA 漏洞扫描器 —— 本地签名靶场（仅用于合法授权测试 / 教学验证）
 #
-# 设计目标：精确复现 plugins/weaver 六个插件命中时的「请求路径 + 响应特征」，
+# 设计目标：精确复现 plugins/weaver 八个插件命中时的「请求路径 + 响应特征」，
 # 使扫描器可在无真实目标的情况下完成判定逻辑对拍（vuln/safe 双模式）。
 #
 # 本服务不实现任何真实漏洞利用，仅返回与插件判定规则匹配的响应签名，
@@ -18,10 +18,12 @@ app = Flask(__name__)
 
 # 插件命中签名（必须与 plugins/weaver/*.py 中的 *_MARKER 完全一致）
 MARKER_UPLOAD = 'weaver-file-upload-rce-confirmed'
+MARKER_FILE_DOWNLOAD = 'weaver-file-download-confirmed'
 MARKER_XML = 'weaver-xml-rce-confirmed'
 MARKER_BSH = 'weaver-bsh-rce-confirmed'
 MARKER_SQLI = 'weaver-sqli-confirmed'
 MARKER_LEAK = 'weaver-info-leak-confirmed'
+MARKER_XSS = 'weaver-xss-confirmed'
 
 
 def is_vuln():
@@ -63,9 +65,14 @@ def dispatch(path, method):
         return Response('Unauthorized: authentication required', status=401,
                         mimetype='text/plain; charset=utf-8')
 
-    # /weaver/weaver.file.FileDownloadForOutDoc：任意文件上传接口（file_upload 插件探针）
+    # /weaver/weaver.file.FileDownloadForOutDoc：
+    #   POST → 任意文件上传接口（file_upload 插件探针）
+    #   GET  → 任意文件下载接口（file_download 插件探针，file 参数路径穿越）
+    # 同一路径按 method 区分两插件，避免互相吞签名
     if path == '/weaver/weaver.file.FileDownloadForOutDoc':
         if vuln:
+            if method == 'GET':
+                return json_body({'status': 200, '_marker': MARKER_FILE_DOWNLOAD})
             return json_body({'status': 200, '_marker': MARKER_UPLOAD})
         return json_body({'status': 404, 'error': 'Not Found', 'path': path}, 404)
 
@@ -98,6 +105,14 @@ def dispatch(path, method):
                 'db.username=root\n',
                 status=200, mimetype='text/plain; charset=utf-8')
         return Response('Not Found', status=404, mimetype='text/plain; charset=utf-8')
+
+    # /weaver/search.jsp：反射型 XSS（xss 插件探针，keyword 参数未过滤反射）
+    if path == '/weaver/search.jsp':
+        if vuln:
+            return html_body(
+                '<html><head><title>搜索结果</title></head>'
+                '<body>关键字结果：' + MARKER_XSS + '</body></html>')
+        return json_body({'status': 404, 'error': 'Not Found', 'path': path}, 404)
 
     # 其他路径 → JSON 404（含 favicon.ico，避免污染其他 CMS 指纹）
     return json_body({'status': 404, 'error': 'Not Found', 'path': path}, 404)

@@ -116,12 +116,12 @@ def test_non_ruoyi_target():
 
 
 def test_router_resolves_ruoyi():
-    """Router 对 ruoyi 指纹返回插件类列表"""
+    """Router 对 ruoyi 指纹返回插件类列表（阶段八扩充至 13 个）"""
     from core.router import Router
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='ruoyi', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) >= 6, f'应至少有 6 个若依插件，实际 {len(plugins)}（Step5 已扩充至 11 个）'
+    assert len(plugins) == 13, f'应有 13 个若依插件，实际 {len(plugins)}（阶段八 nacos_unauth + file_read_path）'
     print('PASS test_router_resolves_ruoyi: %d 个插件' % len(plugins))
 
 
@@ -139,12 +139,12 @@ def test_detect_cms_selects_thinkphp():
 
 
 def test_router_resolves_thinkphp():
-    """Router 对 thinkphp 指纹返回插件类列表（阶段二扩充后 10 个 POC）"""
+    """Router 对 thinkphp 指纹返回插件类列表（阶段八扩充至 12 个 POC）"""
     from core.router import Router
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='thinkphp', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 10, f'应有 10 个 ThinkPHP 插件，实际 {len(plugins)}'
+    assert len(plugins) == 12, f'应有 12 个 ThinkPHP 插件，实际 {len(plugins)}（阶段八 request_rce_v2 + dispatch_rce）'
     print('PASS test_router_resolves_thinkphp: %d 个插件' % len(plugins))
 
 
@@ -160,12 +160,12 @@ def test_detect_cms_selects_spring():
 
 
 def test_router_resolves_spring():
-    """Router 对 spring 指纹返回插件类列表（6 个 POC）"""
+    """Router 对 spring 指纹返回插件类列表（阶段八扩充至 11 个 POC）"""
     from core.router import Router
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='spring', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 9, f'应有 9 个 Spring 插件，实际 {len(plugins)}'
+    assert len(plugins) == 11, f'应有 11 个 Spring 插件，实际 {len(plugins)}（阶段八 jolokia_mlet + trace_leak）'
     print('PASS test_router_resolves_spring: %d 个插件' % len(plugins))
 
 
@@ -185,12 +185,12 @@ def test_detect_cms_selects_weaver():
 
 
 def test_router_resolves_weaver():
-    """Router 对 weaver 指纹返回插件类列表（阶段四：6 个 POC）"""
+    """Router 对 weaver 指纹返回插件类列表（阶段八扩充至 8 个 POC）"""
     from core.router import Router
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='weaver', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 6, f'应有 6 个 Weaver 插件，实际 {len(plugins)}'
+    assert len(plugins) == 8, f'应有 8 个 Weaver 插件，实际 {len(plugins)}（阶段八 file_download + xss）'
     print('PASS test_router_resolves_weaver: %d 个插件' % len(plugins))
 
 

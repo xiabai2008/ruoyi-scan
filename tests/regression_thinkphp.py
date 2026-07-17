@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ThinkPHP 插件回归验收（requests_mock 模拟响应）
 #
-# 验收范围：plugins/thinkphp 十个 POC 插件的 vuln→CONFIRMED / safe→SAFE 判定正确性。
+# 验收范围：plugins/thinkphp 十二个 POC 插件的 vuln→CONFIRMED / safe→SAFE 判定正确性。
 # 运行：python tests/regression_thinkphp.py
 # 退出码：0 全部通过，非 0 表示有失败用例
 import os
@@ -43,6 +43,10 @@ from plugins.thinkphp.file_read import (
     ThinkphpFileReadPlugin, FILE_MARKER as MARKER_FILE)
 from plugins.thinkphp.where_inject import (
     ThinkphpWhereInjectPlugin, SQLI_MARKER as MARKER_SQLI)
+from plugins.thinkphp.request_rce_v2 import (
+    ThinkphpRequestRceV2Plugin, REQUEST_RCE_V2_MARKER as MARKER_REQUEST_V2)
+from plugins.thinkphp.dispatch_rce import (
+    ThinkphpDispatchRcePlugin, DISPATCH_RCE_MARKER as MARKER_DISPATCH)
 
 # 统一 mock 目标（不使用真实域名，避免误发请求；无尾部斜杠，配合 join_url 归一化）
 MOCK_TARGET = 'http://thinkphp-mock.test'
@@ -243,6 +247,48 @@ class TestWhereInject(unittest.TestCase):
     def test_safe(self, m):
         m.get(MOCK_TARGET + '/index.php', text='<html><body>ThinkPHP</body></html>')
         r = ThinkphpWhereInjectPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'响应不含签名应判 SAFE，实际 {r.status}')
+
+
+class TestRequestRceV2(unittest.TestCase):
+    """5.0.x Request 输入 RCE 变体：命中 MARKER_REQUEST_V2，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        # LIFO：先注册 ANY 兜底，再注册根路径精确匹配（带 query 时由根路径命中）
+        m.get(requests_mock.ANY, text='<html><body>ThinkPHP</body></html>')
+        m.get(MOCK_TARGET + '/', text='PHP Version 7.3.2\n' + MARKER_REQUEST_V2)
+        r = ThinkphpRequestRceV2Plugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含 Request RCE 变体签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_REQUEST_V2, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/', text='<html><body>ThinkPHP</body></html>')
+        r = ThinkphpRequestRceV2Plugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'响应不含签名应判 SAFE，实际 {r.status}')
+
+
+class TestDispatchRce(unittest.TestCase):
+    """5.1.x 路由调度 invokefunction RCE：命中 MARKER_DISPATCH，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        # LIFO：先注册 ANY 兜底，再注册根路径精确匹配
+        m.get(requests_mock.ANY, text='<html><body>ThinkPHP</body></html>')
+        m.get(MOCK_TARGET + '/', text='PHP Version 7.3.2\n' + MARKER_DISPATCH)
+        r = ThinkphpDispatchRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含路由调度 RCE 签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_DISPATCH, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/', status_code=404, text='404 Not Found')
+        r = ThinkphpDispatchRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 

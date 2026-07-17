@@ -33,11 +33,15 @@ from plugins.spring.heapdump_leak import (
     SpringHeapdumpLeakPlugin, HEAP_MARKER as MARKER_HEAP)
 from plugins.spring.jolokia_rce import (
     SpringJolokiaRcePlugin, JOLOKIA_MARKER as MARKER_JOLOKIA)
+from plugins.spring.jolokia_mlet_rce import (
+    SpringJolokiaMletRcePlugin, JOLOKIA_MLET_MARKER as MARKER_JOLOKIA_MLET)
 from plugins.spring.cloud_function_rce import (
     SpringCloudFunctionRcePlugin, SCF_MARKER as MARKER_SCF)
 from plugins.spring.h2_console_rce import (
     SpringH2ConsoleRcePlugin, H2_MARKER as MARKER_H2)
 from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+from plugins.spring.trace_leak import (
+    SpringTraceLeakPlugin, TRACE_LEAK_MARKER as MARKER_TRACE)
 
 # 统一 mock 目标
 MOCK_TARGET = 'http://spring-mock.test'
@@ -131,6 +135,27 @@ class TestJolokiaRce(unittest.TestCase):
         m.post(MOCK_TARGET + '/actuator/jolokia',
                text='{"status":404,"error":"Not Found"}', status_code=404)
         r = SpringJolokiaRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'端点不可达应判 SAFE，实际 {r.status}')
+
+
+class TestJolokiaMletRce(unittest.TestCase):
+    """Jolokia MLet 链 RCE：响应含 MARKER_JOLOKIA_MLET → CONFIRMED，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        m.get(MOCK_TARGET + '/actuator/jolokia/list',
+              text='{"status":200,"value":"' + MARKER_JOLOKIA_MLET + '"}')
+        r = SpringJolokiaMletRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含 Jolokia MLet 链签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_JOLOKIA_MLET, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/actuator/jolokia/list',
+              text='{"status":404,"error":"Not Found"}', status_code=404)
+        r = SpringJolokiaMletRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
@@ -247,6 +272,30 @@ class TestHeapdumpLeak(unittest.TestCase):
               text='{"status":404,"error":"Not Found"}', status_code=404,
               headers=json_ok())
         r = SpringHeapdumpLeakPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_SAFE,
+                         f'端点不可达应判 SAFE，实际 {r.status}')
+
+
+class TestTraceLeak(unittest.TestCase):
+    """/actuator/trace 泄露：响应含 MARKER_TRACE → CONFIRMED，否则 SAFE"""
+
+    @requests_mock.Mocker()
+    def test_hit(self, m):
+        m.get(MOCK_TARGET + '/actuator/trace',
+              text='{"traces":[{"request":{"headers":{"Cookie":["SESSION='
+              + MARKER_TRACE + '"]}}}]}',
+              headers=json_ok())
+        r = SpringTraceLeakPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'响应含 /trace 泄露签名应判 CONFIRMED，实际 {r.status}')
+        self.assertIn(MARKER_TRACE, r.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe(self, m):
+        m.get(MOCK_TARGET + '/actuator/trace',
+              text='{"status":404,"error":"Not Found"}', status_code=404,
+              headers=json_ok())
+        r = SpringTraceLeakPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
