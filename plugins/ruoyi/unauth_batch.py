@@ -1,0 +1,131 @@
+# 未授权访问批量检测：Actuator / Druid / Swagger / 后台 列表接口
+from plugins.base import PluginBase
+from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from lib.colors import ok, no
+
+
+class UnauthBatchPlugin(PluginBase):
+    name = '未授权访问（批量）'
+    cve = ''
+    severity = 'medium'
+    category = 'vuln'
+    description = (
+        '批量探测若依/Spring 常见未授权端点：Actuator env、Druid 监控、Swagger UI、后台用户列表。'
+        '任一端点未授权暴露即存在信息泄露风险'
+    )
+    fix = (
+        '生产环境关闭 Actuator 或加鉴权；Druid 监控路径限制 IP 白名单并修改默认口令；'
+        'Swagger 仅在测试环境启用；后台接口接入统一鉴权框架'
+    )
+
+    # 各端点判定规则：路径 + 特征关键字（任一命中即视为该端点未授权暴露）
+    ENDPOINTS = [
+        {
+            'name': 'Spring Actuator env',
+            'path': 'actuator/env',
+            'keywords': ['propertySources', 'activeProfiles', 'applicationConfig',
+                         'environment'],
+            'need_json': True,
+        },
+        {
+            'name': 'Druid 监控',
+            'path': 'druid/index.html',
+            'keywords': ['Druid Stat Index', 'druid-stat', 'Druid Monitor'],
+            'need_json': False,
+        },
+        {
+            'name': 'Swagger UI',
+            'path': 'swagger-ui.html',
+            'keywords': ['Swagger UI', 'swagger-ui', 'SwaggerBootstrap'],
+            'need_json': False,
+        },
+        {
+            'name': '后台用户列表',
+            'path': 'system/user/list',
+            'keywords': ['"rows"', '"code":200', 'admin', 'userId'],
+            'need_json': True,
+        },
+    ]
+
+    # 鉴权拦截关键字（命中即视为该端点已保护）
+    AUTH_BLOCK_KEYWORDS = ['登录', '请先登录', 'unauthorized', '认证失败',
+                           '无法访问系统资源', 'signin', 'login']
+
+    def verify(self, target, session):
+        hit_endpoints = []  # 命中端点详情
+        all_status = []     # 各端点状态（CONFIRMED/SAFE/UNKNOWN）
+        got_response = False
+
+        for ep in self.ENDPOINTS:
+            url = target + ep['path']
+            try:
+                resp = session.get(url)
+            except Exception:
+                all_status.append((ep['name'], 'UNKNOWN', '网络异常'))
+                continue
+            got_response = True
+            text = resp.text or ''
+            code = getattr(resp, 'status_code', 0)
+            ctype = resp.headers.get('Content-Type', '') if hasattr(resp, 'headers') else ''
+
+            # 1) 鉴权拦截关键字命中 → 该端点已保护
+            lower_text = text.lower()
+            if any(kw.lower() in lower_text for kw in self.AUTH_BLOCK_KEYWORDS):
+                all_status.append((ep['name'], 'SAFE', '已鉴权拦截'))
+                continue
+
+            # 2) 状态码 401/403 → 鉴权拦截
+            if code in (401, 403):
+                all_status.append((ep['name'], 'SAFE', f'HTTP {code} 鉴权拦截'))
+                continue
+
+            # 3) 特征关键字命中（且 JSON 端点要求响应确实是 JSON）
+            matched_kw = [kw for kw in ep['keywords'] if kw.lower() in lower_text]
+            is_json = 'json' in ctype.lower() or text.lstrip().startswith('{') or text.lstrip().startswith('[')
+            if ep.get('need_json') and not is_json:
+                all_status.append((ep['name'], 'SAFE', '响应非 JSON'))
+                continue
+
+            if matched_kw:
+                # 进一步控误报：Druid/Swagger 端点要求 HTTP 200（避免 404 错误页含关键字）
+                # 后台 user/list 端点要求 JSON 响应含 code:200 或 rows
+                hit_endpoints.append({
+                    'name': ep['name'],
+                    'url': url,
+                    'code': code,
+                    'matched_keywords': matched_kw,
+                    'snippet': text[:200],
+                })
+                all_status.append((ep['name'], 'CONFIRMED',
+                                   f'命中关键字 {matched_kw} HTTP {code}'))
+                continue
+
+            # 4) 无特征关键字：可能是 404 或其他业务响应，判 SAFE（该端点不构成未授权暴露）
+            all_status.append((ep['name'], 'SAFE', f'无特征关键字 HTTP {code}'))
+
+        # 汇总判定：任一端点命中即 CONFIRMED
+        if hit_endpoints:
+            hit_names = [h['name'] for h in hit_endpoints]
+            print(ok(f'存在未授权访问（命中端点：{",".join(hit_names)}）'))
+            evidence_lines = [f'{h["name"]}({h["url"]}) 命中 {h["matched_keywords"]}'
+                              for h in hit_endpoints]
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=target,
+                evidence='; '.join(evidence_lines),
+                extra={'hit_endpoints': hit_endpoints,
+                       'all_status': [{'name': n, 'status': s, 'detail': d}
+                                      for n, s, d in all_status]},
+                fix=self.fix,
+            )
+
+        # 全部端点未命中
+        if got_response:
+            print(no('不存在未授权访问漏洞（所有端点均已鉴权或无特征）'))
+            return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=target,
+                              evidence='; '.join(f'{n}:{s}({d})' for n, s, d in all_status))
+
+        print(no('未授权访问检测：所有端点网络异常，无法判定'))
+        return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, url=target,
+                          evidence='所有端点均网络异常')

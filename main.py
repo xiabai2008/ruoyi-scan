@@ -46,6 +46,8 @@ def build_parser():
     parser.add_argument('--threads', type=int, default=settings.THREADS, help='并发线程数')
     parser.add_argument('--rate', type=int, default=settings.RATE, help='每秒请求数（0 不限速）')
     parser.add_argument('--report', default=None, help='报告输出目录')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='调试模式：打印每个请求的方法/URL/状态/响应字节到 stderr')
     return parser
 
 
@@ -56,6 +58,13 @@ def print_help():
     print('-m : 目录扫描')
     print('-p : 漏洞检测')
     print('-l : 登录爆破')
+    print(SEPARATOR)
+    print('可选长参数：')
+    print('  --proxy <url>      代理（如 http://127.0.0.1:8080）')
+    print('  --threads <n>      并发线程数（默认 1 同步顺序执行）')
+    print('  --rate <n>         每秒请求数（0 不限速）')
+    print('  --report <dir>      报告输出目录（生成 HTML/JSON/CSV）')
+    print('  --debug            调试模式（请求日志输出到 stderr）')
     print(SEPARATOR)
 
 
@@ -85,7 +94,7 @@ def run_mode(mode, target, args):
     target = normalize_target(target)
 
     # 会话与引擎
-    session = SessionManager(proxy=args.proxy)
+    session = SessionManager(proxy=args.proxy, debug=args.debug)
     engine = ScanEngine(threads=args.threads, rate=args.rate)
 
     # 计时起点（用于报告摘要）

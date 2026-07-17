@@ -1,17 +1,32 @@
-# 若依插件包：plugin_list 声明本包插件类（保持执行顺序，对齐原脚本 -u 综合扫描的调用次序）
-# 原脚本顺序：path_scan → poc_scan(file_read / file_read_time / sql_inject_role / sql_inject_dept) → web_login
+# 若依插件包：plugin_list 声明本包插件类（保持执行顺序）
+# Step 2（无损迁移）：path_scan → poc_scan(file_read / file_read_time / sql_inject_role / sql_inject_dept) → web_login
+# Step 5（专项补齐）：vuln 类追加 file_upload / job_rce / thymeleaf_ssti / unauth_batch；brute 类追加 default_password
 from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_time import FileReadTimePlugin
 from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
+from plugins.ruoyi.file_upload import FileUploadPlugin
+from plugins.ruoyi.job_rce import JobRcePlugin
+from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
+from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
+from plugins.ruoyi.default_password import DefaultPasswordPlugin
 
 plugin_list = [
-    DirectoryScanPlugin,     # recon 目录扫描
-    FileReadPlugin,          # vuln 任意文件读取
-    FileReadTimePlugin,      # vuln 定时任务任意文件读取
-    SqlInjectRolePlugin,     # vuln SQL 报错注入（role）
-    SqlInjectDeptPlugin,     # vuln SQL 报错注入（dept）
-    DruidBrutePlugin,        # brute Druid 弱口令爆破
+    # recon：目录扫描（保持原 -u 综合扫描第一步）
+    DirectoryScanPlugin,
+    # vuln：原有 4 POC（保持原 -p 漏洞检测顺序）
+    FileReadPlugin,          # 任意文件读取
+    FileReadTimePlugin,      # 定时任务任意文件读取
+    SqlInjectRolePlugin,     # POST 型报错注入（role）
+    SqlInjectDeptPlugin,     # POST 型报错注入（dept）
+    # vuln：Step 5 新增专项 POC（按危险度从高到低排序）
+    FileUploadPlugin,        # 任意文件上传
+    JobRcePlugin,            # 定时任务 RCE 未授权访问
+    ThymeleafSstiPlugin,     # Thymeleaf/SpEL 模板注入
+    UnauthBatchPlugin,       # 未授权访问批量检测（medium）
+    # brute：原有 Druid 爆破 + Step 5 新增默认口令
+    DruidBrutePlugin,        # Druid 弱口令爆破
+    DefaultPasswordPlugin,  # 后台默认口令 admin/admin123
 ]
