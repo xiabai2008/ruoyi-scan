@@ -1,0 +1,18 @@
+# lab 靶场镜像构建忽略（阶段七）：仅需 *.py 靶场脚本，排除遗留实验产物
+*.log
+build*.log
+*.md
+README.md
+REAL-RUOYI.md
+VULN-REINTRODUCE.md
+maven388.tar.gz
+real-ruoyi/
+tools/
+docker-compose.yml
+run-ruoyi.bat
+safe-baseline.log
+scan-vuln*.log
+ruoyi-vuln*.log
+ruoyi-run.log
+__pycache__/
+*.pyc
