@@ -8,6 +8,8 @@ from config import settings
 from core.session import SessionManager
 from core.engine import ScanEngine
 from core.loader import load_plugins
+from core.fingerprint import RuoyiFingerprint
+from core.router import Router
 
 
 def print_banner():
@@ -72,23 +74,39 @@ MODE_LABELS = {
 
 
 def run_mode(mode, target, args):
-    """分发到各扫描模式：按 category 分组执行插件，每组开头打印 SEPARATOR（对齐原脚本各函数开头的分隔线）"""
+    """分发到各扫描模式：指纹→路由→插件 主流程，按 category 分组执行，每组开头打印 SEPARATOR"""
     label, color = MODE_LABELS[mode]
     print(f'{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}')
 
     # 目标归一化（确保以 / 结尾，对齐原 self.url += '/'）
     target = normalize_target(target)
 
-    # 加载若依插件包并按 category 分组
-    all_plugins = load_plugins('plugins.ruoyi')
+    # 会话与引擎
+    session = SessionManager(proxy=args.proxy)
+    engine = ScanEngine(threads=args.threads, rate=args.rate)
+
+    # 指纹识别 → 路由 → 插件包（开发方案 §三 Step 3 主流程链路）
+    fp = RuoyiFingerprint()
+    fp_result = fp.detect(target, session)
+    if fp_result.cms:
+        print(f'{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f} '
+              f'命中={fp_result.matched}{RESET}')
+    else:
+        print(f'{YELLOW}[*]指纹识别：未识别到已知 CMS 特征{RESET}')
+
+    # 路由到插件包
+    router = Router()
+    all_plugins = router.resolve(fp_result)
+    if not all_plugins:
+        # 阶段一回退：本工具为若依专用，未识别时默认走 ruoyi 插件包
+        print(f'{YELLOW}[*]未匹配插件包，回退默认 ruoyi 插件包（阶段一兼容）{RESET}')
+        all_plugins = load_plugins('plugins.ruoyi')
+
+    # 按 category 分组
     plugins_by_cat = {}
     for cls in all_plugins:
         cat = getattr(cls, 'category', '')
         plugins_by_cat.setdefault(cat, []).append(cls)
-
-    # 会话与引擎
-    session = SessionManager(proxy=args.proxy)
-    engine = ScanEngine(threads=args.threads, rate=args.rate)
 
     all_results = []
     for cat in MODE_CATEGORIES[mode]:
