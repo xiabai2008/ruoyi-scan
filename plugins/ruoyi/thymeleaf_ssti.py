@@ -2,6 +2,8 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
+from urllib.parse import quote
 
 
 class ThymeleafSstiPlugin(PluginBase):
@@ -38,7 +40,11 @@ class ThymeleafSstiPlugin(PluginBase):
         # 候选路径任一命中即判存在；全部无响应判 UNKNOWN；命中特征但无 49 判 SAFE
         got_response = False
         for path in self.CANDIDATE_PATHS:
-            url = target + path
+            # Tomcat/Spring 默认会剥离 URL 路径中的裸花括号 {}，导致 __${7*7}__ 退化成
+            # __$7*7__ 而失去求值能力。对探针中的特殊字符做百分号编码，使其在路径中存活，
+            # 服务端解码后得到原始 __${7*7}__ 再被 SpEL 求值（与真实 SSTI 探测一致）。
+            enc = path.replace('$', '%24').replace('{', '%7B').replace('}', '%7D')
+            url = join_url(target, enc)
             try:
                 resp = session.get(url)
             except Exception as e:
@@ -80,9 +86,9 @@ class ThymeleafSstiPlugin(PluginBase):
         if got_response:
             print(no('不存在 Thymeleaf/SpEL 模板注入漏洞'))
             return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE,
-                              url=target + self.CANDIDATE_PATHS[0],
+                              url=join_url(target, self.CANDIDATE_PATHS[0]),
                               evidence=f'所有候选路径均无求值结果 {self.EVAL_RESULT}')
         print(no('Thymeleaf SSTI：所有候选路径网络异常，无法判定'))
         return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN,
-                          url=target + self.CANDIDATE_PATHS[0],
+                          url=join_url(target, self.CANDIDATE_PATHS[0]),
                           evidence='所有候选路径均网络异常')

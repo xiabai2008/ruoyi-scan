@@ -2,6 +2,8 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
+from lib.matcher import match_positive, match_all
 
 
 class UnauthBatchPlugin(PluginBase):
@@ -57,7 +59,7 @@ class UnauthBatchPlugin(PluginBase):
         got_response = False
 
         for ep in self.ENDPOINTS:
-            url = target + ep['path']
+            url = join_url(target, ep['path'])
             try:
                 resp = session.get(url)
             except Exception:
@@ -68,9 +70,8 @@ class UnauthBatchPlugin(PluginBase):
             code = getattr(resp, 'status_code', 0)
             ctype = resp.headers.get('Content-Type', '') if hasattr(resp, 'headers') else ''
 
-            # 1) 鉴权拦截关键字命中 → 该端点已保护
-            lower_text = text.lower()
-            if any(kw.lower() in lower_text for kw in self.AUTH_BLOCK_KEYWORDS):
+            # 1) 鉴权拦截关键字命中 → 该端点已保护（使用 match_positive 统一降误报）
+            if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
                 all_status.append((ep['name'], 'SAFE', '已鉴权拦截'))
                 continue
 
@@ -80,15 +81,20 @@ class UnauthBatchPlugin(PluginBase):
                 continue
 
             # 3) 特征关键字命中（且 JSON 端点要求响应确实是 JSON）
-            matched_kw = [kw for kw in ep['keywords'] if kw.lower() in lower_text]
+            matched_kw = [kw for kw in ep['keywords'] if kw.lower() in text.lower()]
             is_json = 'json' in ctype.lower() or text.lstrip().startswith('{') or text.lstrip().startswith('[')
             if ep.get('need_json') and not is_json:
                 all_status.append((ep['name'], 'SAFE', '响应非 JSON'))
                 continue
 
             if matched_kw:
-                # 进一步控误报：Druid/Swagger 端点要求 HTTP 200（避免 404 错误页含关键字）
-                # 后台 user/list 端点要求 JSON 响应含 code:200 或 rows
+                # 进一步控误报（P1 修复）：
+                # Druid/Swagger 等 HTML 端点必须 HTTP 200（避免 404 自定义错误页含关键字而误报）；
+                # JSON 端点（Actuator/user/list）已在上方 need_json 兜底
+                if not ep.get('need_json') and code != 200:
+                    all_status.append((ep['name'], 'SAFE',
+                                       f'含关键字 {matched_kw} 但 HTTP {code} 非 200'))
+                    continue
                 hit_endpoints.append({
                     'name': ep['name'],
                     'url': url,

@@ -2,6 +2,8 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
+from lib.matcher import match_positive
 
 
 class JobRcePlugin(PluginBase):
@@ -22,7 +24,7 @@ class JobRcePlugin(PluginBase):
     AUTH_BLOCK_KEYWORDS = ['登录', '请先登录', 'unauthorized', '认证失败', '无法访问系统资源', 'signin', 'login']
 
     def verify(self, target, session):
-        url = target + 'monitor/job/edit'
+        url = join_url(target, 'monitor/job/edit')
         # 用不存在的 jobId 探测：若未鉴权，服务端会进入业务校验返回「任务不存在」类响应
         # 若已鉴权，服务端在拦截器层即返回登录重定向/401（不会进入业务逻辑）
         # 该探测不会修改任何真实任务（jobId=99999 通常不存在）
@@ -55,9 +57,8 @@ class JobRcePlugin(PluginBase):
         except Exception:
             pass
 
-        # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE
-        lower_text = text.lower()
-        if any(kw.lower() in lower_text for kw in self.AUTH_BLOCK_KEYWORDS):
+        # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE（使用 match_positive 统一降误报）
+        if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
             print(no('不存在定时任务 RCE 漏洞（编辑接口已鉴权）'))
             return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
                               evidence=f'响应含鉴权拦截关键字：{text[:200]}')
@@ -80,8 +81,10 @@ class JobRcePlugin(PluginBase):
                 print(no(f'不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）'))
                 return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
                                   evidence=f'code={r_code} msg={msg}')
-            # 业务层响应（200 成功 / 500 任务不存在 / 其他业务码）→ 绕过鉴权，存在未授权访问
-            if r_code in (200, 500) or r_code is not None:
+            # 业务层响应（200 成功 / 500 任务不存在）→ 绕过鉴权，存在未授权访问
+            # 注意：仅 code==200/500 判 CONFIRMED；其他业务码（400 参数错误等）不判，
+            # 避免「r_code is not None」导致任意 JSON 响应均误报（P0 修复）
+            if r_code in (200, 500):
                 print(ok('存在定时任务 RCE 漏洞（未授权访问编辑接口）'))
                 return ScanResult(
                     kind='vuln', name=self.name, severity=self.severity,
@@ -90,9 +93,14 @@ class JobRcePlugin(PluginBase):
                     extra={'code': r_code, 'msg': msg},
                     fix=self.fix,
                 )
+            # 其他业务码（如 400 参数错误、404 等）：无法明确判定是否绕过鉴权，标 UNKNOWN
+            # （不判 SAFE 避免漏报已修复但返回奇怪码的系统；也不判 CONFIRMED 避免误报）
+            print(no(f'定时任务 RCE：JSON code={r_code} 不在已知范围，判 UNKNOWN'))
+            return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, url=url,
+                              evidence=f'JSON 业务码 {r_code} 不在 (200,500) 范围：{msg}')
 
         # 4) 非 JSON 响应但 HTTP 200 + 非鉴权关键字 → 可能是 HTML 编辑页（未授权渲染）
-        if code == 200 and not any(kw.lower() in lower_text for kw in ['login', 'signin', '登录']):
+        if code == 200 and not match_positive(text, ['login', 'signin', '登录']):
             print(ok('存在定时任务 RCE 漏洞（未授权访问编辑页面）'))
             return ScanResult(
                 kind='vuln', name=self.name, severity=self.severity,

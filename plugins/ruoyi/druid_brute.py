@@ -2,6 +2,7 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
 from config import settings
 
 
@@ -17,7 +18,7 @@ class DruidBrutePlugin(PluginBase):
         # 用户名清单严格保留（6 个）
         user_list = settings.DRUID_USERS
         # 原脚本：self.url + 'druid/submitLogin'（self.url 以 / 结尾，故仅一个斜杠）
-        url = target + 'druid/submitLogin'
+        url = join_url(target, 'druid/submitLogin')
         # 字典原样读取（splitlines 保留空行口令、'NULL' 字符串等，勿 strip）
         try:
             with open(settings.PASSWORD_DICT, 'r', encoding='utf-8') as f:
@@ -41,8 +42,18 @@ class DruidBrutePlugin(PluginBase):
                     print(no(f'请求异常,用户名:{user},密码:{password}'))
                     continue
                 got_response = True
-                # 判定严格保留：'success' in t
-                if 'success' in login_response.text:
+                # 判定：解析 JSON 严格比对 success == True（布尔），避免 {"success":false} 误报
+                # 原始 'success' in text 子串匹配会把失败响应 "success":false 也判为命中（假阳性）
+                success_ok = False
+                try:
+                    j = login_response.json()
+                    success_ok = (j.get('success') is True)
+                except Exception:
+                    # 非 JSON：Druid 真实响应为纯文本 success(正确)/error(错误)
+                    # 也可能返回 JSON {"success":true}，故同时兼容两种形态
+                    low = login_response.text.lower().strip()
+                    success_ok = (low == 'success') or '"success":true' in low or '"success": true' in low
+                if success_ok:
                     # 成功=绿色（对齐原脚本成功配色）
                     print(ok(f'登录成功,用户名:{user},密码:{password}'))
                     return ScanResult(kind='brute', name=self.name, severity=self.severity,

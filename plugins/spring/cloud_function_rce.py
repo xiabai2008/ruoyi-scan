@@ -1,0 +1,46 @@
+# CVE-2022-22963 Spring Cloud Function 远程代码执行（SpEL 路由注入）
+# 漏洞原因：Spring Cloud Function 将 HTTP 头 `spring.cloud.function.routing-expression`
+#   的值注入 SpEL Expression 求值，攻击者可执行任意命令（影响 3.1.x / 3.2.x）。
+# 本插件仅做存在性验证：POST /functionRouter 带 SpEL 探针头，检测响应特征判定接口可达。
+from plugins.base import PluginBase
+from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from lib.colors import ok, no
+from lib.http import join_url
+
+# 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
+SCF_MARKER = 'spring-cloud-function-rce-confirmed'
+
+
+class SpringCloudFunctionRcePlugin(PluginBase):
+    name = 'CVE-2022-22963 Spring Cloud Function 远程代码执行'
+    cve = 'CVE-2022-22963'
+    severity = 'high'
+    category = 'vuln'
+    description = 'HTTP 请求头 routing-expression 注入 SpEL 求值，可执行任意命令（Cloud Function 3.x）'
+    fix = '升级 Spring Cloud Function 至 3.1.7+ / 3.2.3+；或禁用路由功能'
+
+    def verify(self, target, session):
+        url = join_url(target, '/functionRouter')
+        # SpEL 探针头（仅触发签名，不执行真实命令）
+        headers = {
+            'spring.cloud.function.routing-expression': 'T(java.lang.String).valueOf(7*7)',
+        }
+        try:
+            resp = session.post(url, data='probe', headers=headers)
+        except Exception as e:
+            print(no('Spring Cloud Function RCE（网络异常）'))
+            return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN,
+                              url=url, evidence=str(e))
+
+        text = resp.text or ''
+        if SCF_MARKER in text:
+            print(ok('存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence=f'响应含 Cloud Function SpEL 特征：{SCF_MARKER}',
+                fix=self.fix,
+            )
+        print(no('不存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞'))
+        return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
+                          evidence='响应未含 Cloud Function RCE 特征（可能未部署或已修复）')

@@ -21,7 +21,15 @@ def join_url(base, path):
 
 
 def host_of(url):
-    """提取 host（去掉协议前缀），用于原脚本 headers 的 Host 字段"""
+    """提取 host:port（去掉协议与路径），用于原脚本 headers 的 Host 字段
+
+    注意：必须只返回 netloc，不能带路径（如尾斜杠），否则 Host/Origin/Referer
+    头会变成 '127.0.0.1:8080/' 这类非法值，Tomcat 直接返回 400 Bad Request，
+    导致依赖这些头的 POST 型插件（如 SQL 报错注入）误判 SAFE。
+    """
     if '://' in url:
-        return url.split('://', 1)[1]
-    return url
+        rest = url.split('://', 1)[1]
+    else:
+        rest = url
+    # 去掉路径部分，只保留 host[:port]
+    return rest.split('/', 1)[0]

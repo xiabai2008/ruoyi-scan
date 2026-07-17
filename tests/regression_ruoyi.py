@@ -50,7 +50,9 @@ from plugins.ruoyi.default_password import DefaultPasswordPlugin
 
 
 # 统一 mock 目标（不使用真实域名，避免误发请求）
-MOCK_TARGET = 'http://ruoyi-mock.test/'
+# 注意：无尾部斜杠，配合 join_url() 归一化（P1-6 修复后所有插件使用 join_url，
+#       若 target 以 / 结尾且 path 以 / 开头则去重，确保 mock 注册路径与实际请求一致）
+MOCK_TARGET = 'http://ruoyi-mock.test'
 
 
 # ---------------------------------------------------------------------------
@@ -181,8 +183,10 @@ class TestDruidBrute(unittest.TestCase):
         # requests_mock 按 LIFO 顺序匹配（最后注册的最先检查）：
         # 先注册兜底（其他凭据返回 failure），再注册特定凭据（success，最先被检查）
         m.post(url, text='{"code":500,"msg":"password error"}')
+        # 注意：新判定严格比对 JSON success==True（布尔），故 mock 须返回合法 JSON
+        # 旧逻辑 'success' in t 会把 "success":false 也判命中（假阳性），已修复
         m.post(url, additional_matcher=self._match_creds('admin', 'admin123'),
-               text='success')
+               text='{"success": true, "message": "登录成功"}')
         plugin = DruidBrutePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED,
@@ -208,11 +212,11 @@ class TestDirectoryScan(unittest.TestCase):
     def test_status_code_classification(self, m):
         """200 命中（绿）/ 403 不命中为漏洞但仍记录"""
         # 准备 3 个端点：200 有标题、200 无标题、403
-        m.get(MOCK_TARGET + 'login', status_code=200,
+        m.get(MOCK_TARGET + '/login', status_code=200,
               text='<html><title>RuoYi管理系统</title>login page</html>')
-        m.get(MOCK_TARGET + 'index', status_code=200,
+        m.get(MOCK_TARGET + '/index', status_code=200,
               text='<html><title>首页</title></html>')
-        m.get(MOCK_TARGET + 'admin', status_code=403,
+        m.get(MOCK_TARGET + '/admin', status_code=403,
               text='<html><title>Forbidden</title>403</html>')
 
         # 临时字典：仅包含测试用条目
@@ -233,11 +237,11 @@ class TestDirectoryScan(unittest.TestCase):
                 hits = result.extra.get('hits', [])
                 hit_urls = [h['url'] for h in hits]
                 # 200 端点应被收集
-                self.assertIn(MOCK_TARGET + 'login', hit_urls)
-                self.assertIn(MOCK_TARGET + 'index', hit_urls)
+                self.assertIn(MOCK_TARGET + '/login', hit_urls)
+                self.assertIn(MOCK_TARGET + '/index', hit_urls)
                 # 403 端点：根据收集逻辑（'20' in code or 'NULL' not in title）
                 # 403 不含 '20' 但 title 非空（'Forbidden'）→ 也应被收集
-                self.assertIn(MOCK_TARGET + 'admin', hit_urls)
+                self.assertIn(MOCK_TARGET + '/admin', hit_urls)
                 # 校验状态码记录
                 for h in hits:
                     if 'login' in h['url']:
@@ -252,7 +256,7 @@ class TestDirectoryScan(unittest.TestCase):
     @requests_mock.Mocker()
     def test_title_extraction(self, m):
         """标题提取：<title>RuoYi管理系统</title>"""
-        m.get(MOCK_TARGET + 'login', status_code=200,
+        m.get(MOCK_TARGET + '/login', status_code=200,
               text='<html><head><title>RuoYi管理系统</title></head>login</html>')
         import tempfile
         with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False,
@@ -349,6 +353,19 @@ class TestJobRce(unittest.TestCase):
         plugin = JobRcePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE)
+
+    @requests_mock.Mocker()
+    def test_safe_code_400_param_error(self, m):
+        """安全（P0 修复验证）：JSON code=400 参数错误不应判 CONFIRMED
+        修复前 'or r_code is not None' 会导致任意非空 code 均误报为 RCE"""
+        url = MOCK_TARGET + 'monitor/job/edit'
+        m.post(url, headers={'Content-Type': 'application/json'},
+               text='{"code":400,"msg":"参数错误：jobId 不能为空"}')
+        plugin = JobRcePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        # code=400 不在 (200,500) 范围内 → 应判 UNKNOWN 或 SAFE，绝不能是 CONFIRMED
+        self.assertNotEqual(result.status, STATUS_CONFIRMED,
+                            f'code=400 参数错误不应判 CONFIRMED，实际 {result.status}')
 
 
 class TestThymeleafSsti(unittest.TestCase):
@@ -485,6 +502,20 @@ class TestDefaultPassword(unittest.TestCase):
         self.assertEqual(result.status, STATUS_UNKNOWN,
                          f'验证码场景应判 UNKNOWN（避免漏报），实际 {result.status}')
         self.assertTrue(result.extra.get('captcha_required', False))
+
+    @requests_mock.Mocker()
+    def test_safe_jsessionid_only_no_token(self, m):
+        """安全（P0 修复验证）：登录失败仅返回 JSESSIONID（无 Admin-Token）不应判 CONFIRMED
+        Java 应用登录失败时常下发 JSESSIONID 会话 Cookie，修复前会误报为默认口令命中"""
+        url = MOCK_TARGET + 'login'
+        m.post(url, headers={'Content-Type': 'application/json',
+                             'Set-Cookie': 'JSESSIONID=abc123def456; Path=/; HttpOnly'},
+               text='{"code":500,"msg":"用户不存在/密码错误"}')
+        plugin = DefaultPasswordPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        # 仅 JSESSIONID 无 Admin-Token → 应判 SAFE，绝不能是 CONFIRMED
+        self.assertNotEqual(result.status, STATUS_CONFIRMED,
+                            f'仅 JSESSIONID（登录失败场景）不应判 CONFIRMED，实际 {result.status}')
 
 
 # ---------------------------------------------------------------------------

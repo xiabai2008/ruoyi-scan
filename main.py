@@ -10,9 +10,9 @@ from config import settings
 from core.session import SessionManager
 from core.engine import ScanEngine
 from core.loader import load_plugins
-from core.fingerprint import RuoyiFingerprint
+from core.fingerprint import detect_cms
 from core.router import Router
-from core.report import ReportBuilder
+from core.report import ReportBuilder, BatchReport
 
 
 def print_banner():
@@ -37,10 +37,16 @@ def build_parser():
     parser = argparse.ArgumentParser(add_help=False)
     # -h 兼容原 `python Ruoyi-Scan.py -h` 及 `-h <target>`（target 被忽略，仅显示帮助）
     parser.add_argument('-h', dest='help', nargs='?', const='flag', default=None, help='帮助')
-    parser.add_argument('-u', metavar='target', help='综合扫描')
-    parser.add_argument('-m', metavar='target', help='目录扫描')
-    parser.add_argument('-p', metavar='target', help='漏洞检测')
-    parser.add_argument('-l', metavar='target', help='登录爆破')
+    parser.add_argument('-u', metavar='target', nargs='?', const='__flag__',
+                        default=None, help='综合扫描')
+    parser.add_argument('-m', metavar='target', nargs='?', const='__flag__',
+                        default=None, help='目录扫描')
+    parser.add_argument('-p', metavar='target', nargs='?', const='__flag__',
+                        default=None, help='漏洞检测')
+    parser.add_argument('-l', metavar='target', nargs='?', const='__flag__',
+                        default=None, help='登录爆破')
+    parser.add_argument('-f', metavar='file', dest='file', default=None,
+                        help='批量扫描：从文件读取目标列表，每行一个 URL')
     # 新增长参数（不破坏旧短参数语义）
     parser.add_argument('--proxy', default=None, help='代理地址（如 http://127.0.0.1:8080）')
     parser.add_argument('--threads', type=int, default=settings.THREADS, help='并发线程数')
@@ -58,6 +64,7 @@ def print_help():
     print('-m : 目录扫描')
     print('-p : 漏洞检测')
     print('-l : 登录爆破')
+    print('-f : 批量扫描（从文件读取目标列表）')
     print(SEPARATOR)
     print('可选长参数：')
     print('  --proxy <url>      代理（如 http://127.0.0.1:8080）')
@@ -101,9 +108,8 @@ def run_mode(mode, target, args):
     started_at = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     t0 = time.time()
 
-    # 指纹识别 → 路由 → 插件包（开发方案 §三 Step 3 主流程链路）
-    fp = RuoyiFingerprint()
-    fp_result = fp.detect(target, session)
+    # 指纹识别 → 路由 → 插件包（开发方案 §三 Step 3 主流程链路；阶段二多 CMS 自动识别）
+    fp_result = detect_cms(target, session)
     if fp_result.cms:
         print(f'{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f} '
               f'命中={fp_result.matched}{RESET}')
@@ -162,6 +168,69 @@ def run_mode(mode, target, args):
     return all_results
 
 
+def run_mode_batch(filepath, mode, args):
+    """批量扫描：从文件读目标，逐目标扫描并生成单报告 + 批量汇总报告
+
+    Args:
+        filepath: 目标列表文件路径（每行一个 URL）
+        mode: 扫描模式 'u'/'m'/'p'/'l'（单模式应用到所有目标）
+        args: 命令行参数
+    """
+    import os as _os
+
+    if not _os.path.isfile(filepath):
+        print(f'{RED}[!]目标文件不存在：{filepath}{RESET}')
+        return
+
+    label, color = MODE_LABELS[mode]
+    print(f'{YELLOW}[*]批量扫描模式：[{color}{label}{YELLOW}]{RESET}')
+    print(f'{YELLOW}[*]目标文件：{filepath}{RESET}')
+
+    # 读取目标（去空白行 + 去前后空白）
+    with open(filepath, 'r', encoding='utf-8') as f:
+        targets = [line.strip() for line in f if line.strip()]
+    if not targets:
+        print(f'{RED}[!]目标文件为空{RESET}')
+        return
+    print(f'{YELLOW}[*]共 {len(targets)} 个目标待扫描{RESET}')
+
+    batch = BatchReport()
+    out_dir = args.report or settings.REPORT_DIR
+
+    for i, target in enumerate(targets, 1):
+        print(f'\n{SEPARATOR}')
+        print(f'{YELLOW}[*]进度 [{i}/{len(targets)}] 目标：{target}{RESET}')
+        try:
+            results = run_mode(mode, target, args)
+        except Exception as e:
+            print(f'{RED}[!]扫描异常 ({target})：{e}{RESET}')
+            continue
+
+        # 构建单目标报告
+        t0 = time.time()  # 用 run_mode 内部的计时，但这里用 0 表示(已在 run_mode 中计时)
+        started_at = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # 重新获取 session 信息（run_mode 已 close，这里从结果反推）
+        builder = ReportBuilder(results=results, target=target,
+                                summary={
+                                    'started_at': started_at,
+                                    'duration': 0,  # 在 run_mode 内部已由各自计时确定
+                                    'request_count': len(results),
+                                    'mode': label,
+                                    'fingerprint': {'cms': '', 'confidence': 0},
+                                })
+        batch.add(builder)
+
+    # 输出批量汇总报告
+    if batch.builders:
+        bpaths = batch.render_all(out_dir)
+        print(SEPARATOR)
+        print(f'{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}')
+        for p in bpaths:
+            print(f'{GREEN}[*]批量报告：{p}{RESET}')
+
+    return batch
+
+
 def final_prompt():
     """结尾交互（保留原 input 习惯；非 tty 时自动跳过，便于自动化验收）"""
     if not sys.stdin.isatty():
@@ -179,18 +248,41 @@ def main(argv=None):
     print_banner()
 
     # -h 或无任何模式参数：显示帮助并退出
-    if args.help is not None or not any([args.u, args.m, args.p, args.l]):
+    has_mode = any([args.u, args.m, args.p, args.l, args.file])
+    if args.help is not None or not has_mode:
         print_help()
         return
 
-    if args.u:
-        run_mode('u', args.u, args)
-    elif args.m:
-        run_mode('m', args.m, args)
-    elif args.p:
-        run_mode('p', args.p, args)
-    elif args.l:
-        run_mode('l', args.l, args)
+    # 检查哪种模式被指定（值为 __flag__ 表示 flag 模式/批量，否则为 target URL）
+    def _mode_flag(val):
+        return val is not None and val != '__flag__'
+
+    target_for = {}
+    flag_for = {}
+    for k in ('u', 'm', 'p', 'l'):
+        val = getattr(args, k, None)
+        if val is not None:
+            if val == '__flag__':
+                flag_for[k] = True
+            else:
+                target_for[k] = val
+
+    # -f 批量扫描：从文件读目标，配合 -u/-m/-p/-l flag 指定模式
+    if args.file:
+        mode = None
+        for k in ('u', 'm', 'p', 'l'):
+            if k in flag_for:
+                mode = k
+                break
+        if not mode:
+            print(f'{RED}[!]-f 批量扫描需配合 -u/-m/-p/-l 指定扫描模式，如：main.py -f targets.txt -p{RESET}')
+            return
+        run_mode_batch(args.file, mode, args)
+    elif target_for:
+        for k in ('u', 'm', 'p', 'l'):
+            if k in target_for:
+                run_mode(k, target_for[k], args)
+                break
 
     final_prompt()
 

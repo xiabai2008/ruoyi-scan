@@ -2,6 +2,8 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
+from lib.matcher import match_positive
 
 
 class DefaultPasswordPlugin(PluginBase):
@@ -26,7 +28,7 @@ class DefaultPasswordPlugin(PluginBase):
     CAPTCHA_KEYWORDS = ['验证码', 'captcha', 'code expired', '验证码已失效', 'code is null']
 
     def verify(self, target, session):
-        url = target + 'login'
+        url = join_url(target, 'login')
         # RuoYi /login 接收 JSON body（Content-Type: application/json）
         # 部分版本也接受 form 表单，这里用 JSON 兼容主流前后端分离版本
         data = {
@@ -56,8 +58,7 @@ class DefaultPasswordPlugin(PluginBase):
             pass
 
         # 1) 验证码拦截：服务端要求验证码 → 无法判定（非 SAFE，避免漏报）
-        lower_text = text.lower()
-        if any(kw.lower() in lower_text for kw in self.CAPTCHA_KEYWORDS):
+        if match_positive(text, self.CAPTCHA_KEYWORDS):
             print(no('后台默认口令：服务端要求验证码，无法判定'))
             return ScanResult(
                 kind='brute', name=self.name, status=STATUS_UNKNOWN, url=url,
@@ -98,8 +99,10 @@ class DefaultPasswordPlugin(PluginBase):
                 fix=self.fix,
             )
 
-        if 'Admin-Token' in set_cookie or 'JSESSIONID' in set_cookie:
-            # 任意会话 Cookie 出现可能是登录成功（保守起见标 CONFIRMED 但提示需复核）
+        if 'Admin-Token' in set_cookie:
+            # Admin-Token 是 RuoYi 前后端分离版登录成功下发的专属 token Cookie
+            # 注意：JSESSIONID 不在此判定中——Java 应用登录失败时通常也会下发 JSESSIONID，
+            # 仅凭 JSESSIONID 会产生大量误报（P0 修复）
             print(ok('存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）'))
             return ScanResult(
                 kind='brute', name=self.name, severity=self.severity,

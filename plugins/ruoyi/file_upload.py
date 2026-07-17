@@ -2,6 +2,7 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.http import join_url
 
 
 class FileUploadPlugin(PluginBase):
@@ -17,7 +18,7 @@ class FileUploadPlugin(PluginBase):
     PROBE_CONTENT = 'ruoyi-scan-probe-benign-content'
 
     def verify(self, target, session):
-        url = target + 'common/upload'
+        url = join_url(target, 'common/upload')
         # multipart/form-data：RuoYi 默认字段名为 file
         files = {'file': (self.PROBE_NAME, self.PROBE_CONTENT, 'text/plain')}
         try:
@@ -56,9 +57,10 @@ class FileUploadPlugin(PluginBase):
         url_valid = bool(up_url) and (up_url.startswith('http') or up_url.startswith('/'))
         name_valid = bool(file_name)
 
-        # 上传成功判定：code==200 或 (url_valid 或 name_valid)
-        # 仅含 code != 200 的 msg 不算命中（如 "请先登录"）
-        if code == 200 or url_valid or name_valid:
+        # 上传成功判定：要求 url 或 fileName 存在（P1 修复：
+        # 修复前裸 code==200 即触发 CONFIRMED，导致 {"code":200} 无上传字段的响应也误报；
+        # 现在必须同时满足 url_valid 或 name_valid 才判命中，code==200 单独不触发）
+        if (url_valid or name_valid) and code != 401:
             # 进一步排除鉴权拦截：若 msg 含登录关键字，判 SAFE
             msg = str(data.get('msg', ''))
             if any(kw in msg for kw in ['登录', '请先登录', 'unauthorized', '未授权']):

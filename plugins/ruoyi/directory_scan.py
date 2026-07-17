@@ -4,6 +4,7 @@ import re
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_UNKNOWN
 from lib.colors import GREEN, RED, YELLOW, RESET
+from lib.http import join_url
 from config import settings
 
 
@@ -29,10 +30,7 @@ class DirectoryScanPlugin(PluginBase):
                               url=settings.RUOYI_DICT, evidence=str(e))
 
         for path in path_list:
-            # 双斜杠归一化：if self.url[-1] == '/' and path[0] == '/': path = path[1:]
-            if target.endswith('/') and path.startswith('/'):
-                path = path[1:]
-            url = target + path
+            url = join_url(target, path)
             try:
                 respnse = session.get(url)
             except Exception:

