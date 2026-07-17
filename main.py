@@ -3,7 +3,11 @@ import argparse
 import sys
 
 from lib.colors import GREEN, RED, YELLOW, RESET, SEPARATOR
+from lib.http import normalize_target
 from config import settings
+from core.session import SessionManager
+from core.engine import ScanEngine
+from core.loader import load_plugins
 
 
 def print_banner():
@@ -50,17 +54,53 @@ def print_help():
     print(SEPARATOR)
 
 
+# 模式 → 需要执行的插件 category 顺序（对齐原脚本 -u 综合扫描：path_scan → poc_scan → web_login）
+MODE_CATEGORIES = {
+    'u': ['recon', 'vuln', 'brute'],
+    'm': ['recon'],
+    'p': ['vuln'],
+    'l': ['brute'],
+}
+
+# 模式中文标签（综合扫描高亮红色，其余绿色，对齐原脚本）
+MODE_LABELS = {
+    'u': ('综合扫描', RED),
+    'm': ('目录扫描', GREEN),
+    'p': ('漏洞扫描', GREEN),
+    'l': ('登录爆破', GREEN),
+}
+
+
 def run_mode(mode, target, args):
-    """分发到各扫描模式（Step 2 起接入指纹→路由→插件链路）"""
-    if mode == 'u':
-        # 综合扫描高亮沿用红色（对齐原脚本）
-        print(f'{YELLOW}[*]当前扫描模式:[{RED}综合扫描{YELLOW}]{RESET}')
-    else:
-        labels = {'m': '目录扫描', 'p': '漏洞扫描', 'l': '登录爆破'}
-        print(f'{YELLOW}[*]当前扫描模式:[{GREEN}{labels[mode]}{YELLOW}]{RESET}')
-    print(SEPARATOR)
-    # Step 2 起接入插件链路
-    print(f'{YELLOW}[*]骨架就绪：插件能力将在 Step 2 迁移接入（target={target}）{RESET}')
+    """分发到各扫描模式：按 category 分组执行插件，每组开头打印 SEPARATOR（对齐原脚本各函数开头的分隔线）"""
+    label, color = MODE_LABELS[mode]
+    print(f'{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}')
+
+    # 目标归一化（确保以 / 结尾，对齐原 self.url += '/'）
+    target = normalize_target(target)
+
+    # 加载若依插件包并按 category 分组
+    all_plugins = load_plugins('plugins.ruoyi')
+    plugins_by_cat = {}
+    for cls in all_plugins:
+        cat = getattr(cls, 'category', '')
+        plugins_by_cat.setdefault(cat, []).append(cls)
+
+    # 会话与引擎
+    session = SessionManager(proxy=args.proxy)
+    engine = ScanEngine(threads=args.threads, rate=args.rate)
+
+    all_results = []
+    for cat in MODE_CATEGORIES[mode]:
+        print(SEPARATOR)
+        classes = plugins_by_cat.get(cat, [])
+        if not classes:
+            continue
+        results = engine.run(classes, target, session)
+        all_results.extend(results)
+
+    session.close()
+    return all_results
 
 
 def final_prompt():

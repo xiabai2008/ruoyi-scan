@@ -21,8 +21,8 @@ DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101
 # 请求超时（秒）
 TIMEOUT = 10
 
-# 并发线程数（Step 5 启用）
-THREADS = 5
+# 并发线程数（默认 1 = 同步顺序执行，对齐原脚本行为；Step 5 通过 --threads N 启用并发）
+THREADS = 1
 
 # 限速（每秒请求数，0 表示不限速）
 RATE = 0
