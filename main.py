@@ -1,6 +1,8 @@
 # Ruoyi-Scan CLI 入口（-h/-u/-m/-p/-l 向后兼容 + 新长参数）
 import argparse
+import datetime
 import sys
+import time
 
 from lib.colors import GREEN, RED, YELLOW, RESET, SEPARATOR
 from lib.http import normalize_target
@@ -10,6 +12,7 @@ from core.engine import ScanEngine
 from core.loader import load_plugins
 from core.fingerprint import RuoyiFingerprint
 from core.router import Router
+from core.report import ReportBuilder
 
 
 def print_banner():
@@ -85,6 +88,10 @@ def run_mode(mode, target, args):
     session = SessionManager(proxy=args.proxy)
     engine = ScanEngine(threads=args.threads, rate=args.rate)
 
+    # 计时起点（用于报告摘要）
+    started_at = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    t0 = time.time()
+
     # 指纹识别 → 路由 → 插件包（开发方案 §三 Step 3 主流程链路）
     fp = RuoyiFingerprint()
     fp_result = fp.detect(target, session)
@@ -117,7 +124,32 @@ def run_mode(mode, target, args):
         results = engine.run(classes, target, session)
         all_results.extend(results)
 
+    duration = time.time() - t0
     session.close()
+
+    # 报告生成（--report 指定目录时输出 HTML/JSON/CSV 三格式）
+    if args.report:
+        summary = {
+            'started_at': started_at,
+            'duration': duration,
+            'request_count': session.request_count,
+            'mode': label,
+            'fingerprint': {
+                'cms': fp_result.cms,
+                'confidence': fp_result.confidence,
+                'matched': fp_result.matched,
+            },
+        }
+        builder = ReportBuilder(results=all_results, target=target, summary=summary)
+        paths = builder.render_all(args.report)
+        dist = builder.risk_distribution()
+        print(SEPARATOR)
+        print(f'{YELLOW}[*]扫描摘要：耗时 {duration:.2f}s 请求数 {session.request_count} '
+              f'风险分布 高{dist["high"]}/中{dist["medium"]}/低{dist["low"]} '
+              f'合计 {dist["total"]} 个漏洞{RESET}')
+        for p in paths:
+            print(f'{GREEN}[*]报告已生成：{p}{RESET}')
+
     return all_results
 
 

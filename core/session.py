@@ -18,13 +18,17 @@ class SessionManager:
             self.session.proxies.update({'http': self.proxy, 'https': self.proxy})
         # keep-alive 复用连接
         self.session.keep_alive = True
+        # 请求计数（报告摘要用）
+        self.request_count = 0
 
     def get(self, url, headers=None, **kwargs):
         kwargs.setdefault('timeout', self.timeout)
+        self.request_count += 1
         return self.session.get(url, headers=headers, **kwargs)
 
     def post(self, url, headers=None, data=None, **kwargs):
         kwargs.setdefault('timeout', self.timeout)
+        self.request_count += 1
         return self.session.post(url, headers=headers, data=data, **kwargs)
 
     def close(self):
