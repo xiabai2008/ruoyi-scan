@@ -1,0 +1,59 @@
+# Ruoyi-Scan 一键部署（阶段七）
+# 包含：scanner 扫描器 + 4 个 CMS 签名靶场（vuln 模式，供端到端验证）
+# 用法：
+#   docker compose up -d                              # 启动所有靶场
+#   docker compose run --rm scanner -p http://lab-weaver:8092/ --report /app/reports
+#   docker compose down                              # 清理
+services:
+  # 扫描器（main.py 入口，参数通过 CMD 追加）
+  scanner:
+    build: .
+    volumes:
+      - ./reports:/app/reports
+    # 默认显示帮助；运行扫描时用 docker-compose run --rm scanner -p <target>
+    command: -h
+    depends_on:
+      - lab-ruoyi
+      - lab-thinkphp
+      - lab-spring
+      - lab-weaver
+
+  # 若依签名靶场（vuln 模式，端口 8080）
+  lab-ruoyi:
+    build: ./lab
+    environment:
+      - SERVER_FILE=server.py
+      - LAB_MODE=vuln
+      - LAB_PORT=8080
+    ports:
+      - "8080:8080"
+
+  # ThinkPHP 签名靶场（vuln 模式，端口 8090）
+  lab-thinkphp:
+    build: ./lab
+    environment:
+      - SERVER_FILE=thinkphp_server.py
+      - LAB_MODE=vuln
+      - LAB_PORT=8090
+    ports:
+      - "8090:8090"
+
+  # Spring Boot 签名靶场（vuln 模式，端口 8091）
+  lab-spring:
+    build: ./lab
+    environment:
+      - SERVER_FILE=spring_server.py
+      - LAB_MODE=vuln
+      - LAB_PORT=8091
+    ports:
+      - "8091:8091"
+
+  # 泛微 e-cology 签名靶场（vuln 模式，端口 8092）
+  lab-weaver:
+    build: ./lab
+    environment:
+      - SERVER_FILE=weaver_server.py
+      - LAB_MODE=vuln
+      - LAB_PORT=8092
+    ports:
+      - "8092:8092"

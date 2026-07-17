@@ -1,0 +1,29 @@
+# Docker 构建忽略（阶段七）：scanner 镜像仅需扫描器源码，不含 lab 靶场与遗留产物
+.git/
+.gitignore
+.trae-cn/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 报告输出目录（运行时由 volume 挂载）
+reports/
+reports_phase6/
+
+# lab 靶场与遗留实验产物（scanner 不需要）
+lab/
+lab/Dockerfile
+lab/docker-compose.yml
+lab/requirements.txt
+lab/*.log
+lab/build*.log
+lab/maven388.tar.gz
+lab/real-ruoyi/
+lab/tools/
+lab/*.md
+
+# 临时文件
+*.tmp
+COMMIT_*.txt

@@ -1,0 +1,5 @@
+# Ruoyi-Scan 依赖（阶段七 Docker 部署）
+# scanner 主程序仅依赖 requests；flask 供 lab 靶场；requests-mock 供 tests
+requests>=2.28
+flask>=2.3
+requests-mock>=1.11
