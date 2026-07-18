@@ -6,6 +6,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_file_read_leak
 
 # 漏洞命中签名（与 lab/thinkphp_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 FILE_MARKER = 'thinkphp-file-read-confirmed'
@@ -34,12 +35,21 @@ class ThinkphpFileReadPlugin(PluginBase):
                               url=url, evidence=str(e))
 
         text = resp.text or ''
+        # 判定：签名靶场 marker 命中 OR 真实漏洞响应（敏感文件内容特征）
         if FILE_MARKER in text:
             print(ok('存在 ThinkPHP 模板驱动任意文件读取'))
             return ScanResult(
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含文件读取特征：{FILE_MARKER}',
+                fix=self.fix,
+            )
+        if match_file_read_leak(text):
+            print(ok('存在 ThinkPHP 模板驱动任意文件读取（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含敏感文件内容特征（/etc/passwd 等），证实文件读取漏洞',
                 fix=self.fix,
             )
         print(no('不存在 ThinkPHP 模板驱动任意文件读取'))

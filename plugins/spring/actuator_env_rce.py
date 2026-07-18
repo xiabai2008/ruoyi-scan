@@ -6,6 +6,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_spring_actuator_env
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 ENV_MARKER = 'spring-actuator-env-rce-confirmed'
@@ -40,6 +41,26 @@ class SpringActuatorEnvRcePlugin(PluginBase):
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 env 配置 RCE 特征：{ENV_MARKER}',
+                fix=self.fix,
+            )
+        # 真实漏洞响应：POST 返回 200/201（非 401/403/404/405）即说明 env 可被写入
+        # 真实 Spring Boot env POST 成功返回 200 JSON（含 propertySources 或简单 JSON）
+        if resp.status_code in (200, 201) and match_spring_actuator_env(text):
+            print(ok('存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含 Actuator env 配置特征（propertySources/applicationConfig），证实 env POST 可达',
+                fix=self.fix,
+            )
+        # 真实漏洞响应：POST 返回 200 但响应体简单（仅 timestamp/status），
+        # 仍可判定 env POST 可达（无鉴权拦截）
+        if resp.status_code == 200 and 'Method Not Allowed' not in text and 'error' not in text.lower():
+            print(ok('存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence=f'POST /actuator/env 返回 200（无鉴权拦截），证实 env 配置可写入',
                 fix=self.fix,
             )
         print(no('不存在 Spring Boot Actuator env 配置覆盖 RCE'))

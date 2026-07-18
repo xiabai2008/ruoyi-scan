@@ -6,6 +6,7 @@
 # 退出码：0 全部通过，非 0 表示有失败用例
 import os
 import sys
+import json
 import unittest
 
 # 将项目根目录加入 sys.path，便于直接运行
@@ -75,6 +76,18 @@ class TestSpring4shell(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（Spring Boot 成功 JSON，无 marker）应判 CONFIRMED"""
+        # 真实 Spring4Shell 成功响应：200 + {"timestamp":...,"status":200}
+        real_resp = '{"timestamp":"2024-01-01T00:00:00.000Z","status":200,"error":"Not Found","path":"/"}'
+        # 实际成功响应是无 error 字段的标准 JSON
+        real_success = '{"timestamp":"2024-01-01T00:00:00.000Z","status":200,"message":"ok"}'
+        m.post(MOCK_TARGET + '/', text=real_success)
+        r = Spring4shellPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（Spring Boot 成功 JSON）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestGatewayRce(unittest.TestCase):
     """Gateway RCE：响应含 MARKER_GW → CONFIRMED，否则 SAFE"""
@@ -95,6 +108,19 @@ class TestGatewayRce(unittest.TestCase):
         r = SpringGatewayRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（201 + 路由信息含 filters/AddResponseHeader）应判 CONFIRMED"""
+        real_resp = ('{"id":"test-route-probe","filters":'
+                     '[{"name":"AddResponseHeader","args":{"name":"X-Probe","value":"c22947"}}],'
+                     '"uri":"http://localhost:1","order":0}')
+        m.post(MOCK_TARGET + '/actuator/gateway/routes/test',
+               text=real_resp, status_code=201,
+               headers={'Content-Type': 'application/json'})
+        r = SpringGatewayRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（路由创建成功）应判 CONFIRMED，实际 {r.status}')
 
 
 class TestActuatorEnvRce(unittest.TestCase):
@@ -117,6 +143,24 @@ class TestActuatorEnvRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（200 + propertySources JSON）应判 CONFIRMED"""
+        real_env = json.dumps({
+            'activeProfiles': ['prod'],
+            'propertySources': [
+                {'name': 'systemProperties', 'properties': {'java.runtime.name': {'value': 'Java(TM)'}}},
+                {'name': 'applicationConfig: [classpath:/application.yml]',
+                 'properties': {'spring.datasource.password': {'value': '******'},
+                                'spring.datasource.url': {'value': 'jdbc:mysql://localhost:3306/prod_db'}}},
+            ],
+        })
+        m.post(MOCK_TARGET + '/actuator/env', text=real_env,
+               headers={'Content-Type': 'application/json'})
+        r = SpringActuatorEnvRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（propertySources JSON）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestJolokiaRce(unittest.TestCase):
     """Jolokia RCE：响应含 MARKER_JOLOKIA → CONFIRMED，否则 SAFE"""
@@ -138,6 +182,25 @@ class TestJolokiaRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（200 + Jolokia EXEC 响应含 reloadByURL/JMXConfigurator）应判 CONFIRMED"""
+        real_jolokia = json.dumps({
+            'timestamp': 1700000000, 'status': 200,
+            'request': {
+                'type': 'EXEC',
+                'mbean': 'ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator',
+                'operation': 'reloadByURL',
+                'arguments': ['http://jolokia-probe.test/logback.xml'],
+            },
+            'value': None,
+        })
+        m.post(MOCK_TARGET + '/actuator/jolokia', text=real_jolokia,
+               headers={'Content-Type': 'application/json'})
+        r = SpringJolokiaRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（Jolokia EXEC + reloadByURL）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestJolokiaMletRce(unittest.TestCase):
     """Jolokia MLet 链 RCE：响应含 MARKER_JOLOKIA_MLET → CONFIRMED，否则 SAFE"""
@@ -154,10 +217,31 @@ class TestJolokiaMletRce(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe(self, m):
         m.get(MOCK_TARGET + '/actuator/jolokia/list',
-              text='{"status":404,"error":"Not Found"}', status_code=404)
+               text='{"status":404,"error":"Not Found"}', status_code=404)
         r = SpringJolokiaMletRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（200 + Jolokia LIST MBean 域含 reloadByURL）应判 CONFIRMED"""
+        real_list = json.dumps({
+            'timestamp': 1700000000, 'status': 200,
+            'request': {'type': 'LIST'},
+            'value': {
+                'java.lang': {'type=Memory': {'op': {}, 'attr': {'HeapMemoryUsage': {'rw': False}}}},
+                'ch.qos.logback.classic': {
+                    'Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator': {
+                        'op': {'reloadByURL': {'args': 1, 'desc': 'Reload logback config from URL'}},
+                    },
+                },
+            },
+        })
+        m.get(MOCK_TARGET + '/actuator/jolokia/list', text=real_list,
+              headers={'Content-Type': 'application/json'})
+        r = SpringJolokiaMletRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（Jolokia LIST + reloadByURL）应判 CONFIRMED，实际 {r.status}')
 
 
 class TestCloudFunctionRce(unittest.TestCase):
@@ -180,6 +264,16 @@ class TestCloudFunctionRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（200 + SpEL 求值结果 49）应判 CONFIRMED"""
+        # 真实 Spring Cloud Function SpEL T(java.lang.String).valueOf(7*7) 返回 '49'
+        m.post(MOCK_TARGET + '/functionRouter', text='49',
+               headers={'Content-Type': 'text/plain'})
+        r = SpringCloudFunctionRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（SpEL 求值结果 49）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestH2ConsoleRce(unittest.TestCase):
     """H2 Console RCE：响应含 MARKER_H2 → CONFIRMED，否则 SAFE"""
@@ -200,6 +294,21 @@ class TestH2ConsoleRce(unittest.TestCase):
         r = SpringH2ConsoleRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（H2 Console HTML 登录表单）应判 CONFIRMED"""
+        real_h2 = ('<!DOCTYPE html><html><head><title>H2 Console</title></head><body>'
+                   '<h1>H2 Console</h1>'
+                   '<form method="post" action="/h2-console">'
+                   '<input type="text" name="driver" value="org.h2.Driver"/>'
+                   '<input type="text" name="url" value="jdbc:h2:mem:test"/>'
+                   '<input type="submit" value="Connect"/></form></body></html>')
+        m.post(MOCK_TARGET + '/h2-console', text=real_h2,
+               headers={'Content-Type': 'text/html'})
+        r = SpringH2ConsoleRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（H2 Console 登录表单）应判 CONFIRMED，实际 {r.status}')
 
 
 class TestMappingsLeak(unittest.TestCase):
@@ -275,6 +384,25 @@ class TestHeapdumpLeak(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（JAVA PROFILE 二进制 + 敏感字符串）应判 CONFIRMED"""
+        # 真实 heapdump hprof 文件头 + 堆中敏感字符串
+        header = b'JAVA PROFILE 1.0.2\n'
+        sensitive = [
+            b'jdbc:mysql://localhost:3306/prod_db',
+            b'password=Admin@2024',
+            b'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9',
+            b'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            b'private_key=-----BEGIN RSA PRIVATE KEY-----',
+        ]
+        body = header + b'\x00\x01\x02\x03' + b'\n'.join(sensitive) + b'\n\x04\x05\x06'
+        m.get(MOCK_TARGET + '/actuator/heapdump',
+              content=body, headers={'Content-Type': 'application/octet-stream'})
+        r = SpringHeapdumpLeakPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（JAVA PROFILE 二进制 + 敏感字符串）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestTraceLeak(unittest.TestCase):
     """/actuator/trace 泄露：响应含 MARKER_TRACE → CONFIRMED，否则 SAFE"""
@@ -298,6 +426,32 @@ class TestTraceLeak(unittest.TestCase):
         r = SpringTraceLeakPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'端点不可达应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（traces 数组 + timeTaken 字段）应判 CONFIRMED"""
+        real_trace = json.dumps({
+            'traces': [
+                {
+                    'timestamp': '2024-01-01T00:00:00.000Z',
+                    'request': {
+                        'method': 'GET',
+                        'uri': 'http://localhost:8080/actuator/env',
+                        'headers': {
+                            'Cookie': ['SESSION=abc123def456'],
+                            'Authorization': ['Bearer eyJhbGciOiJIUzI1NiJ9'],
+                        },
+                    },
+                    'response': {'status': 200, 'headers': {}},
+                    'timeTaken': 5,
+                },
+            ],
+        })
+        m.get(MOCK_TARGET + '/actuator/trace', text=real_trace,
+              headers={'Content-Type': 'application/json'})
+        r = SpringTraceLeakPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（traces + timeTaken）应判 CONFIRMED，实际 {r.status}')
 
 
 if __name__ == '__main__':

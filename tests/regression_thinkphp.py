@@ -74,6 +74,17 @@ class TestInvokeRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpinfo HTML，不含 marker）应判 CONFIRMED"""
+        phpinfo_html = ('<!DOCTYPE html><html><head><title>phpinfo()</title></head>'
+                       '<body><h1>PHP Version 7.2.34</h1>'
+                       '<table><tr><td>phpinfo()</td></tr></table></body></html>')
+        m.post(MOCK_TARGET + '/index.php', text=phpinfo_html)
+        r = ThinkphpInvokeRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpinfo HTML）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestMethodConstructRce(unittest.TestCase):
     """5.0.23 method 覆盖 RCE：命中 MARKER_CONSTRUCT，否则 SAFE"""
@@ -95,6 +106,15 @@ class TestMethodConstructRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpversion 字符串，不含 marker）应判 CONFIRMED"""
+        # 真实 phpversion() 输出：短字符串 7.x.x 格式
+        m.post(MOCK_TARGET + '/index.php?s=captcha', text='7.2.34')
+        r = ThinkphpMethodConstructRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpversion 短字符串）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestLangRce(unittest.TestCase):
     """5.0.x 多语言 RCE(CVE-2022-25481)：命中 MARKER_LANG，否则 SAFE"""
@@ -114,6 +134,16 @@ class TestLangRce(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpinfo HTML，不含 marker）应判 CONFIRMED"""
+        phpinfo_html = ('<!DOCTYPE html><html><head><title>phpinfo()</title></head>'
+                       '<body><h1>PHP Version 7.2.34</h1></body></html>')
+        m.get(MOCK_TARGET + '/index.php', text=phpinfo_html)
+        r = ThinkphpLangRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpinfo HTML）应判 CONFIRMED，实际 {r.status}')
+
 
 class Test51Rce(unittest.TestCase):
     """5.1.x 路由 RCE：命中 MARKER_51，否则 SAFE"""
@@ -132,6 +162,16 @@ class Test51Rce(unittest.TestCase):
         r = Thinkphp51RcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpinfo HTML，不含 marker）应判 CONFIRMED"""
+        phpinfo_html = ('<!DOCTYPE html><html><head><title>phpinfo()</title></head>'
+                       '<body><h1>PHP Version 7.4.30</h1></body></html>')
+        m.get(MOCK_TARGET + '/index.php', text=phpinfo_html)
+        r = Thinkphp51RcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpinfo HTML）应判 CONFIRMED，实际 {r.status}')
 
 
 class TestCacheWrite(unittest.TestCase):
@@ -212,6 +252,17 @@ class TestLogDisclosure(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'日志路径不可访问应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（真实日志格式，不含 marker）应判 CONFIRMED"""
+        # 真实 ThinkPHP runtime/log 内容：[ 2024-01-01T08:30:00+08:00 ] INFO: [ app ] 日志内容
+        real_log = ('[ 2024-01-01T08:30:00+08:00 ] INFO: [ app ] SQL: SELECT * FROM user\n'
+                    '[ 2024-01-01T08:31:00+08:00 ] ERROR: [ app ] Connection failed')
+        m.get(LOG_URL, text=real_log, status_code=200)
+        r = ThinkphpLogDisclosurePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（真实日志格式）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestFileRead(unittest.TestCase):
     """模板驱动文件读取：命中 MARKER_FILE，否则 SAFE"""
@@ -231,6 +282,17 @@ class TestFileRead(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（/etc/passwd 内容，不含 marker）应判 CONFIRMED"""
+        passwd_content = ('root:x:0:0:root:/root:/bin/bash\n'
+                         'daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n'
+                         'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\n')
+        m.get(MOCK_TARGET + '/index.php', text=passwd_content)
+        r = ThinkphpFileReadPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（/etc/passwd 内容）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestWhereInject(unittest.TestCase):
     """where 子句注入：命中 MARKER_SQLI，否则 SAFE"""
@@ -249,6 +311,17 @@ class TestWhereInject(unittest.TestCase):
         r = ThinkphpWhereInjectPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（SQL 报错特征，不含 marker）应判 CONFIRMED"""
+        # 真实 extractvalue 报错注入回显：XPATH syntax error: '~ry~'
+        sql_error = ("XPATH syntax error: '~ry~'\n"
+                     "[SQL]: SELECT * FROM user WHERE id=1")
+        m.get(MOCK_TARGET + '/index.php', text=sql_error)
+        r = ThinkphpWhereInjectPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（SQL 报错特征）应判 CONFIRMED，实际 {r.status}')
 
 
 class TestRequestRceV2(unittest.TestCase):
@@ -271,6 +344,18 @@ class TestRequestRceV2(unittest.TestCase):
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
 
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpinfo HTML，不含 marker）应判 CONFIRMED"""
+        # LIFO：先注册 ANY 兜底，再注册根路径精确匹配（带 query 时由根路径命中）
+        phpinfo_html = ('<!DOCTYPE html><html><head><title>phpinfo()</title></head>'
+                       '<body><h1>PHP Version 7.2.34</h1></body></html>')
+        m.get(requests_mock.ANY, text='<html><body>ThinkPHP</body></html>')
+        m.get(MOCK_TARGET + '/', text=phpinfo_html)
+        r = ThinkphpRequestRceV2Plugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpinfo HTML）应判 CONFIRMED，实际 {r.status}')
+
 
 class TestDispatchRce(unittest.TestCase):
     """5.1.x 路由调度 invokefunction RCE：命中 MARKER_DISPATCH，否则 SAFE"""
@@ -291,6 +376,18 @@ class TestDispatchRce(unittest.TestCase):
         r = ThinkphpDispatchRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE,
                          f'响应不含签名应判 SAFE，实际 {r.status}')
+
+    @requests_mock.Mocker()
+    def test_real_vuln(self, m):
+        """真实漏洞响应（phpinfo HTML，不含 marker）应判 CONFIRMED"""
+        # LIFO：先注册 ANY 兜底，再注册根路径精确匹配
+        phpinfo_html = ('<!DOCTYPE html><html><head><title>phpinfo()</title></head>'
+                       '<body><h1>PHP Version 7.2.34</h1></body></html>')
+        m.get(requests_mock.ANY, text='<html><body>ThinkPHP</body></html>')
+        m.get(MOCK_TARGET + '/', text=phpinfo_html)
+        r = ThinkphpDispatchRcePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(r.status, STATUS_CONFIRMED,
+                         f'真实漏洞响应（phpinfo HTML）应判 CONFIRMED，实际 {r.status}')
 
 
 if __name__ == '__main__':

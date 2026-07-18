@@ -7,6 +7,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_trace_leak
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 TRACE_LEAK_MARKER = 'spring-trace-leak-confirmed'
@@ -36,6 +37,15 @@ class SpringTraceLeakPlugin(PluginBase):
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 /trace 泄露特征：{TRACE_LEAK_MARKER}',
+                fix=self.fix,
+            )
+        # 真实漏洞响应：/actuator/trace 返回 200 + traces 数组 / timeTaken 等特征
+        if resp.status_code == 200 and match_trace_leak(text):
+            print(ok('存在 Spring Boot Actuator /trace 请求历史泄露漏洞（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含 /trace 请求历史特征（traces 数组 / timeTaken），证实 trace 端点暴露',
                 fix=self.fix,
             )
         print(no('不存在 Spring Boot Actuator /trace 请求历史泄露漏洞'))

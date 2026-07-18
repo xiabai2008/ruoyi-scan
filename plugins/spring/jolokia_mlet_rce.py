@@ -8,6 +8,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_jolokia_response
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 JOLOKIA_MLET_MARKER = 'spring-jolokia-mlet-rce-confirmed'
@@ -37,6 +38,15 @@ class SpringJolokiaMletRcePlugin(PluginBase):
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 Jolokia MLet 链特征：{JOLOKIA_MLET_MARKER}',
+                fix=self.fix,
+            )
+        # 真实漏洞响应：Jolokia LIST 响应含 JMX MBean 域列表（reloadByURL / JMXConfigurator 等）
+        if resp.status_code == 200 and match_jolokia_response(text):
+            print(ok('存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含 Jolokia JMX MBean 响应特征（reloadByURL/JMXConfigurator），证实 Jolokia 端点可达',
                 fix=self.fix,
             )
         print(no('不存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞'))

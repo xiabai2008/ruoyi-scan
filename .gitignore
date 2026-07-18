@@ -9,8 +9,30 @@ __pycache__/
 
 # 扫描报告输出（按需生成，不纳入版本库）
 reports/
+reports_p9_*/
+reports_phase6/
 
 # 本地虚拟环境
 venv/
 .venv/
 env/
+
+# 阶段九临时调试脚本与日志
+_p9_*.py
+_p9_*.log
+
+# 真实靶场源码（外部仓库，仅保留文档与复现脚本）
+lab/real-ruoyi/
+
+# Maven 二进制发行包（用户自行下载）
+lab/tools/
+lab/maven388.tar.gz
+
+# 靶场构建/扫描日志
+lab/build*.log
+lab/build2.log
+lab/scan-vuln*.log
+lab/safe-baseline.log
+lab/ruoyi-run.log
+lab/ruoyi-vuln*.log
+lab/run-ruoyi.bat

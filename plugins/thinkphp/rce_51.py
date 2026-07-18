@@ -5,6 +5,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_php_eval_response
 
 # 漏洞命中签名（与 lab/thinkphp_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 RCE_51_MARKER = 'thinkphp-51-request-rce-confirmed'
@@ -34,12 +35,21 @@ class Thinkphp51RcePlugin(PluginBase):
                               url=url, evidence=str(e))
 
         text = resp.text or ''
+        # 判定：签名靶场 marker 命中 OR 真实漏洞响应（phpinfo/phpversion 求值结果）
         if RCE_51_MARKER in text:
             print(ok('存在 ThinkPHP 5.1.x 路由远程代码执行漏洞'))
             return ScanResult(
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 5.1 路由 RCE 特征：{RCE_51_MARKER}',
+                fix=self.fix,
+            )
+        if match_php_eval_response(text):
+            print(ok('存在 ThinkPHP 5.1.x 路由远程代码执行漏洞（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含 PHP 函数求值结果（phpinfo/phpversion），证实 5.1.x 路由 RCE 可达',
                 fix=self.fix,
             )
         print(no('不存在 ThinkPHP 5.1.x 路由远程代码执行漏洞'))

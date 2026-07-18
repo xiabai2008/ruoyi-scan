@@ -6,6 +6,7 @@ from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from lib.http import join_url
+from lib.matcher import match_cloud_function_spel
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 SCF_MARKER = 'spring-cloud-function-rce-confirmed'
@@ -39,6 +40,15 @@ class SpringCloudFunctionRcePlugin(PluginBase):
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 Cloud Function SpEL 特征：{SCF_MARKER}',
+                fix=self.fix,
+            )
+        # 真实漏洞响应：SpEL 求值结果（7*7=49 短数字 / 命令回显）
+        if resp.status_code == 200 and match_cloud_function_spel(text):
+            print(ok('存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞（真实漏洞响应）'))
+            return ScanResult(
+                kind='vuln', name=self.name, severity=self.severity,
+                status=STATUS_CONFIRMED, url=url,
+                evidence='响应含 SpEL 求值结果（短数字 / 命令回显），证实 Cloud Function SpEL 注入可达',
                 fix=self.fix,
             )
         print(no('不存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞'))
