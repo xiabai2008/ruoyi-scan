@@ -1,15 +1,17 @@
 # 指纹识别接口 + 通用特征判定（数据驱动，支持多 CMS 自动识别与路由）
 import hashlib
 import re
+from typing import Dict, List
 
 from lib.fingerprint_features import get_feature, list_cms
 from core.models import FingerprintResult
+from core.session import SessionManager
 
 
 class Fingerprint:
     """指纹识别抽象接口（新增 CMS 实现此接口即可，引擎零改动）"""
 
-    def detect(self, target, session, cache=None) -> FingerprintResult:
+    def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
         """识别目标 CMS，返回 FingerprintResult（cms 空串表示未识别）
 
         cache（可选）：core.cache.FingerprintCache 实例，用于多 CMS 遍历时
@@ -30,7 +32,7 @@ class FeatureBasedFingerprint(Fingerprint):
         self.cms = cms
         self.feature = get_feature(cms)
 
-    def detect(self, target, session, cache=None) -> FingerprintResult:
+    def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
         if not self.feature:
             return FingerprintResult(cms='', version='', confidence=0.0, matched=[])
 
@@ -122,7 +124,7 @@ class RuoyiFingerprint(FeatureBasedFingerprint):
         super().__init__('ruoyi')
 
 
-def detect_cms(target, session) -> FingerprintResult:
+def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     """多 CMS 指纹识别：遍历所有注册 CMS，返回置信度最高的结果
 
     用于阶段二自动路由：未知目标自动识别为对应 CMS 并加载插件包。
@@ -170,7 +172,7 @@ def detect_cms(target, session) -> FingerprintResult:
     return best
 
 
-def detect_waf(target, session) -> dict:
+def detect_waf(target: str, session: SessionManager) -> dict:
     """WAF 指纹识别：检测目标是否部署了 Web 应用防火墙（P1-C）
 
     通过分析根路径响应头、响应体、Set-Cookie 特征判断 WAF 类型。

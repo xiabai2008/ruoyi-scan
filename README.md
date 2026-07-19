@@ -1,35 +1,39 @@
 # Ruoyi-Scan — 若依专项漏洞扫描工具
 
-> 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定，支持批量扫描与多格式报告。
+> 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定（CONFIRMED / SAFE / UNKNOWN）。
+> 支持批量扫描、多格式报告、WAF 绕过、漏洞利用链、Web API 等企业级特性。
 
 ---
 
 ## 项目定位
 
-针对若依（RuoYi）系统框架的综合漏洞检测工具，专注做深而非做宽。
-
 - **作者**：XIABAI
 - **版本**：1.1.0
-- **技术栈**：Python 3 + `requests`，命令行工具，控制台彩色输出
-- **许可证**：MIT
+- **仓库**：https://github.com/xiabai2004/Ruoyi-Scan
+- **技术栈**：Python 3.8+ / requests / FastAPI / Docker
+- **许可**：MIT License
 
 ---
 
-## 当前能力
+## 核心能力
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 16 个 POC（核心，做深方向） |
-| `plugins/spring/` | Spring Boot 14 个 POC（协同，与若依生态强相关） |
-| `plugins/common/` | 通用漏洞包（.git/.env/备份/CORS 等，不依赖 CMS 指纹） |
-| 指纹识别 | favicon hash + 特征路径 + 登录页关键字，数据驱动 |
-| 批量扫描 | `-f targets.txt`，批量汇总报告 |
-| 报告 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF（可选依赖降级） |
+| `plugins/ruoyi/` | 若依 16 个 POC（文件读取、SQL 注入、RCE、SSTI、未授权等） |
+| `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
+| `plugins/common/` | 通用漏洞包（.git/.env 泄露、备份文件、CORS、Swagger 等） |
+| 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 |
+| 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
+| WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 成功率追踪 |
+| 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |
+| 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
+| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF |
+| Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 |
 | 并发限速 | ThreadPoolExecutor + 令牌桶（锁外 sleep，无并发退化） |
-| 三态判定 | CONFIRMED / SAFE / UNKNOWN，网络异常绝不判 SAFE |
-| WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 策略成功率追踪 |
-| Web API | FastAPI REST + WebSocket 实时推送 + Alpine.js 控制台 |
-| 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 失败策略 |
+| 验证码处理 | 自动探测 / OCR 识别 / 跳过 三模式 |
+| 多版本适配 | RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤 |
+| 端口扫描 | TCP 端口扫描 + 服务识别 + Banner 抓取 |
+| 被动代理 | HTTP/HTTPS 代理，捕获流量自动扫描 |
 
 ---
 
@@ -51,23 +55,56 @@ python main.py -p http://target:8080/ --cms ruoyi
 # 综合扫描（目录扫描 + 漏洞检测 + 登录爆破）
 python main.py -u http://target:8080/
 
-# 生成全格式报告
+# 生成全格式报告（HTML/JSON/CSV/PDF/Word/Excel）
 python main.py -p http://target:8080/ --report ./reports --report-format all
+
+# WAF 绕过（检测到 WAF 自动启用）
+python main.py -p http://target:8080/ --bypass-waf auto
 
 # 执行漏洞利用链
 python main.py --chain ruoyi_sql_to_rce -u http://target:8080/
 python main.py --chain list  # 列出可用链
 
-# WAF 绕过
-python main.py -p http://target:8080/ --bypass-waf auto
-
 # Web API 服务
 python main.py --serve
-# 访问 http://localhost:8000/         Web 控制台
-# 访问 http://localhost:8000/docs     OpenAPI 文档
+# 访问 http://localhost:8000/ (Web 控制台)
+# 访问 http://localhost:8000/docs (OpenAPI 文档)
+
+# 端口扫描 + 漏洞检测
+python main.py -p http://target:8080/ --portscan
+
+# 被动代理模式
+python main.py --passive --passive-port 8080
+
+# Docker 部署
+docker-compose up -d
 ```
 
-**主要 CLI 参数**：`-h` 帮助 / `-u` 综合扫描 / `-m` 目录扫描 / `-p` 漏洞检测 / `-l` 登录爆破 / `-f` 批量 / `--cms` 指定 CMS / `--threads` 并发 / `--rate` 限速 / `--proxy` 代理 / `--report` 报告 / `--chain` 利用链 / `--serve` Web API / `--passive` 被动代理 / `--portscan` 端口扫描
+### CLI 参数速查
+
+| 参数 | 说明 |
+|------|------|
+| `-h` | 帮助信息 |
+| `-u <url>` | 综合扫描（目录+漏洞+爆破） |
+| `-m <url>` | 目录扫描 |
+| `-p <url>` | 漏洞检测 |
+| `-l <url>` | 登录爆破 |
+| `-f <file>` | 批量扫描（从文件读取目标列表） |
+| `--cms <ruoyi\|spring>` | 手动指定 CMS |
+| `--proxy <url>` | 代理地址 |
+| `--threads <n>` | 并发线程数 |
+| `--rate <n>` | 每秒请求数（0=不限速） |
+| `--report <dir>` | 报告输出目录 |
+| `--report-format <f>` | 报告格式（html/json/csv/pdf/docx/xlsx/sarif） |
+| `--timeout <n>` | 请求超时秒数 |
+| `--debug` | 调试模式 |
+| `--chain <name>` | 执行漏洞利用链 |
+| `--bypass-waf <auto\|on\|off>` | WAF 绕过策略 |
+| `--portscan` | 端口扫描 |
+| `--passive` | 被动代理模式 |
+| `--serve` | 启动 Web API 服务 |
+| `--template <name>` | 扫描模板（quick/deep/compliance/dengbao） |
+| `--config <path>` | YAML 配置文件 |
 
 ---
 
@@ -75,19 +112,37 @@ python main.py --serve
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI 入口
+├── main.py                  # CLI 入口（~390 行，纯参数解析+分发）
 ├── config/settings.py       # 全局配置
-├── core/                    # 引擎/路由/指纹/会话/报告/缓存/编排器
-├── plugins/                 # 插件包（ruoyi + spring + common）
-├── lib/                     # 工具库（WAF绕过/爬虫/子域名/分布式等）
-├── data/                    # 字典文件
+├── core/                    # 核心引擎层
+│   ├── runner.py            # 扫描编排器（P0 拆分）
+│   ├── engine.py            # 并发编排+令牌桶限速
+│   ├── models.py            # 数据模型（三态判定）
+│   ├── loader.py            # 插件动态发现
+│   ├── fingerprint.py       # 指纹识别
+│   ├── router.py            # 指纹→插件路由
+│   ├── session.py           # 会话封装
+│   ├── chain.py             # 漏洞利用链引擎
+│   ├── report.py            # 报告渲染（HTML/JSON/CSV）
+│   └── ...                  # 更多核心模块
+├── plugins/                 # 插件系统
+│   ├── base.py              # PluginBase 抽象基类
+│   ├── ruoyi/               # 若依 16 个 POC
+│   ├── spring/              # Spring 14 个 POC
+│   ├── common/              # 通用 8 个 POC
+│   └── chain/               # 3 条利用链
+├── lib/                     # 工具库（26 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）
-├── chains/                  # 漏洞利用链定义
+├── data/                    # 字典文件
+├── tests/                   # 39 个测试文件 / 871 条用例
 ├── lab/                     # 靶场环境
-├── tests/                   # 单元测试 + 回归测试
+├── web/                     # Web 控制台前端
+├── monitoring/              # Grafana + Prometheus
+├── .github/workflows/       # CI 配置
+├── Dockerfile               # Docker 镜像
+├── docker-compose.yml       # Docker 编排
 ├── LICENSE                  # MIT License
-├── requirements.txt         # 依赖管理
-└── README.md
+└── requirements.txt         # 依赖管理
 ```
 
 ---
@@ -95,7 +150,7 @@ Ruoyi-Scan/
 ## 测试
 
 ```bash
-# 全部单元测试
+# 全量测试
 python -m pytest tests/ -q
 
 # 若依插件回归
@@ -103,18 +158,6 @@ python tests/regression_ruoyi.py
 
 # Spring 插件回归
 python tests/regression_spring.py
-
-# 签名靶场对拍
-LAB_MODE=vuln LAB_PORT=8090 python lab/server.py &
-python main.py -p http://127.0.0.1:8090/
-```
-
----
-
-## Docker 部署
-
-```bash
-docker-compose up -d
 ```
 
 ---
@@ -125,7 +168,6 @@ docker-compose up -d
 
 ---
 
-## 相关链接
+## License
 
-- 作者：XIABAI
-- GitHub：https://github.com/xiabai2004/Ruoyi-Scan
+MIT License © 2026 XIABAI

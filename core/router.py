@@ -1,5 +1,8 @@
 # 指纹→插件包路由（自动同步特征库 cms，新增 CMS 零改动）
+from typing import List
+
 from core.loader import load_plugins
+from core.models import FingerprintResult
 
 
 class Router:
@@ -12,7 +15,7 @@ class Router:
         'spring': 'plugins.spring',
     }
 
-    def resolve(self, fingerprint_result):
+    def resolve(self, fingerprint_result: FingerprintResult) -> List[type]:
         """根据指纹结果返回插件类列表（D2：按 affected_versions 过滤）
 
         D2 阶段：若指纹识别出版本号，则过滤掉 affected_versions 不匹配的插件。
@@ -39,7 +42,7 @@ class Router:
             return filtered
         return plugins
 
-    def resolve_by_name(self, cms):
+    def resolve_by_name(self, cms: str) -> List[type]:
         """按 CMS 名称直接加载插件包（跳过指纹识别，供 --cms 手动指定）
 
         Args:

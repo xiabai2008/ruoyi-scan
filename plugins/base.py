@@ -1,5 +1,6 @@
 # 插件抽象基类（agents.md §5：每漏洞一插件，继承 PluginBase）
 from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
 
 from core.models import ScanResult, STATUS_CONFIRMED
 
@@ -86,7 +87,7 @@ def cvss_score(vector: str) -> float:
     return math.ceil(base * 10) / 10.0
 
 
-def parse_compliance(tag: str) -> dict:
+def parse_compliance(tag: str) -> Dict[str, str]:
     """解析合规映射标签字符串为结构化字典
 
     格式：'等保2.0:8.1.3;OWASP:A03:2021'
@@ -138,14 +139,14 @@ class PluginBase(ABC):
     bypass_max_attempts = 3       # 最大绕过尝试次数（每种策略算一次）
 
     @abstractmethod
-    def verify(self, target, session) -> ScanResult:
+    def verify(self, target: str, session: 'SessionManager') -> ScanResult:
         """执行检测，返回 ScanResult（三态判定）
 
         网络异常等不可判定情形必须返回 status=UNKNOWN，不得判为 SAFE。
         """
         raise NotImplementedError
 
-    def verify_with_bypass(self, target, bypass_session, bypass_ctx) -> ScanResult:
+    def verify_with_bypass(self, target: str, bypass_session: 'SessionManager', bypass_ctx: Any) -> ScanResult:
         """WAF 绕过验证（D7）：子类覆盖以实现绕过逻辑
 
         默认实现：复用 verify()，但使用 BypassSession（已应用传输层变换）。
@@ -164,7 +165,8 @@ class PluginBase(ABC):
         # 子类应覆盖此方法以应用 payload 变形
         return self.verify(target, bypass_session)
 
-    def _build_result(self, status, url='', evidence='', extra=None):
+    def _build_result(self, status: str, url: str = '', evidence: str = '',
+                       extra: Optional[Dict[str, Any]] = None) -> ScanResult:
         """辅助方法：构造 ScanResult 并自动填充 kind/name/severity/fix
 
         插件在 verify() 中可直接用此方法构建结果，自动继承插件类属性，
@@ -189,7 +191,7 @@ class PluginBase(ABC):
             compliance=parse_compliance(self.compliance) if self.compliance else {},
         )
 
-    def meta(self):
+    def meta(self) -> Dict[str, str]:
         """返回插件元信息字典"""
         return {
             'name': self.name,

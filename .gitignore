@@ -1,11 +1,17 @@
 # IDE / 工具缓存
 .workbuddy/
+.reasonix/
 
 # Python 字节码与缓存
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+
+# 开发文档与 AI 提示词（不纳入版本库）
+agents.md
+P0P1P2升级计划.md
+D10+-路线图.md
 
 # 扫描报告输出（按需生成，不纳入版本库）
 reports/

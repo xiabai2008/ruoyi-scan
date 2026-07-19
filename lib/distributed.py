@@ -163,6 +163,7 @@ RESULT_QUEUE_KEY = 'ruoyi_scan:results'
 TASK_STATUS_KEY = 'ruoyi_scan:status'  # Hash: task_id → status
 WORKER_HEARTBEAT_KEY = 'ruoyi_scan:workers'  # Hash: worker_id → last_heartbeat
 RATE_LIMIT_KEY = 'ruoyi_scan:rate_limit'  # P3: 全局限速令牌桶
+RATE_STATS_KEY = 'ruoyi_scan:rate_stats'  # P3: 限速统计 HASH
 
 
 class DistributedRateLimiter:
@@ -186,37 +187,54 @@ class DistributedRateLimiter:
 
     _LUA_ACQUIRE = """
         local key = KEYS[1]
+        local key_stats = KEYS[2]
         local rate = tonumber(ARGV[1])
-        local now = tonumber(ARGV[2])
+        local burst = tonumber(ARGV[2])
+        local now = tonumber(ARGV[3])
+        local worker_id = ARGV[4]
 
         -- 清理过期令牌（1 秒窗口外的记录）
         redis.call('ZREMRANGEBYSCORE', key, '-inf', now - 1.0)
 
         -- 当前窗口内请求数
         local current = redis.call('ZCARD', key)
-        if current < rate then
-            -- 允许请求：添加时间戳到有序集合
-            redis.call('ZADD', key, now, now .. ':' .. current)
+
+        -- 突发容量：窗口内允许 rate + burst 个请求
+        local max_allowed = rate + burst
+        if current < max_allowed then
+            -- 使用微秒级时间 + worker_id + 序号确保 member 唯一
+            local member = string.format('%.6f:%s:%d', now, worker_id, current)
+            redis.call('ZADD', key, now, member)
+            -- 更新统计
+            redis.call('HINCRBY', key_stats, 'total_acquired', 1)
+            redis.call('HINCRBY', key_stats, worker_id .. ':acquired', 1)
             return 1
         else
             -- 拒绝：返回需要等待的秒数
             local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
             if oldest and #oldest >= 2 then
                 local wait = 1.0 - (now - tonumber(oldest[2]))
-                return -math.max(0, wait)
+                -- 最小等待 0.001s 防止忙等
+                return -math.max(0.001, wait)
             end
-            return 0
+            -- 安全回退：默认等待 1/rate 秒
+            local fallback = 1.0 / rate
+            return -math.max(0.001, fallback)
         end
     """
 
-    def __init__(self, redis_client, rate: int = 0):
+    def __init__(self, redis_client, rate: int = 0, burst: int = 0, worker_id: str = ''):
         """
         Args:
             redis_client: redis.Redis 实例
             rate: 全局每秒请求数（0 = 不限速）
+            burst: 突发容量（允许瞬时超过 rate 的额外请求数，窗口过期后自动消化）
+            worker_id: Worker 标识（用于统计和 member 唯一性）
         """
         self.redis = redis_client
         self._rate = rate
+        self._burst = burst
+        self._worker_id = worker_id or f'worker_{id(self)}'
         self._local_timestamps: List[float] = []  # 本地退化令牌桶
         self._local_lock = threading.Lock()
 
@@ -248,12 +266,12 @@ class DistributedRateLimiter:
             self._acquire_local()
 
     def _acquire_redis(self) -> None:
-        """Redis 全局令牌桶获取"""
-        import math
+        """Redis 全局令牌桶获取（增强版：burst + 防碰撞 + 统计）"""
         while True:
             now = time.time()
-            result = self.redis.eval(self._LUA_ACQUIRE, 1,
-                                     RATE_LIMIT_KEY, self._rate, now)
+            result = self.redis.eval(self._LUA_ACQUIRE, 2,
+                                     RATE_LIMIT_KEY, RATE_STATS_KEY,
+                                     self._rate, self._burst, now, self._worker_id)
             if result == 1:
                 return
             elif isinstance(result, (int, float)) and result < 0:
@@ -261,21 +279,42 @@ class DistributedRateLimiter:
                 if wait > 0:
                     time.sleep(wait)
             else:
-                time.sleep(0.05)  # 50ms 重试
+                time.sleep(0.05)  # 50ms 安全重试
 
     def _acquire_local(self) -> None:
-        """本地令牌桶（退化模式）"""
-        with self._local_lock:
-            now = time.time()
-            self._local_timestamps = [t for t in self._local_timestamps
-                                       if now - t < 1.0]
-            if len(self._local_timestamps) >= self._rate:
-                sleep = 1.0 - (now - self._local_timestamps[0])
+        """本地令牌桶（退化模式，含 burst 支持 + while 重试保证原子性）"""
+        while True:
+            with self._local_lock:
+                now = time.time()
+                self._local_timestamps = [t for t in self._local_timestamps
+                                           if now - t < 1.0]
+                max_allowed = self._rate + self._burst
+                if len(self._local_timestamps) < max_allowed:
+                    self._local_timestamps.append(now)
+                    return
+                sleep = 1.0 - (now - self._local_timestamps[0]) if self._local_timestamps else 0.05
+            if sleep > 0:
+                time.sleep(max(0.001, sleep))
             else:
-                sleep = 0.0
-            self._local_timestamps.append(now)
-        if sleep > 0:
-            time.sleep(sleep)
+                time.sleep(0.05)
+
+    def get_stats(self):
+        """获取限速统计（需要 Redis 连接）
+
+        Returns:
+            dict: {'total_acquired': str, 'worker_xxx:acquired': str, ...}
+                  无 Redis 连接时返回空 dict
+        """
+        if self.redis is None:
+            return {}
+        try:
+            return self.redis.hgetall(RATE_STATS_KEY)
+        except Exception:
+            return {}
+
+    @property
+    def burst(self) -> int:
+        return self._burst
 
 
 class DistributedTaskQueue:

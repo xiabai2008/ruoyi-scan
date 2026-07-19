@@ -24,7 +24,7 @@ class ScanEngine:
 
     def run(self, plugin_classes: List[type], target: str, session: SessionManager,
             on_result: Optional[Callable[[ScanResult], None]] = None,
-            waf_bypass_coordinator=None) -> List[ScanResult]:
+            waf_bypass_coordinator: Optional[object] = None) -> List[ScanResult]:
         """运行插件集合
 
         Args:
@@ -82,7 +82,7 @@ class ScanEngine:
                         on_result(res)
         return results
 
-    def _rate_limit(self):
+    def _rate_limit(self) -> None:
         """令牌桶限速：保证每秒请求数不超过 self.rate（线程安全）
 
         多线程环境下通过 _rate_lock 保护竞态条件。令牌桶算法：
