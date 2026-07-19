@@ -82,7 +82,7 @@ class WafBypass:
     MARK_FAILED_ATTEMPTS = True
 
 # 工具版本与作者（同步 banner）
-VERSION = '1.0.0'
-AUTHOR = 'XiaBai'
-GITHUB = 'https://www.github.com/xueshanchengke/Ruoyi-Scan'
-CONTACT = '暂无QAQ'
+VERSION = '1.1.0'
+AUTHOR = 'XIABAI'
+GITHUB = 'https://github.com/xiabai2004/Ruoyi-Scan'
+CONTACT = 'https://github.com/xiabai2004'

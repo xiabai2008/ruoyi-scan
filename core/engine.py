@@ -1,22 +1,30 @@
 # 扫描引擎：并发编排 + 令牌桶限速
+from __future__ import annotations
+
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, List, Optional, TYPE_CHECKING
 
 from core.models import ScanResult, STATUS_UNKNOWN
+
+if TYPE_CHECKING:
+    from core.session import SessionManager
+    from plugins.base import PluginBase
 
 
 class ScanEngine:
     """插件执行引擎：同步或并发运行插件，可选限速"""
 
-    def __init__(self, threads=1, rate=0):
+    def __init__(self, threads: int = 1, rate: int = 0) -> None:
         self.threads = max(1, threads)
         self.rate = rate  # 每秒请求数，0 表示不限速
         self._timestamps = []  # 令牌桶：最近 1 秒内的请求时间戳
         self._rate_lock = threading.Lock()  # 保护 _rate_limit 的互斥锁（多线程安全）
 
-    def run(self, plugin_classes, target, session, on_result=None,
-            waf_bypass_coordinator=None):
+    def run(self, plugin_classes: List[type], target: str, session: SessionManager,
+            on_result: Optional[Callable[[ScanResult], None]] = None,
+            waf_bypass_coordinator=None) -> List[ScanResult]:
         """运行插件集合
 
         Args:

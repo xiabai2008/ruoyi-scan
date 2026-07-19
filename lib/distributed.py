@@ -162,6 +162,120 @@ TASK_QUEUE_KEY = 'ruoyi_scan:tasks'
 RESULT_QUEUE_KEY = 'ruoyi_scan:results'
 TASK_STATUS_KEY = 'ruoyi_scan:status'  # Hash: task_id → status
 WORKER_HEARTBEAT_KEY = 'ruoyi_scan:workers'  # Hash: worker_id → last_heartbeat
+RATE_LIMIT_KEY = 'ruoyi_scan:rate_limit'  # P3: 全局限速令牌桶
+
+
+class DistributedRateLimiter:
+    """P3: 分布式全局限速器 — 基于 Redis 令牌桶协调多 Worker 请求速率
+
+    单机限速（core/engine.py 的令牌桶）在分布式场景下存在局限：
+    每个 Worker 各自限速，N 个 Worker 的实际总速率 = N × rate。
+    本类通过 Redis 原子操作实现真正全局协调的令牌桶限速。
+
+    使用方式：
+        limiter = DistributedRateLimiter(redis_client, rate=50)
+        for request in requests:
+            limiter.acquire()  # 阻塞直到获取令牌
+            do_request()
+
+    设计要点：
+        - 使用 Redis Lua 脚本保证原子性（避免竞态条件）
+        - 支持动态调整 rate（无需重启 Worker）
+        - 单 Worker 或无 Redis 时自动退化到本地令牌桶
+    """
+
+    _LUA_ACQUIRE = """
+        local key = KEYS[1]
+        local rate = tonumber(ARGV[1])
+        local now = tonumber(ARGV[2])
+
+        -- 清理过期令牌（1 秒窗口外的记录）
+        redis.call('ZREMRANGEBYSCORE', key, '-inf', now - 1.0)
+
+        -- 当前窗口内请求数
+        local current = redis.call('ZCARD', key)
+        if current < rate then
+            -- 允许请求：添加时间戳到有序集合
+            redis.call('ZADD', key, now, now .. ':' .. current)
+            return 1
+        else
+            -- 拒绝：返回需要等待的秒数
+            local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+            if oldest and #oldest >= 2 then
+                local wait = 1.0 - (now - tonumber(oldest[2]))
+                return -math.max(0, wait)
+            end
+            return 0
+        end
+    """
+
+    def __init__(self, redis_client, rate: int = 0):
+        """
+        Args:
+            redis_client: redis.Redis 实例
+            rate: 全局每秒请求数（0 = 不限速）
+        """
+        self.redis = redis_client
+        self._rate = rate
+        self._local_timestamps: List[float] = []  # 本地退化令牌桶
+        self._local_lock = threading.Lock()
+
+    @property
+    def rate(self) -> int:
+        return self._rate
+
+    @rate.setter
+    def rate(self, value: int):
+        self._rate = value
+
+    def acquire(self) -> None:
+        """获取令牌（阻塞直到可用）
+
+        多 Worker 场景：使用 Redis Lua 脚本做原子令牌桶
+        单机场景（无 Redis 或 rate=0）：退化到本地令牌桶
+        """
+        if self._rate <= 0:
+            return
+
+        if self.redis is None:
+            self._acquire_local()
+            return
+
+        try:
+            self._acquire_redis()
+        except Exception:
+            # Redis 不可用时退化到本地
+            self._acquire_local()
+
+    def _acquire_redis(self) -> None:
+        """Redis 全局令牌桶获取"""
+        import math
+        while True:
+            now = time.time()
+            result = self.redis.eval(self._LUA_ACQUIRE, 1,
+                                     RATE_LIMIT_KEY, self._rate, now)
+            if result == 1:
+                return
+            elif isinstance(result, (int, float)) and result < 0:
+                wait = abs(result)
+                if wait > 0:
+                    time.sleep(wait)
+            else:
+                time.sleep(0.05)  # 50ms 重试
+
+    def _acquire_local(self) -> None:
+        """本地令牌桶（退化模式）"""
+        with self._local_lock:
+            now = time.time()
+            self._local_timestamps = [t for t in self._local_timestamps
+                                       if now - t < 1.0]
+            if len(self._local_timestamps) >= self._rate:
+                sleep = 1.0 - (now - self._local_timestamps[0])
+            else:
+                sleep = 0.0
+            self._local_timestamps.append(now)
+        if sleep > 0:
+            time.sleep(sleep)
 
 
 class DistributedTaskQueue:
@@ -470,14 +584,16 @@ class WorkerNode:
     def run(self, scan_fn: Callable[[ScanTask], List[Dict]],
             poll_interval: int = 5,
             max_tasks: int = 0,
-            heartbeat_interval: int = 30) -> None:
+            heartbeat_interval: int = 30,
+            rate_limiter: Optional[DistributedRateLimiter] = None) -> None:
         """运行 Worker 循环
 
         Args:
-            scan_fn: 扫描函数 fn(task) → results_list
+            scan_fn: 扫描函数 fn(task, rate_limiter) → results_list
             poll_interval: 轮询间隔秒数
             max_tasks: 最大处理任务数（0 表示无限）
             heartbeat_interval: 心跳间隔秒数
+            rate_limiter: P3 分布式全局限速器（None 则不限速）
         """
         self._running = True
         self.queue.register_worker(self.worker_id)
@@ -500,10 +616,10 @@ class WorkerNode:
 
             print(f'[*]收到任务: {task.task_id} → {task.target}')
 
-            # 执行扫描
+            # 执行扫描（P3: 传入限速器供扫描函数使用）
             start = time.time()
             try:
-                results = scan_fn(task)
+                results = scan_fn(task, rate_limiter)
                 duration = time.time() - start
 
                 result = TaskResult(
@@ -677,9 +793,16 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
         return 1
 
     max_tasks = getattr(args, 'worker_max_tasks', 0) or 0
+    distributed_rate = getattr(args, 'distributed_rate', 0) or 0
+
+    # P3: 创建分布式全局限速器
+    rate_limiter = None
+    if distributed_rate > 0:
+        rate_limiter = DistributedRateLimiter(worker.queue.redis, rate=distributed_rate)
+        print(f'[*]全局限速: {distributed_rate} req/s（{redis_url}）')
 
     try:
-        worker.run(scan_fn, max_tasks=max_tasks)
+        worker.run(scan_fn, max_tasks=max_tasks, rate_limiter=rate_limiter)
     except KeyboardInterrupt:
         print('\n[*]停止 Worker...')
         worker.stop()

@@ -1,9 +1,15 @@
 # 会话封装：Cookie / 代理 / 重试 / keep-alive
+from __future__ import annotations
+
 import sys
+from typing import Dict, Optional, TYPE_CHECKING
 
 import requests
 
 from config import settings
+
+if TYPE_CHECKING:
+    from lib.proxy_pool import ProxyPool
 
 
 class SessionManager:
@@ -12,8 +18,9 @@ class SessionManager:
     D13：支持代理池轮换。传入 proxy_pool 时，每次请求自动从池中获取代理。
     """
 
-    def __init__(self, proxy=None, timeout=None, ua=None, debug=False,
-                 proxy_pool=None):
+    def __init__(self, proxy: Optional[str] = None, timeout: Optional[int] = None,
+                 ua: Optional[str] = None, debug: bool = False,
+                 proxy_pool: Optional[ProxyPool] = None) -> None:
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': ua or settings.DEFAULT_UA
@@ -54,21 +61,23 @@ class SessionManager:
             size = '?'
         print(f'[debug] {method} {url} -> {code} ({size} bytes)', file=sys.stderr)
 
-    def get(self, url, headers=None, **kwargs):
+    def get(self, url: str, headers: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
         kwargs.setdefault('timeout', self.timeout)
         self.request_count += 1
         resp = self.session.get(url, headers=headers, **kwargs)
         self._log_debug('GET', url, resp)
         return resp
 
-    def post(self, url, headers=None, data=None, **kwargs):
+    def post(self, url: str, headers: Optional[Dict[str, str]] = None,
+             data: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
         kwargs.setdefault('timeout', self.timeout)
         self.request_count += 1
         resp = self.session.post(url, headers=headers, data=data, **kwargs)
         self._log_debug('POST', url, resp)
         return resp
 
-    def request(self, method, url, headers=None, **kwargs):
+    def request(self, method: str, url: str, headers: Optional[Dict[str, str]] = None,
+                **kwargs) -> requests.Response:
         """通用 HTTP 请求（支持 OPTIONS/TRACE 等非标准方法）"""
         kwargs.setdefault('timeout', self.timeout)
         self.request_count += 1
@@ -76,5 +85,5 @@ class SessionManager:
         self._log_debug(method.upper(), url, resp)
         return resp
 
-    def close(self):
+    def close(self) -> None:
         self.session.close()
