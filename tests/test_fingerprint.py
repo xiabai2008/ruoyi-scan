@@ -121,31 +121,8 @@ def test_router_resolves_ruoyi():
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='ruoyi', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 13, f'应有 13 个若依插件，实际 {len(plugins)}（阶段八 nacos_unauth + file_read_path）'
+    assert len(plugins) == 16, f'应有 16 个若依插件，实际 {len(plugins)}（阶段九 nacos_unauth + file_read_path + 3 new）'
     print('PASS test_router_resolves_ruoyi: %d 个插件' % len(plugins))
-
-
-def test_detect_cms_selects_thinkphp():
-    """detect_cms 遍历所有注册 CMS，返回 thinkphp（阶段二多 CMS 自动路由）"""
-    html = '<html><head><title>ThinkPHP Framework</title></head><body>ThinkPHP V5.0.23</body></html>'
-    sess = FakeSession({
-        'http://target/': FakeResp(html, 200, {'Content-Type': 'text/html'}),
-        'http://target/index.php': FakeResp(html, 200, {'Content-Type': 'text/html'}),
-    })
-    res = detect_cms('http://target/', sess)
-    assert res.cms == 'thinkphp', res.cms
-    assert res.confidence > 0
-    print('PASS test_detect_cms_selects_thinkphp: cms=%s conf=%.2f' % (res.cms, res.confidence))
-
-
-def test_router_resolves_thinkphp():
-    """Router 对 thinkphp 指纹返回插件类列表（阶段八扩充至 12 个 POC）"""
-    from core.router import Router
-    from core.models import FingerprintResult
-    fp_result = FingerprintResult(cms='thinkphp', confidence=1.0, matched=['test'])
-    plugins = Router().resolve(fp_result)
-    assert len(plugins) == 12, f'应有 12 个 ThinkPHP 插件，实际 {len(plugins)}（阶段八 request_rce_v2 + dispatch_rce）'
-    print('PASS test_router_resolves_thinkphp: %d 个插件' % len(plugins))
 
 
 def test_detect_cms_selects_spring():
@@ -160,38 +137,75 @@ def test_detect_cms_selects_spring():
 
 
 def test_router_resolves_spring():
-    """Router 对 spring 指纹返回插件类列表（阶段八扩充至 11 个 POC）"""
+    """Router 对 spring 指纹返回插件类列表（阶段九扩充至 14 个 POC）"""
     from core.router import Router
     from core.models import FingerprintResult
     fp_result = FingerprintResult(cms='spring', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 11, f'应有 11 个 Spring 插件，实际 {len(plugins)}（阶段八 jolokia_mlet + trace_leak）'
+    assert len(plugins) == 14, f'应有 14 个 Spring 插件，实际 {len(plugins)}（阶段九 spring_cloud_config + spring_boot_admin + spring_data_rest）'
     print('PASS test_router_resolves_spring: %d 个插件' % len(plugins))
 
 
-def test_detect_cms_selects_weaver():
-    """detect_cms 遍历所有注册 CMS，返回 weaver（阶段四第四个 CMS 自动路由）"""
-    # 主页含「泛微 e-cology」→ login_keywords 强命中；/login/Login.jsp 200 → 强路径命中
-    html = '<html><head><title>泛微 e-cology OA</title></head><body>Weaver 协同</body></html>'
-    sess = FakeSession({
-        'http://target/': FakeResp(html, 200, {'Content-Type': 'text/html'}),
-        'http://target/login/Login.jsp': FakeResp('<html><body>weaver login</body></html>',
-                                                   200, {'Content-Type': 'text/html'}),
-    })
-    res = detect_cms('http://target/', sess)
-    assert res.cms == 'weaver', res.cms
-    assert res.confidence > 0
-    print('PASS test_detect_cms_selects_weaver: cms=%s conf=%.2f' % (res.cms, res.confidence))
+# === D15 指纹库与 WAF 库扩充测试 ===
+
+def test_d15_ruoyi_cloud_feature_registered():
+    """D15: RuoYi-Cloud 特征已注册"""
+    from lib.fingerprint_features import get_feature, list_cms
+    assert 'ruoyi-cloud' in list_cms()
+    feat = get_feature('ruoyi-cloud')
+    assert feat is not None
+    assert feat['display'] == 'RuoYi-Cloud'
+    assert any(p['path'] == '/nacos/' for p in feat['strong_paths'])
+    print('PASS test_d15_ruoyi_cloud_feature_registered')
 
 
-def test_router_resolves_weaver():
-    """Router 对 weaver 指纹返回插件类列表（阶段八扩充至 8 个 POC）"""
-    from core.router import Router
-    from core.models import FingerprintResult
-    fp_result = FingerprintResult(cms='weaver', confidence=1.0, matched=['test'])
-    plugins = Router().resolve(fp_result)
-    assert len(plugins) == 8, f'应有 8 个 Weaver 插件，实际 {len(plugins)}（阶段八 file_download + xss）'
-    print('PASS test_router_resolves_weaver: %d 个插件' % len(plugins))
+def test_d15_jeecgboot_feature_registered():
+    """D15: JeecgBoot 特征已注册（负向特征，避免误判为若依）"""
+    from lib.fingerprint_features import get_feature, list_cms
+    assert 'jeecgboot' in list_cms()
+    feat = get_feature('jeecgboot')
+    assert feat is not None
+    assert feat['display'] == 'JeecgBoot'
+    print('PASS test_d15_jeecgboot_feature_registered')
+
+
+def test_d15_new_waf_registered():
+    """D15: 新增 4 个 WAF（AWS/F5/Akamai/Imperva）已注册"""
+    from lib.waf_features import get_waf_names
+    names = get_waf_names()
+    # 原 8 个 + D15 新增 4 个 = 12 个
+    assert 'aws_waf' in names, '缺少 AWS WAF'
+    assert 'f5_asm' in names, '缺少 F5 ASM'
+    assert 'akamai' in names, '缺少 Akamai'
+    assert 'imperva' in names, '缺少 Imperva'
+    assert len(names) >= 12, f'WAF 总数应 >= 12，实际 {len(names)}'
+    print('PASS test_d15_new_waf_registered: %d 个 WAF' % len(names))
+
+
+def test_d15_aws_waf_detection():
+    """D15: AWS WAF 响应头识别"""
+    from lib.waf_features import is_waf_blocked
+    # 403 + AWS WAF 关键字
+    assert is_waf_blocked('aws_waf', 'request blocked by AWS WAF', 403) is True
+    # 正常响应
+    assert is_waf_blocked('aws_waf', 'normal response', 200) is False
+    print('PASS test_d15_aws_waf_detection')
+
+
+def test_d15_f5_cookie_detection():
+    """D15: F5 BIG-IP cookie 特征"""
+    from lib.waf_features import WAF_FEATURES
+    feat = WAF_FEATURES['f5_asm']
+    assert 'BIGipServer' in feat['cookie']
+    print('PASS test_d15_f5_cookie_detection')
+
+
+def test_d15_cms_count():
+    """D15: CMS 总数 >= 4（ruoyi + spring + ruoyi-cloud + jeecgboot）"""
+    from lib.fingerprint_features import list_cms
+    cms_list = list_cms()
+    assert len(cms_list) >= 4, f'CMS 总数应 >= 4，实际 {len(cms_list)}: {cms_list}'
+    print('PASS test_d15_cms_count: %d 个 CMS' % len(cms_list))
 
 
 if __name__ == '__main__':
@@ -202,10 +216,6 @@ if __name__ == '__main__':
     test_detect_cms_selects_ruoyi()
     test_non_ruoyi_target()
     test_router_resolves_ruoyi()
-    test_detect_cms_selects_thinkphp()
-    test_router_resolves_thinkphp()
     test_detect_cms_selects_spring()
     test_router_resolves_spring()
-    test_detect_cms_selects_weaver()
-    test_router_resolves_weaver()
     print('ALL_FP_TESTS_PASS')

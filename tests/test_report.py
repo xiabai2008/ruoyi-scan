@@ -74,7 +74,8 @@ def test_json_fields():
 def test_csv_fields():
     rb = ReportBuilder(results=_sample_results(), target='http://target/', summary=_sample_summary())
     csv_text = rb.to_csv()
-    assert '漏洞名称,URL,危害等级,状态,证据,修复建议' in csv_text
+    # D18/D24：CSV 表头新增 修复详情/复现命令 列
+    assert '漏洞名称,URL,危害等级,状态,CVE,CVSS,合规映射,证据,修复建议,修复详情,复现命令' in csv_text
     assert '任意文件读取' in csv_text
     assert '高' in csv_text
     assert '目录穿越' in csv_text  # 修复建议

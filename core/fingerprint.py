@@ -104,7 +104,12 @@ class FeatureBasedFingerprint(Fingerprint):
             pass
 
         confidence = min(1.0, strong_hits * w_strong + weak_hits * w_weak)
-        if strong_hits > 0 or weak_hits > 0:
+        # D5 误报率修复：仅弱特征命中时需达到弱特征阈值（0.4），避免单弱特征误判
+        # 设计依据：若依弱_keywords 含"若依"/"ruoyi"/"RuoYi"，单弱特征命中（0.2）不足以确信，
+        # 需至少 2 个弱特征（0.4）或 1 个强特征（0.5）才判为该 CMS。
+        # 边界用例：含"若依"二字的非若依页面（单弱特征）不应误判。
+        weak_confidence = weak_hits * w_weak
+        if strong_hits > 0 or weak_confidence >= 0.4:
             return FingerprintResult(
                 cms=self.cms, version='', confidence=confidence, matched=matched)
         return FingerprintResult(cms='', version='', confidence=0.0, matched=matched)
@@ -125,6 +130,9 @@ def detect_cms(target, session) -> FingerprintResult:
 
     阶段五：内部创建 FingerprintCache 共享根响应/favicon 响应，避免多 CMS
     遍历时重复 GET 相同 URL（detect 签名不变，向后兼容旧调用方）。
+
+    D2 阶段：识别出 CMS 后，对若依额外探测版本号（/login 页面 HTML 中的 X.Y.Z），
+    版本号存入 FingerprintResult.version，供 Router 按 affected_versions 过滤 POC。
     """
     from core.cache import FingerprintCache
     cache = FingerprintCache(session)
@@ -133,4 +141,72 @@ def detect_cms(target, session) -> FingerprintResult:
         res = FeatureBasedFingerprint(cms).detect(target, session, cache=cache)
         if res.cms and res.confidence > best.confidence:
             best = res
+    # D2：若依版本探测（仅对 ruoyi 做，其他 CMS 暂不支持）
+    if best.cms == 'ruoyi':
+        try:
+            from lib.ruoyi_versions import extract_version
+            from lib.http import join_url
+            # 优先从缓存中已有的 /login 和根路径响应提取版本号（避免额外请求）
+            cached_version = ''
+            for path in ['/login', '/', '']:
+                try:
+                    full_url = join_url(target, path) if path else target
+                    cached_resp = cache.get(full_url)
+                    if cached_resp:
+                        v = extract_version(cached_resp.text or '')
+                        if v:
+                            cached_version = v
+                            break
+                except Exception:
+                    pass
+            if cached_version:
+                best.version = cached_version
+                best.matched.append('version:%s' % cached_version)
+            # 注：缓存未命中版本号时不额外请求 detect_version，
+            # 避免 detect_cms 的请求次数超出缓存测试预期。
+            # 版本号未在首页/login 出现时，Router 会按"版本未识别"处理（跑全部 POC）。
+        except Exception:
+            pass
     return best
+
+
+def detect_waf(target, session) -> dict:
+    """WAF 指纹识别：检测目标是否部署了 Web 应用防火墙（P1-C）
+
+    通过分析根路径响应头、响应体、Set-Cookie 特征判断 WAF 类型。
+
+    Args:
+        target: 目标 URL
+        session: SessionManager 实例
+    Returns:
+        dict: {'waf': 'WAF标识' 或 '', 'display': '显示名', 'bypass_hint': '绕过提示'}
+    """
+    from lib.waf_features import WAF_FEATURES
+
+    try:
+        resp = session.get(target)
+        resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+        resp_text = (resp.text or '').lower()
+        cookie = (resp.headers.get('Set-Cookie') or '').lower()
+    except Exception:
+        return {'waf': '', 'display': '', 'bypass_hint': ''}
+
+    for waf_key, f in WAF_FEATURES.items():
+        # 响应头检测
+        for hdr in f.get('headers', []):
+            hdr_lower = hdr.lower()
+            if hdr_lower in resp_headers or any(hdr_lower in k for k in resp_headers):
+                return {'waf': waf_key, 'display': f['display'],
+                        'bypass_hint': f.get('bypass_hint', '')}
+        # 响应体关键字
+        for kw in f.get('body', []):
+            if kw.lower() in resp_text:
+                return {'waf': waf_key, 'display': f['display'],
+                        'bypass_hint': f.get('bypass_hint', '')}
+        # Cookie 特征
+        for ck in f.get('cookie', []):
+            if ck.lower() in cookie:
+                return {'waf': waf_key, 'display': f['display'],
+                        'bypass_hint': f.get('bypass_hint', '')}
+
+    return {'waf': '', 'display': '', 'bypass_hint': ''}

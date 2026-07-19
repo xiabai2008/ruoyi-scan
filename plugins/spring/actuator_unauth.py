@@ -9,11 +9,45 @@ from lib.http import join_url
 
 class SpringActuatorUnauthPlugin(PluginBase):
     name = 'Spring Boot Actuator 未授权访问'
-    cve = ''
+    cve = 'N/A'
     severity = 'medium'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A01:2021'
     category = 'vuln'
     description = 'Actuator 端点 /actuator/env 可匿名访问，泄露环境变量、配置属性与密钥'
     fix = '引入 spring-boot-starter-security 为 Actuator 端点配置认证；或设置 management.endpoints.web.exposure.include 白名单'
+    fix_detail = (
+        '【引入依赖】pom.xml 添加 Spring Security：\n'
+        '  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>\n'
+        '【配置鉴权】application.yml 为 Actuator 端点配置角色：\n'
+        '  management.endpoints.web.exposure.include: health,info  # 仅暴露必要端点\n'
+        '  management.endpoint.env.enabled: false  # 禁用 env 端点\n'
+        '  management.endpoint.heapdump.enabled: false  # 禁用 heapdump\n'
+        '【SecurityConfig】SecurityConfig.configure():\n'
+        '  .antMatchers("/actuator/**").hasRole("ADMIN")\n'
+        '【端口隔离】management.server.port: 9090  # 管理端口与业务端口分离，仅内网访问\n'
+        '【WAF 规则】拦截外网对 /actuator, /actuator/env, /actuator/heapdump 的访问\n'
+        '【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 1. 探测 Actuator 根端点：\n'
+        'curl -i "http://target/actuator"\n'
+        '  # 返回 200 + JSON 含 "_links" 字段即 Actuator 启用\n'
+        '\n'
+        '# 2. 读取环境变量与配置（含数据库密码、JWT 密钥）：\n'
+        'curl "http://target/actuator/env" | python -m json.tool\n'
+        '  # propertySources 含 application.yml、系统环境变量等\n'
+        '\n'
+        '# 3. 下载内存快照（可提取密码、token）：\n'
+        'curl "http://target/actuator/heapdump" -o heapdump.bin\n'
+        '  # 使用 Eclipse MAT 或 jhat 分析，搜索 "password" 关键字\n'
+        '\n'
+        '# 4. 列出所有已注册的 Bean（信息收集）：\n'
+        'curl "http://target/actuator/beans" | python -m json.tool | head -100'
+    )
+    # D2：Actuator 未授权全版本存在（取决于配置）
+    affected_versions = ''
 
     def verify(self, target, session):
         # 第一关：/actuator 是否可访问（返回 HAL JSON）

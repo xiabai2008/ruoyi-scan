@@ -36,3 +36,7 @@ lab/safe-baseline.log
 lab/ruoyi-run.log
 lab/ruoyi-vuln*.log
 lab/run-ruoyi.bat
+
+# CI 本地验证产物（run_e2e.py 生成）
+.ci_tmp/
+lab_*.log

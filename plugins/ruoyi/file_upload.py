@@ -7,11 +7,43 @@ from lib.http import join_url
 
 class FileUploadPlugin(PluginBase):
     name = '任意文件上传'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
     category = 'vuln'
     description = '若依后台 /common/upload 未授权可写：上传无害 .txt 探针，响应 JSON 含 url/fileName 字段即存在'
     fix = '强制 /common/upload 鉴权；服务端白名单校验扩展名；上传目录不可执行；按用户隔离存储路径'
+    fix_detail = (
+        '【权限加固】为 /common/upload 添加 @PreAuthorize("@ss.hasPermi(\'common:upload\')") 注解\n'
+        '【代码修复】CommonController.uploadFile() 添加扩展名白名单校验：\n'
+        '  String[] allowed = {"jpg","jpeg","png","gif","bmp","doc","docx","xls","xlsx","ppt","pptx","txt","pdf"};\n'
+        '  String ext = fileName.substring(fileName.lastIndexOf(".")+1).toLowerCase();\n'
+        '  if (!Arrays.asList(allowed).contains(ext)) { throw new ServiceException("不允许的文件类型"); }\n'
+        '【目录加固】上传目录禁止执行权限（nginx: location /profile/ { location ~ \\.(jsp|jspx)$ { deny all; } }）\n'
+        '【配置加固】application.yml 限制上传大小：spring.servlet.multipart.max-file-size: 10MB\n'
+        '【WAF 规则】拦截 Content-Type 含 multipart/form-data 且无 Cookie 的 /common/upload 请求\n'
+        '【合规】OWASP A04:2021 不安全设计；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 上传无害 .txt 探针文件验证接口可写：\n'
+        'curl -X POST "http://target/common/upload" \\\n'
+        '  -F "file=@/tmp/probe.txt;type=text/plain"\n'
+        '\n'
+        '# 预期响应：HTTP 200 + JSON 含 {"url": "/profile/upload/...", "fileName": "probe.txt"} 字段\n'
+        '\n'
+        '# 实战利用（上传 webshell.jsp，需登录后台）：\n'
+        'curl -X POST "http://target/common/upload" \\\n'
+        '  -H "Cookie: JSESSIONID=<已登录的 session>" \\\n'
+        '  -F "file=@webshell.jsp;type=application/octet-stream"\n'
+        '  # 访问返回的 url 即可获得 webshell'
+    )
+    # D2：扩展名校验在 4.6.0 加强（但未授权上传仍存在于部分版本，保守标 <4.7）
+    affected_versions = '>=4.0,<4.7'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H'
+    compliance = '等保2.0:8.1.4;OWASP:A04:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'rce'
+    supports_waf_bypass = True
 
     # 探针文件名与内容（agents.md §7：仅做存在性验证，不上传可执行文件）
     PROBE_NAME = 'ruoyi_scan_probe.txt'

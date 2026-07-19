@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruoyi-Scan 综合漏洞检测控制台</title>
+    <!-- Alpine.js（CDN，轻量响应式框架，无需构建） -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --bg-card: #1a1f2e;
+            --bg-input: #252b3b;
+            --border: #2d3548;
+            --text: #e0e0e0;
+            --text-dim: #8b95a7;
+            --accent: #00d4aa;
+            --accent-dim: #007a63;
+            --danger: #ff4757;
+            --warning: #ffa502;
+            --success: #2ed573;
+            --info: #54a0ff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 20px;
+            color: var(--accent);
+        }
+        .header .version {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 16px;
+            padding: 16px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .card h2 {
+            font-size: 14px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+            width: 100%;
+        }
+        .btn-primary:hover {
+            background: var(--accent-dim);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+            background: var(--bg-input);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-sm:hover {
+            border-color: var(--accent);
+        }
+        .task-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .task-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-item:hover {
+            background: var(--bg-input);
+        }
+        .task-item.active {
+            background: var(--bg-input);
+            border-left: 3px solid var(--accent);
+        }
+        .task-status {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        .status-pending { background: var(--text-dim); color: var(--bg); }
+        .status-running { background: var(--info); color: var(--bg); }
+        .status-done { background: var(--success); color: var(--bg); }
+        .status-failed { background: var(--danger); color: var(--bg); }
+        .status-cancelled { background: var(--warning); color: var(--bg); }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .result-table th {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 2px solid var(--border);
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+        .result-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+        .severity-badge {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .sev-high { background: var(--danger); color: #fff; }
+        .sev-medium { background: var(--warning); color: var(--bg); }
+        .sev-low { background: var(--info); color: #fff; }
+
+        .event-log {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .event-log .event {
+            margin-bottom: 4px;
+            color: var(--text-dim);
+        }
+        .event-log .event .ts {
+            color: var(--accent);
+            margin-right: 8px;
+        }
+        .event-log .event.result { color: var(--success); }
+        .event-log .event.error { color: var(--danger); }
+        .event-log .event.waf { color: var(--warning); }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--bg-input);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .stat-box {
+            background: var(--bg-input);
+            border-radius: 4px;
+            padding: 8px;
+            text-align: center;
+        }
+        .stat-box .num {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .stat-box .label {
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+        .stat-box.confirmed .num { color: var(--danger); }
+        .stat-box.safe .num { color: var(--success); }
+        .stat-box.unknown .num { color: var(--warning); }
+        .stat-box.total .num { color: var(--accent); }
+
+        .report-links {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-dim);
+        }
+        .badge-bypass {
+            display: inline-block;
+            background: #8e44ad;
+            color: #fff;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+<div x-data="scanApp()" x-init="init()">
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <h1>Ruoyi-Scan 综合漏洞检测控制台</h1>
+            <span class="version" x-text="`v${version} · ${pythonVersion}`"></span>
+        </div>
+        <div>
+            <button class="btn-sm" @click="loadPlugins()">刷新插件</button>
+            <button class="btn-sm" @click="loadTasks()">刷新任务</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 左侧：扫描表单 + 任务列表 -->
+        <div>
+            <!-- 扫描表单 -->
+            <div class="card">
+                <h2>提交扫描任务</h2>
+                <div class="form-group">
+                    <label>目标 URL *</label>
+                    <input type="text" x-model="form.target" placeholder="http://target:8080/"
+                           @keyup.enter="submitScan()">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>扫描模式</label>
+                        <select x-model="form.mode">
+                            <option value="u">综合扫描</option>
+                            <option value="p">漏洞检测</option>
+                            <option value="m">目录扫描</option>
+                            <option value="l">登录爆破</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>CMS（可选）</label>
+                        <select x-model="form.cms">
+                            <option value="">自动识别</option>
+                            <option value="ruoyi">Ruoyi</option>
+                            <option value="spring">Spring</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>线程数</label>
+                        <input type="number" x-model.number="form.threads" min="1" max="50">
+                    </div>
+                    <div class="form-group">
+                        <label>超时(秒)</label>
+                        <input type="number" x-model.number="form.timeout" min="1" max="120">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>WAF 绕过</label>
+                        <select x-model="form.bypass_waf">
+                            <option value="auto">自动（检测到才启用）</option>
+                            <option value="on">强制启用</option>
+                            <option value="off">禁用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>报告格式</label>
+                        <select x-model="form.report_format">
+                            <option value="all">全部格式</option>
+                            <option value="html">HTML</option>
+                            <option value="json">JSON</option>
+                            <option value="csv">CSV</option>
+                            <option value="pdf">PDF</option>
+                            <option value="docx">Word</option>
+                            <option value="xlsx">Excel</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" x-model="form.portscan" style="width:auto;margin-right:4px;">
+                        端口扫描
+                    </label>
+                    <label style="margin-left:16px;">
+                        <input type="checkbox" x-model="form.no_dedup" style="width:auto;margin-right:4px;">
+                        关闭去重
+                    </label>
+                </div>
+                <button class="btn btn-primary" @click="submitScan()" :disabled="!form.target || scanning">
+                    <span x-show="!scanning">开始扫描</span>
+                    <span x-show="scanning">扫描中...</span>
+                </button>
+            </div>
+
+            <!-- 任务列表 -->
+            <div class="card">
+                <h2>任务列表 (<span x-text="tasks.length"></span>)</h2>
+                <div class="task-list">
+                    <template x-for="task in tasks" :key="task.task_id">
+                        <div class="task-item" :class="{active: selectedTaskId === task.task_id}"
+                             @click="selectTask(task.task_id)">
+                            <div>
+                                <div x-text="task.target || task.task_id" style="font-size:13px;"></div>
+                                <div style="font-size:11px;color:var(--text-dim);" x-text="task.mode ? `模式: ${task.mode}` : ''"></div>
+                            </div>
+                            <span class="task-status" :class="`status-${task.status}`" x-text="task.status"></span>
+                        </div>
+                    </template>
+                    <div x-show="tasks.length === 0" class="empty-state" style="padding:20px;">
+                        暂无任务
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：结果 + 事件日志 -->
+        <div>
+            <!-- 统计 -->
+            <div class="card" x-show="currentTask">
+                <h2>扫描统计</h2>
+                <div class="stats">
+                    <div class="stat-box total">
+                        <div class="num" x-text="results.length">0</div>
+                        <div class="label">总检测</div>
+                    </div>
+                    <div class="stat-box confirmed">
+                        <div class="num" x-text="results.filter(r => r.status === 'CONFIRMED').length">0</div>
+                        <div class="label">确认漏洞</div>
+                    </div>
+                    <div class="stat-box safe">
+                        <div class="num" x-text="results.filter(r => r.status === 'SAFE').length">0</div>
+                        <div class="label">不存在</div>
+                    </div>
+                    <div class="stat-box unknown">
+                        <div class="num" x-text="results.filter(r => r.status === 'UNKNOWN').length">0</div>
+                        <div class="label">未知</div>
+                    </div>
+                </div>
+                <div x-show="currentTask">
+                    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">
+                        进度: <span x-text="progress.done"></span>/<span x-text="progress.total"></span>
+                        (<span x-text="progress.percent"></span>%)
+                    </div>
+                    <div class="progress-bar">
+                        <div class="fill" :style="`width: ${progress.percent}%`"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 指纹 + WAF 信息 -->
+            <div class="card" x-show="currentTask">
+                <h2>目标信息</h2>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
+                    <div>
+                        <strong>CMS:</strong> <span x-text="fingerprint.cms || '未识别'"></span>
+                        <span x-show="fingerprint.confidence" style="color:var(--text-dim);" x-text="`(${(fingerprint.confidence * 100).toFixed(0)}%)`"></span>
+                    </div>
+                    <div>
+                        <strong>WAF:</strong>
+                        <span x-show="wafInfo.waf" style="color:var(--danger);" x-text="wafInfo.display || wafInfo.waf"></span>
+                        <span x-show="!wafInfo.waf" style="color:var(--success);">未检测到</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果列表 -->
+            <div class="card" x-show="currentTask">
+                <h2>扫描结果 (<span x-text="results.length"></span>)</h2>
+                <table class="result-table" x-show="results.length > 0">
+                    <thead>
+                        <tr>
+                            <th>严重度</th>
+                            <th>漏洞名称</th>
+                            <th>状态</th>
+                            <th>URL</th>
+                            <th>证据</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="r in results" :key="r.name + r.url">
+                            <tr>
+                                <td>
+                                    <span class="severity-badge" :class="`sev-${r.severity}`" x-text="r.severity"></span>
+                                </td>
+                                <td x-text="r.name"></td>
+                                <td>
+                                    <span x-text="r.status"
+                                          :style="r.status === 'CONFIRMED' ? 'color:var(--danger)' : r.status === 'SAFE' ? 'color:var(--success)' : 'color:var(--warning)'">
+                                    </span>
+                                    <template x-if="r.extra && r.extra.waf_bypass && r.extra.waf_bypass.strategy_used">
+                                        <span class="badge-bypass" x-text="`WAF绕过:${r.extra.waf_bypass.strategy_used}`"></span>
+                                    </template>
+                                </td>
+                                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" x-text="r.url"></td>
+                                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;" :title="r.evidence" x-text="r.evidence"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                <div x-show="results.length === 0" class="empty-state">
+                    等待扫描结果...
+                </div>
+            </div>
+
+            <!-- 报告下载 -->
+            <div class="card" x-show="currentTask && currentTask.status === 'done'">
+                <h2>报告下载</h2>
+                <div class="report-links">
+                    <button class="btn-sm" @click="downloadReport('html')">HTML</button>
+                    <button class="btn-sm" @click="downloadReport('json')">JSON</button>
+                    <button class="btn-sm" @click="downloadReport('csv')">CSV</button>
+                    <button class="btn-sm" @click="downloadReport('pdf')">PDF</button>
+                    <button class="btn-sm" @click="downloadReport('docx')">Word</button>
+                </div>
+            </div>
+
+            <!-- 事件日志 -->
+            <div class="card" x-show="currentTask">
+                <h2>实时事件日志</h2>
+                <div class="event-log">
+                    <template x-for="(ev, idx) in events" :key="idx">
+                        <div class="event" :class="ev.type">
+                            <span class="ts" x-text="formatTime(ev.timestamp)"></span>
+                            <span x-text="`[${ev.type}] ${formatEvent(ev)}`"></span>
+                        </div>
+                    </template>
+                    <div x-show="events.length === 0" style="color:var(--text-dim);">等待事件...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function scanApp() {
+    return {
+        // 版本信息
+        version: '1.0.0',
+        pythonVersion: '',
+
+        // 扫描表单
+        form: {
+            target: '',
+            mode: 'u',
+            cms: '',
+            threads: 1,
+            timeout: 10,
+            bypass_waf: 'auto',
+            report_format: 'all',
+            portscan: false,
+            no_dedup: false,
+        },
+        scanning: false,
+
+        // 任务列表
+        tasks: [],
+        selectedTaskId: '',
+        currentTask: null,
+
+        // 结果与事件
+        results: [],
+        events: [],
+        progress: { done: 0, total: 0, percent: 0 },
+        fingerprint: { cms: '', confidence: 0 },
+        wafInfo: { waf: '', display: '' },
+
+        // WebSocket
+        ws: null,
+
+        async init() {
+            await this.loadVersion();
+            await this.loadTasks();
+            // 定时刷新任务列表
+            setInterval(() => this.loadTasks(), 5000);
+        },
+
+        async loadVersion() {
+            try {
+                const resp = await fetch('/api/system/version');
+                const data = await resp.json();
+                this.version = data.version;
+                this.pythonVersion = `Python ${data.python_version}`;
+            } catch (e) { console.error('加载版本失败', e); }
+        },
+
+        async loadPlugins() {
+            try {
+                const resp = await fetch('/api/plugins');
+                const data = await resp.json();
+                alert(`已加载 ${data.length} 个插件`);
+            } catch (e) { alert('加载插件失败'); }
+        },
+
+        async loadTasks() {
+            try {
+                const resp = await fetch('/api/scan');
+                const data = await resp.json();
+                this.tasks = data;
+            } catch (e) { console.error('加载任务失败', e); }
+        },
+
+        async submitScan() {
+            if (!this.form.target) return;
+            this.scanning = true;
+            this.results = [];
+            this.events = [];
+            this.progress = { done: 0, total: 0, percent: 0 };
+            this.fingerprint = { cms: '', confidence: 0 };
+            this.wafInfo = { waf: '', display: '' };
+
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form),
+                });
+                const data = await resp.json();
+                this.selectedTaskId = data.task_id;
+                this.connectWS(data.task_id);
+                await this.loadTasks();
+            } catch (e) {
+                alert('提交扫描失败: ' + e.message);
+            } finally {
+                this.scanning = false;
+            }
+        },
+
+        connectWS(taskId) {
+            if (this.ws) {
+                this.ws.close();
+                this.ws = null;
+            }
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/ws/scan/${taskId}`;
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onmessage = (e) => {
+                const event = JSON.parse(e.data);
+                this.handleEvent(event);
+            };
+            this.ws.onclose = () => {
+                this.ws = null;
+                this.loadTasks();
+            };
+            this.ws.onerror = (e) => {
+                console.error('WebSocket 错误', e);
+            };
+        },
+
+        handleEvent(event) {
+            if (event.type === 'ping') return;
+
+            this.events.push(event);
+            // 限制事件日志最多 200 条
+            if (this.events.length > 200) {
+                this.events = this.events.slice(-200);
+            }
+
+            const data = event.data || {};
+
+            switch (event.type) {
+                case 'status':
+                    if (this.currentTask) {
+                        this.currentTask.status = data.status;
+                    }
+                    break;
+                case 'fingerprint':
+                    this.fingerprint = data;
+                    break;
+                case 'waf':
+                    this.wafInfo = data;
+                    break;
+                case 'result':
+                    this.results.push(data);
+                    break;
+                case 'progress':
+                    this.progress = data;
+                    break;
+                case 'complete':
+                    if (this.currentTask) {
+                        this.currentTask.status = 'done';
+                    }
+                    this.loadTasks();
+                    break;
+                case 'error':
+                    if (this.currentTask) {
+                        this.currentTask.status = 'failed';
+                    }
+                    break;
+            }
+        },
+
+        async selectTask(taskId) {
+            this.selectedTaskId = taskId;
+            this.results = [];
+            this.events = [];
+            this.progress = { done: 0, total: 0, percent: 0 };
+
+            // 获取任务详情
+            try {
+                const resp = await fetch(`/api/scan/${taskId}`);
+                this.currentTask = await resp.json();
+
+                if (this.currentTask.fingerprint) {
+                    this.fingerprint = this.currentTask.fingerprint;
+                }
+                if (this.currentTask.waf) {
+                    this.wafInfo = this.currentTask.waf;
+                }
+            } catch (e) { console.error('获取任务详情失败', e); }
+
+            // 获取已有结果
+            try {
+                const resp = await fetch(`/api/scan/${taskId}/results`);
+                this.results = await resp.json();
+            } catch (e) { console.error('获取结果失败', e); }
+
+            // 连接 WebSocket（如果任务还在运行）
+            if (this.currentTask && ['pending', 'running'].includes(this.currentTask.status)) {
+                this.connectWS(taskId);
+            }
+        },
+
+        downloadReport(fmt) {
+            if (!this.selectedTaskId) return;
+            window.open(`/api/report/${this.selectedTaskId}/${fmt}`, '_blank');
+        },
+
+        formatTime(ts) {
+            if (!ts) return '';
+            const d = new Date(ts * 1000);
+            return d.toLocaleTimeString('zh-CN', { hour12: false });
+        },
+
+        formatEvent(ev) {
+            const d = ev.data || {};
+            switch (ev.type) {
+                case 'status': return `状态: ${d.status}`;
+                case 'fingerprint': return `CMS=${d.cms || '未识别'} 置信度=${((d.confidence || 0) * 100).toFixed(0)}%`;
+                case 'waf': return `WAF=${d.waf || '无'} ${d.display || ''}`;
+                case 'result': return `${d.name} → ${d.status} (${d.severity})`;
+                case 'progress': return `${d.done}/${d.total} (${d.percent}%)`;
+                case 'complete': return `完成! 耗时 ${d.duration?.toFixed(1)}s 命中 ${d.confirmed_count}`;
+                case 'error': return `错误: ${d.error}`;
+                case 'report': return `报告已生成: ${(d.paths || []).length} 个文件`;
+                default: return JSON.stringify(d).slice(0, 100);
+            }
+        },
+    };
+}
+</script>
+</body>
+</html>

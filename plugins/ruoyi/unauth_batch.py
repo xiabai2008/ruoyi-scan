@@ -8,7 +8,7 @@ from lib.matcher import match_positive, match_all
 
 class UnauthBatchPlugin(PluginBase):
     name = '未授权访问（批量）'
-    cve = ''
+    cve = 'N/A'
     severity = 'medium'
     category = 'vuln'
     description = (
@@ -19,6 +19,42 @@ class UnauthBatchPlugin(PluginBase):
         '生产环境关闭 Actuator 或加鉴权；Druid 监控路径限制 IP 白名单并修改默认口令；'
         'Swagger 仅在测试环境启用；后台接口接入统一鉴权框架'
     )
+    fix_detail = (
+        '【Actuator 加固】application.yml 仅暴露必要端点：\n'
+        '  management.endpoints.web.exposure.include: health,info\n'
+        '  management.endpoint.env.enabled: false  # 禁用 env 端点\n'
+        '【Actuator 鉴权】SecurityConfig.configure(): .antMatchers("/actuator/**").hasRole("ADMIN")\n'
+        '【Druid 加固】修改默认口令 + IP 白名单：\n'
+        '  spring.datasource.druid.stat-view-servlet.login-username: <强口令>\n'
+        '  spring.datasource.druid.stat-view-servlet.allow: 127.0.0.1\n'
+        '【Swagger 加固】生产环境禁用：swagger.enabled: false\n'
+        '【后台鉴权】/system/user/list 等接口添加 @PreAuthorize("@ss.hasPermi(\'system:user:list\')")\n'
+        '【WAF 规则】拦截外网对 /actuator, /druid, /swagger, /system/user/* 的访问\n'
+        '【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 1. Actuator env 泄露（含数据库密码、Redis 密码等）：\n'
+        'curl "http://target/actuator/env" | python -m json.tool | head -50\n'
+        '\n'
+        '# 2. Actuator heapdump 下载内存快照（可提取密码）：\n'
+        'curl "http://target/actuator/heapdump" -o heapdump.bin\n'
+        '  # 使用 Eclipse MAT 或 jhat 分析 heapdump.bin，搜索 "password" 关键字\n'
+        '\n'
+        '# 3. Druid 监控未授权访问：\n'
+        'curl -i "http://target/druid/index.html"\n'
+        '\n'
+        '# 4. 后台用户列表未授权（敏感接口）：\n'
+        'curl "http://target/system/user/list" | python -m json.tool\n'
+        '  # 返回 JSON 含用户名、手机号、邮箱等敏感信息即未授权'
+    )
+    # D2：未授权访问全版本存在（取决于配置）
+    affected_versions = ''
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A01:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'info_leak'
+    supports_waf_bypass = True
 
     # 各端点判定规则：路径 + 特征关键字（任一命中即视为该端点未授权暴露）
     ENDPOINTS = [

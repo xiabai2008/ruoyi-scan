@@ -30,19 +30,6 @@ CMS_FEATURES = {
         'weight_strong': 0.5,
         'weight_weak': 0.2,
     },
-    # ThinkPHP（阶段二第二个 CMS 插件包）：默认入口 /index.php + 主页 ThinkPHP Framework 标题
-    'thinkphp': {
-        'display': 'ThinkPHP',
-        'favicon_hashes': set(),  # ThinkPHP 默认无稳定 favicon，靠入口路径 + 主页关键字识别
-        'strong_paths': [
-            {'path': '/index.php', 'expect': 'any'},   # ThinkPHP 默认入口脚本
-        ],
-        'login_keywords': ['ThinkPHP Framework'],       # 默认欢迎页标题强特征
-        'weak_keywords': ['ThinkPHP', 'thinkphp'],       # 响应体/调试页关键字
-        'weight_strong': 0.5,
-        'weight_weak': 0.2,
-    },
-    # Spring Boot（阶段二第三个 CMS 插件包）：Actuator 端点 JSON 响应为强特征 + 默认错误页弱特征
     'spring': {
         'display': 'Spring Boot',
         'favicon_hashes': set(),  # Spring Boot 默认绿叶 favicon 随版本变化，不设固定 hash
@@ -54,18 +41,33 @@ CMS_FEATURES = {
         'weight_strong': 0.5,
         'weight_weak': 0.2,
     },
-    # 泛微 e-cology OA（阶段四第四个 CMS 插件包）：/login/Login.jsp 登录页 + 主页泛微关键字
-    'weaver': {
-        'display': 'Weaver e-cology',
-        'favicon_hashes': set(),
+    # D15：RuoYi-Cloud 微服务版（Nacos + Gateway + 前后端分离）
+    'ruoyi-cloud': {
+        'display': 'RuoYi-Cloud',
+        'favicon_hashes': set(),  # Cloud 版 favicon 与单机版可能不同
         'strong_paths': [
-            {'path': '/login/Login.jsp', 'expect': 'any'},  # OA 登录页
+            {'path': '/nacos/', 'expect': 'any'},            # Nacos 控制台
+            {'path': '/gateway/', 'expect': 'any'},          # Spring Gateway
         ],
-        'login_keywords': ['泛微', 'e-cology', 'weaver'],
-        'weak_keywords': ['ecology', 'weaver', 'OA'],
+        'login_keywords': ['RuoYi-Cloud', '若依微服务'],
+        'weak_keywords': ['ruoyi-cloud', 'RuoYiCloud', 'nacos'],
         'weight_strong': 0.5,
         'weight_weak': 0.2,
     },
+    # D15：JeecgBoot（低代码平台，常与若依混淆的 Java 框架，负向特征）
+    'jeecgboot': {
+        'display': 'JeecgBoot',
+        'favicon_hashes': set(),
+        'strong_paths': [
+            {'path': '/jeecg-boot/', 'expect': 'any'},
+            {'path': '/sys/login', 'expect': 'json'},
+        ],
+        'login_keywords': ['JeecgBoot', 'Jeecg-Boot'],
+        'weak_keywords': ['jeecg', 'JEECG'],
+        'weight_strong': 0.5,
+        'weight_weak': 0.2,
+    },
+    # 注：thinkphp / weaver / shiro / struts2 特征已迁移至 cms-scan-extras/，本项目专注若依做深
 }
 
 

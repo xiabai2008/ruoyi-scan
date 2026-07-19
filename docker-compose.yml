@@ -1,9 +1,18 @@
-# Ruoyi-Scan 一键部署（阶段七）
-# 包含：scanner 扫描器 + 4 个 CMS 签名靶场（vuln 模式，供端到端验证）
+# Ruoyi-Scan 一键部署（阶段七 + D16 监控栈）
+# 包含：
+#   - scanner：扫描器 CLI（main.py 入口，参数通过 CMD 追加）
+#   - api：Web API 服务（FastAPI + WebSocket + Web 控制台）
+#   - lab-ruoyi / lab-spring：2 个 CMS 签名靶场（vuln 模式，供端到端验证）
+#   - prometheus：指标采集（可选，profile=monitor 启用）
+#   - grafana：监控面板（可选，profile=monitor 启用）
+# 注：thinkphp / weaver 靶场已随插件迁移至 cms-scan-extras/
+#
 # 用法：
-#   docker compose up -d                              # 启动所有靶场
-#   docker compose run --rm scanner -p http://lab-weaver:8092/ --report /app/reports
-#   docker compose down                              # 清理
+#   docker compose up -d                                       # 启动靶场
+#   docker compose run --rm scanner -p http://lab-ruoyi:8080/ --report /app/reports
+#   docker compose up -d api                                   # 启动 Web API
+#   docker compose --profile monitor up -d                     # 启动监控栈
+#   docker compose down                                        # 清理
 services:
   # 扫描器（main.py 入口，参数通过 CMD 追加）
   scanner:
@@ -14,9 +23,32 @@ services:
     command: -h
     depends_on:
       - lab-ruoyi
-      - lab-thinkphp
       - lab-spring
-      - lab-weaver
+
+  # D16 Web API 服务（FastAPI + WebSocket + Web 控制台）
+  api:
+    build: .
+    command: --serve --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data          # SQLite 持久化
+      - ./reports:/app/reports    # 报告目录共享
+    environment:
+      # 默认不设置 API Key（仅允许容器内/本地访问）；生产部署请设置 --api-key 或环境变量
+      - RUOYI_SCAN_API_KEY=${RUOYI_SCAN_API_KEY:-}
+    depends_on:
+      - lab-ruoyi
+      - lab-spring
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/system/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+      - monitor
 
   # 若依签名靶场（vuln 模式，端口 8080）
   lab-ruoyi:
@@ -28,16 +60,6 @@ services:
     ports:
       - "8080:8080"
 
-  # ThinkPHP 签名靶场（vuln 模式，端口 8090）
-  lab-thinkphp:
-    build: ./lab
-    environment:
-      - SERVER_FILE=thinkphp_server.py
-      - LAB_MODE=vuln
-      - LAB_PORT=8090
-    ports:
-      - "8090:8090"
-
   # Spring Boot 签名靶场（vuln 模式，端口 8091）
   lab-spring:
     build: ./lab
@@ -48,12 +70,49 @@ services:
     ports:
       - "8091:8091"
 
-  # 泛微 e-cology 签名靶场（vuln 模式，端口 8092）
-  lab-weaver:
-    build: ./lab
-    environment:
-      - SERVER_FILE=weaver_server.py
-      - LAB_MODE=vuln
-      - LAB_PORT=8092
+  # D16 Prometheus 指标采集（仅 monitor profile 启用）
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitor"]
     ports:
-      - "8092:8092"
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - api
+    networks:
+      - monitor
+
+  # D16 Grafana 监控面板（仅 monitor profile 启用）
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["monitor"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - monitor
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  # 默认网络（scanner/api/靶场互通）
+  default:
+  # 监控网络（api/prometheus/grafana 互通）
+  monitor:
+    driver: bridge

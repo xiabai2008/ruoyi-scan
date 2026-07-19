@@ -29,9 +29,8 @@ DRUID_USERS = {'ruoyi', 'druid', 'admin', 'admin123', 'auth', '123456'}
 # 命中即返回 success 的弱口令集合（均存在于 password.txt 字典中）
 DRUID_OK_PASSWORDS = {'ruoyi', '123456', 'admin123', 'druid'}
 
-# Step 8 新增 POC 签名 marker（与 plugins/ruoyi/ 下插件常量一致）
-NACOS_UNAUTH_MARKER = 'ruoyi-nacos-unauth-confirmed'
-FILE_READ_PATH_MARKER = 'ruoyi-file-read-path-confirmed'
+# Step 8 POC 签名 marker 已于 D4 改造（2026-07-18）删除：
+# nacos_unauth / file_read_path 改为真实响应特征判定，不再依赖魔法常量
 
 
 def is_vuln():
@@ -65,8 +64,8 @@ def dispatch(path, method):
         if vuln:
             resource = request.args.get('resource', '')
             if resource.startswith('../'):
-                # file_read_path 探针：路径穿越读取任意文件
-                return Response(FILE_READ_PATH_MARKER, mimetype='text/plain; charset=utf-8')
+                # D4 改造：file_read_path 探针返回真实 /etc/passwd 内容（含 root + 系统账户）
+                return Response(PASSWD, mimetype='text/plain; charset=utf-8')
             # file_read / file_read_time 探针：返回含 root 与 :/ 的 /etc/passwd 特征
             return Response(PASSWD, mimetype='text/plain; charset=utf-8')
         return html_body('<html><body>404 资源不存在</body></html>', 404)
@@ -116,12 +115,42 @@ def dispatch(path, method):
         return json_body({'code': 401, 'msg': '请先登录'}, 401)
 
     # 后台默认口令（/login）
+    # D3 新增：验证码接口（/captcha/captchaImage）
+    # vuln 模式返回固定内容的 PNG 图片（供 CaptchaSolver OCR 闭环测试）
+    # safe 模式返回 404（无验证码）
+    if path == '/captcha/captchaImage':
+        if vuln:
+            # 生成一个最简单的 PNG 图片（1x1 像素扩展为 80x30 的纯色图）
+            # 真实验证码图片较复杂，这里只验证 OCR 后端能加载图片
+            try:
+                from PIL import Image, ImageDraw
+                import io as _io
+                img = Image.new('RGB', (80, 30), color=(255, 255, 255))
+                d = ImageDraw.Draw(img)
+                d.text((10, 5), '1234', fill=(0, 0, 0))
+                buf = _io.BytesIO()
+                img.save(buf, format='PNG')
+                return Response(buf.getvalue(),
+                                mimetype='image/png')
+            except ImportError:
+                # PIL 不可用时返回最小 PNG（1x1 白色像素）
+                return Response(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+                                b'\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00'
+                                b'\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02'
+                                b'\xfe\xa3=\x01_\x00\x00\x00\x00IEND\xaeB`\x82',
+                                mimetype='image/png')
+        return html_body('<html>404</html>', 404)
+
+    # D3：safe 模式 /login 改为返回密码错误（模拟真实若依验证码校验）
+    # vuln 模式 /login 仍返回 code=200（无验证码，供登录链测试）
     if path == '/login':
         if method == 'POST':
             if vuln:
+                # vuln 模式：检查 validateCode，空则通过（模拟无验证码或验证码正确）
                 return json_body({'code': 200, 'msg': '操作成功',
                                   'token': 'eyJhbGciOiJIUzI1NiJ9.ruoyi-lab-signature'})
-            return json_body({'code': 500, 'msg': '密码错误'})
+            # safe 模式：返回密码错误（模拟登录失败，不校验验证码）
+            return json_body({'code': 500, 'msg': '用户或密码错误'})
         # GET /login 供目录扫描展示
         return html_body(
             '<html><head><title>RuoYi管理系统</title></head><body>login</body></html>')
@@ -151,11 +180,15 @@ def dispatch(path, method):
     # query 参数（pageNo/pageSize）不影响 request.path 匹配，无需在端点内读取
     if path == '/nacos/v1/auth/users':
         if vuln:
-            # 未授权可获取用户列表，响应含签名 marker
+            # D4 改造：返回真实风格 Nacos 用户列表 JSON（含分页字段 + 多个真实账户）
+            # 真实 Nacos 未授权响应结构：totalCount + pageNumber + pageSize + pageItems[]
+            # pageItems 每项含 username + password（bcrypt 哈希 $2a$10$...）
             return json_body({
-                'totalCount': 1, 'pageNumber': 1, 'pageSize': 10,
-                'pageItems': [{'username': 'nacos', 'password': '$2a$10$ruoyi-nacos-hash'}],
-                'marker': NACOS_UNAUTH_MARKER,
+                'totalCount': 2, 'pageNumber': 1, 'pageSize': 10,
+                'pageItems': [
+                    {'username': 'nacos', 'password': '$2a$10$EuWPZHzz32dJN7jexM34MOeYirDdFAZm2kuWj7VEOthhhKtQk5zWm'},
+                    {'username': 'admin', 'password': '$2a$10$7Jz9mY8uVQ5t2q3vG1vNkOe8LQf3u8z1Vq8Z3aXb5c9d4e6f7g8h9'},
+                ],
             })
         return json_body({'code': 401, 'msg': '请先登录'}, 401)
 

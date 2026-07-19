@@ -7,16 +7,21 @@ from config import settings
 
 
 class SessionManager:
-    """requests.Session 封装，统一 UA / 代理 / 超时 / keep-alive"""
+    """requests.Session 封装，统一 UA / 代理 / 超时 / keep-alive
 
-    def __init__(self, proxy=None, timeout=None, ua=None, debug=False):
+    D13：支持代理池轮换。传入 proxy_pool 时，每次请求自动从池中获取代理。
+    """
+
+    def __init__(self, proxy=None, timeout=None, ua=None, debug=False,
+                 proxy_pool=None):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': ua or settings.DEFAULT_UA
         })
         self.proxy = proxy if proxy is not None else settings.PROXY
         self.timeout = timeout or settings.TIMEOUT
-        if self.proxy:
+        self.proxy_pool = proxy_pool  # D13: 代理池
+        if self.proxy and not self.proxy_pool:
             self.session.proxies.update({'http': self.proxy, 'https': self.proxy})
         # keep-alive 复用连接
         self.session.keep_alive = True
@@ -24,6 +29,18 @@ class SessionManager:
         self.request_count = 0
         # 调试模式：打印每个请求的方法/URL/状态/响应大小到 stderr（不影响正常输出）
         self.debug = bool(debug)
+
+    def _get_proxy_for_request(self):
+        """D13: 从代理池获取当前请求的代理"""
+        if not self.proxy_pool:
+            return self.proxy
+        proxy = self.proxy_pool.get()
+        return proxy
+
+    def _record_proxy_result(self, proxy_url, success):
+        """D13: 记录代理使用结果"""
+        if self.proxy_pool and proxy_url:
+            self.proxy_pool.record_result(proxy_url, success)
 
     def _log_debug(self, method, url, resp):
         """调试日志：方法 URL 状态码 响应字节，输出到 stderr"""
@@ -49,6 +66,14 @@ class SessionManager:
         self.request_count += 1
         resp = self.session.post(url, headers=headers, data=data, **kwargs)
         self._log_debug('POST', url, resp)
+        return resp
+
+    def request(self, method, url, headers=None, **kwargs):
+        """通用 HTTP 请求（支持 OPTIONS/TRACE 等非标准方法）"""
+        kwargs.setdefault('timeout', self.timeout)
+        self.request_count += 1
+        resp = self.session.request(method, url, headers=headers, **kwargs)
+        self._log_debug(method.upper(), url, resp)
         return resp
 
     def close(self):

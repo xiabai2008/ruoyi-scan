@@ -15,11 +15,40 @@ TRACE_LEAK_MARKER = 'spring-trace-leak-confirmed'
 
 class SpringTraceLeakPlugin(PluginBase):
     name = 'Spring Boot Actuator /trace 请求历史泄露'
-    cve = ''
+    cve = 'N/A'
     severity = 'medium'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A01:2021'
     category = 'vuln'
     description = '/actuator/trace 暴露最近请求历史，含 headers/cookies/sessions 等敏感信息'
     fix = '为 /actuator/trace 端点配置认证；或设置 management.endpoints.web.exposure.exclude=trace,httptrace'
+    fix_detail = (
+        '【引入依赖】pom.xml 添加 Spring Security：\n'
+        '  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>\n'
+        '【配置加固】application.yml 收敛 trace/httptrace 端点：\n'
+        '  management.endpoints.web.exposure.include: health,info\n'
+        '  management.endpoints.web.exposure.exclude: trace,httptrace\n'
+        '  # Spring Boot 1.x: endpoints.trace.enabled: false\n'
+        '【SecurityConfig】为 trace 端点配置角色：\n'
+        '  .antMatchers("/actuator/trace", "/actuator/httptrace").hasRole("ADMIN")\n'
+        '【端口隔离】management.server.port: 9090  # 管理端口与业务端口分离，仅内网访问\n'
+        '【WAF 规则】拦截外网对 /actuator/trace 与 /actuator/httptrace 的访问\n'
+        '【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 1. 探测 Spring Boot 1.x 的 trace 端点：\n'
+        'curl -i "http://target/actuator/trace"\n'
+        '\n'
+        '# 2. 探测 Spring Boot 2.x 的 httptrace 端点：\n'
+        'curl -i "http://target/actuator/httptrace"\n'
+        '\n'
+        '# 3. 读取最近请求历史（含 headers/cookies/sessions）：\n'
+        'curl "http://target/actuator/httptrace" | python -m json.tool\n'
+        '  # 返回 JSON 含 traces 数组与 timeTaken 字段即泄露\n'
+        '\n'
+        '# 预期响应：200 + JSON 含 traces 数组（含 Cookie/Authorization 头）即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/actuator/trace')

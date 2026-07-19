@@ -6,24 +6,47 @@ class Router:
     """按指纹结果选择对应 CMS 的插件包"""
 
     # 显式映射兜底（优先于动态推导）
+    # 注：thinkphp / weaver / shiro / struts2 已迁移至 cms-scan-extras/，本项目专注若依做深
     mapping = {
         'ruoyi': 'plugins.ruoyi',
-        'thinkphp': 'plugins.thinkphp',
         'spring': 'plugins.spring',
-        'weaver': 'plugins.weaver',
     }
 
     def resolve(self, fingerprint_result):
-        """根据指纹结果返回插件类列表
+        """根据指纹结果返回插件类列表（D2：按 affected_versions 过滤）
+
+        D2 阶段：若指纹识别出版本号，则过滤掉 affected_versions 不匹配的插件。
+        版本未识别（空串）时不过滤，保守策略：跑全部 POC。
 
         Args:
-            fingerprint_result: FingerprintResult 实例
+            fingerprint_result: FingerprintResult 实例（含 cms / version / confidence）
         Returns:
             插件类列表（未匹配返回空列表）
         """
         cms = fingerprint_result.cms
         if not cms:
             return []
+        plugins = self.resolve_by_name(cms)
+        # D2：按 affected_versions 过滤
+        version = getattr(fingerprint_result, 'version', '') or ''
+        if version:
+            from lib.ruoyi_versions import version_in_range
+            filtered = []
+            for cls in plugins:
+                spec = getattr(cls, 'affected_versions', '') or ''
+                if version_in_range(version, spec):
+                    filtered.append(cls)
+            return filtered
+        return plugins
+
+    def resolve_by_name(self, cms):
+        """按 CMS 名称直接加载插件包（跳过指纹识别，供 --cms 手动指定）
+
+        Args:
+            cms: CMS 标识字符串（如 'ruoyi'）
+        Returns:
+            插件类列表（未匹配返回空列表）
+        """
         package = self.mapping.get(cms)
         if not package:
             # 动态尝试 plugins.<cms>（特征库已注册的 CMS 自动可用）

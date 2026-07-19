@@ -10,6 +10,9 @@ from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
 from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
 from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
 from plugins.spring.trace_leak import SpringTraceLeakPlugin
+from plugins.spring.spring_cloud_config import SpringCloudConfigPlugin
+from plugins.spring.spring_boot_admin import SpringBootAdminPlugin
+from plugins.spring.spring_data_rest import SpringDataRestPlugin
 
 plugin_list = [
     # vuln：RCE 类（high）
@@ -25,4 +28,8 @@ plugin_list = [
     SpringHeapdumpLeakPlugin,         # heapdump 敏感信息泄露
     SpringMappingsLeakPlugin,         # /mappings 路由映射泄露
     SpringTraceLeakPlugin,            # /trace 请求历史泄露
+    # vuln：新增插件（high）
+    SpringCloudConfigPlugin,         # Spring Cloud Config 配置泄露
+    SpringBootAdminPlugin,           # Spring Boot Admin 未授权
+    SpringDataRestPlugin,            # Spring Data REST 漏洞
 ]

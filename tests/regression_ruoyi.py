@@ -50,10 +50,8 @@ from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
 
 # Step 8 新增 2 个 POC 插件（含签名 marker 常量）
-from plugins.ruoyi.nacos_unauth import (
-    RuoyiNacosUnauthPlugin, NACOS_UNAUTH_MARKER)
-from plugins.ruoyi.file_read_path import (
-    RuoyiFileReadPathPlugin, FILE_READ_PATH_MARKER)
+from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
 
 
 # 统一 mock 目标（不使用真实域名，避免误发请求）
@@ -136,11 +134,24 @@ class TestSqlInject(unittest.TestCase):
 
 
 class TestFileReadTime(unittest.TestCase):
-    """3. 定时任务读取链路（edit → run → 2.txt）：状态/响应判定正确"""
+    """3. 定时任务读取链路（登录链 → edit → run → 2.txt）：状态/响应判定正确
+
+    D1 改造（2026-07-18）：file_read_time 先走 RuoYiAuthChain 登录，再 edit→run→read。
+    mock 需补充 GET /login（HTML 登录页）+ POST /login（code=0 成功）。
+    """
+
+    def _mock_login(self, m):
+        """公共：mock 登录链两端点（v4 Session 模式）"""
+        m.get(MOCK_TARGET + '/login',
+              text='<html><head><title>登录若依系统</title></head><body><form>登录</form></body></html>',
+              headers={'Content-Type': 'text/html;charset=UTF-8'})
+        m.post(MOCK_TARGET + '/login', text='{"code":0,"msg":"操作成功"}',
+               headers={'Content-Type': 'application/json'})
 
     @requests_mock.Mocker()
     def test_hit_full_chain(self, m):
-        """命中：edit 200 + run 200 + 2.txt 含 root:/"""
+        """命中：登录成功 + edit 200 + run 200 + 2.txt 含 root:/"""
+        self._mock_login(m)
         edit_url = MOCK_TARGET + '/monitor/job/edit'
         run_url = MOCK_TARGET + '/monitor/job/run'
         read_url = MOCK_TARGET + '/common/download/resource?resource=2.txt'
@@ -155,7 +166,8 @@ class TestFileReadTime(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_safe_when_2txt_no_root(self, m):
-        """安全：2.txt 不含 root:/，应判 SAFE（即使 edit/run 成功）"""
+        """安全：登录成功 + 2.txt 不含 root:/，应判 SAFE（即使 edit/run 成功）"""
+        self._mock_login(m)
         m.post(MOCK_TARGET + '/monitor/job/edit', text='ok')
         m.post(MOCK_TARGET + '/monitor/job/run', text='ok')
         m.get(MOCK_TARGET + '/common/download/resource?resource=2.txt',
@@ -163,6 +175,19 @@ class TestFileReadTime(unittest.TestCase):
         plugin = FileReadTimePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE)
+
+    @requests_mock.Mocker()
+    def test_unknown_when_captcha_required(self, m):
+        """D1 新增：登录需验证码 → UNKNOWN（file_read_time 无法处理验证码）"""
+        m.get(MOCK_TARGET + '/login',
+              text='<html><form>登录</form></html>',
+              headers={'Content-Type': 'text/html'})
+        m.post(MOCK_TARGET + '/login', text='{"code":500,"msg":"验证码错误"}',
+               headers={'Content-Type': 'application/json'})
+        plugin = FileReadTimePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN,
+                         f'验证码拦截应判 UNKNOWN，实际 {result.status}')
 
 
 class TestDruidBrute(unittest.TestCase):
@@ -530,20 +555,44 @@ class TestDefaultPassword(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestNacosUnauth(unittest.TestCase):
-    """Step 8：Nacos 未授权访问判定（签名 marker 模式）"""
+    """Step 8：Nacos 未授权访问判定（D4 改造后：真实响应特征判定）"""
 
     @requests_mock.Mocker()
     def test_hit(self, m):
-        """命中：响应含 NACOS_UNAUTH_MARKER → CONFIRMED"""
+        """命中：响应含真实 Nacos 用户列表（分页字段 + username/password）→ CONFIRMED"""
         url = MOCK_TARGET + '/nacos/v1/auth/users?pageNo=1&pageSize=10'
-        m.get(url, text='{"totalCount":1,"pageNumber":1,"pageSize":10,'
-                        '"pageItems":[{"username":"nacos","password":"$2a$10$hash"}],'
-                        '"marker":"' + NACOS_UNAUTH_MARKER + '"}')
+        # D4 改造：真实风格响应，无 marker，含分页字段 + 多个用户条目
+        m.get(url, text='{"totalCount":2,"pageNumber":1,"pageSize":10,'
+                        '"pageItems":['
+                        '{"username":"nacos","password":"$2a$10$EuWPZHzz32dJN7jexM34MOeYirDdFAZm2kuWj7VEOthhhKtQk5zWm"},'
+                        '{"username":"admin","password":"$2a$10$7Jz9mY8uVQ5t2q3vG1vNkOe8LQf3u8z1Vq8Z3aXb5c9d4e6f7g8h9"}'
+                        ']}')
         plugin = RuoyiNacosUnauthPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED,
-                         f'响应含 Nacos 未授权签名应判 CONFIRMED，实际 {result.status}')
-        self.assertIn(NACOS_UNAUTH_MARKER, result.evidence)
+                         f'响应含 Nacos 用户列表应判 CONFIRMED，实际 {result.status}')
+        # evidence 应含用户名（脱敏后不含密码哈希）
+        self.assertIn('nacos', result.evidence)
+
+    @requests_mock.Mocker()
+    def test_hit_single_user(self, m):
+        """命中：仅 1 个用户条目但含分页字段 + username/password → CONFIRMED"""
+        url = MOCK_TARGET + '/nacos/v1/auth/users?pageNo=1&pageSize=10'
+        m.get(url, text='{"totalCount":1,"pageNumber":1,"pageSize":10,'
+                        '"pageItems":[{"username":"nacos","password":"$2a$10$hash"}]}')
+        plugin = RuoyiNacosUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED)
+
+    @requests_mock.Mocker()
+    def test_safe_no_user_fields(self, m):
+        """安全：200 但响应无 username/password 字段 → SAFE"""
+        url = MOCK_TARGET + '/nacos/v1/auth/users?pageNo=1&pageSize=10'
+        m.get(url, text='{"code":200,"msg":"操作成功","data":[]}')
+        plugin = RuoyiNacosUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE,
+                         f'200 但无用户字段应判 SAFE，实际 {result.status}')
 
     @requests_mock.Mocker()
     def test_safe(self, m):
@@ -557,18 +606,31 @@ class TestNacosUnauth(unittest.TestCase):
 
 
 class TestFileReadPath(unittest.TestCase):
-    """Step 8：文件下载路径穿越判定（签名 marker 模式）"""
+    """Step 8：文件下载路径穿越判定（D4 改造后：真实 /etc/passwd 特征判定）"""
 
     @requests_mock.Mocker()
     def test_hit(self, m):
-        """命中：响应含 FILE_READ_PATH_MARKER → CONFIRMED"""
+        """命中：响应含真实 /etc/passwd（root + 系统账户）→ CONFIRMED"""
         url = MOCK_TARGET + '/common/download/resource?resource=../../../etc/passwd'
-        m.get(url, text=FILE_READ_PATH_MARKER)
+        # D4 改造：真实 /etc/passwd 内容，无 marker
+        m.get(url, text='root:x:0:0:root:/root:/bin/bash\n'
+                        'bin:x:1:1:bin:/bin:/sbin/nologin\n'
+                        'daemon:x:2:2:daemon:/sbin:/sbin/nologin\n')
         plugin = RuoyiFileReadPathPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED,
-                         f'响应含路径穿越签名应判 CONFIRMED，实际 {result.status}')
-        self.assertIn(FILE_READ_PATH_MARKER, result.evidence)
+                         f'响应含真实 /etc/passwd 应判 CONFIRMED，实际 {result.status}')
+        self.assertIn('root', result.evidence)
+
+    @requests_mock.Mocker()
+    def test_safe_no_passwd(self, m):
+        """安全：200 但响应无 passwd 特征 → SAFE"""
+        url = MOCK_TARGET + '/common/download/resource?resource=../../../etc/passwd'
+        m.get(url, text='<html><body>文件不存在</body></html>')
+        plugin = RuoyiFileReadPathPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE,
+                         f'200 但无 passwd 特征应判 SAFE，实际 {result.status}')
 
     @requests_mock.Mocker()
     def test_safe(self, m):

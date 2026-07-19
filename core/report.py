@@ -18,11 +18,36 @@ class ReportBuilder:
     摘要：目标、耗时、请求数、风险分布、扫描时间
     """
 
-    def __init__(self, results=None, target='', summary=None):
+    def __init__(self, results=None, target='', summary=None, dedup=True):
         self.results = results or []
         self.target = target
         # summary: {duration, request_count, started_at, ended_at, mode, fingerprint}
         self.summary = summary or {}
+        # D8: 结果去重聚合（渲染前合并同指纹漏洞，可 --no-dedup 关闭）
+        self.dedup_enabled = dedup
+        self._cached_effective = None      # 缓存去重后结果
+        self._cached_dedup_report = None   # 缓存去重统计
+
+    def _effective_results(self):
+        """返回渲染用结果：dedup=True 时返回去重聚合后结果，否则返回原始结果
+
+        去重层位于 ReportBuilder 渲染前（不破坏 ScanEngine 契约），
+        AggregatedVuln 鸭子类型兼容 ScanResult，现有渲染方法零改动即可接受。
+        """
+        if not self.dedup_enabled:
+            return self.results
+        if self._cached_effective is None:
+            from core.dedup import aggregate
+            self._cached_effective, self._cached_dedup_report = aggregate(self.results)
+        return self._cached_effective
+
+    def dedup_report(self):
+        """返回去重统计报告（dedup 关闭时返回 None）"""
+        if not self.dedup_enabled:
+            return None
+        if self._cached_dedup_report is None:
+            self._effective_results()  # 触发计算
+        return self._cached_dedup_report
 
     def add(self, result):
         self.results.append(result)
@@ -30,7 +55,7 @@ class ReportBuilder:
     # 风险分布：仅统计 CONFIRMED 漏洞
     def risk_distribution(self):
         dist = {'high': 0, 'medium': 0, 'low': 0, 'total': 0}
-        for r in self.results:
+        for r in self._effective_results():
             if r.status != STATUS_CONFIRMED:
                 continue
             dist['total'] += 1
@@ -40,7 +65,7 @@ class ReportBuilder:
 
     # 仅保留确认存在的漏洞条目（UNKNOWN/SAFE 不计入漏洞数，见开发方案 §三 Step 4）
     def confirmed_results(self):
-        return [r for r in self.results if r.status == STATUS_CONFIRMED]
+        return [r for r in self._effective_results() if r.status == STATUS_CONFIRMED]
 
     def sorted_results(self, confirmed_first=True):
         """排序结果：CONFIRMED 在前，同状态按危害度 high→medium→low→其他排序"""
@@ -51,7 +76,7 @@ class ReportBuilder:
             s = status_order.get(r.status, 99)
             v = sev_order.get(r.severity, 99)
             return (s if confirmed_first else 0, v, r.name)
-        return sorted(self.results, key=key)
+        return sorted(self._effective_results(), key=key)
 
     def to_dict(self):
         """整体报告字典（JSON 用）"""
@@ -65,7 +90,7 @@ class ReportBuilder:
             'fingerprint': self.summary.get('fingerprint', {}),
             'risk_distribution': dist,
             'vuln_count': dist['total'],
-            'results': [r.to_dict() for r in self.results],
+            'results': [r.to_dict() for r in self._effective_results()],
         }
 
     def to_json(self):
@@ -73,18 +98,26 @@ class ReportBuilder:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
     def to_csv(self):
-        """CSV 格式（漏洞名称/URL/危害等级/状态/证据/修复建议）"""
+        """CSV 格式（漏洞名称/URL/危害等级/状态/CVE/CVSS/合规/证据/修复建议/修复详情/复现命令）"""
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(['漏洞名称', 'URL', '危害等级', '状态', '证据', '修复建议'])
-        for r in self.results:
+        writer.writerow(['漏洞名称', 'URL', '危害等级', '状态', 'CVE', 'CVSS', '合规映射',
+                         '证据', '修复建议', '修复详情', '复现命令'])
+        for r in self._effective_results():
+            # 合规映射拼接为字符串
+            compliance_str = ';'.join(f'{k}:{v}' for k, v in r.compliance.items()) if r.compliance else ''
             writer.writerow([
                 r.name,
                 r.url,
                 SEVERITY_CN.get(r.severity, r.severity),
                 r.status,
+                r.cve or '',
+                f'{r.cvss_score:.1f}' if r.cvss_score > 0 else '',
+                compliance_str,
                 r.evidence,
                 r.fix,
+                getattr(r, 'fix_detail', '') or '',
+                getattr(r, 'reproduce', '') or '',
             ])
         return buf.getvalue()
 
@@ -170,17 +203,44 @@ class ReportBuilder:
             status_cn = {'CONFIRMED': '确认存在', 'SAFE': '不存在', 'UNKNOWN': '未知'}.get(r.status, r.status)
             # CSS class 用于 show/hide 过滤
             row_class = 'confirmed' if r.status == STATUS_CONFIRMED else 'not-confirmed'
+            # D7: WAF 绕过徽标（extra.waf_bypass 含 strategy_used 或 bypass_attempted）
+            bypass_badge = ''
+            extra = getattr(r, 'extra', None) or {}
+            waf_info = extra.get('waf_bypass') if isinstance(extra, dict) else None
+            if waf_info:
+                if waf_info.get('strategy_used'):
+                    sid = html_module.escape(str(waf_info.get('strategy_used', '')))
+                    sname = html_module.escape(str(waf_info.get('strategy_name', '')))
+                    bypass_badge = f' <span class="bypass-badge" title="{sname}">WAF绕过:{sid}</span>'
+                elif waf_info.get('bypass_attempted'):
+                    bypass_badge = ' <span class="bypass-failed-badge">WAF绕过失败</span>'
+            # D12：CVE/CVSS/合规列
+            cve_text = html_module.escape(r.cve) if r.cve else '—'
+            cvss_text = f'{r.cvss_score:.1f}' if r.cvss_score > 0 else '—'
+            compliance_parts = []
+            if r.compliance:
+                for std, clause in r.compliance.items():
+                    compliance_parts.append(f'{html_module.escape(std)}:{html_module.escape(clause)}')
+            compliance_text = '<br>'.join(compliance_parts) if compliance_parts else '—'
+            # D18/D24：修复详情 + 复现命令（保留换行，转义 HTML）
+            fix_detail_text = html_module.escape(getattr(r, 'fix_detail', '') or '').replace('\n', '<br>') or '—'
+            reproduce_text = html_module.escape(getattr(r, 'reproduce', '') or '').replace('\n', '<br>') or '—'
             rows_html.append(
                 f'<tr class="{row_class}">'
                 f'<td class="sev-{r.severity}"><span class="badge" style="background:{color}">{html_module.escape(sev_text)}</span></td>'
                 f'<td>{html_module.escape(r.name)}</td>'
                 f'<td class="url">{html_module.escape(r.url)}</td>'
                 f'<td>{html_module.escape(status_cn)}</td>'
-                f'<td class="evidence">{html_module.escape(r.evidence)}</td>'
+                f'<td class="cve">{cve_text}</td>'
+                f'<td class="cvss">{cvss_text}</td>'
+                f'<td class="evidence">{html_module.escape(r.evidence)}{bypass_badge}</td>'
                 f'<td class="fix">{html_module.escape(r.fix)}</td>'
+                f'<td class="fix-detail">{fix_detail_text}</td>'
+                f'<td class="reproduce">{reproduce_text}</td>'
+                f'<td class="compliance">{compliance_text}</td>'
                 '</tr>'
             )
-        rows = '\n'.join(rows_html) if rows_html else '<tr><td colspan="6" class="empty">无扫描结果</td></tr>'
+        rows = '\n'.join(rows_html) if rows_html else '<tr><td colspan="11" class="empty">无扫描结果</td></tr>'
 
         # 摘要区 + CMS 感知标题
         started = html_module.escape(str(self.summary.get('started_at', '')))
@@ -197,7 +257,7 @@ class ReportBuilder:
 
         # 仅确认模式开关（CSS + checkbox）
         filter_html = ''
-        any_non = any(r.status != STATUS_CONFIRMED for r in self.results)
+        any_non = any(r.status != STATUS_CONFIRMED for r in self._effective_results())
         if any_non and not confirmed_only:
             filter_html = (
                 '<div style="margin:10px 0">'
@@ -232,8 +292,15 @@ class ReportBuilder:
   td.url {{ word-break: break-all; color: #2980b9; font-family: Consolas, monospace; }}
   td.evidence {{ font-family: Consolas, monospace; font-size: 12px; color: #c0392b; }}
   td.fix {{ color: #27ae60; }}
+  td.fix-detail {{ color: #27ae60; font-size: 12px; white-space: pre-wrap; max-width: 360px; }}
+  td.reproduce {{ font-family: Consolas, monospace; font-size: 11px; color: #2c3e50; background: #f8f9fa; white-space: pre-wrap; max-width: 360px; }}
+  td.cve {{ font-family: Consolas, monospace; font-size: 11px; color: #8e44ad; }}
+  td.cvss {{ font-family: Consolas, monospace; font-size: 12px; font-weight: bold; text-align: center; }}
+  td.compliance {{ font-size: 11px; color: #555; }}
   td.empty {{ text-align: center; color: #999; padding: 20px; }}
   .badge {{ color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 12px; }}
+  .bypass-badge {{ display: inline-block; background: #8e44ad; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px; }}
+  .bypass-failed-badge {{ display: inline-block; background: #7f8c8d; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px; }}
   .footer {{ margin-top: 24px; color: #999; font-size: 12px; text-align: center; }}
   tr.not-confirmed {{ display: none; }}
   tr.not-confirmed.show {{ display: table-row; }}
@@ -271,7 +338,7 @@ function toggleFilter() {{
 <table>
   <thead>
     <tr>
-      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>证据</th><th>修复建议</th>
+      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>CVE</th><th>CVSS</th><th>证据</th><th>修复建议</th><th>修复详情</th><th>复现命令</th><th>合规映射</th>
     </tr>
   </thead>
   <tbody>
@@ -282,26 +349,73 @@ function toggleFilter() {{
 </body>
 </html>'''
 
-    def render_all(self, out_dir):
-        """渲染三种格式到 out_dir，返回生成的文件路径列表
+    def render_all(self, out_dir, formats=None):
+        """渲染多格式到 out_dir，返回生成的文件路径列表
 
-        文件名：report.json / report.html / report.csv（已存在则覆盖）
+        formats: 默认 ['html','json','csv']；D8 起新增 'pdf','docx','xlsx'；'all'=全部 6 种
+        未安装可选依赖时自动降级（跳过 PDF/Word/Excel 并打印警告）。
+        文件名：report.json / report.html / report.csv / report.pdf / report.docx / report.xlsx
         """
         if not out_dir:
             out_dir = settings.REPORT_DIR
         os.makedirs(out_dir, exist_ok=True)
+
+        if formats is None:
+            formats = ['html', 'json', 'csv']
+        elif formats == 'all':
+            formats = ['html', 'json', 'csv', 'pdf', 'docx', 'xlsx', 'sarif']
+
         paths = []
-        json_path = os.path.join(out_dir, 'report.json')
-        html_path = os.path.join(out_dir, 'report.html')
-        csv_path = os.path.join(out_dir, 'report.csv')
-        with open(json_path, 'w', encoding='utf-8') as f:
-            f.write(self.to_json())
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(self.to_html())
-        # CSV 用 utf-8-sig 便于 Excel 正确显示中文
-        with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write(self.to_csv())
-        paths.extend([json_path, html_path, csv_path])
+        if 'json' in formats:
+            json_path = os.path.join(out_dir, 'report.json')
+            with open(json_path, 'w', encoding='utf-8') as f:
+                f.write(self.to_json())
+            paths.append(json_path)
+        if 'html' in formats:
+            html_path = os.path.join(out_dir, 'report.html')
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(self.to_html())
+            paths.append(html_path)
+        if 'csv' in formats:
+            csv_path = os.path.join(out_dir, 'report.csv')
+            # CSV 用 utf-8-sig 便于 Excel 正确显示中文
+            with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+                f.write(self.to_csv())
+            paths.append(csv_path)
+        # D8.2-D8.4: PDF/Word/Excel 惰性 import + 降级友好
+        if 'pdf' in formats:
+            try:
+                from core.report_pdf import render_pdf
+                pdf_path = os.path.join(out_dir, 'report.pdf')
+                render_pdf(self, pdf_path)
+                paths.append(pdf_path)
+            except ImportError:
+                print('[警告] reportlab 未安装，跳过 PDF 报告（pip install reportlab）')
+        if 'docx' in formats:
+            try:
+                from core.report_docx import render_docx
+                docx_path = os.path.join(out_dir, 'report.docx')
+                render_docx(self, docx_path)
+                paths.append(docx_path)
+            except ImportError:
+                print('[警告] python-docx 未安装，跳过 Word 报告（pip install python-docx）')
+        if 'xlsx' in formats:
+            try:
+                from core.report_xlsx import render_xlsx
+                xlsx_path = os.path.join(out_dir, 'report.xlsx')
+                render_xlsx(self, xlsx_path)
+                paths.append(xlsx_path)
+            except ImportError:
+                print('[警告] openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）')
+        # D22: SARIF 报告格式（GitHub Code Scanning）
+        if 'sarif' in formats:
+            try:
+                from core.report_sarif import render_sarif
+                sarif_path = os.path.join(out_dir, 'report.sarif')
+                render_sarif(self, sarif_path)
+                paths.append(sarif_path)
+            except Exception as e:
+                print(f'[警告] SARIF 报告生成失败: {e}')
         return paths
 
 

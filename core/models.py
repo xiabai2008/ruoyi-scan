@@ -30,7 +30,16 @@ class ScanResult:
     url: str = ''                                    # 触发 URL
     evidence: str = ''                               # 证据（关键字/响应片段）
     extra: Dict[str, Any] = field(default_factory=dict)   # 附加字段
-    fix: str = ''                                    # 修复建议
+    fix: str = ''                                    # 修复建议（一句话概要）
+    # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤，多行字符串）
+    fix_detail: str = ''
+    # D24：复现命令（curl/Python PoC 脚本，多行字符串，可直接复制执行）
+    reproduce: str = ''
+    # D12：CVE / CVSS / 合规映射（向后兼容，默认空）
+    cve: str = ''                                    # CVE 编号
+    cvss_score: float = 0.0                          # CVSS v3.1 Base Score
+    cvss_vector: str = ''                            # CVSS v3.1 向量
+    compliance: Dict[str, str] = field(default_factory=dict)  # 合规映射 {'等保2.0': '8.1.3', 'OWASP': 'A03:2021'}
 
     @property
     def is_vuln(self):
@@ -49,6 +58,12 @@ class ScanResult:
             'evidence': self.evidence,
             'extra': self.extra,
             'fix': self.fix,
+            'fix_detail': self.fix_detail,
+            'reproduce': self.reproduce,
+            'cve': self.cve,
+            'cvss_score': self.cvss_score,
+            'cvss_vector': self.cvss_vector,
+            'compliance': self.compliance,
         }
 
 

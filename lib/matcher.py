@@ -28,8 +28,7 @@ def match_all(text, keywords):
 def match_php_eval_response(text):
     """检测响应是否是 PHP 函数求值结果（phpinfo / phpversion 真实漏洞响应）
 
-    用于 ThinkPHP RCE 类插件在真实漏洞环境上的判定补充：
-    签名靶场返回 marker 字符串，真实漏洞返回 phpinfo HTML 或 phpversion 字符串。
+    通用判定函数：签名靶场返回 marker 字符串，真实漏洞返回 phpinfo HTML 或 phpversion 字符串。
     本函数判定 phpinfo HTML 表格 / phpversion 输出特征。
 
     Args:

@@ -8,7 +8,7 @@ from lib.matcher import match_positive
 
 class DefaultPasswordPlugin(PluginBase):
     name = '后台默认口令（admin/admin123）'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
     category = 'brute'
     description = (
@@ -19,6 +19,35 @@ class DefaultPasswordPlugin(PluginBase):
         '强制修改 admin 默认口令为高强度密码；启用登录验证码；'
         '限制 admin 仅内网访问；登录失败次数阈值锁定；定期审计用户列表'
     )
+    fix_detail = (
+        '【口令修改】首次部署后立即执行：登录后台 → 个人中心 → 修改密码（≥12 位，含大小写+数字+符号）\n'
+        '【SQL 修改】update sys_user set password = \'$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2\' where user_name = \'admin\';\n'
+        '  （示例为 admin123 的 BCrypt 哈希，替换为目标强口令的哈希）\n'
+        '【启用验证码】application.yml: shiro.captchaEnabled: true\n'
+        '【失败锁定】SysLoginController.login() 添加：if (loginRecordService.isLocked(username)) throw new ServiceException("账号已锁定")\n'
+        '【WAF 规则】拦截 username=admin 且 password=admin123 的 /login 请求\n'
+        '【合规】等保 2.0 8.1.4 要求：身份鉴别信息复杂度并定期更换'
+    )
+    reproduce = (
+        '# 尝试默认口令登录（admin/admin123）：\n'
+        'curl -X POST "http://target/login" \\\n'
+        '  -H "Content-Type: application/json" \\\n'
+        '  -d \'{"username":"admin","password":"admin123"}\'\n'
+        '\n'
+        '# 预期响应：HTTP 200 + JSON 含 {"code":200,"msg":"操作成功","token":"..."} 字段\n'
+        '\n'
+        '# 验证登录成功后访问后台接口：\n'
+        'curl "http://target/getInfo" -H "Authorization: Bearer <token>"\n'
+        '  # 返回用户信息即确认默认口令有效'
+    )
+    # D2：默认口令全版本存在（取决于是否修改默认 admin/admin123）
+    affected_versions = ''
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
+    compliance = '等保2.0:8.1.4;OWASP:A07:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'auth'
+    supports_waf_bypass = True
 
     # 默认凭据（仅这一组，符合 agents.md §6「不得新增炫技功能」原则，聚焦若依官方默认口令）
     USERNAME = 'admin'

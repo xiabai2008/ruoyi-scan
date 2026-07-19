@@ -15,6 +15,9 @@ from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin
+from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
+from plugins.ruoyi.ruoyi_gen_rce import RuoyiGenRcePlugin
 
 plugin_list = [
     # recon：目录扫描（保持原 -u 综合扫描第一步）
@@ -35,4 +38,8 @@ plugin_list = [
     # brute：原有 Druid 爆破 + Step 5 新增默认口令
     DruidBrutePlugin,        # Druid 弱口令爆破
     DefaultPasswordPlugin,  # 后台默认口令 admin/admin123
+    # P1-F 新增（阶段扩充 +3）
+    RuoyiCloudNacosPlugin,   # RuoYi-Cloud Nacos 配置泄露（high）
+    RuoyiSwaggerUnauthPlugin,# Swagger 未授权 API 文档（medium）
+    RuoyiGenRcePlugin,       # 代码生成模块 SSTI（high）
 ]

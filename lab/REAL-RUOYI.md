@@ -144,6 +144,6 @@
 
 ## 后续动作
 
-- [ ] ThinkPHP：vulhub `thinkphp:5.0.23` 镜像验证（需 Docker）
-- [ ] Spring：公开靶场或自行部署含已知漏洞版本验证
+- [x] Spring：real-spring Flask 靶场验证完成（见 `REAL-SPRING.md`）
 - [x] RuoYi：真实 4.7.8 验证完成
+- [ ] 做深若依 D1-D5：登录链打通 / 多版本适配 / 验证码处理 / real-ruoyi 自动化 / 误报率实测（见 `P0P1P2升级计划.md`）
