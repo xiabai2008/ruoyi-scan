@@ -2,8 +2,8 @@
 # 漏洞原因：/actuator/heapdump 端点可匿名访问，下载 JVM 堆转储文件，内含
 #   数据库口令、JWT 密钥、Session Token、API Key 等明文/编码敏感信息。
 # 本插件仅做存在性验证：GET /actuator/heapdump 检测返回体含 heapdump 特征。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_heapdump_binary
 from plugins.base import PluginBase

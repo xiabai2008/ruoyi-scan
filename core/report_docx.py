@@ -11,7 +11,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-from core.models import (
+from common.models import (
     SEVERITY_CN,
     SEVERITY_HIGH,
     SEVERITY_LOW,

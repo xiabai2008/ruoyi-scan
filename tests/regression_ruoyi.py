@@ -28,7 +28,7 @@ except ImportError:
     sys.exit(1)
 
 from core.session import SessionManager
-from core.models import (
+from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,

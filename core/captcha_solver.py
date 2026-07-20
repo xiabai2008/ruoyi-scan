@@ -18,8 +18,8 @@ import base64
 import io
 import re
 
+from common.logger import get_logger
 from core.http import join_url
-from core.logger import get_logger
 
 logger = get_logger(__name__)
 

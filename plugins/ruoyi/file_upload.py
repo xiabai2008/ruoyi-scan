@@ -1,6 +1,6 @@
 # 任意文件上传：POST /common/upload 上传无害 .txt 探针，按 JSON 响应判定接口可写
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

@@ -21,8 +21,8 @@ from cli.runner import (
     run_template_list_mode,
     run_wiki_mode,
 )
+from common.logger import setup_logging
 from config import settings
-from core.logger import setup_logging
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 

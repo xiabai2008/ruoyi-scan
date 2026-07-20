@@ -2,8 +2,8 @@
 # 漏洞原因：Actuator 暴露 /gateway/routes/ 端点，可 POST 创建含恶意 Filter 的路由触发
 #   SPEL 表达式求值执行任意命令（影响 Spring Cloud Gateway 3.1.x）。
 # 本插件仅做存在性验证：POST 创建测试路由探针，检测响应特征判定接口是否可达。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_gateway_route_created
 from plugins.base import PluginBase

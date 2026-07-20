@@ -2,9 +2,9 @@
 import hashlib
 import re
 
+from common.logger import get_logger
+from common.models import FingerprintResult
 from core.fingerprint_features import get_feature, list_cms
-from core.logger import get_logger
-from core.models import FingerprintResult
 from core.session import SessionManager
 
 logger = get_logger(__name__)

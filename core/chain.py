@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core.models import (
+from common.models import (
     SEVERITY_HIGH,
     STATUS_CONFIRMED,
     STATUS_SAFE,

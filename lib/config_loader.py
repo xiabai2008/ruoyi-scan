@@ -29,7 +29,7 @@
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

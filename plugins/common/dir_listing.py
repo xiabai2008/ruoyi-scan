@@ -1,6 +1,6 @@
 # 目录遍历探测 — 探测常见路径是否开启目录列表
+from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
-from core.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from plugins.base import PluginBase
 
 

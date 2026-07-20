@@ -1,7 +1,7 @@
 # Thymeleaf/SpEL 模板注入：路径注入 __${7*7}__::.x 探针，按响应是否含 49 判定（保守判定）
 
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

@@ -1,6 +1,6 @@
 # SQL 报错注入（role）：/system/role/list 的 params[dataScope] 参数 extractvalue 报错注入
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

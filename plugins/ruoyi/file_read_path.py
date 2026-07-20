@@ -3,8 +3,8 @@
 #   攻击者构造 ../ 路径穿越可读取任意文件（如 /etc/passwd、/proc/self/environ）。
 # 本插件仅做存在性验证：读取 /etc/passwd，检测响应是否含真实 passwd 文件特征。
 # D4 改造（2026-07-18）：删除签名 marker，改真实 /etc/passwd 特征判定，兼容签名靶场与真实若依。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

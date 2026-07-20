@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.waf_bypass import (WafBypassStrategy, BypassContext, BypassSession,
                               StrategyRegistry, WafBypassCoordinator,
                               InlineCommentStrategy, RandomCaseStrategy,

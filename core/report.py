@@ -6,8 +6,7 @@ import io
 import json
 import os
 
-from config import settings
-from core.models import (
+from common.models import (
     SEVERITY_CN,
     SEVERITY_HIGH,
     SEVERITY_LOW,
@@ -16,6 +15,7 @@ from core.models import (
     STATUS_SAFE,
     STATUS_UNKNOWN,
 )
+from config import settings
 
 
 class ReportBuilder:

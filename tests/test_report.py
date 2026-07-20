@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, SEVERITY_HIGH, SEVERITY_MEDIUM
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, SEVERITY_HIGH, SEVERITY_MEDIUM
 from core.report import ReportBuilder
 
 
@@ -147,7 +147,7 @@ def test_donut_svg_zero_total():
 def test_batch_bar_svg():
     """阶段六：BatchReport 柱状图 SVG 含 rect 元素 + 序号"""
     from core.report import BatchReport
-    from core.models import ScanResult, SEVERITY_HIGH
+    from common.models import ScanResult, SEVERITY_HIGH
     b1 = ReportBuilder(results=_sample_results(), target='http://t1/',
                        summary=_sample_summary())
     # 第二个目标：3 high + 0 medium + 0 low

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.engine import ScanEngine
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from plugins.base import PluginBase
 from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.file_read import FileReadPlugin

@@ -7,9 +7,9 @@
 # 注意：本链仅验证可利用性，不实际上传真实 webshell。
 import re
 
+from common.logger import get_logger
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.logger import get_logger
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)

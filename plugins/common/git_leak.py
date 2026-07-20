@@ -1,6 +1,6 @@
 # .git 源码泄露探测 — GET /.git/HEAD 检测 ref: 关键字
+from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 

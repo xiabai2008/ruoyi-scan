@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Callable, List, Optional
 
-from core.models import STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_UNKNOWN, ScanResult
 
 if TYPE_CHECKING:
     from core.session import SessionManager

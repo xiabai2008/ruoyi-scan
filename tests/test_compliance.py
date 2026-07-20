@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from plugins.base import PluginBase, cvss_score, parse_compliance
-from core.models import ScanResult, STATUS_CONFIRMED, SEVERITY_HIGH
+from common.models import ScanResult, STATUS_CONFIRMED, SEVERITY_HIGH
 from core.report import ReportBuilder
 
 

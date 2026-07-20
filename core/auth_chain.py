@@ -18,8 +18,8 @@
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
 
+from common.logger import get_logger
 from core.http import join_url
-from core.logger import get_logger
 
 logger = get_logger(__name__)
 

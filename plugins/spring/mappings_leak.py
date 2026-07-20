@@ -2,8 +2,8 @@
 # 漏洞原因：/actuator/mappings 端点可匿名访问，暴露应用全部 URL 映射、控制器类名、
 #   请求方法等内部细节，便于攻击者绘制攻击面（影响 Spring Boot 1.x ~ 2.x 默认暴露）。
 # 本插件仅做存在性验证：GET /actuator/mappings 200+JSON 且含 handler/dispatcher 特征。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

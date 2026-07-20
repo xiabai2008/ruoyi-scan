@@ -1,5 +1,5 @@
 # CORS 跨域配置检测 — Origin 反射 + Access-Control 头分析
-from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 

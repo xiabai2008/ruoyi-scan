@@ -2,8 +2,8 @@
 # 漏洞原因：spring-boot-starter-actuator 搭配 H2 数据库时，/h2-console 端点可匿名访问，
 #   攻击者可通过 JNDI 连接字符串登录 H2 控制台执行任意 SQL / 代码（high）。
 # 本插件仅做存在性验证：POST /h2-console 带 JNDI 连接探针，检测响应特征判定接口可达。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_h2_console
 from plugins.base import PluginBase

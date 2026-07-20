@@ -1,7 +1,7 @@
-# 项目级日志工具：统一 logger 配置，避免 except: pass 静默吞错
+# common/logger.py — 项目级日志工具（共享基础层，供 core/lib/api/cli/plugins 共同依赖）
 #
 # 用法：
-#   from core.logger import get_logger
+#   from common.logger import get_logger
 #   logger = get_logger(__name__)
 #   except Exception as e:
 #       logger.debug("操作失败", exc_info=True)

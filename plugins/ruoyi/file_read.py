@@ -1,6 +1,6 @@
 # 任意文件读取：通过 /common/download/resource 接口读取 /etc/passwd
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_all
 from plugins.base import PluginBase

@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.models import STATUS_CONFIRMED, ScanResult
+from common.models import STATUS_CONFIRMED, ScanResult
 from core.orchestrator import ScanOrchestrator, ScanRequest, ScanTask
 from tests.helpers import wait_for
 

@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.chain import (ChainEngine, CHAIN_CONFIRMED, CHAIN_PARTIAL,
                           CHAIN_BLOCKED, CHAIN_UNKNOWN,
                           NODE_SUCCESS, NODE_FAILED, NODE_SKIPPED)
-from core.models import FingerprintResult
+from common.models import FingerprintResult
 from chains.registry import get_chain, list_chains
 
 

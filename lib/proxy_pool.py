@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

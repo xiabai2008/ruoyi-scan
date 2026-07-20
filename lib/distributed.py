@@ -34,7 +34,7 @@ import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

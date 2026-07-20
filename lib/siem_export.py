@@ -23,10 +23,10 @@ import json
 import socket
 from typing import Any, Dict, List
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 # 复用现有模型
-from core.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
+from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
 
 logger = get_logger(__name__)
 

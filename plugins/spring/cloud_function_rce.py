@@ -2,8 +2,8 @@
 # 漏洞原因：Spring Cloud Function 将 HTTP 头 `spring.cloud.function.routing-expression`
 #   的值注入 SpEL Expression 求值，攻击者可执行任意命令（影响 3.1.x / 3.2.x）。
 # 本插件仅做存在性验证：POST /functionRouter 带 SpEL 探针头，检测响应特征判定接口可达。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_cloud_function_spel
 from plugins.base import PluginBase

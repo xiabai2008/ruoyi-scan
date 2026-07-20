@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

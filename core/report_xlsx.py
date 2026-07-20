@@ -13,7 +13,7 @@ from openpyxl.chart.label import DataLabelList
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from core.models import (
+from common.models import (
     SEVERITY_CN,
     SEVERITY_HIGH,
     SEVERITY_LOW,

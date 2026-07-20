@@ -27,7 +27,7 @@ import os
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

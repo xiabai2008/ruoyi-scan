@@ -19,7 +19,7 @@ from core.ruoyi_versions import (
 )
 from core.session import SessionManager
 from core.router import Router
-from core.models import FingerprintResult
+from common.models import FingerprintResult
 
 MOCK_TARGET = 'http://ruoyi-version.test'
 

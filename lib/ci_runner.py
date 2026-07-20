@@ -48,7 +48,7 @@ def should_fail_ci(results: List, severity_threshold: str = "high") -> bool:
     Returns:
         True 表示应失败（发现超阈值漏洞）
     """
-    from core.models import STATUS_CONFIRMED
+    from common.models import STATUS_CONFIRMED
 
     threshold_level = SEVERITY_LEVELS.get(severity_threshold, 3)
 
@@ -88,7 +88,7 @@ def format_ci_summary(results: List, target: str, duration: float = 0) -> str:
     Returns:
         摘要字符串（纯文本，无 ANSI 颜色码）
     """
-    from core.models import STATUS_CONFIRMED
+    from common.models import STATUS_CONFIRMED
 
     dist = {"high": 0, "medium": 0, "low": 0, "total": 0}
     for r in results:
@@ -122,7 +122,7 @@ def format_ci_vulns(results: List, max_display: int = 50) -> str:
     Returns:
         漏洞列表字符串
     """
-    from core.models import STATUS_CONFIRMED
+    from common.models import STATUS_CONFIRMED
 
     confirmed = [r for r in results if r.status == STATUS_CONFIRMED]
     if not confirmed:

@@ -2,8 +2,8 @@
 # 漏洞原因：/actuator/env 可 POST 写入配置属性，设置 eureka.client.serviceUrl.defaultZone
 #   为恶意 XML URL，触发 /refresh 后 xstream 反序列化执行命令（影响 Spring Cloud < 特定版本）。
 # 本插件仅做存在性验证：POST /actuator/env 写入探针配置，检测响应特征判定接口是否可达。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_spring_actuator_env
 from plugins.base import PluginBase

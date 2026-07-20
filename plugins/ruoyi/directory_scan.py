@@ -1,9 +1,9 @@
 # 目录扫描：读 ruoyi.txt 字典，逐条 GET 并打印 响应码/标题/长度/最终 URL
 import re
 
+from common.models import STATUS_UNKNOWN, ScanResult
 from config import settings
 from core.http import join_url
-from core.models import STATUS_UNKNOWN, ScanResult
 from lib.colors import GREEN, RED, RESET, YELLOW
 from plugins.base import PluginBase
 

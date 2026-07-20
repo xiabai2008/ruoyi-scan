@@ -1,7 +1,7 @@
 # 后台默认口令：POST /login 尝试 admin/admin123，按 token/code:200/Set-Cookie 判定
+from common.logger import get_logger
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.logger import get_logger
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_positive
 from plugins.base import PluginBase

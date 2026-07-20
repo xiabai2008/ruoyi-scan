@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
+from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
                           SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
 from core.dedup import (fingerprint, aggregate, AggregatedVuln, DedupReport,
                           _normalize_endpoint, _strip_parens, VULN_TYPE_CN)

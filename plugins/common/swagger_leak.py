@@ -1,6 +1,6 @@
 # Swagger/OpenAPI 文档泄露 — 常见 API 文档路径探测
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
-from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from plugins.base import PluginBase
 
 

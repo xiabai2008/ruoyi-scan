@@ -17,9 +17,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from common.logger import get_logger  # noqa: E402
+from common.models import STATUS_CONFIRMED  # noqa: E402
 from core.fingerprint import detect_cms  # noqa: E402
-from core.logger import get_logger  # noqa: E402
-from core.models import STATUS_CONFIRMED  # noqa: E402
 from core.router import Router  # noqa: E402
 from core.session import SessionManager  # noqa: E402
 from lab.fp_lab.server import TARGETS  # noqa: E402
@@ -30,11 +30,11 @@ logger = get_logger(__name__)
 def start_lab(target_id, port):
     """启动一个误报靶场实例"""
     env = os.environ.copy()
-    env['FP_TARGET'] = target_id
-    env['FP_PORT'] = str(port)
+    env["FP_TARGET"] = target_id
+    env["FP_PORT"] = str(port)
     proc = subprocess.Popen(
-        [sys.executable, 'server.py'],
-        cwd=os.path.join(PROJECT_ROOT, 'lab', 'fp_lab'),
+        [sys.executable, "server.py"],
+        cwd=os.path.join(PROJECT_ROOT, "lab", "fp_lab"),
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -45,12 +45,13 @@ def start_lab(target_id, port):
 def wait_port(port, timeout=10):
     """等待端口可达"""
     import socket
+
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(0.5)
-            s.connect(('127.0.0.1', port))
+            s.connect(("127.0.0.1", port))
             s.close()
             return True
         except Exception:
@@ -69,7 +70,7 @@ def scan_target(target_url):
 
     # 如果误判为 ruoyi，跑 POC 看是否 CONFIRMED
     confirmed_count = 0
-    if cms == 'ruoyi':
+    if cms == "ruoyi":
         plugins = Router().resolve(fp_result)
         for cls in plugins:
             try:
@@ -83,9 +84,9 @@ def scan_target(target_url):
 
 
 def main():
-    print('=' * 70)
-    print('D5 误报率测试：10 个非若依靶场')
-    print('=' * 70)
+    print("=" * 70)
+    print("D5 误报率测试：10 个非若依靶场")
+    print("=" * 70)
 
     # 启动 10 个靶场（端口 8501-8510）
     procs = []
@@ -96,32 +97,32 @@ def main():
         proc = start_lab(target_id, port)
         procs.append(proc)
         if not wait_port(port, timeout=10):
-            print(f'[!] 启动失败: {target_id} port={port}')
+            print(f"[!] 启动失败: {target_id} port={port}")
         else:
-            print(f'[+] 启动: {target_id:<22} port={port}  ({desc})')
+            print(f"[+] 启动: {target_id:<22} port={port}  ({desc})")
 
     print()
-    print('-' * 70)
-    print(f'{"靶场":<22} {"指纹":<12} {"置信度":<8} {"CONFIRMED":<10} {"判定":<10}')
-    print('-' * 70)
+    print("-" * 70)
+    print(f"{'靶场':<22} {'指纹':<12} {'置信度':<8} {'CONFIRMED':<10} {'判定':<10}")
+    print("-" * 70)
 
     false_positives = 0
     results = []
     for i, (target_id, desc) in enumerate(targets):
         port = port_base + i
-        target_url = f'http://127.0.0.1:{port}/'
+        target_url = f"http://127.0.0.1:{port}/"
         try:
             cms, version, confidence, confirmed = scan_target(target_url)
         except Exception as e:
-            cms, confidence, confirmed = 'error', 0.0, 0
-            print(f'[!] 扫描异常 {target_id}: {e}')
+            cms, confidence, confirmed = "error", 0.0, 0
+            print(f"[!] 扫描异常 {target_id}: {e}")
 
-        is_fp = (cms == 'ruoyi')
+        is_fp = cms == "ruoyi"
         if is_fp:
             false_positives += 1
-        verdict = '假阳' if is_fp else '正确'
+        verdict = "假阳" if is_fp else "正确"
         results.append((target_id, desc, cms, confidence, confirmed, is_fp))
-        print(f'{target_id:<22} {cms:<12} {confidence:<8.2f} {confirmed:<10} {verdict:<10}')
+        print(f"{target_id:<22} {cms:<12} {confidence:<8.2f} {confirmed:<10} {verdict:<10}")
 
     # 清理靶场进程
     for proc in procs:
@@ -132,18 +133,18 @@ def main():
         except Exception:
             proc.kill()
 
-    print('-' * 70)
+    print("-" * 70)
     total = len(targets)
     fp_rate = false_positives / total * 100
-    print(f'总计: {total} 个靶场，假阳 {false_positives} 个，假阳率 {fp_rate:.1f}%')
-    print(f'目标: 假阳率 <5%（≤{int(total * 0.05)} 个假阳）')
+    print(f"总计: {total} 个靶场，假阳 {false_positives} 个，假阳率 {fp_rate:.1f}%")
+    print(f"目标: 假阳率 <5%（≤{int(total * 0.05)} 个假阳）")
     if fp_rate < 5:
-        print('结果: PASS ✅')
+        print("结果: PASS ✅")
         return 0
     else:
-        print('结果: FAIL ❌')
+        print("结果: FAIL ❌")
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

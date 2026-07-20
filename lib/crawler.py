@@ -18,7 +18,7 @@ from html.parser import HTMLParser
 from typing import Callable, List, Optional, Set
 from urllib.parse import urldefrag, urljoin, urlparse
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

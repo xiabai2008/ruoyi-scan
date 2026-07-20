@@ -14,7 +14,7 @@
 #   ''            空串表示全版本适用（默认）
 import re
 
-from core.logger import get_logger
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

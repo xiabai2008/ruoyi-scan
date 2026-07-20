@@ -2,8 +2,8 @@
 from fastapi import APIRouter, HTTPException
 
 from api.models.schemas import PluginDTO
+from common.logger import get_logger
 from core.loader import load_plugins
-from core.logger import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["插件"])

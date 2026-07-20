@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
-from core.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 
 # 严重度排序（数值越大越严重）
 _SEVERITY_ORDER = {SEVERITY_LOW: 0, SEVERITY_MEDIUM: 1, SEVERITY_HIGH: 2}
@@ -131,7 +131,7 @@ class AggregatedVuln:
 
     def to_dict(self):
         """转为字典（与 ScanResult.to_dict() 字段对齐 + 聚合扩展字段）"""
-        from core.models import SEVERITY_CN
+        from common.models import SEVERITY_CN
 
         return {
             "kind": self.kind,

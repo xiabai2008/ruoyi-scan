@@ -1,8 +1,8 @@
 # 指纹→插件包路由（自动同步特征库 cms，新增 CMS 零改动）
 from typing import List
 
+from common.models import FingerprintResult
 from core.loader import load_plugins
-from core.models import FingerprintResult
 
 
 class Router:

@@ -20,6 +20,7 @@ CI 端到端验收脚本（跨平台，Windows/Linux 通用）
       --scan-mode -p --report-dir /tmp/e2e/real-spring \
       --name real-spring --min-confirmed 11
 """
+
 import argparse
 import json
 import os
@@ -89,8 +90,7 @@ def check_report(json_path, name, min_confirmed, require_all):
     confirmed = sum(1 for r in results if r.get("status") == STATUS_CONFIRMED)
     safe = sum(1 for r in results if r.get("status") == STATUS_SAFE)
     unknown = sum(1 for r in results if r.get("status") == STATUS_UNKNOWN)
-    print(f"[{name}] total={len(results)} CONFIRMED={confirmed} "
-          f"SAFE={safe} UNKNOWN={unknown}")
+    print(f"[{name}] total={len(results)} CONFIRMED={confirmed} SAFE={safe} UNKNOWN={unknown}")
 
     ok = True
     if require_all and (safe or unknown):
@@ -106,20 +106,26 @@ def check_report(json_path, name, min_confirmed, require_all):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="CI 端到端验收：启靶场→扫描→断言")
-    p.add_argument("--lab", default=None,
-                   help="靶场启动脚本相对路径（如 lab/server.py）；不传则跳过启动（靶场已运行）")
+    p.add_argument("--lab", default=None, help="靶场启动脚本相对路径（如 lab/server.py）；不传则跳过启动（靶场已运行）")
     p.add_argument("--lab-port", type=int, default=8080, help="注入靶场的 LAB_PORT 环境变量")
     p.add_argument("--lab-mode", default="vuln", help="注入靶场的 LAB_MODE 环境变量")
     p.add_argument("--target", required=True, help="扫描目标 URL，如 http://127.0.0.1:8080/")
-    p.add_argument("--mode", "--scan-mode", dest="mode",
-                   choices=["u", "p", "m", "l"], default="p",
-                   help="扫描模式字符（对应 main.py 的 -u/-p/-m/-l；--scan-mode 为兼容别名）")
+    p.add_argument(
+        "--mode",
+        "--scan-mode",
+        dest="mode",
+        choices=["u", "p", "m", "l"],
+        default="p",
+        help="扫描模式字符（对应 main.py 的 -u/-p/-m/-l；--scan-mode 为兼容别名）",
+    )
     p.add_argument("--report-dir", required=True, help="报告输出目录（生成 report.json 等）")
     p.add_argument("--name", required=True, help="标签（日志/失败时显示）")
-    p.add_argument("--min-confirmed", type=int, default=0,
-                   help="CONFIRMED 数量下限（默认 0；真实靶场用此断言）")
-    p.add_argument("--require-all-confirmed", action="store_true",
-                   help="要求所有 result 均为 CONFIRMED（签名靶场 vuln 模式用此断言）")
+    p.add_argument("--min-confirmed", type=int, default=0, help="CONFIRMED 数量下限（默认 0；真实靶场用此断言）")
+    p.add_argument(
+        "--require-all-confirmed",
+        action="store_true",
+        help="要求所有 result 均为 CONFIRMED（签名靶场 vuln 模式用此断言）",
+    )
     p.add_argument("--timeout", type=int, default=30, help="等待端口可达的超时秒数")
     a = p.parse_args(argv)
 

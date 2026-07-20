@@ -19,11 +19,11 @@ jobs:
       - name: Install dev dependencies
         run: pip install ruff mypy
       - name: Ruff lint
-        run: ruff check core/ lib/ api/ plugins/ chains/ cli/ main.py
+        run: ruff check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
       - name: Ruff format check
-        run: ruff format --check core/ lib/ api/ plugins/ chains/ cli/ main.py
-      - name: Mypy type check（仅 core/，宽松模式）
-        run: mypy core/ --ignore-missing-imports --no-strict-optional || true
+        run: ruff format --check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
+      - name: Mypy type check（common/ + core/，strict 模式）
+        run: mypy common/ core/ --strict --ignore-missing-imports || true
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   unit:

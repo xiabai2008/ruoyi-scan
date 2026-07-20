@@ -200,7 +200,7 @@ def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
     仅提取 CONFIRMED 状态的漏洞（SAFE/UNKNOWN 不计入差异对比）
     """
-    from core.models import STATUS_CONFIRMED
+    from common.models import STATUS_CONFIRMED
 
     vulns = {}
     results = report_data.get("results", [])

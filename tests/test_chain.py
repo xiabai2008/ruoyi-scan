@@ -13,7 +13,7 @@ from core.chain import (ChainStep, ChainEdge, ChainDef, ChainContext,
                           NODE_SKIPPED, NODE_ERROR,
                           CHAIN_CONFIRMED, CHAIN_PARTIAL, CHAIN_BLOCKED,
                           CHAIN_UNKNOWN)
-from core.models import (ScanResult, FingerprintResult, STATUS_CONFIRMED,
+from common.models import (ScanResult, FingerprintResult, STATUS_CONFIRMED,
                           STATUS_SAFE, STATUS_UNKNOWN, SEVERITY_HIGH)
 from plugins.base import PluginBase
 

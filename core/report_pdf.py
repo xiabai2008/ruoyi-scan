@@ -12,7 +12,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from core.models import (
+from common.models import (
     SEVERITY_CN,
     SEVERITY_HIGH,
     SEVERITY_LOW,

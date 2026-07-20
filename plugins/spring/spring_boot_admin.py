@@ -1,6 +1,6 @@
 # Spring Boot Admin 未授权访问
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
-from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from plugins.base import PluginBase
 
 

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
 from api.deps import get_registry
-from core.logger import get_logger
+from common.logger import get_logger
 from core.task_registry import TaskRegistry
 
 logger = get_logger(__name__)

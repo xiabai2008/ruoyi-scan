@@ -34,7 +34,7 @@ PLUGIN_TEMPLATE = '''# {description}
 # CVSS: {cvss_vector}
 # 合规: {compliance}
 from plugins.base import PluginBase
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
 from core.http import join_url
 

@@ -1,5 +1,5 @@
 # HTTP 方法探测 — OPTIONS 请求 + TRACE 探测
-from core.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 

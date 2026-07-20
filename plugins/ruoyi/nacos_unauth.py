@@ -6,8 +6,8 @@
 # D4 改造（2026-07-18）：删除签名 marker，改真实响应特征判定，兼容签名靶场与真实 Nacos。
 import json as _json
 
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

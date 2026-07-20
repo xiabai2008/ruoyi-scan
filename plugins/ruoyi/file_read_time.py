@@ -1,9 +1,9 @@
 # 定时任务任意文件读取：登录链 → edit→run 触发 ruoYiConfig.setProfile，再读取落地文件 2.txt
 # D1 改造（2026-07-18）：删除硬编码 JSESSIONID + 固定 Content-Length，改用 RuoYiAuthChain 登录拿会话
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from config import settings
 from core.auth_chain import LOGIN_CAPTCHA, RuoYiAuthChain
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from lib.matcher import match_all
 from plugins.base import PluginBase

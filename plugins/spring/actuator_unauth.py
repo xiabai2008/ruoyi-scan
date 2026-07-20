@@ -1,8 +1,8 @@
 # Spring Boot Actuator 未授权访问（信息泄露 / 配置暴露）
 # 漏洞原因：Actuator 端点未配置认证，/actuator/env 等暴露配置、环境变量、密码与密钥。
 # 本插件仅做存在性验证：探测 /actuator 与 /actuator/env 是否均可匿名访问。
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
 from plugins.base import PluginBase
 

@@ -1,6 +1,6 @@
 # Spring Data REST 信息泄露
+from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from core.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 

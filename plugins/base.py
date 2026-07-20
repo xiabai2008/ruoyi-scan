@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from core.models import STATUS_CONFIRMED, ScanResult
+from common.models import STATUS_CONFIRMED, ScanResult
 
 if TYPE_CHECKING:
     from core.session import SessionManager

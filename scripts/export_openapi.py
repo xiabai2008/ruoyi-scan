@@ -7,6 +7,7 @@
 生成的 openapi.json 可导入 Swagger UI / Postman / Insomnia 等工具，
 也可通过 `redoc-cli bundle docs/openapi.json` 生成静态 HTML 文档。
 """
+
 import argparse
 import json
 import os
@@ -47,13 +48,16 @@ def export_openapi(output_path: str, indent: int = 2) -> str:
 def main():
     parser = argparse.ArgumentParser(description="导出 FastAPI OpenAPI 规范")
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="docs/openapi.json",
         help="输出文件路径（默认: docs/openapi.json）",
     )
     parser.add_argument(
-        "--indent", "-i",
-        type=int, default=2,
+        "--indent",
+        "-i",
+        type=int,
+        default=2,
         help="JSON 缩进空格数（默认: 2）",
     )
     args = parser.parse_args()

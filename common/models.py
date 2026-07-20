@@ -1,4 +1,5 @@
-# 扫描结果数据模型：ScanResult / FingerprintResult
+# common/models.py — 扫描结果数据模型（共享基础层，供 core/lib/api/cli/plugins 共同依赖）
+# ScanResult / FingerprintResult
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 

@@ -21,7 +21,7 @@ except ImportError:
     sys.exit(1)
 
 from core.session import SessionManager
-from core.models import STATUS_CONFIRMED, STATUS_SAFE
+from common.models import STATUS_CONFIRMED, STATUS_SAFE
 
 from plugins.spring.spring4shell import (
     Spring4shellPlugin, S4S_MARKER as MARKER_S4S)

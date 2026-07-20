@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE
 from cli.runner import (
     _parse_report_formats, _print_scan_result,
     MODE_CATEGORIES, MODE_LABELS,
@@ -116,7 +116,7 @@ class TestE2EFullFlow(unittest.TestCase):
     def test_core_imports_with_type_hints(self):
         """验证 core/ 模块 type hints 导入正常"""
         from core.engine import ScanEngine
-        from core.models import ScanResult, FingerprintResult, STATUS_CONFIRMED
+        from common.models import ScanResult, FingerprintResult, STATUS_CONFIRMED
         from core.loader import load_plugins
         from core.router import Router
         from core.session import SessionManager
@@ -203,7 +203,7 @@ class TestE2EFullFlow(unittest.TestCase):
         """验证三态判定常量"""
         self.assertEqual(STATUS_CONFIRMED, 'CONFIRMED')
         self.assertEqual(STATUS_SAFE, 'SAFE')
-        from core.models import STATUS_UNKNOWN
+        from common.models import STATUS_UNKNOWN
         self.assertEqual(STATUS_UNKNOWN, 'UNKNOWN')
 
         # ScanResult.is_vuln 只对 CONFIRMED 返回 True

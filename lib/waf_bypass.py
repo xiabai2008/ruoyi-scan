@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-from core.models import STATUS_CONFIRMED, ScanResult
+from common.models import STATUS_CONFIRMED, ScanResult
 from lib.tamper import (
     between_replace,
     double_urlencode,
