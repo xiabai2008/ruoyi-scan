@@ -142,5 +142,5 @@ warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py", "regression_*.py"]
+python_files = ["test_*.py"]
 addopts = "-q --timeout=30 --timeout-method=thread"

@@ -485,9 +485,9 @@ class TestSubdomainEnumerator:
         assert 'dict' in enum.sources['www.example.com']
 
     def test_enumerate_subdomains_helper(self):
-        """便捷函数"""
+        """便捷函数（禁用 crt.sh 避免真实网络请求）"""
         subs = enumerate_subdomains(
-            'example.com', verify_dns=False,
+            'example.com', verify_dns=False, use_crtsh=False,
         )
         # 默认字典至少 50 个 + 主域
         assert len(subs) >= 50

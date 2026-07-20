@@ -234,9 +234,18 @@ class SubdomainEnumerator:
 # === 便捷函数 ===
 
 
-def enumerate_subdomains(domain: str, session=None, verify_dns: bool = False) -> List[str]:
-    """便捷子域名枚举函数"""
-    enum = SubdomainEnumerator(verify_dns=verify_dns)
+def enumerate_subdomains(
+    domain: str, session=None, verify_dns: bool = False, use_crtsh: bool = True
+) -> List[str]:
+    """便捷子域名枚举函数
+
+    Args:
+        domain: 主域名
+        session: SessionManager 实例（用于 crt.sh 查询）
+        verify_dns: 是否 DNS 验证
+        use_crtsh: 是否查询 crt.sh（测试环境可设 False 避免真实网络请求）
+    """
+    enum = SubdomainEnumerator(verify_dns=verify_dns, use_crtsh=use_crtsh)
     return enum.enumerate(domain, session)
 
 
