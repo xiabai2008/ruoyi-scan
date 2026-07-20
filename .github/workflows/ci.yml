@@ -90,7 +90,7 @@ jobs:
           python -c "
           import tempfile, os
           from core.report import ReportBuilder
-          from core.models import ScanResult, STATUS_CONFIRMED, SEVERITY_HIGH
+          from common.models import ScanResult, STATUS_CONFIRMED, SEVERITY_HIGH
           r = ScanResult(kind='vuln', name='测试漏洞', severity=SEVERITY_HIGH,
                          status=STATUS_CONFIRMED, url='http://x.com/test',
                          evidence='proof', fix='patch it')
