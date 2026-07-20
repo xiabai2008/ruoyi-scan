@@ -11,10 +11,25 @@ import sys
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core.models import STATUS_CONFIRMED, ScanResult
 from core.orchestrator import ScanOrchestrator, ScanRequest, ScanTask
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+
+
+@pytest.fixture(autouse=True)
+def _mock_router():
+    """自动 mock Router，避免真实插件加载与网络请求（所有测试共享）
+
+    未 mock Router 时 router.resolve() 会返回 16 个真实 RuoYi 插件，
+    对 http://example.com/ 发起真实 HTTP 请求，导致 CI D9 任务超时。
+    """
+    with patch('core.orchestrator.Router') as mock_router:
+        mock_router.return_value.resolve.return_value = []
+        mock_router.return_value.resolve_by_name.return_value = []
+        yield mock_router
 
 
 # === 数据模型测试 ===
@@ -203,7 +218,7 @@ def test_run_sync_error_handling():
             status_events.append(payload)
 
     with patch('core.orchestrator.detect_cms', side_effect=RuntimeError('模拟异常')):
-        results = orch.run_sync(req, on_event=on_event)
+        orch.run_sync(req, on_event=on_event)
 
     assert error_event is not None, '应触发 error 事件'
     assert '模拟异常' in error_event['error']
@@ -249,7 +264,7 @@ def test_submit_registers_with_registry():
             mock_waf.return_value = {'waf': '', 'display': '', 'bypass_hint': ''}
             mock_load.return_value = []
 
-            task_id = orch.submit(req)
+            orch.submit(req)
             time.sleep(0.5)  # 等待异步执行
 
         # 应调用 registry.register（task_id, task_dict）
@@ -275,7 +290,7 @@ def test_submit_notifies_pending_status():
             mock_waf.return_value = {'waf': '', 'display': '', 'bypass_hint': ''}
             mock_load.return_value = []
 
-            task_id = orch.submit(req)
+            orch.submit(req)
             time.sleep(0.3)
 
         # 应至少调用 notify 一次（pending 状态）

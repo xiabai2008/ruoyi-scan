@@ -6,21 +6,21 @@
 #   3. subscribe/unsubscribe 订阅管理
 #   4. 历史事件补播
 #   5. WebSocket 端点连接 + 事件推送
+import asyncio
 import os
 import sys
-import asyncio
-import time
 import threading
-import json
+import time
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.task_registry import TaskRegistry, TaskRecord
 from fastapi.testclient import TestClient
-from api.app import create_app
 
+from api.app import create_app
+from core.task_registry import TaskRegistry
 
 # === TaskRegistry 单元测试 ===
 
@@ -230,7 +230,7 @@ def test_unsubscribe_stops_delivery():
         reg.notify('task-1', 'status', {'status': 'running'})
         # 等待一小段时间确认没有事件
         try:
-            event = await asyncio.wait_for(queue.get(), timeout=0.5)
+            await asyncio.wait_for(queue.get(), timeout=0.5)
             assert False, '不应收到事件'
         except asyncio.TimeoutError:
             pass  # 预期超时
@@ -286,13 +286,16 @@ def test_ws_receives_historical_events(ws_client, mock_network_ws):
 
 @pytest.fixture
 def mock_network_ws():
-    """Mock 网络请求 for WebSocket tests"""
+    """Mock 网络请求 for WebSocket tests（含 Router 避免真实插件加载）"""
     with patch('core.orchestrator.detect_cms') as mock_cms, \
          patch('core.orchestrator.detect_waf') as mock_waf, \
-         patch('core.orchestrator.load_plugins') as mock_load:
+         patch('core.orchestrator.load_plugins') as mock_load, \
+         patch('core.orchestrator.Router') as mock_router:
         mock_cms.return_value = MagicMock(cms='', version='', confidence=0, matched=[])
         mock_waf.return_value = {'waf': '', 'display': '', 'bypass_hint': ''}
         mock_load.return_value = []
+        mock_router.return_value.resolve.return_value = []
+        mock_router.return_value.resolve_by_name.return_value = []
         yield
 
 
@@ -347,10 +350,13 @@ def test_ws_closed_on_task_completion(ws_client, mock_network_ws):
 
 def test_ws_event_constants():
     """WebSocket 事件常量定义完整"""
-    from api.ws.events import (ALL_EVENTS, EVENT_STATUS, EVENT_COMPLETE,
-                                EVENT_FINGERPRINT, EVENT_WAF, EVENT_PORTSCAN,
-                                EVENT_CATEGORY_START, EVENT_RESULT, EVENT_PROGRESS,
-                                EVENT_REPORT, EVENT_ERROR)
+    from api.ws.events import (
+        ALL_EVENTS,
+        EVENT_COMPLETE,
+        EVENT_ERROR,
+        EVENT_RESULT,
+        EVENT_STATUS,
+    )
     assert len(ALL_EVENTS) == 10
     assert EVENT_STATUS in ALL_EVENTS
     assert EVENT_COMPLETE in ALL_EVENTS

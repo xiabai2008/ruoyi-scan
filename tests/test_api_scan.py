@@ -14,12 +14,14 @@
 import os
 import sys
 import time
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient
+
 from api.app import create_app
 
 
@@ -34,13 +36,16 @@ def client():
 
 @pytest.fixture
 def mock_network():
-    """Mock 网络请求（避免真实 HTTP 调用）"""
+    """Mock 网络请求（避免真实 HTTP 调用 + 真实插件加载）"""
     with patch('core.orchestrator.detect_cms') as mock_cms, \
          patch('core.orchestrator.detect_waf') as mock_waf, \
-         patch('core.orchestrator.load_plugins') as mock_load:
+         patch('core.orchestrator.load_plugins') as mock_load, \
+         patch('core.orchestrator.Router') as mock_router:
         mock_cms.return_value = MagicMock(cms='', version='', confidence=0, matched=[])
         mock_waf.return_value = {'waf': '', 'display': '', 'bypass_hint': ''}
         mock_load.return_value = []
+        mock_router.return_value.resolve.return_value = []
+        mock_router.return_value.resolve_by_name.return_value = []
         yield
 
 
