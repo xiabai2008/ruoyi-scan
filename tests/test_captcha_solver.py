@@ -41,6 +41,21 @@ import base64
 MOCK_TARGET = 'http://ruoyi-captcha.test'
 
 
+def _has_ocr_backend():
+    """检查是否有可用的 OCR 后端（ddddocr 或 pytesseract）"""
+    try:
+        import ddddocr  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    try:
+        import pytesseract  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    return False
+
+
 class TestDetectCaptcha(unittest.TestCase):
     """验证码接口探测"""
 
@@ -150,6 +165,7 @@ class TestMathCaptcha(unittest.TestCase):
 class TestAuthChainCaptchaIntegration(unittest.TestCase):
     """RuoYiAuthChain 验证码集成"""
 
+    @unittest.skipIf(not _has_ocr_backend(), "无 OCR 后端（ddddocr/pytesseract），跳过自动识别测试")
     @requests_mock.Mocker()
     def test_login_with_captcha_auto_ocr(self, m):
         """登录链自动 OCR：有验证码接口 + OCR 成功 → 登录成功"""
