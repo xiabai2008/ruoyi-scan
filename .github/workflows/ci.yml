@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Pytest (core unit tests)
-        run: python -m pytest -q
+        run: python -m pytest -q --timeout-method=signal
       - name: Regression ruoyi
         run: python tests/regression_ruoyi.py
       - name: Regression spring
@@ -84,7 +84,7 @@ jobs:
       - name: Install dependencies (含 D8 可选依赖)
         run: pip install -r requirements-dev.txt
       - name: D8 单元测试（dedup + PDF + Word + Excel + CLI 集成）
-        run: python -m pytest tests/test_dedup.py tests/test_report_pdf.py tests/test_report_docx.py tests/test_report_xlsx.py tests/test_d8_cli.py -v
+        run: python -m pytest tests/test_dedup.py tests/test_report_pdf.py tests/test_report_docx.py tests/test_report_xlsx.py tests/test_d8_cli.py -v --timeout-method=signal
       - name: 全格式生成冒烟（render_all formats=all → 6 文件）
         run: |
           python -c "
@@ -116,7 +116,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: D7 全量测试（tamper + bypass + origin + engine + plugins + acceptance + stats）
-        run: python -m pytest tests/test_tamper.py tests/test_waf_bypass.py tests/test_origin_finder.py tests/test_d7_engine.py tests/test_d7_plugins.py tests/test_d7_acceptance.py tests/test_d7_stats.py -v
+        run: python -m pytest tests/test_tamper.py tests/test_waf_bypass.py tests/test_origin_finder.py tests/test_d7_engine.py tests/test_d7_plugins.py tests/test_d7_acceptance.py tests/test_d7_stats.py -v --timeout-method=signal
 
   # ── D9 Web API 验收：FastAPI + WebSocket + 编排器 ──────────────────
   web-api:
@@ -131,7 +131,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: D9 全量测试（orchestrator + API + WebSocket + 报告下载）
-        run: python -m pytest tests/test_orchestrator.py tests/test_api_scan.py tests/test_api_ws.py -v
+        run: python -m pytest tests/test_orchestrator.py tests/test_api_scan.py tests/test_api_ws.py -v --timeout-method=signal
 
   # ── 真实 Spring 靶场：纯 Flask，轻量，自动跑 ─────────────────────
   real-spring:
