@@ -64,6 +64,10 @@ class ScanRequest:
     crawl_max_pages: int = 50  # 爬虫最大页面数
     subdomain: bool = False  # 是否启用子域名枚举
     js_extract: bool = False  # 是否启用 JS 端点提取
+    # D26：认证扫描增强（CLI args.auth / args.auth_file / args.auth_login 解析后传入）
+    auth: Optional[dict] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
+    # D19：扫描模板名称（quick / deep / compliance / dengbao）
+    template: str = ""
 
 
 @dataclass
@@ -296,6 +300,26 @@ class ScanOrchestrator:
             )
             engine = ScanEngine(threads=req.threads, rate=req.rate)
 
+            # D26：认证扫描增强（将 auth 配置注入 session）
+            if req.auth:
+                from lib.auth_scan import apply_auth_to_session
+
+                apply_auth_to_session(session, req.auth)
+                auth_summary = []
+                if req.auth.get("cookies"):
+                    auth_summary.append(f"{len(req.auth['cookies'])} 个 Cookie")
+                if req.auth.get("headers"):
+                    auth_summary.append(f"{len(req.auth['headers'])} 个自定义头")
+                _emit(
+                    "auth",
+                    {
+                        "summary": " + ".join(auth_summary),
+                        "cookies": len(req.auth.get("cookies", {})),
+                        "headers": len(req.auth.get("headers", {})),
+                        "task_id": task.task_id,
+                    },
+                )
+
             # 3. 口令字典分级
             if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
                 settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
@@ -304,8 +328,10 @@ class ScanOrchestrator:
             router = Router()
             if req.cms:
                 fp_result = FingerprintResult(cms=req.cms, version="", confidence=1.0, matched=["manual"])
+                all_plugins = router.resolve_by_name(req.cms)
             else:
                 fp_result = detect_cms(target, session)
+                all_plugins = router.resolve(fp_result)
 
             task.fingerprint = fp_result
             _emit(
@@ -319,8 +345,6 @@ class ScanOrchestrator:
                 },
             )
 
-            all_plugins = router.resolve(fp_result)
-
             # 5. WAF 探测 + 绕过协调器
             waf_result = detect_waf(target, session)
             task.waf_info = waf_result
@@ -329,26 +353,68 @@ class ScanOrchestrator:
                 {
                     "waf": waf_result.get("waf", ""),
                     "display": waf_result.get("display", ""),
+                    "bypass_hint": waf_result.get("bypass_hint", ""),
                     "task_id": task.task_id,
                 },
             )
 
             waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
 
+            # WAF 绕过状态事件（CLI 打印绕过模式信息）
+            bypass_mode = req.bypass_waf or "auto"
+            if waf_bypass_coordinator:
+                _emit(
+                    "waf_bypass",
+                    {
+                        "mode": bypass_mode,
+                        "enabled": True,
+                        "origin_ip": getattr(waf_bypass_coordinator, "origin_ip", ""),
+                        "task_id": task.task_id,
+                    },
+                )
+
             # 6. 插件加载 + 路由
             if not all_plugins:
                 all_plugins = load_plugins("plugins.ruoyi")
+                _emit(
+                    "plugin_fallback",
+                    {"task_id": task.task_id},
+                )
 
             # 通用漏洞检测包
             try:
                 common_plugins = load_plugins("plugins.common")
                 all_plugins = all_plugins + common_plugins
+                _emit(
+                    "plugins_loaded",
+                    {"common_count": len(common_plugins), "total_count": len(all_plugins), "task_id": task.task_id},
+                )
             except Exception:
                 pass
 
             # 指定插件过滤（API 可指定插件子集）
             if req.plugins:
                 all_plugins = [cls for cls in all_plugins if getattr(cls, "name", "") in req.plugins]
+
+            # D19：扫描模板过滤插件
+            template_obj = None
+            if req.template:
+                from lib.scan_templates import filter_plugins, get_template
+
+                template_obj = get_template(req.template)
+                if template_obj:
+                    before_count = len(all_plugins)
+                    all_plugins = filter_plugins(all_plugins, template_obj)
+                    after_count = len(all_plugins)
+                    _emit(
+                        "template",
+                        {
+                            "name": template_obj.display_name,
+                            "before": before_count,
+                            "after": after_count,
+                            "task_id": task.task_id,
+                        },
+                    )
 
             # 按 category 分组（对应 MODE_CATEGORIES）
             mode_categories = {

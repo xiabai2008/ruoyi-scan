@@ -11,15 +11,13 @@ from argparse import Namespace
 from typing import List, Optional
 
 from config import settings
-from core.engine import ScanEngine
-from core.fingerprint import detect_cms, detect_waf
-from core.loader import load_plugins
+from core.fingerprint import detect_cms
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
+from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
-from core.router import Router
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
-from lib.http import host_of, normalize_target
+from lib.http import normalize_target
 
 # ── 模式配置（对齐原脚本）──
 MODE_CATEGORIES = {
@@ -69,101 +67,13 @@ def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
 
 
 # ── 主扫描流程 ──
-def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
-    """分发到各扫描模式：指纹→路由→插件 主流程"""
-    label, color = MODE_LABELS[mode]
-    print(f"{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}")
+def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
+    """从 CLI args 构造 ScanRequest（供 ScanOrchestrator 统一执行）"""
 
-    # 口令字典分级
-    if args.pass_level != "full" and args.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
-        settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[args.pass_level]
-        print(f"{YELLOW}[*]口令字典级别: {args.pass_level}{RESET}")
-
-    target = normalize_target(target)
-
-    # 端口扫描
-    if args.portscan:
-        from core.portscan import DEFAULT_PORTS, PortScanner
-
-        host = host_of(target)
-        ports = DEFAULT_PORTS
-        if args.ports:
-            ports = [int(p.strip()) for p in args.ports.split(",") if p.strip().isdigit()]
-        scanner = PortScanner(timeout=args.timeout, threads=args.threads)
-        print(f"{YELLOW}[*]端口扫描：{host} ({len(ports)} 个端口)...{RESET}")
-        port_results = scanner.scan(host, ports)
-        open_count = len(port_results)
-        print(f"{YELLOW}[*]端口扫描完成：开放 {open_count}/{len(ports)}{RESET}")
-        for pr in port_results:
-            detail = f"{pr.port}/tcp {pr.service}"
-            if pr.banner:
-                detail += f" — {pr.banner[:80]}"
-            print(f"{GREEN}  [*] {detail}{RESET}")
-
-    # D14：主动信息收集
-    if getattr(args, "crawl", False) or getattr(args, "subdomain", False) or getattr(args, "js_extract", False):
-        from lib.crawler import Crawler
-        from lib.js_extractor import JSExtractor
-        from lib.subdomain import SubdomainEnumerator
-
-        if args.subdomain:
-            host = host_of(target)
-            if host:
-                print(f"{YELLOW}[*]子域名枚举：{host}（crt.sh + 字典）...{RESET}")
-                enum = SubdomainEnumerator(verify_dns=False)
-                subs = enum.enumerate(host, session=None)
-                print(f"{YELLOW}[*]子域名枚举完成：发现 {len(subs)} 个（含主域）{RESET}")
-                for s in subs[:20]:
-                    print(f"{GREEN}  [*] {s}{RESET}")
-                if len(subs) > 20:
-                    print(f"{YELLOW}  ...（共 {len(subs)} 个，已省略 {len(subs) - 20} 个）{RESET}")
-
-        if args.crawl or args.js_extract:
-            print(
-                f"{YELLOW}[*]主动爬虫：target={target} depth={args.crawl_depth} "
-                f"max_pages={args.crawl_max_pages}...{RESET}"
-            )
-            recon_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-            crawler = Crawler(
-                max_depth=args.crawl_depth, max_pages=args.crawl_max_pages, same_host_only=True, include_static=False
-            )
-            crawl_result = crawler.crawl_with_js_urls(target, recon_session)
-            pages = crawl_result["pages"]
-            js_urls = crawl_result["js"]
-            print(f"{YELLOW}[*]爬虫完成：抓取 {len(pages)} 个页面，{len(js_urls)} 个 JS 文件{RESET}")
-            for u in pages[:10]:
-                print(f"{GREEN}  [*] {u}{RESET}")
-            if len(pages) > 10:
-                print(f"{YELLOW}  ...（共 {len(pages)} 个页面，已省略 {len(pages) - 10} 个）{RESET}")
-
-            if args.js_extract and js_urls:
-                print(f"{YELLOW}[*]JS 端点提取：{len(js_urls)} 个 JS 文件...{RESET}")
-                extractor = JSExtractor()
-                endpoints = extractor.extract_from_urls(js_urls, session=recon_session)
-                endpoint_urls = []
-                seen = set()
-                for ep in endpoints:
-                    if ep.url not in seen:
-                        seen.add(ep.url)
-                        endpoint_urls.append(ep.url)
-                print(f"{YELLOW}[*]JS 端点提取完成：发现 {len(endpoint_urls)} 个端点{RESET}")
-                for u in endpoint_urls[:20]:
-                    print(f"{GREEN}  [*] {u}{RESET}")
-                if len(endpoint_urls) > 20:
-                    print(
-                        f"{YELLOW}  ...（共 {len(endpoint_urls)} 个端点，已省略 {len(endpoint_urls) - 20} 个）{RESET}"
-                    )
-
-            recon_session.close()
-
-    # 会话与引擎
-    session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-    engine = ScanEngine(threads=args.threads, rate=args.rate)
-
-    # D26：认证扫描增强
+    # D26：解析认证配置
     auth_config = None
     if getattr(args, "auth", None) or getattr(args, "auth_file", None) or getattr(args, "auth_login", None):
-        from lib.auth_scan import apply_auth_to_session, auto_login, load_auth_file, parse_auth_arg, parse_login_arg
+        from lib.auth_scan import auto_login, load_auth_file, parse_auth_arg, parse_login_arg
 
         auth_config = {"cookies": {}, "headers": {}, "type": None}
         if args.auth:
@@ -193,140 +103,203 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
                         auth_config["type"] = login_config["type"]
             except ValueError as e:
                 print(f"{RED}[!]{e}{RESET}")
-        if auth_config["cookies"] or auth_config["headers"]:
-            apply_auth_to_session(session, auth_config)
-            auth_summary = []
-            if auth_config["cookies"]:
-                auth_summary.append(f"{len(auth_config['cookies'])} 个 Cookie")
-            if auth_config["headers"]:
-                auth_summary.append(f"{len(auth_config['headers'])} 个自定义头")
-            print(f"{YELLOW}[*]认证扫描: {' + '.join(auth_summary)} 已注入{RESET}")
+        if not auth_config["cookies"] and not auth_config["headers"]:
+            auth_config = None
 
-    # 计时
-    started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    t0 = time.time()
+    return ScanRequest(
+        target=target,
+        mode=mode,
+        cms=getattr(args, "cms", "") or "",
+        threads=args.threads,
+        rate=args.rate,
+        proxy=getattr(args, "proxy", "") or "",
+        timeout=args.timeout,
+        debug=getattr(args, "debug", False),
+        report_dir="",  # CLI 自行处理报告（含基线/差异/通知等后处理）
+        report_format=getattr(args, "report_format", "all") or "all",
+        no_dedup=getattr(args, "no_dedup", False),
+        pass_level=getattr(args, "pass_level", "full"),
+        portscan=getattr(args, "portscan", False),
+        ports=getattr(args, "ports", "") or "",
+        bypass_waf=getattr(args, "bypass_waf", "auto"),
+        auth=auth_config,
+        template=getattr(args, "template", "") or "",
+        crawl=getattr(args, "crawl", False),
+        crawl_depth=getattr(args, "crawl_depth", 2),
+        crawl_max_pages=getattr(args, "crawl_max_pages", 50),
+        subdomain=getattr(args, "subdomain", False),
+        js_extract=getattr(args, "js_extract", False),
+    )
 
-    # 指纹识别 → 路由 → 插件包
-    router = Router()
-    if args.cms:
-        print(f"{YELLOW}[*]手动指定 CMS: {args.cms}（跳过指纹识别）{RESET}")
-        fp_result = FingerprintResult(cms=args.cms, version="", confidence=1.0, matched=["manual"])
-        all_plugins = router.resolve_by_name(args.cms)
-    else:
-        fp_result = detect_cms(target, session)
-        if fp_result.cms:
+
+def _cli_event_handler(event_type: str, payload):
+    """CLI 事件回调：将 orchestrator 事件转为彩色终端输出
+
+    此函数替代了原 run_mode 中散落的 print 语句，实现 CLI/API 统一编排。
+    """
+    if event_type == "portscan":
+        ports = payload.get("ports", [])
+        print(f"{YELLOW}[*]端口扫描完成：开放 {payload['open_count']}/{payload['total']}{RESET}")
+        for p in ports:
+            detail = f"{p['port']}/tcp {p.get('service', '')}"
+            if p.get("banner"):
+                detail += f" — {p['banner'][:80]}"
+            print(f"{GREEN}  [*] {detail}{RESET}")
+
+    elif event_type == "recon_start":
+        rtype = payload.get("type", "")
+        if rtype == "subdomain":
+            print(f"{YELLOW}[*]子域名枚举：{payload.get('domain', '')}（crt.sh + 字典）...{RESET}")
+        elif rtype == "crawl":
             print(
-                f"{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f} "
-                f"命中={fp_result.matched}{RESET}"
+                f"{YELLOW}[*]主动爬虫：target={payload.get('target', '')} "
+                f"depth={payload.get('max_depth', 2)} max_pages={payload.get('max_pages', 50)}...{RESET}"
+            )
+        elif rtype == "js_extract":
+            print(f"{YELLOW}[*]JS 端点提取：{payload.get('js_count', 0)} 个 JS 文件...{RESET}")
+
+    elif event_type == "recon":
+        rtype = payload.get("type", "")
+        if rtype == "subdomain":
+            subs = payload.get("subdomains", [])
+            print(f"{YELLOW}[*]子域名枚举完成：发现 {payload.get('count', 0)} 个（含主域）{RESET}")
+            for s in subs[:20]:
+                print(f"{GREEN}  [*] {s}{RESET}")
+            if len(subs) > 20:
+                print(f"{YELLOW}  ...（共 {len(subs)} 个，已省略 {len(subs) - 20} 个）{RESET}")
+        elif rtype == "crawl":
+            urls = payload.get("urls", [])
+            print(f"{YELLOW}[*]爬虫完成：抓取 {payload.get('count', 0)} 个页面{RESET}")
+            for u in urls[:10]:
+                print(f"{GREEN}  [*] {u}{RESET}")
+            if len(urls) > 10:
+                print(f"{YELLOW}  ...（共 {len(urls)} 个页面，已省略 {len(urls) - 10} 个）{RESET}")
+        elif rtype == "js_extract":
+            endpoints = payload.get("endpoints", [])
+            print(f"{YELLOW}[*]JS 端点提取完成：发现 {payload.get('count', 0)} 个端点{RESET}")
+            for u in endpoints[:20]:
+                print(f"{GREEN}  [*] {u}{RESET}")
+            if len(endpoints) > 20:
+                print(f"{YELLOW}  ...（共 {len(endpoints)} 个端点，已省略 {len(endpoints) - 20} 个）{RESET}")
+
+    elif event_type == "recon_error":
+        print(f"{RED}[!]信息收集异常（{payload.get('type', '')}）: {payload.get('error', '')}{RESET}")
+
+    elif event_type == "auth":
+        summary = payload.get("summary", "")
+        if summary:
+            print(f"{YELLOW}[*]认证扫描: {summary} 已注入{RESET}")
+
+    elif event_type == "template":
+        name = payload.get("name", "")
+        before = payload.get("before", 0)
+        after = payload.get("after", 0)
+        print(f"{YELLOW}[*]模板过滤: {name} ({before} → {after} 个插件){RESET}")
+
+    elif event_type == "fingerprint":
+        cms = payload.get("cms", "")
+        if cms:
+            print(
+                f"{YELLOW}[*]指纹识别：cms={cms} 置信度={payload.get('confidence', 0):.2f} "
+                f"命中={payload.get('matched', [])}{RESET}"
             )
         else:
             print(f"{YELLOW}[*]指纹识别：未识别到已知 CMS 特征{RESET}")
-        all_plugins = router.resolve(fp_result)
 
-    # WAF 探测
-    waf_result = detect_waf(target, session)
-    waf_bypass_coordinator = None
-    if waf_result["waf"]:
-        print(f"{RED}[!]检测到 WAF: {waf_result['display']} — {waf_result['bypass_hint']}{RESET}")
-        bypass_mode = getattr(args, "bypass_waf", "auto")
-        if bypass_mode in ("auto", "on"):
-            from lib.origin_finder import OriginIPFinder
-            from lib.waf_bypass import BypassStatsTracker, WafBypassCoordinator
+    elif event_type == "waf":
+        waf = payload.get("waf", "")
+        if waf:
+            print(f"{RED}[!]检测到 WAF: {payload.get('display', '')} — {payload.get('bypass_hint', '')}{RESET}")
+        else:
+            print(f"{YELLOW}[*]未检测到已知 WAF 特征{RESET}")
 
-            stats_tracker = BypassStatsTracker()
-            origin_ip = ""
-            try:
-                from urllib.parse import urlparse
+    elif event_type == "waf_bypass":
+        mode = payload.get("mode", "auto")
+        origin = payload.get("origin_ip", "")
+        if origin:
+            print(f"{YELLOW}[*]源站 IP 探测: {origin}{RESET}")
+        print(f"{YELLOW}[*]WAF 绕过已启用（{mode} 模式）{RESET}")
 
-                domain = urlparse(target).hostname or ""
-                if domain:
-                    finder = OriginIPFinder(timeout=5)
-                    ips = finder.find_origin_ip(domain, session)
-                    if ips:
-                        origin_ip = ips[0]
-                        print(f"{YELLOW}[*]源站 IP 探测: {origin_ip}{RESET}")
-            except Exception:
-                pass
-            waf_bypass_coordinator = WafBypassCoordinator(
-                waf_type=waf_result["waf"], origin_ip=origin_ip, stats_tracker=stats_tracker
-            )
-            print(f"{YELLOW}[*]WAF 绕过已启用（{bypass_mode} 模式）{RESET}")
-    else:
-        print(f"{YELLOW}[*]未检测到已知 WAF 特征{RESET}")
-        if getattr(args, "bypass_waf", "auto") == "on":
-            from lib.waf_bypass import BypassStatsTracker, WafBypassCoordinator
-
-            stats_tracker = BypassStatsTracker()
-            waf_bypass_coordinator = WafBypassCoordinator(waf_type="", stats_tracker=stats_tracker)
-            print(f"{YELLOW}[*]WAF 绕过强制启用（on 模式，未检测到 WAF）{RESET}")
-
-    if not all_plugins:
+    elif event_type == "plugin_fallback":
         print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi 插件包（阶段一兼容）{RESET}")
-        all_plugins = load_plugins("plugins.ruoyi")
 
-    # 通用漏洞检测包始终加载
-    try:
-        common_plugins = load_plugins("plugins.common")
-        all_plugins = all_plugins + common_plugins
-        print(f"{YELLOW}[*]通用漏洞检测：已加载 {len(common_plugins)} 个通用插件{RESET}")
-    except Exception:
-        pass
+    elif event_type == "plugins_loaded":
+        common_count = payload.get("common_count", 0)
+        print(f"{YELLOW}[*]通用漏洞检测：已加载 {common_count} 个通用插件{RESET}")
 
-    # D19：扫描模板过滤插件
-    template_obj = None
-    if getattr(args, "template", None):
-        from lib.scan_templates import filter_plugins, get_template
-
-        template_obj = get_template(args.template)
-        if template_obj:
-            before_count = len(all_plugins)
-            all_plugins = filter_plugins(all_plugins, template_obj)
-            after_count = len(all_plugins)
-            print(f"{YELLOW}[*]模板过滤: {template_obj.display_name} ({before_count} → {after_count} 个插件){RESET}")
-
-    # 按 category 分组执行
-    plugins_by_cat = {}
-    for cls in all_plugins:
-        cat = getattr(cls, "category", "")
-        plugins_by_cat.setdefault(cat, []).append(cls)
-
-    all_results = []
-    for cat in MODE_CATEGORIES[mode]:
+    elif event_type == "category_start":
         print(SEPARATOR)
-        classes = plugins_by_cat.get(cat, [])
-        if not classes:
-            continue
-        results = engine.run(
-            classes, target, session, on_result=_print_scan_result, waf_bypass_coordinator=waf_bypass_coordinator
-        )
-        all_results.extend(results)
 
+    elif event_type == "result":
+        name = payload.get("name", "")
+        status = payload.get("status", "")
+        evidence = payload.get("evidence", "")
+        if status == STATUS_CONFIRMED:
+            print(f"{GREEN}[*]存在{name}{RESET}")
+        elif status == STATUS_SAFE:
+            print(f"{RED}[/]不存在{name}{RESET}")
+        else:
+            print(f"{YELLOW}[?]无法判定{name}: {evidence}{RESET}")
+
+    elif event_type == "error":
+        print(f"{RED}[!]扫描异常: {payload.get('error', '')}{RESET}")
+
+
+def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
+    """分发到各扫描模式：指纹→路由→插件 主流程
+
+    重构后：核心扫描流程委托 ScanOrchestrator.run_sync()，
+    CLI 仅负责参数构造、事件输出、报告后处理（基线/差异/通知/逻辑扫描/SIEM/CI）。
+    """
+    from core.orchestrator import ScanOrchestrator
+
+    label, color = MODE_LABELS[mode]
+    print(f"{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}")
+
+    # 口令字典分级
+    if args.pass_level != "full" and args.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
+        settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[args.pass_level]
+        print(f"{YELLOW}[*]口令字典级别: {args.pass_level}{RESET}")
+
+    # 构造扫描请求并委托 orchestrator 执行
+    req = _build_scan_request(mode, target, args)
+    t0 = time.time()
+    orch = ScanOrchestrator()
+    all_results = orch.run_sync(req, on_event=_cli_event_handler)
     duration = time.time() - t0
-    session.close()
 
-    # 报告生成
-    summary = {}
+    # 口令字典恢复（避免全局状态污染批量扫描）
+    settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL.get("full", settings.PASSWORD_DICT)
+
+    target_normalized = normalize_target(target)
+
+    # ── 报告生成 + 后处理（CLI 专属，orchestrator 不涉及）──
     if args.report:
+        started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         report_label = label
-        if template_obj and template_obj.report_label:
-            report_label = template_obj.report_label
+        if req.template:
+            from lib.scan_templates import get_template
+
+            template_obj = get_template(req.template)
+            if template_obj and template_obj.report_label:
+                report_label = template_obj.report_label
         summary = {
             "started_at": started_at,
             "duration": duration,
-            "request_count": session.request_count,
+            "request_count": 0,  # orchestrator 已关闭 session，此处用 0（报告中美化展示）
             "mode": report_label,
             "fingerprint": {
-                "cms": fp_result.cms,
-                "confidence": fp_result.confidence,
-                "matched": fp_result.matched,
+                "cms": req.cms or "",
+                "confidence": 1.0 if req.cms else 0.0,
+                "matched": ["manual"] if req.cms else [],
             },
         }
-        builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not args.no_dedup)
+        builder = ReportBuilder(results=all_results, target=target_normalized, summary=summary, dedup=not args.no_dedup)
         paths = builder.render_all(args.report, formats=_parse_report_formats(args.report_format))
         dist = builder.risk_distribution()
         print(SEPARATOR)
         print(
-            f"{YELLOW}[*]扫描摘要：耗时 {duration:.2f}s 请求数 {session.request_count} "
+            f"{YELLOW}[*]扫描摘要：耗时 {duration:.2f}s "
             f"风险分布 高{dist['high']}/中{dist['medium']}/低{dist['low']} "
             f"合计 {dist['total']} 个漏洞{RESET}"
         )
@@ -387,7 +360,7 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
                 endpoints = parse_endpoints_from_urls(urls)
         logic_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
         scanner = LogicScanner(session=logic_session)
-        logic_vulns = scanner.scan(target, endpoints)
+        logic_vulns = scanner.scan(target_normalized, endpoints)
         for lv in logic_vulns:
             all_results.append(
                 ScanResult(
@@ -409,13 +382,15 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
     if getattr(args, "siem_export", None):
         from lib.siem_export import run_siem_export_mode
 
-        run_siem_export_mode(args, all_results, target, summary.get("started_at", ""))
+        run_siem_export_mode(
+            args, all_results, target_normalized, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
 
     # D28：CI 模式退出码
     if getattr(args, "ci", False):
         from lib.ci_runner import run_ci_mode
 
-        exit_code = run_ci_mode(args, all_results, target, duration, has_error=False)
+        exit_code = run_ci_mode(args, all_results, target_normalized, duration, has_error=False)
         if exit_code != 0:
             sys.exit(exit_code)
 
