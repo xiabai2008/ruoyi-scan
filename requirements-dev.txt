@@ -7,3 +7,6 @@ pytest>=7.4
 pytest-timeout>=2.2
 pytest-cov>=4.1
 pytest-asyncio>=0.21
+
+# FastAPI TestClient 依赖（starlette.testclient 需要）
+httpx2>=2.7.0
