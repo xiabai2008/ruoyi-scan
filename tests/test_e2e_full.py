@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
-import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -54,8 +54,20 @@ def _start_server(port=18999):
     server = HTTPServer(('127.0.0.1', port), _MockRuoYiHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    time.sleep(0.3)
+    # 轮询等待服务器就绪，替代固定 sleep
+    from tests.helpers import wait_for
+
+    wait_for(lambda: _port_open('127.0.0.1', port), timeout=3)
     return t, server, f'http://127.0.0.1:{port}/'
+
+
+def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    """检查端口是否可连接"""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, ConnectionRefusedError):
+        return False
 
 
 class TestE2E:

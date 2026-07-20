@@ -13,7 +13,6 @@
 #  10. /docs 和 /openapi.json 可访问
 import os
 import sys
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from tests.helpers import wait_for, wait_for_task_done
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def test_submit_scan_with_full_params(client, mock_network):
 def test_list_scans(client, mock_network):
     """GET /api/scan 列出任务"""
     client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
-    time.sleep(0.5)
+    wait_for(lambda: len(client.get('/api/scan').json()) > 0, timeout=3)
     resp = client.get('/api/scan')
     assert resp.status_code == 200
     data = resp.json()
@@ -95,7 +95,7 @@ def test_get_scan_status(client, mock_network):
     """GET /api/scan/{task_id} 查询状态"""
     r = client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = r.json()['task_id']
-    time.sleep(0.5)
+    wait_for(lambda: client.get(f'/api/scan/{task_id}').json().get('status') in ('done', 'failed', 'running'), timeout=3)
     resp = client.get(f'/api/scan/{task_id}')
     assert resp.status_code == 200
     data = resp.json()
@@ -121,7 +121,7 @@ def test_get_scan_results(client, mock_network):
     """GET /api/scan/{task_id}/results 获取结果"""
     r = client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = r.json()['task_id']
-    time.sleep(1)
+    wait_for_task_done(client, task_id, timeout=5)
     resp = client.get(f'/api/scan/{task_id}/results')
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -193,7 +193,7 @@ def test_get_report_metadata(client, mock_network):
     """GET /api/report/{task_id} 报告元数据"""
     r = client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = r.json()['task_id']
-    time.sleep(0.5)
+    wait_for(lambda: client.get(f'/api/scan/{task_id}').json().get('status') in ('done', 'failed'), timeout=3)
     resp = client.get(f'/api/report/{task_id}')
     assert resp.status_code == 200
     data = resp.json()
@@ -219,7 +219,7 @@ def test_download_report_with_existing_file(client, mock_network, tmp_path):
     # 提交扫描任务（任务进入 registry）
     r = client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = r.json()['task_id']
-    time.sleep(0.5)
+    wait_for(lambda: client.get(f'/api/scan/{task_id}').json().get('status') in ('done', 'failed'), timeout=3)
     # 创建模拟报告文件（reports/api/report.html）
     report_dir = os.path.join('reports', 'api')
     os.makedirs(report_dir, exist_ok=True)

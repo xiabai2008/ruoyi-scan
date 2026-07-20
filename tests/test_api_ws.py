@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from api.app import create_app
 from core.task_registry import TaskRegistry
+from tests.helpers import wait_for, wait_for_events
 
 # === TaskRegistry 单元测试 ===
 
@@ -274,7 +275,9 @@ def test_ws_receives_historical_events(ws_client, mock_network_ws):
     # 先提交任务
     resp = ws_client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = resp.json()['task_id']
-    time.sleep(1)  # 等待任务产生事件
+    # 轮询等待 registry 中有事件，替代固定 time.sleep
+    registry = ws_client.app.state.registry
+    wait_for_events(registry, task_id, min_count=1, timeout=5)
 
     # 连接 WebSocket 应收到历史事件
     with ws_client.websocket_connect(f'/ws/scan/{task_id}') as ws:
@@ -325,7 +328,11 @@ def test_ws_closed_on_task_completion(ws_client, mock_network_ws):
     """任务完成后 WebSocket 自动关闭"""
     resp = ws_client.post('/api/scan', json={'target': 'http://x.com/', 'mode': 'p'})
     task_id = resp.json()['task_id']
-    time.sleep(1.5)  # 等待任务完成
+    # 轮询等待任务完成（done/failed），替代固定 time.sleep
+    wait_for(
+        lambda: ws_client.get(f'/api/scan/{task_id}').json().get('status') in ('done', 'failed'),
+        timeout=5,
+    )
 
     # 连接后应收到历史事件 + 连接关闭消息
     try:

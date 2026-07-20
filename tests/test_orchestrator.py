@@ -8,7 +8,6 @@
 #   5. CLI 行为兼容（通过 on_event 回调）
 import os
 import sys
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.models import STATUS_CONFIRMED, ScanResult
 from core.orchestrator import ScanOrchestrator, ScanRequest, ScanTask
+from tests.helpers import wait_for
 
 
 @pytest.fixture(autouse=True)
@@ -265,7 +265,7 @@ def test_submit_registers_with_registry():
             mock_load.return_value = []
 
             orch.submit(req)
-            time.sleep(0.5)  # 等待异步执行
+            wait_for(lambda: registry.register.called, timeout=3)
 
         # 应调用 registry.register（task_id, task_dict）
         assert registry.register.called, '应调用 registry.register'
@@ -291,7 +291,7 @@ def test_submit_notifies_pending_status():
             mock_load.return_value = []
 
             orch.submit(req)
-            time.sleep(0.3)
+            wait_for(lambda: registry.notify.called, timeout=3)
 
         # 应至少调用 notify 一次（pending 状态）
         assert registry.notify.called, '应调用 registry.notify'
@@ -394,7 +394,8 @@ def test_shutdown_closes_pool():
             mock_load.return_value = []
             req = ScanRequest(target='http://x.com/', mode='p')
             orch.submit(req)
-            time.sleep(0.2)
+            # 等待线程池被创建（submit 会懒加载 _pool）
+            wait_for(lambda: orch._pool is not None, timeout=3)
     finally:
         orch.shutdown()
     assert orch._pool is None

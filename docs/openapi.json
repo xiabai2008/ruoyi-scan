@@ -1,0 +1,1122 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "若依综合漏洞检测 API",
+    "description": "Ruoyi-Scan Web API — 提交扫描任务、实时事件推送、报告下载",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/scan": {
+      "get": {
+        "tags": [
+          "扫描任务"
+        ],
+        "summary": "列出所有任务",
+        "description": "列出所有扫描任务",
+        "operationId": "list_scans_api_scan_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array",
+                  "title": "Response List Scans Api Scan Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "扫描任务"
+        ],
+        "summary": "提交扫描任务",
+        "description": "提交扫描任务，返回 task_id（非阻塞）",
+        "operationId": "create_scan_api_scan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scan/{task_id}": {
+      "get": {
+        "tags": [
+          "扫描任务"
+        ],
+        "summary": "查询单个任务状态",
+        "description": "查询单个扫描任务状态",
+        "operationId": "get_scan_api_scan__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanTaskDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "扫描任务"
+        ],
+        "summary": "取消任务",
+        "description": "取消扫描任务（标记为 cancelled，实际执行中的任务无法立即中断）",
+        "operationId": "cancel_scan_api_scan__task_id__delete",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scan/{task_id}/results": {
+      "get": {
+        "tags": [
+          "扫描任务"
+        ],
+        "summary": "获取任务结果列表",
+        "description": "获取扫描任务的结果列表",
+        "operationId": "get_scan_results_api_scan__task_id__results_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {},
+                  "title": "Response Get Scan Results Api Scan  Task Id  Results Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "查询报告元数据",
+        "description": "查询任务报告的元数据（可用格式 + 文件路径）",
+        "operationId": "get_report_metadata_api_report__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportMetadataDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/html": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 HTML 报告",
+        "description": "下载 HTML 格式报告",
+        "operationId": "download_html_report_api_report__task_id__html_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/json": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 JSON 报告",
+        "description": "下载 JSON 格式报告",
+        "operationId": "download_json_report_api_report__task_id__json_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/csv": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 CSV 报告",
+        "description": "下载 CSV 格式报告",
+        "operationId": "download_csv_report_api_report__task_id__csv_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/pdf": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 PDF 报告",
+        "description": "下载 PDF 格式报告（D8 依赖）",
+        "operationId": "download_pdf_report_api_report__task_id__pdf_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/docx": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 Word 报告",
+        "description": "下载 Word 格式报告（D8 依赖）",
+        "operationId": "download_docx_report_api_report__task_id__docx_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report/{task_id}/xlsx": {
+      "get": {
+        "tags": [
+          "报告"
+        ],
+        "summary": "下载 Excel 报告",
+        "description": "下载 Excel 格式报告（D8 依赖）",
+        "operationId": "download_xlsx_report_api_report__task_id__xlsx_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plugins": {
+      "get": {
+        "tags": [
+          "插件"
+        ],
+        "summary": "列出所有已加载插件",
+        "description": "列出所有已加载的扫描插件",
+        "operationId": "list_plugins_api_plugins_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array",
+                  "title": "Response List Plugins Api Plugins Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plugins/{name}": {
+      "get": {
+        "tags": [
+          "插件"
+        ],
+        "summary": "查询单个插件元数据",
+        "description": "查询单个插件的元数据",
+        "operationId": "get_plugin_api_plugins__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "健康检查",
+        "description": "健康检查端点",
+        "operationId": "health_check_api_system_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/version": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "版本信息",
+        "description": "返回工具版本信息",
+        "operationId": "version_info_api_system_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/fingerprint": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "在线指纹探测",
+        "description": "在线指纹探测（轻量，不入任务表）\n\n对目标执行 detect_cms + detect_waf，返回识别结果。",
+        "operationId": "fingerprint_probe_api_system_fingerprint_get",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "目标 URL",
+              "title": "Target"
+            },
+            "description": "目标 URL"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FingerprintDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/metrics": {
+      "get": {
+        "summary": "Prometheus 指标",
+        "description": "返回 Prometheus 格式指标\n\n指标列表：\n    ruoyi_scan_tasks_total{status}    任务总数（按状态分）\n    ruoyi_scan_tasks_active           当前活跃任务数\n    ruoyi_scan_results_total{status}  扫描结果总数\n    ruoyi_scan_uptime_seconds         服务运行时间\n    ruoyi_scan_storage_tasks          持久化任务数",
+        "operationId": "prometheus_metrics_api_system_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FingerprintDTO": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "cms": {
+            "type": "string",
+            "title": "Cms",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0
+          },
+          "matched": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched",
+            "default": []
+          },
+          "waf": {
+            "type": "string",
+            "title": "Waf",
+            "default": ""
+          },
+          "waf_display": {
+            "type": "string",
+            "title": "Waf Display",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "FingerprintDTO",
+        "description": "指纹探测结果"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthDTO": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          },
+          "uptime": {
+            "type": "number",
+            "title": "Uptime",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "HealthDTO",
+        "description": "健康检查响应"
+      },
+      "PluginDTO": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "cms": {
+            "type": "string",
+            "title": "Cms",
+            "default": ""
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": ""
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity",
+            "default": "low"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "cve": {
+            "type": "string",
+            "title": "Cve",
+            "default": ""
+          },
+          "affected_versions": {
+            "type": "string",
+            "title": "Affected Versions",
+            "default": ""
+          },
+          "vuln_type": {
+            "type": "string",
+            "title": "Vuln Type",
+            "default": ""
+          },
+          "supports_waf_bypass": {
+            "type": "boolean",
+            "title": "Supports Waf Bypass",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "PluginDTO",
+        "description": "插件元数据"
+      },
+      "ReportMetadataDTO": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Formats",
+            "default": []
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Paths",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "ReportMetadataDTO",
+        "description": "报告元数据"
+      },
+      "ScanCreateRequest": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "目标 URL（如 http://example.com:8080/）"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "扫描模式：u=综合/m=目录/p=漏洞/l=爆破",
+            "default": "u"
+          },
+          "cms": {
+            "type": "string",
+            "title": "Cms",
+            "description": "手动指定 CMS（ruoyi/spring，空=自动识别）",
+            "default": ""
+          },
+          "threads": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Threads",
+            "description": "并发线程数",
+            "default": 1
+          },
+          "rate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Rate",
+            "description": "限速（每秒请求数，0=不限）",
+            "default": 0
+          },
+          "proxy": {
+            "type": "string",
+            "title": "Proxy",
+            "description": "代理地址（如 http://127.0.0.1:8080）",
+            "default": ""
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "请求超时秒数",
+            "default": 10
+          },
+          "report_format": {
+            "type": "string",
+            "title": "Report Format",
+            "description": "报告格式：html/json/csv/pdf/docx/xlsx，逗号分隔；all=全部",
+            "default": "all"
+          },
+          "no_dedup": {
+            "type": "boolean",
+            "title": "No Dedup",
+            "description": "关闭结果去重聚合",
+            "default": false
+          },
+          "pass_level": {
+            "type": "string",
+            "title": "Pass Level",
+            "description": "口令字典级别：top100/top1000/full",
+            "default": "full"
+          },
+          "portscan": {
+            "type": "boolean",
+            "title": "Portscan",
+            "description": "扫描前执行端口扫描",
+            "default": false
+          },
+          "ports": {
+            "type": "string",
+            "title": "Ports",
+            "description": "自定义端口（逗号分隔，如 80,443,8080）",
+            "default": ""
+          },
+          "bypass_waf": {
+            "type": "string",
+            "title": "Bypass Waf",
+            "description": "WAF 绕过：auto=自动/on=强制/off=禁用",
+            "default": "auto"
+          },
+          "plugins": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugins",
+            "description": "指定插件名列表（空=全部）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "ScanCreateRequest",
+        "description": "提交扫描任务请求"
+      },
+      "ScanCreateResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "ScanCreateResponse",
+        "description": "提交扫描任务响应"
+      },
+      "ScanTaskDTO": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "u"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At",
+            "default": 0
+          },
+          "finished_at": {
+            "type": "number",
+            "title": "Finished At",
+            "default": 0
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration",
+            "default": 0
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count",
+            "default": 0
+          },
+          "result_count": {
+            "type": "integer",
+            "title": "Result Count",
+            "default": 0
+          },
+          "confirmed_count": {
+            "type": "integer",
+            "title": "Confirmed Count",
+            "default": 0
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
+          "waf": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waf"
+          },
+          "report_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Report Paths",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "target"
+        ],
+        "title": "ScanTaskDTO",
+        "description": "扫描任务详情 DTO"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VersionDTO": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          },
+          "author": {
+            "type": "string",
+            "title": "Author",
+            "default": ""
+          },
+          "github": {
+            "type": "string",
+            "title": "Github",
+            "default": ""
+          },
+          "python_version": {
+            "type": "string",
+            "title": "Python Version",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "VersionDTO",
+        "description": "版本信息"
+      }
+    }
+  }
+}

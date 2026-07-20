@@ -243,6 +243,9 @@ docker compose down
 | `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
 | `--db-path <path>` | SQLite 任务持久化数据库路径 |
 
+> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](docs/API.md)。
+> OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
+
 #### OAST 带外检测（D30）
 
 | 参数 | 说明 |
