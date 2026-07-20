@@ -94,9 +94,68 @@ python main.py -p http://target:8080/ --portscan
 # 被动代理模式
 python main.py --passive --passive-port 8080
 
-# Docker 部署
-docker-compose up -d
+# Docker 部署（见下方「Docker 部署」章节）
+# docker-compose up -d
 ```
+
+### Docker 部署
+
+Ruoyi-Scan 提供生产就绪的 Docker 镜像（多阶段构建、非 root 用户）。
+
+**构建镜像**
+
+```bash
+docker build -t ruoyi-scan .
+```
+
+**扫描目标**
+
+```bash
+# 基本扫描
+docker run --rm ruoyi-scan -p http://target/
+
+# 扫描并保存报告到宿主机
+docker run --rm -v $(pwd)/reports:/app/reports ruoyi-scan \
+  -p http://target/ --report /app/reports
+```
+
+**Web API 服务**
+
+```bash
+# 启动 FastAPI Web API（端口 8000）
+docker run --rm -p 8000:8000 ruoyi-scan --serve --host 0.0.0.0 --port 8000
+
+# 带认证的 API
+docker run --rm -p 8000:8000 -e RUOYI_SCAN_API_KEY=your-secret ruoyi-scan \
+  --serve --host 0.0.0.0 --port 8000 --api-key your-secret
+```
+
+**Docker Compose 一键部署**
+
+```bash
+# 启动全部服务（扫描器 + API + 2 个签名靶场）
+docker compose up -d
+
+# 扫描内置靶场
+docker compose run --rm scanner -p http://lab-ruoyi:8080/ --report /app/reports
+
+# 启动监控栈（Prometheus + Grafana）
+docker compose --profile monitor up -d
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+
+# 清理
+docker compose down
+```
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| scanner | - | 扫描器 CLI（通过 `docker compose run` 调用） |
+| api | 8000 | FastAPI Web API + WebSocket + Web 控制台 |
+| lab-ruoyi | 8080 | 若依签名靶场（vuln 模式） |
+| lab-spring | 8091 | Spring Boot 签名靶场（vuln 模式） |
+| prometheus | 9090 | 指标采集（`--profile monitor`） |
+| grafana | 3000 | 监控面板（`--profile monitor`） |
 
 ### CLI 参数速查
 
