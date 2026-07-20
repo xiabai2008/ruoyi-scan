@@ -234,9 +234,7 @@ class SubdomainEnumerator:
 # === 便捷函数 ===
 
 
-def enumerate_subdomains(
-    domain: str, session=None, verify_dns: bool = False, use_crtsh: bool = True
-) -> List[str]:
+def enumerate_subdomains(domain: str, session=None, verify_dns: bool = False, use_crtsh: bool = True) -> List[str]:
     """便捷子域名枚举函数
 
     Args:
