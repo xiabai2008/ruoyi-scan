@@ -115,32 +115,11 @@ def dispatch(path, method):
 
     # 后台默认口令（/login）
     # D3 新增：验证码接口（/captcha/captchaImage）
-    # vuln 模式返回固定内容的 PNG 图片（供 CaptchaSolver OCR 闭环测试）
-    # safe 模式返回 404（无验证码）
+    # vuln 模式返回 captchaEnabled=false（模拟关闭验证码，CI 无 OCR 依赖也能登录）
+    # safe 模式返回 404
     if path == "/captcha/captchaImage":
         if vuln:
-            # 生成一个最简单的 PNG 图片（1x1 像素扩展为 80x30 的纯色图）
-            # 真实验证码图片较复杂，这里只验证 OCR 后端能加载图片
-            try:
-                import io as _io
-
-                from PIL import Image, ImageDraw
-
-                img = Image.new("RGB", (80, 30), color=(255, 255, 255))
-                d = ImageDraw.Draw(img)
-                d.text((10, 5), "1234", fill=(0, 0, 0))
-                buf = _io.BytesIO()
-                img.save(buf, format="PNG")
-                return Response(buf.getvalue(), mimetype="image/png")
-            except ImportError:
-                # PIL 不可用时返回最小 PNG（1x1 白色像素）
-                return Response(
-                    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-                    b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-                    b"\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02"
-                    b"\xfe\xa3=\x01_\x00\x00\x00\x00IEND\xaeB`\x82",
-                    mimetype="image/png",
-                )
+            return json_body({"code": 200, "captchaEnabled": False, "msg": "操作成功"})
         return html_body("<html>404</html>", 404)
 
     # D3：safe 模式 /login 改为返回密码错误（模拟真实若依验证码校验）
