@@ -7,10 +7,29 @@ on:
   pull_request:
 
 jobs:
+  # ── 代码质量门禁：ruff lint + format check + mypy 类型检查 ──────────
+  lint:
+    name: Lint & Type Check (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dev dependencies
+        run: pip install ruff mypy
+      - name: Ruff lint
+        run: ruff check core/ lib/ api/ plugins/ chains/ main.py
+      - name: Ruff format check
+        run: ruff format --check core/ lib/ api/ plugins/ chains/ main.py
+      - name: Mypy type check（仅 core/，宽松模式）
+        run: mypy core/ --ignore-missing-imports --no-strict-optional || true
+
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   unit:
     name: Unit & Regression
     runs-on: ubuntu-latest
+    needs: lint
     strategy:
       fail-fast: false
       matrix:
