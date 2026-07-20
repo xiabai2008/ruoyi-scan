@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
 import requests
 
@@ -18,18 +18,21 @@ class SessionManager:
     D13：支持代理池轮换。传入 proxy_pool 时，每次请求自动从池中获取代理。
     """
 
-    def __init__(self, proxy: Optional[str] = None, timeout: Optional[int] = None,
-                 ua: Optional[str] = None, debug: bool = False,
-                 proxy_pool: Optional[ProxyPool] = None) -> None:
+    def __init__(
+        self,
+        proxy: Optional[str] = None,
+        timeout: Optional[int] = None,
+        ua: Optional[str] = None,
+        debug: bool = False,
+        proxy_pool: Optional[ProxyPool] = None,
+    ) -> None:
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': ua or settings.DEFAULT_UA
-        })
+        self.session.headers.update({"User-Agent": ua or settings.DEFAULT_UA})
         self.proxy = proxy if proxy is not None else settings.PROXY
         self.timeout = timeout or settings.TIMEOUT
         self.proxy_pool = proxy_pool  # D13: 代理池
         if self.proxy and not self.proxy_pool:
-            self.session.proxies.update({'http': self.proxy, 'https': self.proxy})
+            self.session.proxies.update({"http": self.proxy, "https": self.proxy})
         # keep-alive 复用连接
         self.session.keep_alive = True
         # 请求计数（报告摘要用）
@@ -55,31 +58,31 @@ class SessionManager:
             return
         try:
             code = resp.status_code
-            size = len(resp.content or b'')
+            size = len(resp.content or b"")
         except Exception:
-            code = '?'
-            size = '?'
-        print(f'[debug] {method} {url} -> {code} ({size} bytes)', file=sys.stderr)
+            code = "?"
+            size = "?"
+        print(f"[debug] {method} {url} -> {code} ({size} bytes)", file=sys.stderr)
 
     def get(self, url: str, headers: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
-        kwargs.setdefault('timeout', self.timeout)
+        kwargs.setdefault("timeout", self.timeout)
         self.request_count += 1
         resp = self.session.get(url, headers=headers, **kwargs)
-        self._log_debug('GET', url, resp)
+        self._log_debug("GET", url, resp)
         return resp
 
-    def post(self, url: str, headers: Optional[Dict[str, str]] = None,
-             data: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
-        kwargs.setdefault('timeout', self.timeout)
+    def post(
+        self, url: str, headers: Optional[Dict[str, str]] = None, data: Optional[Dict[str, str]] = None, **kwargs
+    ) -> requests.Response:
+        kwargs.setdefault("timeout", self.timeout)
         self.request_count += 1
         resp = self.session.post(url, headers=headers, data=data, **kwargs)
-        self._log_debug('POST', url, resp)
+        self._log_debug("POST", url, resp)
         return resp
 
-    def request(self, method: str, url: str, headers: Optional[Dict[str, str]] = None,
-                **kwargs) -> requests.Response:
+    def request(self, method: str, url: str, headers: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
         """通用 HTTP 请求（支持 OPTIONS/TRACE 等非标准方法）"""
-        kwargs.setdefault('timeout', self.timeout)
+        kwargs.setdefault("timeout", self.timeout)
         self.request_count += 1
         resp = self.session.request(method, url, headers=headers, **kwargs)
         self._log_debug(method.upper(), url, resp)

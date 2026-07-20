@@ -24,8 +24,7 @@ import importlib
 import os
 import pkgutil
 import re
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any, Dict, List, Tuple
 
 # ============================================================
 # 插件模板
@@ -102,12 +101,18 @@ class {class_name}(PluginBase):
 '''
 
 
-def generate_plugin(name: str, category: str = 'common',
-                    severity: str = 'high', cve: str = 'N/A',
-                    description: str = '', fix: str = '',
-                    probe_path: str = '/', probe_url: str = 'http://target/',
-                    cvss_vector: str = 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
-                    compliance: str = 'OWASP:A03:2021;等保2.0:8.1.3') -> str:
+def generate_plugin(
+    name: str,
+    category: str = "common",
+    severity: str = "high",
+    cve: str = "N/A",
+    description: str = "",
+    fix: str = "",
+    probe_path: str = "/",
+    probe_url: str = "http://target/",
+    cvss_vector: str = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    compliance: str = "OWASP:A03:2021;等保2.0:8.1.3",
+) -> str:
     """生成插件源代码
 
     Args:
@@ -128,9 +133,9 @@ def generate_plugin(name: str, category: str = 'common',
     class_name = _to_pascal_case(name)
 
     if not description:
-        description = f'{name} 检测'
+        description = f"{name} 检测"
     if not fix:
-        fix = f'修复 {name} 漏洞'
+        fix = f"修复 {name} 漏洞"
 
     return PLUGIN_TEMPLATE.format(
         name=name,
@@ -155,16 +160,15 @@ def _to_pascal_case(name: str) -> str:
     如 'my-plugin' → 'MyPluginPlugin'（始终追加 Plugin 后缀）
     """
     # 去除特殊字符
-    cleaned = re.sub(r'[^\w\u4e00-\u9fff]', '_', name)
+    cleaned = re.sub(r"[^\w\u4e00-\u9fff]", "_", name)
     # 按下划线分割并首字母大写
-    parts = cleaned.split('_')
-    result = ''.join(p[:1].upper() + p[1:] for p in parts if p)
+    parts = cleaned.split("_")
+    result = "".join(p[:1].upper() + p[1:] for p in parts if p)
     # 始终追加 Plugin 后缀（保证类名一致性）
-    return result + 'Plugin'
+    return result + "Plugin"
 
 
-def init_plugin_file(name: str, category: str = 'common',
-                     output_dir: str = None, **kwargs) -> str:
+def init_plugin_file(name: str, category: str = "common", output_dir: str = None, **kwargs) -> str:
     """生成插件文件并写入磁盘
 
     Args:
@@ -178,23 +182,23 @@ def init_plugin_file(name: str, category: str = 'common',
     if output_dir is None:
         # 找到项目根目录
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(project_root, 'plugins', category)
+        output_dir = os.path.join(project_root, "plugins", category)
 
     os.makedirs(output_dir, exist_ok=True)
 
     # 生成文件名：插件名转为下划线
     filename = _to_filename(name)
-    filepath = os.path.join(output_dir, f'{filename}.py')
+    filepath = os.path.join(output_dir, f"{filename}.py")
 
     # 检查文件是否已存在
     if os.path.exists(filepath):
-        raise FileExistsError(f'插件文件已存在: {filepath}')
+        raise FileExistsError(f"插件文件已存在: {filepath}")
 
     # 生成源代码
     source = generate_plugin(name, category=category, **kwargs)
 
     # 写入文件
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(source)
 
     return filepath
@@ -203,14 +207,15 @@ def init_plugin_file(name: str, category: str = 'common',
 def _to_filename(name: str) -> str:
     """将插件名转为文件名（下划线小写）"""
     # 中文保留，英文转下划线
-    result = re.sub(r'([A-Z])', r'_\1', name).lower().lstrip('_')
-    result = re.sub(r'\s+', '_', result)
+    result = re.sub(r"([A-Z])", r"_\1", name).lower().lstrip("_")
+    result = re.sub(r"\s+", "_", result)
     return result
 
 
 # ============================================================
 # 插件验证
 # ============================================================
+
 
 def check_plugin(filepath: str) -> Tuple[bool, List[str], List[str]]:
     """验证插件文件完整性
@@ -224,44 +229,43 @@ def check_plugin(filepath: str) -> Tuple[bool, List[str], List[str]]:
     warnings = []
 
     if not os.path.isfile(filepath):
-        errors.append(f'文件不存在: {filepath}')
+        errors.append(f"文件不存在: {filepath}")
         return False, errors, warnings
 
     # 读取源代码
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         source = f.read()
 
     # 检查必需的类属性
-    required_attrs = ['name', 'severity', 'category', 'description', 'fix']
+    required_attrs = ["name", "severity", "category", "description", "fix"]
     for attr in required_attrs:
         pattern = rf'^\s*{attr}\s*=\s*[\'"].+[\'"]'
         if not re.search(pattern, source, re.MULTILINE):
-            errors.append(f'缺少必需属性: {attr}')
+            errors.append(f"缺少必需属性: {attr}")
 
     # 检查 verify 方法
-    if 'def verify(self, target, session):' not in source and \
-       'def verify(self,target,session):' not in source:
-        errors.append('缺少 verify(self, target, session) 方法')
+    if "def verify(self, target, session):" not in source and "def verify(self,target,session):" not in source:
+        errors.append("缺少 verify(self, target, session) 方法")
 
     # 检查 ScanResult 导入
-    if 'ScanResult' not in source:
-        errors.append('未导入 ScanResult')
+    if "ScanResult" not in source:
+        errors.append("未导入 ScanResult")
 
     # 检查 PluginBase 继承
-    if 'PluginBase' not in source:
-        errors.append('未继承 PluginBase')
+    if "PluginBase" not in source:
+        errors.append("未继承 PluginBase")
 
     # 建议的属性（警告）
-    recommended_attrs = ['cve', 'cvss_vector', 'compliance', 'fix_detail', 'reproduce']
+    recommended_attrs = ["cve", "cvss_vector", "compliance", "fix_detail", "reproduce"]
     for attr in recommended_attrs:
         pattern = rf'^\s*{attr}\s*=\s*[\'"].*[\'"]'
         if not re.search(pattern, source, re.MULTILINE):
-            warnings.append(f'建议填写属性: {attr}')
+            warnings.append(f"建议填写属性: {attr}")
 
     # 检查 TODO 标记
-    if 'TODO' in source:
-        todo_count = source.count('TODO')
-        warnings.append(f'含 {todo_count} 个 TODO 标记，请完善检测逻辑')
+    if "TODO" in source:
+        todo_count = source.count("TODO")
+        warnings.append(f"含 {todo_count} 个 TODO 标记，请完善检测逻辑")
 
     return len(errors) == 0, errors, warnings
 
@@ -280,47 +284,53 @@ def check_plugin_by_import(filepath: str) -> Tuple[bool, List[str], List[str]]:
     try:
         # 动态导入
         import importlib.util
-        spec = importlib.util.spec_from_file_location('plugin_module', filepath)
+
+        spec = importlib.util.spec_from_file_location("plugin_module", filepath)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
         # 查找 PluginBase 子类
         from plugins.base import PluginBase
+
         plugin_classes = []
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
-            if (isinstance(attr, type) and issubclass(attr, PluginBase)
-                    and attr is not PluginBase and attr.__module__ == module.__name__):
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, PluginBase)
+                and attr is not PluginBase
+                and attr.__module__ == module.__name__
+            ):
                 plugin_classes.append(attr)
 
         if not plugin_classes:
-            errors.append('未找到 PluginBase 子类')
+            errors.append("未找到 PluginBase 子类")
             return False, errors, warnings
 
         if len(plugin_classes) > 1:
-            warnings.append(f'发现 {len(plugin_classes)} 个插件类，建议每文件只含一个')
+            warnings.append(f"发现 {len(plugin_classes)} 个插件类，建议每文件只含一个")
 
         # 验证每个插件类
         for cls in plugin_classes:
             instance = cls()
             # 检查必需属性
-            for attr in ['name', 'severity', 'category', 'description', 'fix']:
-                val = getattr(instance, attr, '')
+            for attr in ["name", "severity", "category", "description", "fix"]:
+                val = getattr(instance, attr, "")
                 if not val:
-                    errors.append(f'{cls.__name__}.{attr} 为空')
+                    errors.append(f"{cls.__name__}.{attr} 为空")
 
             # 检查 verify 方法
-            if not hasattr(instance, 'verify'):
-                errors.append(f'{cls.__name__} 缺少 verify 方法')
+            if not hasattr(instance, "verify"):
+                errors.append(f"{cls.__name__} 缺少 verify 方法")
 
             # 建议属性
-            for attr in ['cve', 'cvss_vector', 'compliance', 'fix_detail', 'reproduce']:
-                val = getattr(instance, attr, '')
+            for attr in ["cve", "cvss_vector", "compliance", "fix_detail", "reproduce"]:
+                val = getattr(instance, attr, "")
                 if not val:
-                    warnings.append(f'{cls.__name__}.{attr} 为空（建议填写）')
+                    warnings.append(f"{cls.__name__}.{attr} 为空（建议填写）")
 
     except Exception as e:
-        errors.append(f'导入失败: {e}')
+        errors.append(f"导入失败: {e}")
 
     return len(errors) == 0, errors, warnings
 
@@ -329,6 +339,7 @@ def check_plugin_by_import(filepath: str) -> Tuple[bool, List[str], List[str]]:
 # 插件列表
 # ============================================================
 
+
 def list_all_plugins() -> List[Dict[str, Any]]:
     """列出所有插件的元数据
 
@@ -336,35 +347,42 @@ def list_all_plugins() -> List[Dict[str, Any]]:
         插件元数据列表，每项含 name/category/severity/cve/cvss/compliance
     """
     from plugins.base import PluginBase
+
     plugins = []
 
-    for pkg_name in ['plugins.ruoyi', 'plugins.spring', 'plugins.common']:
+    for pkg_name in ["plugins.ruoyi", "plugins.spring", "plugins.common"]:
         try:
             pkg = importlib.import_module(pkg_name)
             for _, name, is_pkg in pkgutil.iter_modules(pkg.__path__):
-                if is_pkg or name.startswith('_'):
+                if is_pkg or name.startswith("_"):
                     continue
-                mn = f'{pkg_name}.{name}'
+                mn = f"{pkg_name}.{name}"
                 try:
                     m = importlib.import_module(mn)
                     for an in dir(m):
                         a = getattr(m, an)
-                        if (isinstance(a, type) and issubclass(a, PluginBase)
-                                and a is not PluginBase and a.__module__ == mn):
+                        if (
+                            isinstance(a, type)
+                            and issubclass(a, PluginBase)
+                            and a is not PluginBase
+                            and a.__module__ == mn
+                        ):
                             try:
                                 instance = a()
-                                plugins.append({
-                                    'module': mn,
-                                    'class': an,
-                                    'name': getattr(instance, 'name', ''),
-                                    'category': getattr(instance, 'category', ''),
-                                    'severity': getattr(instance, 'severity', ''),
-                                    'cve': getattr(instance, 'cve', ''),
-                                    'cvss_vector': getattr(instance, 'cvss_vector', ''),
-                                    'compliance': getattr(instance, 'compliance', ''),
-                                    'has_fix_detail': bool(getattr(instance, 'fix_detail', '')),
-                                    'has_reproduce': bool(getattr(instance, 'reproduce', '')),
-                                })
+                                plugins.append(
+                                    {
+                                        "module": mn,
+                                        "class": an,
+                                        "name": getattr(instance, "name", ""),
+                                        "category": getattr(instance, "category", ""),
+                                        "severity": getattr(instance, "severity", ""),
+                                        "cve": getattr(instance, "cve", ""),
+                                        "cvss_vector": getattr(instance, "cvss_vector", ""),
+                                        "compliance": getattr(instance, "compliance", ""),
+                                        "has_fix_detail": bool(getattr(instance, "fix_detail", "")),
+                                        "has_reproduce": bool(getattr(instance, "reproduce", "")),
+                                    }
+                                )
                             except Exception:
                                 continue
                 except Exception:
@@ -386,48 +404,48 @@ def generate_plugin_docs(output_path: str) -> str:
     plugins = list_all_plugins()
 
     lines = [
-        '# Ruoyi-Scan 插件列表',
-        '',
-        f'共 {len(plugins)} 个插件',
-        '',
-        '| 模块 | 类名 | 漏洞名称 | 类别 | 严重度 | CVE | CVSS | 合规 | 修复详情 | 复现命令 |',
-        '|------|------|----------|------|--------|-----|------|------|----------|----------|',
+        "# Ruoyi-Scan 插件列表",
+        "",
+        f"共 {len(plugins)} 个插件",
+        "",
+        "| 模块 | 类名 | 漏洞名称 | 类别 | 严重度 | CVE | CVSS | 合规 | 修复详情 | 复现命令 |",
+        "|------|------|----------|------|--------|-----|------|------|----------|----------|",
     ]
 
     for p in plugins:
-        has_fix = '✓' if p['has_fix_detail'] else '✗'
-        has_reproduce = '✓' if p['has_reproduce'] else '✗'
+        has_fix = "✓" if p["has_fix_detail"] else "✗"
+        has_reproduce = "✓" if p["has_reproduce"] else "✗"
         lines.append(
-            f'| {p["module"]} | {p["class"]} | {p["name"]} | {p["category"]} | '
-            f'{p["severity"]} | {p["cve"]} | {p["cvss_vector"]} | {p["compliance"]} | '
-            f'{has_fix} | {has_reproduce} |'
+            f"| {p['module']} | {p['class']} | {p['name']} | {p['category']} | "
+            f"{p['severity']} | {p['cve']} | {p['cvss_vector']} | {p['compliance']} | "
+            f"{has_fix} | {has_reproduce} |"
         )
 
-    lines.append('')
-    lines.append('## 统计')
-    lines.append('')
+    lines.append("")
+    lines.append("## 统计")
+    lines.append("")
 
     # 按类别统计
     categories = {}
     for p in plugins:
-        cat = p['category']
+        cat = p["category"]
         categories[cat] = categories.get(cat, 0) + 1
-    lines.append('### 按类别')
+    lines.append("### 按类别")
     for cat, count in sorted(categories.items()):
-        lines.append(f'- {cat}: {count} 个')
+        lines.append(f"- {cat}: {count} 个")
 
     # 按严重度统计
     severities = {}
     for p in plugins:
-        sev = p['severity']
+        sev = p["severity"]
         severities[sev] = severities.get(sev, 0) + 1
-    lines.append('')
-    lines.append('### 按严重度')
+    lines.append("")
+    lines.append("### 按严重度")
     for sev, count in sorted(severities.items()):
-        lines.append(f'- {sev}: {count} 个')
+        lines.append(f"- {sev}: {count} 个")
 
-    content = '\n'.join(lines)
-    with open(output_path, 'w', encoding='utf-8') as f:
+    content = "\n".join(lines)
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     return output_path

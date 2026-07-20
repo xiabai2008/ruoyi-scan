@@ -14,11 +14,10 @@ import os
 import sqlite3
 import threading
 import time
-from typing import Optional, List, Dict, Any
-
+from typing import Any, Dict, List, Optional
 
 # 默认数据库路径
-DEFAULT_DB_PATH = os.path.join('data', 'tasks.db')
+DEFAULT_DB_PATH = os.path.join("data", "tasks.db")
 
 
 class Storage:
@@ -46,8 +45,8 @@ class Storage:
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                conn.execute('PRAGMA journal_mode=WAL')
-                conn.execute('''
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("""
                     CREATE TABLE IF NOT EXISTS tasks (
                         task_id TEXT PRIMARY KEY,
                         status TEXT NOT NULL DEFAULT 'pending',
@@ -56,8 +55,8 @@ class Storage:
                         created_at REAL,
                         finished_at REAL
                     )
-                ''')
-                conn.execute('''
+                """)
+                conn.execute("""
                     CREATE TABLE IF NOT EXISTS events (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         task_id TEXT NOT NULL,
@@ -66,47 +65,53 @@ class Storage:
                         timestamp REAL,
                         FOREIGN KEY (task_id) REFERENCES tasks(task_id)
                     )
-                ''')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
                 conn.commit()
             finally:
                 conn.close()
 
     def save_task(self, task_id: str, task_dict: Dict[str, Any]):
         """保存或更新任务（upsert）"""
-        status = task_dict.get('status', 'pending')
-        target = task_dict.get('target', '')
-        created_at = task_dict.get('started_at', time.time())
-        finished_at = task_dict.get('finished_at', None)
+        status = task_dict.get("status", "pending")
+        target = task_dict.get("target", "")
+        created_at = task_dict.get("started_at", time.time())
+        finished_at = task_dict.get("finished_at")
         task_json = json.dumps(task_dict, ensure_ascii=False)
 
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                conn.execute('''
+                conn.execute(
+                    """
                     INSERT INTO tasks (task_id, status, target, task_dict, created_at, finished_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(task_id) DO UPDATE SET
                         status=excluded.status,
                         task_dict=excluded.task_dict,
                         finished_at=excluded.finished_at
-                ''', (task_id, status, target, task_json, created_at, finished_at))
+                """,
+                    (task_id, status, target, task_json, created_at, finished_at),
+                )
                 conn.commit()
             finally:
                 conn.close()
 
     def save_event(self, task_id: str, event_type: str, payload: Any):
         """保存事件"""
-        payload_json = json.dumps(payload, ensure_ascii=False) if payload else '{}'
+        payload_json = json.dumps(payload, ensure_ascii=False) if payload else "{}"
         ts = time.time()
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                conn.execute('''
+                conn.execute(
+                    """
                     INSERT INTO events (task_id, event_type, payload, timestamp)
                     VALUES (?, ?, ?, ?)
-                ''', (task_id, event_type, payload_json, ts))
+                """,
+                    (task_id, event_type, payload_json, ts),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -117,9 +122,9 @@ class Storage:
             conn = sqlite3.connect(self.db_path)
             try:
                 conn.row_factory = sqlite3.Row
-                row = conn.execute('SELECT * FROM tasks WHERE task_id = ?', (task_id,)).fetchone()
+                row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
                 if row:
-                    return json.loads(row['task_dict']) if row['task_dict'] else {}
+                    return json.loads(row["task_dict"]) if row["task_dict"] else {}
                 return None
             finally:
                 conn.close()
@@ -131,10 +136,9 @@ class Storage:
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    'SELECT * FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?',
-                    (limit, offset)
+                    "SELECT * FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)
                 ).fetchall()
-                return [json.loads(r['task_dict']) for r in rows if r['task_dict']]
+                return [json.loads(r["task_dict"]) for r in rows if r["task_dict"]]
             finally:
                 conn.close()
 
@@ -145,15 +149,17 @@ class Storage:
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    'SELECT * FROM events WHERE task_id = ? ORDER BY timestamp ASC LIMIT ?',
-                    (task_id, limit)
+                    "SELECT * FROM events WHERE task_id = ? ORDER BY timestamp ASC LIMIT ?", (task_id, limit)
                 ).fetchall()
-                return [{
-                    'task_id': r['task_id'],
-                    'event_type': r['event_type'],
-                    'payload': json.loads(r['payload']) if r['payload'] else {},
-                    'timestamp': r['timestamp'],
-                } for r in rows]
+                return [
+                    {
+                        "task_id": r["task_id"],
+                        "event_type": r["event_type"],
+                        "payload": json.loads(r["payload"]) if r["payload"] else {},
+                        "timestamp": r["timestamp"],
+                    }
+                    for r in rows
+                ]
             finally:
                 conn.close()
 
@@ -162,8 +168,8 @@ class Storage:
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                conn.execute('DELETE FROM events WHERE task_id = ?', (task_id,))
-                conn.execute('DELETE FROM tasks WHERE task_id = ?', (task_id,))
+                conn.execute("DELETE FROM events WHERE task_id = ?", (task_id,))
+                conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
                 conn.commit()
             finally:
                 conn.close()
@@ -175,13 +181,15 @@ class Storage:
             conn = sqlite3.connect(self.db_path)
             try:
                 # 删除旧任务的事件
-                conn.execute('''
+                conn.execute(
+                    """
                     DELETE FROM events WHERE task_id IN (
                         SELECT task_id FROM tasks WHERE created_at < ? AND status IN ('done', 'failed')
                     )
-                ''', (cutoff,))
-                conn.execute('DELETE FROM tasks WHERE created_at < ? AND status IN ("done", "failed")',
-                             (cutoff,))
+                """,
+                    (cutoff,),
+                )
+                conn.execute('DELETE FROM tasks WHERE created_at < ? AND status IN ("done", "failed")', (cutoff,))
                 conn.commit()
             finally:
                 conn.close()
@@ -191,7 +199,7 @@ class Storage:
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                row = conn.execute('SELECT COUNT(*) FROM tasks').fetchone()
+                row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
                 return row[0] if row else 0
             finally:
                 conn.close()

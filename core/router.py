@@ -11,8 +11,8 @@ class Router:
     # 显式映射兜底（优先于动态推导）
     # 注：thinkphp / weaver / shiro / struts2 已迁移至 cms-scan-extras/，本项目专注若依做深
     mapping = {
-        'ruoyi': 'plugins.ruoyi',
-        'spring': 'plugins.spring',
+        "ruoyi": "plugins.ruoyi",
+        "spring": "plugins.spring",
     }
 
     def resolve(self, fingerprint_result: FingerprintResult) -> List[type]:
@@ -31,12 +31,13 @@ class Router:
             return []
         plugins = self.resolve_by_name(cms)
         # D2：按 affected_versions 过滤
-        version = getattr(fingerprint_result, 'version', '') or ''
+        version = getattr(fingerprint_result, "version", "") or ""
         if version:
             from lib.ruoyi_versions import version_in_range
+
             filtered = []
             for cls in plugins:
-                spec = getattr(cls, 'affected_versions', '') or ''
+                spec = getattr(cls, "affected_versions", "") or ""
                 if version_in_range(version, spec):
                     filtered.append(cls)
             return filtered
@@ -53,7 +54,7 @@ class Router:
         package = self.mapping.get(cms)
         if not package:
             # 动态尝试 plugins.<cms>（特征库已注册的 CMS 自动可用）
-            candidate = 'plugins.%s' % cms
+            candidate = "plugins.%s" % cms
             try:
                 load_plugins(candidate)
                 package = candidate

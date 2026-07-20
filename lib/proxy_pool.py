@@ -14,13 +14,14 @@
 import random
 import threading
 import time
-from typing import List, Optional, Dict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 
 @dataclass
 class ProxyStats:
     """代理统计数据"""
+
     url: str
     success_count: int = 0
     fail_count: int = 0
@@ -57,7 +58,7 @@ class ProxyPool:
     # 重试间隔：被剔除的代理多久后重试（秒）
     RECHECK_INTERVAL = 300  # 5 分钟
 
-    def __init__(self, proxies: List[str] = None, strategy: str = 'round-robin'):
+    def __init__(self, proxies: List[str] = None, strategy: str = "round-robin"):
         """初始化代理池
 
         Args:
@@ -73,7 +74,7 @@ class ProxyPool:
                 self._stats[url] = ProxyStats(url=url)
 
     @classmethod
-    def from_file(cls, file_path: str, strategy: str = 'round-robin') -> 'ProxyPool':
+    def from_file(cls, file_path: str, strategy: str = "round-robin") -> "ProxyPool":
         """从文件加载代理列表
 
         文件格式：每行一个代理 URL，# 开头为注释
@@ -87,10 +88,10 @@ class ProxyPool:
         """
         proxies = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#'):
+                    if line and not line.startswith("#"):
                         proxies.append(line)
         except FileNotFoundError:
             pass
@@ -121,9 +122,9 @@ class ProxyPool:
             if not available:
                 return None
 
-            if self._strategy == 'random':
+            if self._strategy == "random":
                 return random.choice(available).url
-            elif self._strategy == 'least-fail':
+            elif self._strategy == "least-fail":
                 # 优先用失败率最低的
                 return min(available, key=lambda s: s.fail_rate).url
             else:  # round-robin（默认）
@@ -161,12 +162,12 @@ class ProxyPool:
         with self._lock:
             return [
                 {
-                    'url': s.url,
-                    'success': s.success_count,
-                    'fail': s.fail_count,
-                    'fail_rate': round(s.fail_rate, 2),
-                    'disabled': s.disabled,
-                    'consecutive_fails': s.consecutive_fails,
+                    "url": s.url,
+                    "success": s.success_count,
+                    "fail": s.fail_count,
+                    "fail_rate": round(s.fail_rate, 2),
+                    "disabled": s.disabled,
+                    "consecutive_fails": s.consecutive_fails,
                 }
                 for s in self._stats.values()
             ]

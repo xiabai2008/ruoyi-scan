@@ -8,15 +8,16 @@ import asyncio
 import threading
 import time
 from collections import defaultdict
-from typing import Dict, Set, Optional, List
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
 
 
 @dataclass
 class TaskRecord:
     """任务记录（TaskRegistry 内部用）"""
+
     task_id: str
-    status: str = 'pending'  # pending/running/done/failed
+    status: str = "pending"  # pending/running/done/failed
     created_at: float = field(default_factory=time.time)
     events: List[dict] = field(default_factory=list)  # 历史事件（供后加入的订阅者补播）
     task_dict: dict = field(default_factory=dict)  # ScanTask.to_dict() 的快照
@@ -35,8 +36,7 @@ class TaskRegistry:
         - 任务完成后保留事件 1 小时（可配置）
     """
 
-    def __init__(self, max_events_per_task: int = 500, retention_seconds: int = 3600,
-                 storage=None):
+    def __init__(self, max_events_per_task: int = 500, retention_seconds: int = 3600, storage=None):
         """初始化注册表
 
         Args:
@@ -65,7 +65,8 @@ class TaskRegistry:
         td = task_dict or {}
         with self._lock:
             self._tasks[task_id] = TaskRecord(
-                task_id=task_id, status='pending',
+                task_id=task_id,
+                status="pending",
                 task_dict=td,
             )
         # D11：落盘
@@ -103,10 +104,10 @@ class TaskRegistry:
         通过 run_coroutine_threadsafe 跨线程安全投递到 asyncio loop。
         """
         event = {
-            'type': event_type,
-            'data': payload,
-            'task_id': task_id,
-            'timestamp': time.time(),
+            "type": event_type,
+            "data": payload,
+            "task_id": task_id,
+            "timestamp": time.time(),
         }
 
         # 记录到历史事件缓冲
@@ -115,12 +116,12 @@ class TaskRegistry:
                 self._tasks[task_id].events.append(event)
                 # 限制缓冲大小
                 if len(self._tasks[task_id].events) > self.max_events_per_task:
-                    self._tasks[task_id].events = self._tasks[task_id].events[-self.max_events_per_task:]
+                    self._tasks[task_id].events = self._tasks[task_id].events[-self.max_events_per_task :]
                 # 更新状态
-                if event_type == 'status' and isinstance(payload, dict):
-                    self._tasks[task_id].status = payload.get('status', self._tasks[task_id].status)
-                elif event_type == 'error':
-                    self._tasks[task_id].status = 'failed'
+                if event_type == "status" and isinstance(payload, dict):
+                    self._tasks[task_id].status = payload.get("status", self._tasks[task_id].status)
+                elif event_type == "error":
+                    self._tasks[task_id].status = "failed"
 
                 subscribers = list(self._subscribers.get(task_id, set()))
             else:
@@ -137,9 +138,7 @@ class TaskRegistry:
         if self._loop and subscribers:
             for queue in subscribers:
                 try:
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(event), self._loop
-                    )
+                    asyncio.run_coroutine_threadsafe(queue.put(event), self._loop)
                 except Exception:
                     pass  # loop 可能已关闭
 
@@ -170,7 +169,7 @@ class TaskRegistry:
         expired = []
         with self._lock:
             for task_id, record in list(self._tasks.items()):
-                if record.status in ('done', 'failed'):
+                if record.status in ("done", "failed"):
                     if now - record.created_at > self.retention_seconds:
                         expired.append(task_id)
             for task_id in expired:
@@ -192,17 +191,17 @@ class TaskRegistry:
         try:
             tasks = storage.list_tasks(limit=100)
             for td in tasks:
-                task_id = td.get('task_id', '')
+                task_id = td.get("task_id", "")
                 if not task_id:
                     continue
-                status = td.get('status', 'done')
+                status = td.get("status", "done")
                 # 恢复事件历史
                 events = storage.get_events(task_id, limit=self.max_events_per_task)
                 with self._lock:
                     self._tasks[task_id] = TaskRecord(
                         task_id=task_id,
                         status=status,
-                        created_at=td.get('started_at', time.time()),
+                        created_at=td.get("started_at", time.time()),
                         events=events,
                         task_dict=td,
                     )

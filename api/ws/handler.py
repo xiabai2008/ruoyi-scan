@@ -1,10 +1,9 @@
 # D9 WebSocket 连接管理：订阅任务实时事件
 import asyncio
-import json
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from core.task_registry import TaskRegistry
-from api.ws.events import ALL_EVENTS
 
 router = APIRouter()
 
@@ -28,12 +27,14 @@ async def scan_ws(websocket: WebSocket, task_id: str):
     record = registry.get(task_id)
 
     if record is None:
-        await websocket.send_json({
-            'type': 'error',
-            'data': {'error': f'任务不存在: {task_id}'},
-            'task_id': task_id,
-        })
-        await websocket.close(code=1008, reason='任务不存在')
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"error": f"任务不存在: {task_id}"},
+                "task_id": task_id,
+            }
+        )
+        await websocket.close(code=1008, reason="任务不存在")
         return
 
     # 1. 补播历史事件
@@ -42,13 +43,15 @@ async def scan_ws(websocket: WebSocket, task_id: str):
         await websocket.send_json(event)
 
     # 如果任务已完成，发送完历史后保持连接（客户端可主动关闭）
-    if record.status in ('done', 'failed', 'cancelled'):
-        await websocket.send_json({
-            'type': 'connection_closed',
-            'data': {'reason': f'任务已结束: {record.status}'},
-            'task_id': task_id,
-        })
-        await websocket.close(code=1000, reason='任务已结束')
+    if record.status in ("done", "failed", "cancelled"):
+        await websocket.send_json(
+            {
+                "type": "connection_closed",
+                "data": {"reason": f"任务已结束: {record.status}"},
+                "task_id": task_id,
+            }
+        )
+        await websocket.close(code=1000, reason="任务已结束")
         return
 
     # 2. 订阅新事件
@@ -62,29 +65,34 @@ async def scan_ws(websocket: WebSocket, task_id: str):
                 await websocket.send_json(event)
 
                 # 任务完成事件后关闭连接
-                if event.get('type') in ('complete', 'error'):
+                if event.get("type") in ("complete", "error"):
                     # 给客户端一点时间接收，然后关闭
                     await asyncio.sleep(0.5)
-                    await websocket.close(code=1000, reason='任务完成')
+                    await websocket.close(code=1000, reason="任务完成")
                     break
 
-                if (event.get('type') == 'status'
-                        and event.get('data', {}).get('status') in ('done', 'failed', 'cancelled')):
+                if event.get("type") == "status" and event.get("data", {}).get("status") in (
+                    "done",
+                    "failed",
+                    "cancelled",
+                ):
                     await asyncio.sleep(0.5)
-                    await websocket.close(code=1000, reason='任务结束')
+                    await websocket.close(code=1000, reason="任务结束")
                     break
 
             except asyncio.TimeoutError:
                 # 心跳：每 30 秒发送 ping 保持连接
-                await websocket.send_json({
-                    'type': 'ping',
-                    'data': {'ts': asyncio.get_event_loop().time()},
-                    'task_id': task_id,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "ping",
+                        "data": {"ts": asyncio.get_event_loop().time()},
+                        "task_id": task_id,
+                    }
+                )
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
+    except Exception:
         # 连接异常关闭
         pass
     finally:

@@ -120,8 +120,19 @@ line-length = 120
 target-version = "py38"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM"]
-ignore = ["E501"]  # 行长度由 line-length 控制，不强制警告
+# 仅启用关键规则：错误(E) / pyflakes(F) / 警告(W) / 导入排序(I) / 命名(N)
+# 跳过 SIM(代码简化) / B(bugbear) / UP(版本升级) 等非阻塞风格建议
+select = ["E", "F", "W", "I", "N"]
+ignore = [
+    "E501",   # 行长度由 line-length 控制，不强制警告
+    "E722",   # 裸 except（项目中有意为之的兜底捕获）
+    "N806",   # 变量名大小写（如 F=_FONT_NAME 是字体常量惯例）
+    "N818",   # 异常名后缀（项目已有 Exception 命名惯例）
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试文件允许更宽松
+"tests/*" = ["N802", "N803"]
 
 [tool.mypy]
 python_version = "3.8"

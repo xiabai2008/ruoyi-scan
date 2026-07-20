@@ -1,11 +1,10 @@
 # 指纹识别接口 + 通用特征判定（数据驱动，支持多 CMS 自动识别与路由）
 import hashlib
 import re
-from typing import Dict, List
 
-from lib.fingerprint_features import get_feature, list_cms
 from core.models import FingerprintResult
 from core.session import SessionManager
+from lib.fingerprint_features import get_feature, list_cms
 
 
 class Fingerprint:
@@ -34,14 +33,14 @@ class FeatureBasedFingerprint(Fingerprint):
 
     def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
         if not self.feature:
-            return FingerprintResult(cms='', version='', confidence=0.0, matched=[])
+            return FingerprintResult(cms="", version="", confidence=0.0, matched=[])
 
         f = self.feature
         matched = []
         strong_hits = 0
         weak_hits = 0
-        w_strong = f.get('weight_strong', 0.5)
-        w_weak = f.get('weight_weak', 0.2)
+        w_strong = f.get("weight_strong", 0.5)
+        w_weak = f.get("weight_weak", 0.2)
 
         # 阶段五：cache 存在时走缓存（多 CMS 共享根/favicon 响应），否则直接 session.get
         def _get(url):
@@ -52,56 +51,56 @@ class FeatureBasedFingerprint(Fingerprint):
         # 1. 主页特征：GET 根路径，检查标题与响应体关键字
         try:
             resp = _get(target)
-            text = resp.text or ''
-            title_m = re.findall(r'<title>(.*?)</title>', text, re.IGNORECASE | re.DOTALL)
-            title = title_m[0] if title_m else ''
-            for kw in f.get('login_keywords', []):
+            text = resp.text or ""
+            title_m = re.findall(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+            title = title_m[0] if title_m else ""
+            for kw in f.get("login_keywords", []):
                 if kw in text or kw in title:
                     strong_hits += 1
-                    matched.append('login:%s' % kw)
+                    matched.append("login:%s" % kw)
                     break
-            for kw in f.get('weak_keywords', []):
+            for kw in f.get("weak_keywords", []):
                 if kw in text or kw in title:
                     weak_hits += 1
-                    matched.append('keyword:%s' % kw)
+                    matched.append("keyword:%s" % kw)
                     break
         except Exception:
             pass
 
         # 2. 强特征路径探测
-        for item in f.get('strong_paths', []):
-            path = item['path']
-            expect = item.get('expect', 'any')
-            url = target + path.lstrip('/')
+        for item in f.get("strong_paths", []):
+            path = item["path"]
+            expect = item.get("expect", "any")
+            url = target + path.lstrip("/")
             try:
                 r = _get(url)
                 if r.status_code != 200:
                     continue
-                ct = (r.headers.get('Content-Type') or '').lower()
-                body = r.text or ''
-                if expect == 'json':
-                    ok = ('json' in ct) and ('code' in body or 'msg' in body)
-                elif expect == 'image':
-                    ok = 'image' in ct
+                ct = (r.headers.get("Content-Type") or "").lower()
+                body = r.text or ""
+                if expect == "json":
+                    ok = ("json" in ct) and ("code" in body or "msg" in body)
+                elif expect == "image":
+                    ok = "image" in ct
                 else:
                     ok = True
                 if ok:
                     strong_hits += 1
-                    matched.append('path:%s(%s,%d)' % (path, expect, r.status_code))
+                    matched.append("path:%s(%s,%d)" % (path, expect, r.status_code))
             except Exception:
                 continue
 
         # 3. favicon hash 比对（标准库 hashlib.md5(content).hexdigest()）
         try:
-            fav = _get(target + 'favicon.ico')
+            fav = _get(target + "favicon.ico")
             if fav.status_code == 200 and len(fav.content) > 0:
                 h = hashlib.md5(fav.content).hexdigest()
-                if h in f.get('favicon_hashes', set()):
+                if h in f.get("favicon_hashes", set()):
                     strong_hits += 1
-                    matched.append('favicon:%s' % h)
+                    matched.append("favicon:%s" % h)
                 else:
                     weak_hits += 1
-                    matched.append('favicon:unknown:%s' % h[:8])
+                    matched.append("favicon:unknown:%s" % h[:8])
         except Exception:
             pass
 
@@ -112,16 +111,15 @@ class FeatureBasedFingerprint(Fingerprint):
         # 边界用例：含"若依"二字的非若依页面（单弱特征）不应误判。
         weak_confidence = weak_hits * w_weak
         if strong_hits > 0 or weak_confidence >= 0.4:
-            return FingerprintResult(
-                cms=self.cms, version='', confidence=confidence, matched=matched)
-        return FingerprintResult(cms='', version='', confidence=0.0, matched=matched)
+            return FingerprintResult(cms=self.cms, version="", confidence=confidence, matched=matched)
+        return FingerprintResult(cms="", version="", confidence=0.0, matched=matched)
 
 
 class RuoyiFingerprint(FeatureBasedFingerprint):
     """若依指纹识别（薄封装，向后兼容 main.py / 旧测试）"""
 
     def __init__(self):
-        super().__init__('ruoyi')
+        super().__init__("ruoyi")
 
 
 def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
@@ -137,25 +135,27 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     版本号存入 FingerprintResult.version，供 Router 按 affected_versions 过滤 POC。
     """
     from core.cache import FingerprintCache
+
     cache = FingerprintCache(session)
-    best = FingerprintResult(cms='', version='', confidence=0.0, matched=[])
+    best = FingerprintResult(cms="", version="", confidence=0.0, matched=[])
     for cms in list_cms():
         res = FeatureBasedFingerprint(cms).detect(target, session, cache=cache)
         if res.cms and res.confidence > best.confidence:
             best = res
     # D2：若依版本探测（仅对 ruoyi 做，其他 CMS 暂不支持）
-    if best.cms == 'ruoyi':
+    if best.cms == "ruoyi":
         try:
-            from lib.ruoyi_versions import extract_version
             from lib.http import join_url
+            from lib.ruoyi_versions import extract_version
+
             # 优先从缓存中已有的 /login 和根路径响应提取版本号（避免额外请求）
-            cached_version = ''
-            for path in ['/login', '/', '']:
+            cached_version = ""
+            for path in ["/login", "/", ""]:
                 try:
                     full_url = join_url(target, path) if path else target
                     cached_resp = cache.get(full_url)
                     if cached_resp:
-                        v = extract_version(cached_resp.text or '')
+                        v = extract_version(cached_resp.text or "")
                         if v:
                             cached_version = v
                             break
@@ -163,7 +163,7 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
                     pass
             if cached_version:
                 best.version = cached_version
-                best.matched.append('version:%s' % cached_version)
+                best.matched.append("version:%s" % cached_version)
             # 注：缓存未命中版本号时不额外请求 detect_version，
             # 避免 detect_cms 的请求次数超出缓存测试预期。
             # 版本号未在首页/login 出现时，Router 会按"版本未识别"处理（跑全部 POC）。
@@ -188,27 +188,24 @@ def detect_waf(target: str, session: SessionManager) -> dict:
     try:
         resp = session.get(target)
         resp_headers = {k.lower(): v for k, v in resp.headers.items()}
-        resp_text = (resp.text or '').lower()
-        cookie = (resp.headers.get('Set-Cookie') or '').lower()
+        resp_text = (resp.text or "").lower()
+        cookie = (resp.headers.get("Set-Cookie") or "").lower()
     except Exception:
-        return {'waf': '', 'display': '', 'bypass_hint': ''}
+        return {"waf": "", "display": "", "bypass_hint": ""}
 
     for waf_key, f in WAF_FEATURES.items():
         # 响应头检测
-        for hdr in f.get('headers', []):
+        for hdr in f.get("headers", []):
             hdr_lower = hdr.lower()
             if hdr_lower in resp_headers or any(hdr_lower in k for k in resp_headers):
-                return {'waf': waf_key, 'display': f['display'],
-                        'bypass_hint': f.get('bypass_hint', '')}
+                return {"waf": waf_key, "display": f["display"], "bypass_hint": f.get("bypass_hint", "")}
         # 响应体关键字
-        for kw in f.get('body', []):
+        for kw in f.get("body", []):
             if kw.lower() in resp_text:
-                return {'waf': waf_key, 'display': f['display'],
-                        'bypass_hint': f.get('bypass_hint', '')}
+                return {"waf": waf_key, "display": f["display"], "bypass_hint": f.get("bypass_hint", "")}
         # Cookie 特征
-        for ck in f.get('cookie', []):
+        for ck in f.get("cookie", []):
             if ck.lower() in cookie:
-                return {'waf': waf_key, 'display': f['display'],
-                        'bypass_hint': f.get('bypass_hint', '')}
+                return {"waf": waf_key, "display": f["display"], "bypass_hint": f.get("bypass_hint", "")}
 
-    return {'waf': '', 'display': '', 'bypass_hint': ''}
+    return {"waf": "", "display": "", "bypass_hint": ""}

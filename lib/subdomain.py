@@ -16,21 +16,66 @@
 #   from lib.subdomain import SubdomainEnumerator
 #   enum = SubdomainEnumerator(verify_dns=False)
 #   subs = enum.enumerate('example.com', session)
-import json
 import socket
 import threading
-from typing import List, Set, Optional, Callable
+from typing import Callable, List, Optional, Set
 from urllib.parse import urlparse
-
 
 # 内置 top 50 常见子域名字典（按出现频率排序）
 DEFAULT_SUBDOMAIN_WORDS = [
-    'www', 'mail', 'remote', 'blog', 'web', 'dev', 'test', 'stage', 'staging',
-    'api', 'admin', 'portal', 'app', 'm', 'shop', 'store', 'forum', 'wiki',
-    'docs', 'cdn', 'static', 'assets', 'img', 'images', 'media', 'video',
-    'download', 'ftp', 'sftp', 'ns1', 'ns2', 'dns', 'mx', 'smtp', 'pop', 'imap',
-    'vpn', 'gateway', 'proxy', 'auth', 'sso', 'oauth', 'cloud', 'aws', 'azure',
-    'git', 'gitlab', 'jenkins', 'jira', 'confluence', 'crm', 'erp', 'oa',
+    "www",
+    "mail",
+    "remote",
+    "blog",
+    "web",
+    "dev",
+    "test",
+    "stage",
+    "staging",
+    "api",
+    "admin",
+    "portal",
+    "app",
+    "m",
+    "shop",
+    "store",
+    "forum",
+    "wiki",
+    "docs",
+    "cdn",
+    "static",
+    "assets",
+    "img",
+    "images",
+    "media",
+    "video",
+    "download",
+    "ftp",
+    "sftp",
+    "ns1",
+    "ns2",
+    "dns",
+    "mx",
+    "smtp",
+    "pop",
+    "imap",
+    "vpn",
+    "gateway",
+    "proxy",
+    "auth",
+    "sso",
+    "oauth",
+    "cloud",
+    "aws",
+    "azure",
+    "git",
+    "gitlab",
+    "jenkins",
+    "jira",
+    "confluence",
+    "crm",
+    "erp",
+    "oa",
 ]
 
 
@@ -42,15 +87,17 @@ class SubdomainEnumerator:
         subs = enum.enumerate('example.com', session)
     """
 
-    CRT_SH_URL = 'https://crt.sh/?q=%25.{domain}&output=json'
+    CRT_SH_URL = "https://crt.sh/?q=%25.{domain}&output=json"
 
-    def __init__(self,
-                 word_list: Optional[List[str]] = None,
-                 verify_dns: bool = False,
-                 use_crtsh: bool = True,
-                 use_dictionary: bool = True,
-                 timeout: int = 10,
-                 on_found: Optional[Callable[[str], None]] = None):
+    def __init__(
+        self,
+        word_list: Optional[List[str]] = None,
+        verify_dns: bool = False,
+        use_crtsh: bool = True,
+        use_dictionary: bool = True,
+        timeout: int = 10,
+        on_found: Optional[Callable[[str], None]] = None,
+    ):
         """初始化枚举器
 
         Args:
@@ -89,7 +136,7 @@ class SubdomainEnumerator:
             return []
 
         # 加入主域名本身
-        self._add(domain, 'root')
+        self._add(domain, "root")
 
         # 1. crt.sh 证书透明日志
         if self.use_crtsh:
@@ -104,20 +151,20 @@ class SubdomainEnumerator:
     def _clean_domain(self, domain: str) -> str:
         """清理域名：去除协议、路径、端口"""
         if not domain:
-            return ''
+            return ""
         # 去除协议
-        if '://' in domain:
-            domain = urlparse(domain).hostname or ''
+        if "://" in domain:
+            domain = urlparse(domain).hostname or ""
         # 去除路径
-        domain = domain.split('/')[0]
+        domain = domain.split("/")[0]
         # 去除端口
-        domain = domain.split(':')[0]
+        domain = domain.split(":")[0]
         # 小写化
-        return domain.lower().strip('.')
+        return domain.lower().strip(".")
 
     def _add(self, subdomain: str, source: str):
         """添加发现的子域名"""
-        subdomain = subdomain.lower().strip('.')
+        subdomain = subdomain.lower().strip(".")
         if not subdomain:
             return
         with self._lock:
@@ -141,38 +188,39 @@ class SubdomainEnumerator:
                 resp = session.get(url)
             else:
                 import requests as _requests
+
                 resp = _requests.get(url, timeout=self.timeout)
             if resp.status_code != 200:
-                self.errors.append(f'crt.sh -> HTTP {resp.status_code}')
+                self.errors.append(f"crt.sh -> HTTP {resp.status_code}")
                 return
             # crt.sh 返回 JSON 数组，每项含 name_value 字段（可能含多行）
             data = resp.json()
             for entry in data:
-                name_value = entry.get('name_value', '') if isinstance(entry, dict) else ''
+                name_value = entry.get("name_value", "") if isinstance(entry, dict) else ""
                 if not name_value:
                     continue
                 # name_value 可能是多行（一个证书可包含多个域名）
-                for line in name_value.split('\n'):
+                for line in name_value.split("\n"):
                     line = line.strip().lower()
-                    if not line or '*' in line:
+                    if not line or "*" in line:
                         continue
                     # 仅保留属于该主域的子域
-                    if line == self._clean_domain(domain) or line.endswith('.' + self._clean_domain(domain)):
-                        self._add(line, 'crt.sh')
+                    if line == self._clean_domain(domain) or line.endswith("." + self._clean_domain(domain)):
+                        self._add(line, "crt.sh")
         except Exception as e:
-            self.errors.append(f'crt.sh -> {type(e).__name__}: {e}')
+            self.errors.append(f"crt.sh -> {type(e).__name__}: {e}")
 
     def _enumerate_dictionary(self, domain: str, session=None):
         """字典枚举：尝试常见子域前缀"""
         for word in self.word_list:
-            subdomain = f'{word}.{domain}'
+            subdomain = f"{word}.{domain}"
             # 验证 DNS（可选）
             if self.verify_dns:
                 if self._dns_resolve(subdomain):
-                    self._add(subdomain, 'dict+dns')
+                    self._add(subdomain, "dict+dns")
             else:
                 # 不验证 DNS，直接加入候选（让后续扫描器验证）
-                self._add(subdomain, 'dict')
+                self._add(subdomain, "dict")
 
     def _dns_resolve(self, hostname: str) -> bool:
         """DNS 解析验证"""
@@ -185,8 +233,8 @@ class SubdomainEnumerator:
 
 # === 便捷函数 ===
 
-def enumerate_subdomains(domain: str, session=None,
-                         verify_dns: bool = False) -> List[str]:
+
+def enumerate_subdomains(domain: str, session=None, verify_dns: bool = False) -> List[str]:
     """便捷子域名枚举函数"""
     enum = SubdomainEnumerator(verify_dns=verify_dns)
     return enum.enumerate(domain, session)

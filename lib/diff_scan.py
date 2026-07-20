@@ -25,8 +25,7 @@
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -35,41 +34,44 @@ class VulnFingerprint:
 
     指纹由 name + url 路径组成，不包含 status/severity（这些是比较维度）
     """
+
     name: str
     url: str
 
     def key(self) -> str:
         """生成唯一 key"""
         # URL 去除查询参数中的随机 token（保留路径结构）
-        url = self.url.split('?')[0]  # 去查询参数
-        return f'{self.name}|{url}'
+        url = self.url.split("?")[0]  # 去查询参数
+        return f"{self.name}|{url}"
 
 
 @dataclass
 class DiffEntry:
     """差异条目"""
+
     diff_type: str  # new / fixed / persisted / changed
     name: str
     url: str
-    old_status: str = ''  # 旧状态（fixed/changed 时有值）
-    new_status: str = ''  # 新状态（new/persisted/changed 时有值）
-    old_severity: str = ''
-    new_severity: str = ''
-    cve: str = ''
+    old_status: str = ""  # 旧状态（fixed/changed 时有值）
+    new_status: str = ""  # 新状态（new/persisted/changed 时有值）
+    old_severity: str = ""
+    new_severity: str = ""
+    cve: str = ""
 
 
 @dataclass
 class DiffReport:
     """差异报告"""
-    old_scan_time: str = ''
-    new_scan_time: str = ''
-    target: str = ''
+
+    old_scan_time: str = ""
+    new_scan_time: str = ""
+    target: str = ""
     old_total: int = 0
     new_total: int = 0
-    new_vulns: List[DiffEntry] = field(default_factory=list)        # 新增漏洞
-    fixed_vulns: List[DiffEntry] = field(default_factory=list)      # 已修复漏洞
+    new_vulns: List[DiffEntry] = field(default_factory=list)  # 新增漏洞
+    fixed_vulns: List[DiffEntry] = field(default_factory=list)  # 已修复漏洞
     persisted_vulns: List[DiffEntry] = field(default_factory=list)  # 未变漏洞
-    changed_vulns: List[DiffEntry] = field(default_factory=list)    # 状态变化漏洞
+    changed_vulns: List[DiffEntry] = field(default_factory=list)  # 状态变化漏洞
 
     @property
     def total_new(self) -> int:
@@ -90,21 +92,21 @@ class DiffReport:
     def to_dict(self) -> Dict[str, Any]:
         """转为字典"""
         return {
-            'old_scan_time': self.old_scan_time,
-            'new_scan_time': self.new_scan_time,
-            'target': self.target,
-            'old_total': self.old_total,
-            'new_total': self.new_total,
-            'summary': {
-                'new': self.total_new,
-                'fixed': self.total_fixed,
-                'persisted': self.total_persisted,
-                'changed': self.total_changed,
+            "old_scan_time": self.old_scan_time,
+            "new_scan_time": self.new_scan_time,
+            "target": self.target,
+            "old_total": self.old_total,
+            "new_total": self.new_total,
+            "summary": {
+                "new": self.total_new,
+                "fixed": self.total_fixed,
+                "persisted": self.total_persisted,
+                "changed": self.total_changed,
             },
-            'new_vulns': [e.__dict__ for e in self.new_vulns],
-            'fixed_vulns': [e.__dict__ for e in self.fixed_vulns],
-            'persisted_vulns': [e.__dict__ for e in self.persisted_vulns],
-            'changed_vulns': [e.__dict__ for e in self.changed_vulns],
+            "new_vulns": [e.__dict__ for e in self.new_vulns],
+            "fixed_vulns": [e.__dict__ for e in self.fixed_vulns],
+            "persisted_vulns": [e.__dict__ for e in self.persisted_vulns],
+            "changed_vulns": [e.__dict__ for e in self.changed_vulns],
         }
 
     def to_json(self) -> str:
@@ -121,17 +123,17 @@ class DiffReport:
             rows = []
             for e in entries:
                 rows.append(
-                    f'<tr>'
-                    f'<td>{html_module.escape(e.name)}</td>'
+                    f"<tr>"
+                    f"<td>{html_module.escape(e.name)}</td>"
                     f'<td class="url">{html_module.escape(e.url)}</td>'
-                    f'<td>{html_module.escape(e.old_status or "—")}</td>'
-                    f'<td>{html_module.escape(e.new_status or "—")}</td>'
-                    f'<td>{html_module.escape(e.cve or "—")}</td>'
-                    f'</tr>'
+                    f"<td>{html_module.escape(e.old_status or '—')}</td>"
+                    f"<td>{html_module.escape(e.new_status or '—')}</td>"
+                    f"<td>{html_module.escape(e.cve or '—')}</td>"
+                    f"</tr>"
                 )
-            return '\n'.join(rows)
+            return "\n".join(rows)
 
-        return f'''<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -169,28 +171,28 @@ class DiffReport:
 <h2>🆕 新增漏洞（{self.total_new}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.new_vulns, 'new', '🆕')}
+{render_entries(self.new_vulns, "new", "🆕")}
 </table>
 
 <h2>✅ 已修复漏洞（{self.total_fixed}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.fixed_vulns, 'fixed', '✅')}
+{render_entries(self.fixed_vulns, "fixed", "✅")}
 </table>
 
 <h2>⚠️ 状态变化（{self.total_changed}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.changed_vulns, 'changed', '⚠️')}
+{render_entries(self.changed_vulns, "changed", "⚠️")}
 </table>
 
 <h2>⏳ 未变漏洞（{self.total_persisted}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.persisted_vulns, 'persisted', '⏳')}
+{render_entries(self.persisted_vulns, "persisted", "⏳")}
 </table>
 </body>
-</html>'''
+</html>"""
 
 
 def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -199,25 +201,26 @@ def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     仅提取 CONFIRMED 状态的漏洞（SAFE/UNKNOWN 不计入差异对比）
     """
     from core.models import STATUS_CONFIRMED
+
     vulns = {}
-    results = report_data.get('results', [])
+    results = report_data.get("results", [])
     for r in results:
-        if r.get('status') != STATUS_CONFIRMED:
+        if r.get("status") != STATUS_CONFIRMED:
             continue
-        fp = VulnFingerprint(name=r.get('name', ''), url=r.get('url', ''))
+        fp = VulnFingerprint(name=r.get("name", ""), url=r.get("url", ""))
         vulns[fp.key()] = {
-            'name': r.get('name', ''),
-            'url': r.get('url', ''),
-            'status': r.get('status', ''),
-            'severity': r.get('severity', ''),
-            'cve': r.get('cve', ''),
+            "name": r.get("name", ""),
+            "url": r.get("url", ""),
+            "status": r.get("status", ""),
+            "severity": r.get("severity", ""),
+            "cve": r.get("cve", ""),
         }
     return vulns
 
 
 def load_report(filepath: str) -> Dict[str, Any]:
     """加载 JSON 报告文件"""
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -234,9 +237,9 @@ def diff_reports(old_report: Dict[str, Any], new_report: Dict[str, Any]) -> Diff
     new_vulns = _extract_vulns(new_report)
 
     report = DiffReport(
-        old_scan_time=old_report.get('scan_time', ''),
-        new_scan_time=new_report.get('scan_time', ''),
-        target=new_report.get('target', old_report.get('target', '')),
+        old_scan_time=old_report.get("scan_time", ""),
+        new_scan_time=new_report.get("scan_time", ""),
+        target=new_report.get("target", old_report.get("target", "")),
         old_total=len(old_vulns),
         new_total=len(new_vulns),
     )
@@ -247,41 +250,63 @@ def diff_reports(old_report: Dict[str, Any], new_report: Dict[str, Any]) -> Diff
     # 新增漏洞：新有旧无
     for key in new_keys - old_keys:
         v = new_vulns[key]
-        report.new_vulns.append(DiffEntry(
-            diff_type='new', name=v['name'], url=v['url'],
-            new_status=v['status'], new_severity=v['severity'],
-            cve=v.get('cve', ''),
-        ))
+        report.new_vulns.append(
+            DiffEntry(
+                diff_type="new",
+                name=v["name"],
+                url=v["url"],
+                new_status=v["status"],
+                new_severity=v["severity"],
+                cve=v.get("cve", ""),
+            )
+        )
 
     # 已修复漏洞：旧有新无
     for key in old_keys - new_keys:
         v = old_vulns[key]
-        report.fixed_vulns.append(DiffEntry(
-            diff_type='fixed', name=v['name'], url=v['url'],
-            old_status=v['status'], old_severity=v['severity'],
-            cve=v.get('cve', ''),
-        ))
+        report.fixed_vulns.append(
+            DiffEntry(
+                diff_type="fixed",
+                name=v["name"],
+                url=v["url"],
+                old_status=v["status"],
+                old_severity=v["severity"],
+                cve=v.get("cve", ""),
+            )
+        )
 
     # 对比共有的漏洞
     for key in old_keys & new_keys:
         old_v = old_vulns[key]
         new_v = new_vulns[key]
         # 状态或严重度变化
-        if old_v['status'] != new_v['status'] or old_v['severity'] != new_v['severity']:
-            report.changed_vulns.append(DiffEntry(
-                diff_type='changed', name=new_v['name'], url=new_v['url'],
-                old_status=old_v['status'], new_status=new_v['status'],
-                old_severity=old_v['severity'], new_severity=new_v['severity'],
-                cve=new_v.get('cve', ''),
-            ))
+        if old_v["status"] != new_v["status"] or old_v["severity"] != new_v["severity"]:
+            report.changed_vulns.append(
+                DiffEntry(
+                    diff_type="changed",
+                    name=new_v["name"],
+                    url=new_v["url"],
+                    old_status=old_v["status"],
+                    new_status=new_v["status"],
+                    old_severity=old_v["severity"],
+                    new_severity=new_v["severity"],
+                    cve=new_v.get("cve", ""),
+                )
+            )
         else:
             # 未变
-            report.persisted_vulns.append(DiffEntry(
-                diff_type='persisted', name=new_v['name'], url=new_v['url'],
-                old_status=old_v['status'], new_status=new_v['status'],
-                old_severity=old_v['severity'], new_severity=new_v['severity'],
-                cve=new_v.get('cve', ''),
-            ))
+            report.persisted_vulns.append(
+                DiffEntry(
+                    diff_type="persisted",
+                    name=new_v["name"],
+                    url=new_v["url"],
+                    old_status=old_v["status"],
+                    new_status=new_v["status"],
+                    old_severity=old_v["severity"],
+                    new_severity=new_v["severity"],
+                    cve=new_v.get("cve", ""),
+                )
+            )
 
     return report
 
@@ -293,8 +318,8 @@ def save_baseline(report_data: Dict[str, Any], filepath: str):
         report_data: 扫描报告字典
         filepath: 基线文件路径（.json）
     """
-    os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+    with open(filepath, "w", encoding="utf-8") as f:
         json.dump(report_data, f, ensure_ascii=False, indent=2)
 
 
@@ -311,14 +336,14 @@ def render_diff_report(diff: DiffReport, out_dir: str) -> List[str]:
     paths = []
 
     # JSON 差异报告
-    json_path = os.path.join(out_dir, 'diff_report.json')
-    with open(json_path, 'w', encoding='utf-8') as f:
+    json_path = os.path.join(out_dir, "diff_report.json")
+    with open(json_path, "w", encoding="utf-8") as f:
         f.write(diff.to_json())
     paths.append(json_path)
 
     # HTML 差异报告
-    html_path = os.path.join(out_dir, 'diff_report.html')
-    with open(html_path, 'w', encoding='utf-8') as f:
+    html_path = os.path.join(out_dir, "diff_report.html")
+    with open(html_path, "w", encoding="utf-8") as f:
         f.write(diff.to_html())
     paths.append(html_path)
 

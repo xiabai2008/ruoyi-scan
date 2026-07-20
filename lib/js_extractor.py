@@ -16,43 +16,45 @@
 #   endpoints = ext.extract_from_text(js_code, source_url='http://x/main.js')
 #   endpoints = ext.extract_from_urls(['http://x/main.js', 'http://x/app.js'], session)
 import re
-from typing import List, Set, Optional, Dict
 from dataclasses import dataclass, field
+from typing import List, Set
 from urllib.parse import urlparse
-
 
 # 正则模式：路径样式（/word/word...，至少 2 段以降低噪声）
 # 例：/api/user、/admin/list、/prod-api/system/user
-PATH_PATTERN = re.compile(
-    r'["\'`](/(?:[a-zA-Z0-9_\-]+/){1,6}[a-zA-Z0-9_\-]+)["\'`]'
-)
+PATH_PATTERN = re.compile(r'["\'`](/(?:[a-zA-Z0-9_\-]+/){1,6}[a-zA-Z0-9_\-]+)["\'`]')
 
 # 正则模式：绝对 URL
-URL_PATTERN = re.compile(
-    r'["\'`](https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+)["\'`]'
-)
+URL_PATTERN = re.compile(r'["\'`](https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+)["\'`]')
 
 # 正则模式：fetch/axios 调用
 FETCH_PATTERN = re.compile(
-    r'(?:fetch|axios\.(?:get|post|put|delete|patch|request)|\$\.ajax)\s*\(\s*["\'`]([^"\'`]+)["\'`]',
-    re.IGNORECASE
+    r'(?:fetch|axios\.(?:get|post|put|delete|patch|request)|\$\.ajax)\s*\(\s*["\'`]([^"\'`]+)["\'`]', re.IGNORECASE
 )
 
 # 第三方库噪声路径前缀（这些不是真正的 API 端点）
 NOISE_PREFIXES = (
-    'node_modules/', 'webpack/', 'babel/', 'core-js/', 'tslib/',
-    'polyfill', 'chunk-', 'vendor/', 'sourcemap',
+    "node_modules/",
+    "webpack/",
+    "babel/",
+    "core-js/",
+    "tslib/",
+    "polyfill",
+    "chunk-",
+    "vendor/",
+    "sourcemap",
 )
 
 
 @dataclass
 class Endpoint:
     """提取的端点信息"""
-    url: str                                # 端点 URL（绝对或相对路径）
-    source: str = ''                        # 来源 JS 文件 URL
-    method: str = ''                        # HTTP 方法（如果能识别）
-    line_no: int = 0                        # 行号（近似）
-    is_absolute: bool = False               # 是否绝对 URL
+
+    url: str  # 端点 URL（绝对或相对路径）
+    source: str = ""  # 来源 JS 文件 URL
+    method: str = ""  # HTTP 方法（如果能识别）
+    line_no: int = 0  # 行号（近似）
+    is_absolute: bool = False  # 是否绝对 URL
     contexts: List[str] = field(default_factory=list)  # 出现的上下文（fetch/url/string）
 
     def __hash__(self):
@@ -75,10 +77,7 @@ class JSExtractor:
         endpoints = ext.extract_from_urls(['http://x/main.js'], session)
     """
 
-    def __init__(self,
-                 min_path_segments: int = 2,
-                 include_noise: bool = False,
-                 include_third_party: bool = False):
+    def __init__(self, min_path_segments: int = 2, include_noise: bool = False, include_third_party: bool = False):
         """初始化提取器
 
         Args:
@@ -90,7 +89,7 @@ class JSExtractor:
         self.include_noise = include_noise
         self.include_third_party = include_third_party
 
-    def extract_from_text(self, js_text: str, source_url: str = '') -> List[Endpoint]:
+    def extract_from_text(self, js_text: str, source_url: str = "") -> List[Endpoint]:
         """从 JS 文本提取端点
 
         Args:
@@ -105,23 +104,22 @@ class JSExtractor:
 
         seen: Set[str] = set()
         endpoints: List[Endpoint] = []
-        lines = js_text.split('\n')
+        lines = js_text.split("\n")
 
         # 按行扫描（便于记录行号）
         for line_no, line in enumerate(lines, start=1):
             # 1. 绝对 URL
             for match in URL_PATTERN.finditer(line):
-                url = match.group(1).rstrip('/').rstrip('\\')
+                url = match.group(1).rstrip("/").rstrip("\\")
                 if self._is_noise(url):
                     continue
-                key = f'{url}|{source_url}'
+                key = f"{url}|{source_url}"
                 if key in seen:
                     continue
                 seen.add(key)
-                endpoints.append(Endpoint(
-                    url=url, source=source_url, line_no=line_no,
-                    is_absolute=True, contexts=['url']
-                ))
+                endpoints.append(
+                    Endpoint(url=url, source=source_url, line_no=line_no, is_absolute=True, contexts=["url"])
+                )
 
             # 2. fetch/axios 调用（高置信度，标注方法）
             for match in FETCH_PATTERN.finditer(line):
@@ -129,29 +127,28 @@ class JSExtractor:
                 if self._is_noise(url):
                     continue
                 # 识别方法（fetch 默认 GET，axios.X 用 X）
-                method = 'GET'
-                if 'axios.post' in line.lower():
-                    method = 'POST'
-                elif 'axios.put' in line.lower():
-                    method = 'PUT'
-                elif 'axios.delete' in line.lower():
-                    method = 'DELETE'
-                elif 'axios.patch' in line.lower():
-                    method = 'PATCH'
-                key = f'{url}|{source_url}'
+                method = "GET"
+                if "axios.post" in line.lower():
+                    method = "POST"
+                elif "axios.put" in line.lower():
+                    method = "PUT"
+                elif "axios.delete" in line.lower():
+                    method = "DELETE"
+                elif "axios.patch" in line.lower():
+                    method = "PATCH"
+                key = f"{url}|{source_url}"
                 if key in seen:
                     # 已存在则补 method
                     for ep in endpoints:
                         if ep.url == url and ep.source == source_url:
                             if method and method not in ep.contexts:
-                                ep.contexts.append(f'fetch:{method}')
+                                ep.contexts.append(f"fetch:{method}")
                             break
                     continue
                 seen.add(key)
-                endpoints.append(Endpoint(
-                    url=url, source=source_url, line_no=line_no,
-                    method=method, contexts=[f'fetch:{method}']
-                ))
+                endpoints.append(
+                    Endpoint(url=url, source=source_url, line_no=line_no, method=method, contexts=[f"fetch:{method}"])
+                )
 
             # 3. 相对路径（/api/... 等）
             for match in PATH_PATTERN.finditer(line):
@@ -159,17 +156,16 @@ class JSExtractor:
                 if self._is_noise(path):
                     continue
                 # 段数过滤
-                segments = [s for s in path.split('/') if s]
+                segments = [s for s in path.split("/") if s]
                 if len(segments) < self.min_path_segments:
                     continue
-                key = f'{path}|{source_url}'
+                key = f"{path}|{source_url}"
                 if key in seen:
                     continue
                 seen.add(key)
-                endpoints.append(Endpoint(
-                    url=path, source=source_url, line_no=line_no,
-                    is_absolute=False, contexts=['path']
-                ))
+                endpoints.append(
+                    Endpoint(url=path, source=source_url, line_no=line_no, is_absolute=False, contexts=["path"])
+                )
 
         return endpoints
 
@@ -190,12 +186,13 @@ class JSExtractor:
                     resp = session.get(js_url)
                 else:
                     import requests as _requests
+
                     resp = _requests.get(js_url, timeout=10)
                 if resp.status_code != 200:
                     continue
                 # 仅处理 JS 响应
-                ct = resp.headers.get('Content-Type', '').lower()
-                if 'javascript' not in ct and 'text' not in ct and not js_url.lower().endswith('.js'):
+                ct = resp.headers.get("Content-Type", "").lower()
+                if "javascript" not in ct and "text" not in ct and not js_url.lower().endswith(".js"):
                     continue
                 endpoints = self.extract_from_text(resp.text, source_url=js_url)
                 all_endpoints.extend(endpoints)
@@ -217,10 +214,10 @@ class JSExtractor:
                 if prefix in lower:
                     return True
         # 排除 sourcemap
-        if lower.endswith('.map'):
+        if lower.endswith(".map"):
             return True
         # 排除 data: URI
-        if lower.startswith('data:'):
+        if lower.startswith("data:"):
             return True
         return False
 
@@ -241,7 +238,7 @@ class JSExtractor:
                 result.append(ep)
             else:
                 # 绝对 URL 仅保留同 host
-                ep_host = urlparse(ep.url).hostname or ''
+                ep_host = urlparse(ep.url).hostname or ""
                 if ep_host == host:
                     result.append(ep)
         return result
@@ -249,7 +246,8 @@ class JSExtractor:
 
 # === 便捷函数 ===
 
-def extract_endpoints(js_text: str, source_url: str = '') -> List[str]:
+
+def extract_endpoints(js_text: str, source_url: str = "") -> List[str]:
     """便捷提取函数：从 JS 文本提取端点 URL（仅返回 URL 列表，去重）"""
     ext = JSExtractor()
     endpoints = ext.extract_from_text(js_text, source_url=source_url)

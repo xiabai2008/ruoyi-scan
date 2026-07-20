@@ -40,17 +40,17 @@ def match_php_eval_response(text):
     if not text:
         return False
     # phpinfo() HTML 输出特征：含 PHP Version + phpinfo() 或 <!DOCTYPE
-    if 'PHP Version' in text and ('phpinfo()' in text or '<!DOCTYPE' in text):
+    if "PHP Version" in text and ("phpinfo()" in text or "<!DOCTYPE" in text):
         return True
     # phpinfo() 调用痕迹（部分环境仅输出 phpinfo() 错误或部分内容）
-    if 'phpinfo()' in text and 'PHP' in text:
+    if "phpinfo()" in text and "PHP" in text:
         return True
     # phpversion() 输出：短字符串 7.x.x / 8.x.x 格式
     # 真实 phpversion 输出通常 < 50 字节，形如 '7.2.34' 或 '8.1.0'
-    if len(text) < 50 and any(p in text for p in ['7.', '8.']) and '.' in text:
+    if len(text) < 50 and any(p in text for p in ["7.", "8."]) and "." in text:
         # 排除常见误报：'7.' 单独出现可能是页码、时间等
         # phpversion 输出是纯版本号，不含 HTML/JSON 标记
-        if '<' not in text and '{' not in text:
+        if "<" not in text and "{" not in text:
             return True
     return False
 
@@ -64,12 +64,12 @@ def match_sql_error(text):
     if not text:
         return False
     sql_error_features = [
-        'XPATH syntax error',           # MySQL extractvalue 报错
-        'SQLSTATE',                     # PDO/MySQL 错误
-        'You have an error in your SQL syntax',  # MySQL 语法错误
-        'Operand should contain',       # MySQL 类型错误
-        'Truncated incorrect',          # MySQL 截断错误
-        'Data too long for column',     # MySQL 数据过长
+        "XPATH syntax error",  # MySQL extractvalue 报错
+        "SQLSTATE",  # PDO/MySQL 错误
+        "You have an error in your SQL syntax",  # MySQL 语法错误
+        "Operand should contain",  # MySQL 类型错误
+        "Truncated incorrect",  # MySQL 截断错误
+        "Data too long for column",  # MySQL 数据过长
     ]
     return any(f in text for f in sql_error_features)
 
@@ -82,13 +82,13 @@ def match_file_read_leak(text):
     if not text:
         return False
     file_features = [
-        'root:x:0:0:',                  # /etc/passwd
-        'root:*:0:0:',                  # /etc/passwd (BSD)
-        'daemon:x:1:1:',                # /etc/passwd
-        'nobody:x:65534:',              # /etc/passwd
-        'www-data:x:33:',               # /etc/passwd Debian/Ubuntu
-        'apache:x:48:',                 # /etc/passwd CentOS
-        '[boot loader]',                # Windows boot.ini
+        "root:x:0:0:",  # /etc/passwd
+        "root:*:0:0:",  # /etc/passwd (BSD)
+        "daemon:x:1:1:",  # /etc/passwd
+        "nobody:x:65534:",  # /etc/passwd
+        "www-data:x:33:",  # /etc/passwd Debian/Ubuntu
+        "apache:x:48:",  # /etc/passwd CentOS
+        "[boot loader]",  # Windows boot.ini
     ]
     return any(f in text for f in file_features)
 
@@ -102,10 +102,10 @@ def match_spring_actuator_env(text):
     if not text:
         return False
     env_features = [
-        'propertySources',          # /actuator/env 标准字段
-        'applicationConfig',         # 配置源标识
-        'activeProfiles',            # 激活的 profile
-        'spring.datasource',         # 数据源配置（含敏感信息）
+        "propertySources",  # /actuator/env 标准字段
+        "applicationConfig",  # 配置源标识
+        "activeProfiles",  # 激活的 profile
+        "spring.datasource",  # 数据源配置（含敏感信息）
     ]
     return any(f in text for f in env_features)
 
@@ -119,15 +119,15 @@ def match_heapdump_binary(text):
     if not text:
         return False
     heap_features = [
-        'JAVA PROFILE',              # hprof 文件头
-        'hprof',                     # hprof 标识
-        'password=',                 # 堆中字符串敏感信息
-        'aws_secret_access_key',     # AWS 凭证
-        'BEGIN RSA PRIVATE KEY',     # RSA 私钥
-        'BEGIN PRIVATE KEY',         # PKCS#8 私钥
-        'Authorization: Bearer',    # JWT/Token
-        'jdbc:mysql://',             # 数据库连接串
-        'jdbc:postgresql://',        # PostgreSQL 连接串
+        "JAVA PROFILE",  # hprof 文件头
+        "hprof",  # hprof 标识
+        "password=",  # 堆中字符串敏感信息
+        "aws_secret_access_key",  # AWS 凭证
+        "BEGIN RSA PRIVATE KEY",  # RSA 私钥
+        "BEGIN PRIVATE KEY",  # PKCS#8 私钥
+        "Authorization: Bearer",  # JWT/Token
+        "jdbc:mysql://",  # 数据库连接串
+        "jdbc:postgresql://",  # PostgreSQL 连接串
     ]
     return any(f in text for f in heap_features)
 
@@ -141,11 +141,11 @@ def match_h2_console(text):
     if not text:
         return False
     h2_features = [
-        '<title>H2 Console</title>',     # H2 Console 页面标题
-        'H2 Console',                    # H2 Console 文本
-        'Generic H2',                     # H2 驱动选项
-        'org.h2.Driver',                  # H2 JDBC 驱动类
-        'h2-console',                     # H2 Console 路径
+        "<title>H2 Console</title>",  # H2 Console 页面标题
+        "H2 Console",  # H2 Console 文本
+        "Generic H2",  # H2 驱动选项
+        "org.h2.Driver",  # H2 JDBC 驱动类
+        "h2-console",  # H2 Console 路径
     ]
     return any(f in text for f in h2_features)
 
@@ -159,11 +159,11 @@ def match_jolokia_response(text):
     if not text:
         return False
     jolokia_features = [
-        'reloadByURL',                # logback JNDI 链关键 MBean 操作
-        'JMXConfigurator',            # logback JMX MBean 类名
-        'javax.management',            # JMX 标识
-        'mbean',                       # Jolokia 请求字段
-        '"type":"EXEC"',              # Jolokia EXEC 请求
+        "reloadByURL",  # logback JNDI 链关键 MBean 操作
+        "JMXConfigurator",  # logback JMX MBean 类名
+        "javax.management",  # JMX 标识
+        "mbean",  # Jolokia 请求字段
+        '"type":"EXEC"',  # Jolokia EXEC 请求
         "'type': 'EXEC'",
     ]
     return any(f in text for f in jolokia_features)
@@ -189,15 +189,21 @@ def match_spring4shell_response(text):
         return True
     # 排除失败响应特征
     fail_indicators = [
-        'Bad Request', '"error"', "'error'",
-        'Whitelabel Error Page', '"status":400', '"status": 400',
-        '"status":404', '"status": 404',
-        '"status":500', '"status": 500',
+        "Bad Request",
+        '"error"',
+        "'error'",
+        "Whitelabel Error Page",
+        '"status":400',
+        '"status": 400',
+        '"status":404',
+        '"status": 404',
+        '"status":500',
+        '"status": 500',
     ]
     if any(ind in text for ind in fail_indicators):
         return False
     # 真实成功响应特征：JSON 含 "status":200 / "timestamp"
-    success_indicators = ['"status":200', '"status": 200', '"timestamp"', 'message']
+    success_indicators = ['"status":200', '"status": 200', '"timestamp"', "message"]
     return any(ind in text for ind in success_indicators)
 
 
@@ -210,11 +216,11 @@ def match_trace_leak(text):
     if not text:
         return False
     trace_features = [
-        '"traces"',                  # traces 数组字段
+        '"traces"',  # traces 数组字段
         "'traces'",
-        'httptrace',                 # /actuator/httptrace 端点
-        'timeTaken',                 # 请求耗时字段
-        'request": {"method"',       # 请求结构
+        "httptrace",  # /actuator/httptrace 端点
+        "timeTaken",  # 请求耗时字段
+        'request": {"method"',  # 请求结构
         "request': {'method'",
     ]
     return any(f in text for f in trace_features)
@@ -233,9 +239,9 @@ def match_cloud_function_spel(text):
     if len(text_stripped) < 20 and text_stripped.isdigit():
         return True
     # SpEL 命令执行结果回显（短输出）
-    if 'uid=' in text and 'gid=' in text:
+    if "uid=" in text and "gid=" in text:
         return True  # id 命令输出
-    if 'root' in text and ':' in text and len(text) < 100:
+    if "root" in text and ":" in text and len(text) < 100:
         return True  # /etc/passwd 读取结果
     return False
 
@@ -249,11 +255,10 @@ def match_gateway_route_created(text):
     if not text:
         return False
     gateway_features = [
-        'AddResponseHeader',         # 路由 Filter 名
-        'filters',                   # 路由字段
-        'route',                      # 路由标识
-        'predicate',                  # 路由谓词
+        "AddResponseHeader",  # 路由 Filter 名
+        "filters",  # 路由字段
+        "route",  # 路由标识
+        "predicate",  # 路由谓词
     ]
     # 至少命中 2 个特征才算 Gateway 路由响应
     return sum(1 for f in gateway_features if f in text) >= 2
-

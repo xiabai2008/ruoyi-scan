@@ -34,6 +34,7 @@ def _try_import_yaml():
     """尝试导入 PyYAML，不可用时返回 None"""
     try:
         import yaml
+
         return yaml
     except ImportError:
         return None
@@ -51,9 +52,9 @@ def load_yaml_config(filepath: str) -> Dict[str, Any]:
         ValueError: 文件格式错误
     """
     if not os.path.isfile(filepath):
-        raise FileNotFoundError(f'配置文件不存在: {filepath}')
+        raise FileNotFoundError(f"配置文件不存在: {filepath}")
 
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
 
     yaml = _try_import_yaml()
@@ -61,11 +62,11 @@ def load_yaml_config(filepath: str) -> Dict[str, Any]:
         try:
             data = yaml.safe_load(content)
         except yaml.YAMLError as e:
-            raise ValueError(f'YAML 解析失败: {e}')
+            raise ValueError(f"YAML 解析失败: {e}")
         if data is None:
             return {}
         if not isinstance(data, dict):
-            raise ValueError(f'YAML 顶层应为字典，实际为 {type(data).__name__}')
+            raise ValueError(f"YAML 顶层应为字典，实际为 {type(data).__name__}")
         return data
     else:
         # 回退：简易解析器（支持 key: value 格式，不支持嵌套）
@@ -87,16 +88,15 @@ def _simple_yaml_parse(content: str) -> Dict[str, Any]:
     result = {}
     for line_num, line in enumerate(content.splitlines(), 1):
         line = line.strip()
-        if not line or line.startswith('#'):
+        if not line or line.startswith("#"):
             continue
-        if ':' not in line:
-            raise ValueError(f'第 {line_num} 行格式错误（应为 key: value）: {line}')
-        key, _, value = line.partition(':')
+        if ":" not in line:
+            raise ValueError(f"第 {line_num} 行格式错误（应为 key: value）: {line}")
+        key, _, value = line.partition(":")
         key = key.strip()
         value = value.strip()
         # 去引号
-        if (value.startswith('"') and value.endswith('"')) or \
-           (value.startswith("'") and value.endswith("'")):
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
             value = value[1:-1]
         # 类型推断
         value = _infer_type(value)
@@ -112,11 +112,11 @@ def _infer_type(value: str) -> Any:
     其他 → str
     """
     if not value:
-        return ''
+        return ""
     lower = value.lower()
-    if lower in ('true', 'yes', 'on'):
+    if lower in ("true", "yes", "on"):
         return True
-    if lower in ('false', 'no', 'off'):
+    if lower in ("false", "no", "off"):
         return False
     # 尝试 int
     try:
@@ -135,61 +135,61 @@ def _infer_type(value: str) -> Any:
 # YAML 中的 key 可以用横线或下划线，统一映射到 argparse 属性名
 _KEY_ALIASES = {
     # 短参数
-    'target': 'u',
-    'mode': None,  # mode 不直接映射到 args，由 main() 处理
+    "target": "u",
+    "mode": None,  # mode 不直接映射到 args，由 main() 处理
     # 长参数（YAML key → argparse dest）
-    'proxy': 'proxy',
-    'proxy-file': 'proxy_file',
-    'proxy_file': 'proxy_file',
-    'proxy-rotate': 'proxy_rotate',
-    'proxy_rotate': 'proxy_rotate',
-    'threads': 'threads',
-    'rate': 'rate',
-    'report': 'report',
-    'debug': 'debug',
-    'timeout': 'timeout',
-    'cms': 'cms',
-    'pass-level': 'pass_level',
-    'pass_level': 'pass_level',
-    'portscan': 'portscan',
-    'ports': 'ports',
-    'passive': 'passive',
-    'passive-host': 'passive_host',
-    'passive_host': 'passive_host',
-    'passive-port': 'passive_port',
-    'passive_port': 'passive_port',
-    'report-format': 'report_format',
-    'report_format': 'report_format',
-    'no-dedup': 'no_dedup',
-    'no_dedup': 'no_dedup',
-    'chain': 'chain',
-    'chain-list': 'chain_list',
-    'chain_list': 'chain_list',
-    'bypass-waf': 'bypass_waf',
-    'bypass_waf': 'bypass_waf',
-    'serve': 'serve',
-    'host': 'host',
-    'port': 'port',
-    'api-key': 'api_key',
-    'api_key': 'api_key',
-    'cors-origins': 'cors_origins',
-    'cors_origins': 'cors_origins',
-    'db-path': 'db_path',
-    'db_path': 'db_path',
-    'crawl': 'crawl',
-    'crawl-depth': 'crawl_depth',
-    'crawl_depth': 'crawl_depth',
-    'crawl-max-pages': 'crawl_max_pages',
-    'crawl_max_pages': 'crawl_max_pages',
-    'subdomain': 'subdomain',
-    'js-extract': 'js_extract',
-    'js_extract': 'js_extract',
+    "proxy": "proxy",
+    "proxy-file": "proxy_file",
+    "proxy_file": "proxy_file",
+    "proxy-rotate": "proxy_rotate",
+    "proxy_rotate": "proxy_rotate",
+    "threads": "threads",
+    "rate": "rate",
+    "report": "report",
+    "debug": "debug",
+    "timeout": "timeout",
+    "cms": "cms",
+    "pass-level": "pass_level",
+    "pass_level": "pass_level",
+    "portscan": "portscan",
+    "ports": "ports",
+    "passive": "passive",
+    "passive-host": "passive_host",
+    "passive_host": "passive_host",
+    "passive-port": "passive_port",
+    "passive_port": "passive_port",
+    "report-format": "report_format",
+    "report_format": "report_format",
+    "no-dedup": "no_dedup",
+    "no_dedup": "no_dedup",
+    "chain": "chain",
+    "chain-list": "chain_list",
+    "chain_list": "chain_list",
+    "bypass-waf": "bypass_waf",
+    "bypass_waf": "bypass_waf",
+    "serve": "serve",
+    "host": "host",
+    "port": "port",
+    "api-key": "api_key",
+    "api_key": "api_key",
+    "cors-origins": "cors_origins",
+    "cors_origins": "cors_origins",
+    "db-path": "db_path",
+    "db_path": "db_path",
+    "crawl": "crawl",
+    "crawl-depth": "crawl_depth",
+    "crawl_depth": "crawl_depth",
+    "crawl-max-pages": "crawl_max_pages",
+    "crawl_max_pages": "crawl_max_pages",
+    "subdomain": "subdomain",
+    "js-extract": "js_extract",
+    "js_extract": "js_extract",
     # D19
-    'template': 'template',
+    "template": "template",
     # D27
-    'config': 'config',
+    "config": "config",
     # 文件批量
-    'file': 'file',
+    "file": "file",
 }
 
 
@@ -232,7 +232,7 @@ def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str,
 
     overridden = []
     for key, config_value in config.items():
-        if key in ('mode', 'target'):
+        if key in ("mode", "target"):
             # mode 和 target 由 main() 单独处理，不直接设到 args
             continue
         current_value = getattr(args, key, None)
@@ -260,6 +260,7 @@ def _get_parser_defaults() -> Dict[str, Any]:
 
     try:
         import main as _main
+
         parser = _main.build_parser()
         _parser_defaults_cache = dict(vars(parser.parse_args([])))
     except Exception:
@@ -294,13 +295,13 @@ def apply_config_to_args(args, filepath: str, verbose: bool = True) -> Tuple[Any
     config = normalize_config_keys(config)
 
     if verbose and config:
-        print(f'  [*]加载配置文件: {filepath}')
-        print(f'      参数数: {len(config)}')
+        print(f"  [*]加载配置文件: {filepath}")
+        print(f"      参数数: {len(config)}")
 
     args, overridden = merge_config_with_args(args, config)
 
     if verbose and overridden:
-        print(f'      覆盖参数: {", ".join(overridden)}')
+        print(f"      覆盖参数: {', '.join(overridden)}")
 
     return args, config
 
@@ -351,5 +352,5 @@ ports: 80,443,8080                 # 自定义端口
 # 口令字典
 pass_level: full                   # top100/top1000/full
 """
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(example)

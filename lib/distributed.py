@@ -32,14 +32,14 @@ import os
 import threading
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Tuple
-
+from typing import Any, Callable, Dict, List, Optional
 
 # ============================================================
 # Redis 连接（延迟导入，避免未安装时报错）
 # ============================================================
 
-def get_redis_client(redis_url: str = 'redis://127.0.0.1:6379'):
+
+def get_redis_client(redis_url: str = "redis://127.0.0.1:6379"):
     """获取 Redis 客户端
 
     Args:
@@ -55,13 +55,13 @@ def get_redis_client(redis_url: str = 'redis://127.0.0.1:6379'):
     try:
         import redis
     except ImportError:
-        raise ImportError('分布式模式需要安装 redis：pip install redis')
+        raise ImportError("分布式模式需要安装 redis：pip install redis")
 
     client = redis.from_url(redis_url, decode_responses=True)
     try:
         client.ping()
     except redis.ConnectionError:
-        raise ConnectionError(f'无法连接 Redis: {redis_url}')
+        raise ConnectionError(f"无法连接 Redis: {redis_url}")
     return client
 
 
@@ -69,58 +69,57 @@ def get_redis_client(redis_url: str = 'redis://127.0.0.1:6379'):
 # 任务模型
 # ============================================================
 
+
 class ScanTask:
     """扫描任务"""
 
-    def __init__(self, task_id: str = '', target: str = '',
-                 mode: str = 'full', config: Dict = None,
-                 priority: int = 0):
+    def __init__(self, task_id: str = "", target: str = "", mode: str = "full", config: Dict = None, priority: int = 0):
         self.task_id = task_id or uuid.uuid4().hex[:12]
         self.target = target
         self.mode = mode  # full/vuln/dir/brute
         self.config = config or {}
         self.priority = priority
         self.created_at = datetime.datetime.now().isoformat()
-        self.status = 'pending'  # pending/running/completed/failed
+        self.status = "pending"  # pending/running/completed/failed
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'task_id': self.task_id,
-            'target': self.target,
-            'mode': self.mode,
-            'config': self.config,
-            'priority': self.priority,
-            'created_at': self.created_at,
-            'status': self.status,
+            "task_id": self.task_id,
+            "target": self.target,
+            "mode": self.mode,
+            "config": self.config,
+            "priority": self.priority,
+            "created_at": self.created_at,
+            "status": self.status,
         }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> 'ScanTask':
+    def from_dict(cls, d: Dict[str, Any]) -> "ScanTask":
         task = cls(
-            task_id=d.get('task_id', ''),
-            target=d.get('target', ''),
-            mode=d.get('mode', 'full'),
-            config=d.get('config', {}),
-            priority=d.get('priority', 0),
+            task_id=d.get("task_id", ""),
+            target=d.get("target", ""),
+            mode=d.get("mode", "full"),
+            config=d.get("config", {}),
+            priority=d.get("priority", 0),
         )
-        task.created_at = d.get('created_at', '')
-        task.status = d.get('status', 'pending')
+        task.created_at = d.get("created_at", "")
+        task.status = d.get("status", "pending")
         return task
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'ScanTask':
+    def from_json(cls, json_str: str) -> "ScanTask":
         return cls.from_dict(json.loads(json_str))
 
 
 class TaskResult:
     """任务结果"""
 
-    def __init__(self, task_id: str = '', worker_id: str = '',
-                 results: List[Dict] = None, error: str = '',
-                 duration: float = 0.0):
+    def __init__(
+        self, task_id: str = "", worker_id: str = "", results: List[Dict] = None, error: str = "", duration: float = 0.0
+    ):
         self.task_id = task_id
         self.worker_id = worker_id
         self.results = results or []
@@ -130,27 +129,27 @@ class TaskResult:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'task_id': self.task_id,
-            'worker_id': self.worker_id,
-            'results': self.results,
-            'error': self.error,
-            'duration': round(self.duration, 3),
-            'completed_at': self.completed_at,
+            "task_id": self.task_id,
+            "worker_id": self.worker_id,
+            "results": self.results,
+            "error": self.error,
+            "duration": round(self.duration, 3),
+            "completed_at": self.completed_at,
         }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> 'TaskResult':
+    def from_dict(cls, d: Dict[str, Any]) -> "TaskResult":
         r = cls(
-            task_id=d.get('task_id', ''),
-            worker_id=d.get('worker_id', ''),
-            results=d.get('results', []),
-            error=d.get('error', ''),
-            duration=d.get('duration', 0.0),
+            task_id=d.get("task_id", ""),
+            worker_id=d.get("worker_id", ""),
+            results=d.get("results", []),
+            error=d.get("error", ""),
+            duration=d.get("duration", 0.0),
         )
-        r.completed_at = d.get('completed_at', '')
+        r.completed_at = d.get("completed_at", "")
         return r
 
 
@@ -158,12 +157,12 @@ class TaskResult:
 # 分布式任务队列（Redis 实现）
 # ============================================================
 
-TASK_QUEUE_KEY = 'ruoyi_scan:tasks'
-RESULT_QUEUE_KEY = 'ruoyi_scan:results'
-TASK_STATUS_KEY = 'ruoyi_scan:status'  # Hash: task_id → status
-WORKER_HEARTBEAT_KEY = 'ruoyi_scan:workers'  # Hash: worker_id → last_heartbeat
-RATE_LIMIT_KEY = 'ruoyi_scan:rate_limit'  # P3: 全局限速令牌桶
-RATE_STATS_KEY = 'ruoyi_scan:rate_stats'  # P3: 限速统计 HASH
+TASK_QUEUE_KEY = "ruoyi_scan:tasks"
+RESULT_QUEUE_KEY = "ruoyi_scan:results"
+TASK_STATUS_KEY = "ruoyi_scan:status"  # Hash: task_id → status
+WORKER_HEARTBEAT_KEY = "ruoyi_scan:workers"  # Hash: worker_id → last_heartbeat
+RATE_LIMIT_KEY = "ruoyi_scan:rate_limit"  # P3: 全局限速令牌桶
+RATE_STATS_KEY = "ruoyi_scan:rate_stats"  # P3: 限速统计 HASH
 
 
 class DistributedRateLimiter:
@@ -223,7 +222,7 @@ class DistributedRateLimiter:
         end
     """
 
-    def __init__(self, redis_client, rate: int = 0, burst: int = 0, worker_id: str = ''):
+    def __init__(self, redis_client, rate: int = 0, burst: int = 0, worker_id: str = ""):
         """
         Args:
             redis_client: redis.Redis 实例
@@ -234,7 +233,7 @@ class DistributedRateLimiter:
         self.redis = redis_client
         self._rate = rate
         self._burst = burst
-        self._worker_id = worker_id or f'worker_{id(self)}'
+        self._worker_id = worker_id or f"worker_{id(self)}"
         self._local_timestamps: List[float] = []  # 本地退化令牌桶
         self._local_lock = threading.Lock()
 
@@ -269,9 +268,9 @@ class DistributedRateLimiter:
         """Redis 全局令牌桶获取（增强版：burst + 防碰撞 + 统计）"""
         while True:
             now = time.time()
-            result = self.redis.eval(self._LUA_ACQUIRE, 2,
-                                     RATE_LIMIT_KEY, RATE_STATS_KEY,
-                                     self._rate, self._burst, now, self._worker_id)
+            result = self.redis.eval(
+                self._LUA_ACQUIRE, 2, RATE_LIMIT_KEY, RATE_STATS_KEY, self._rate, self._burst, now, self._worker_id
+            )
             if result == 1:
                 return
             elif isinstance(result, (int, float)) and result < 0:
@@ -286,8 +285,7 @@ class DistributedRateLimiter:
         while True:
             with self._local_lock:
                 now = time.time()
-                self._local_timestamps = [t for t in self._local_timestamps
-                                           if now - t < 1.0]
+                self._local_timestamps = [t for t in self._local_timestamps if now - t < 1.0]
                 max_allowed = self._rate + self._burst
                 if len(self._local_timestamps) < max_allowed:
                     self._local_timestamps.append(now)
@@ -323,7 +321,7 @@ class DistributedTaskQueue:
     基于 Redis list 实现的轻量级任务队列。
     """
 
-    def __init__(self, redis_url: str = 'redis://127.0.0.1:6379'):
+    def __init__(self, redis_url: str = "redis://127.0.0.1:6379"):
         """
         Args:
             redis_url: Redis 连接 URL
@@ -345,7 +343,7 @@ class DistributedTaskQueue:
             task_id
         """
         # 记录任务状态
-        self.redis.hset(TASK_STATUS_KEY, task.task_id, 'pending')
+        self.redis.hset(TASK_STATUS_KEY, task.task_id, "pending")
         # LPUSH 到队列头部
         self.redis.lpush(TASK_QUEUE_KEY, task.to_json())
         return task.task_id
@@ -362,7 +360,7 @@ class DistributedTaskQueue:
         pipe = self.redis.pipeline()
         task_ids = []
         for task in tasks:
-            pipe.hset(TASK_STATUS_KEY, task.task_id, 'pending')
+            pipe.hset(TASK_STATUS_KEY, task.task_id, "pending")
             pipe.lpush(TASK_QUEUE_KEY, task.to_json())
             task_ids.append(task.task_id)
         pipe.execute()
@@ -384,7 +382,7 @@ class DistributedTaskQueue:
         _, task_json = result
         task = ScanTask.from_json(task_json)
         # 更新状态为 running
-        self.redis.hset(TASK_STATUS_KEY, task.task_id, 'running')
+        self.redis.hset(TASK_STATUS_KEY, task.task_id, "running")
         return task
 
     def push_result(self, result: TaskResult) -> None:
@@ -394,7 +392,7 @@ class DistributedTaskQueue:
             result: 任务结果
         """
         self.redis.lpush(RESULT_QUEUE_KEY, result.to_json())
-        status = 'failed' if result.error else 'completed'
+        status = "failed" if result.error else "completed"
         self.redis.hset(TASK_STATUS_KEY, result.task_id, status)
 
     def pop_result(self, timeout: int = 0) -> Optional[TaskResult]:
@@ -414,7 +412,7 @@ class DistributedTaskQueue:
 
     def get_task_status(self, task_id: str) -> str:
         """获取任务状态"""
-        return self.redis.hget(TASK_STATUS_KEY, task_id) or 'unknown'
+        return self.redis.hget(TASK_STATUS_KEY, task_id) or "unknown"
 
     def get_all_status(self) -> Dict[str, str]:
         """获取所有任务状态"""
@@ -430,13 +428,11 @@ class DistributedTaskQueue:
 
     def register_worker(self, worker_id: str) -> None:
         """注册 Worker"""
-        self.redis.hset(WORKER_HEARTBEAT_KEY, worker_id,
-                         datetime.datetime.now().isoformat())
+        self.redis.hset(WORKER_HEARTBEAT_KEY, worker_id, datetime.datetime.now().isoformat())
 
     def heartbeat(self, worker_id: str) -> None:
         """Worker 心跳"""
-        self.redis.hset(WORKER_HEARTBEAT_KEY, worker_id,
-                         datetime.datetime.now().isoformat())
+        self.redis.hset(WORKER_HEARTBEAT_KEY, worker_id, datetime.datetime.now().isoformat())
 
     def get_active_workers(self, max_age: int = 60) -> List[str]:
         """获取活跃 Worker
@@ -461,27 +457,27 @@ class DistributedTaskQueue:
 
     def clear_all(self) -> None:
         """清空所有队列和状态"""
-        self.redis.delete(TASK_QUEUE_KEY, RESULT_QUEUE_KEY,
-                          TASK_STATUS_KEY, WORKER_HEARTBEAT_KEY)
+        self.redis.delete(TASK_QUEUE_KEY, RESULT_QUEUE_KEY, TASK_STATUS_KEY, WORKER_HEARTBEAT_KEY)
 
     def get_stats(self) -> Dict[str, Any]:
         """获取队列统计"""
         status = self.get_all_status()
         return {
-            'queue_size': self.get_queue_size(),
-            'result_count': self.get_result_count(),
-            'total_tasks': len(status),
-            'pending': sum(1 for s in status.values() if s == 'pending'),
-            'running': sum(1 for s in status.values() if s == 'running'),
-            'completed': sum(1 for s in status.values() if s == 'completed'),
-            'failed': sum(1 for s in status.values() if s == 'failed'),
-            'active_workers': len(self.get_active_workers()),
+            "queue_size": self.get_queue_size(),
+            "result_count": self.get_result_count(),
+            "total_tasks": len(status),
+            "pending": sum(1 for s in status.values() if s == "pending"),
+            "running": sum(1 for s in status.values() if s == "running"),
+            "completed": sum(1 for s in status.values() if s == "completed"),
+            "failed": sum(1 for s in status.values() if s == "failed"),
+            "active_workers": len(self.get_active_workers()),
         }
 
 
 # ============================================================
 # Master 节点
 # ============================================================
+
 
 class MasterNode:
     """Master 节点：分发任务 + 聚合结果
@@ -493,11 +489,10 @@ class MasterNode:
     4. 聚合结果生成最终报告
     """
 
-    def __init__(self, redis_url: str = 'redis://127.0.0.1:6379'):
+    def __init__(self, redis_url: str = "redis://127.0.0.1:6379"):
         self.queue = DistributedTaskQueue(redis_url)
 
-    def distribute_tasks(self, targets: List[str], mode: str = 'full',
-                         config: Dict = None) -> List[str]:
+    def distribute_tasks(self, targets: List[str], mode: str = "full", config: Dict = None) -> List[str]:
         """分发扫描任务
 
         Args:
@@ -508,15 +503,12 @@ class MasterNode:
         Returns:
             task_id 列表
         """
-        tasks = [
-            ScanTask(target=t, mode=mode, config=config or {})
-            for t in targets
-        ]
+        tasks = [ScanTask(target=t, mode=mode, config=config or {}) for t in targets]
         return self.queue.push_tasks_batch(tasks)
 
-    def collect_results(self, expected_count: int,
-                        timeout: float = 300,
-                        progress_callback: Optional[Callable] = None) -> List[TaskResult]:
+    def collect_results(
+        self, expected_count: int, timeout: float = 300, progress_callback: Optional[Callable] = None
+    ) -> List[TaskResult]:
         """收集任务结果
 
         Args:
@@ -531,7 +523,6 @@ class MasterNode:
         deadline = time.time() + timeout
 
         while len(results) < expected_count and time.time() < deadline:
-            remaining = expected_count - len(results)
             # 非阻塞获取（1 秒超时）
             result = self.queue.pop_result(timeout=1)
             if result:
@@ -541,7 +532,7 @@ class MasterNode:
             else:
                 # 检查是否还有未完成任务
                 stats = self.queue.get_stats()
-                if stats['queue_size'] == 0 and stats['running'] == 0:
+                if stats["queue_size"] == 0 and stats["running"] == 0:
                     # 队列空且无运行中任务，可能 Worker 宕机
                     break
 
@@ -562,38 +553,41 @@ class MasterNode:
 
         for r in results:
             if r.error:
-                failed_tasks.append({
-                    'task_id': r.task_id,
-                    'error': r.error,
-                })
+                failed_tasks.append(
+                    {
+                        "task_id": r.task_id,
+                        "error": r.error,
+                    }
+                )
             else:
                 all_vulns.extend(r.results)
             total_duration += r.duration
 
         # 按严重度统计
-        severity_count = {'high': 0, 'medium': 0, 'low': 0, 'total': 0}
+        severity_count = {"high": 0, "medium": 0, "low": 0, "total": 0}
         for v in all_vulns:
-            sev = v.get('severity', 'low')
+            sev = v.get("severity", "low")
             if sev in severity_count:
                 severity_count[sev] += 1
-            severity_count['total'] += 1
+            severity_count["total"] += 1
 
         return {
-            'total_tasks': len(results),
-            'successful': len(results) - len(failed_tasks),
-            'failed': len(failed_tasks),
-            'total_vulns': len(all_vulns),
-            'severity_distribution': severity_count,
-            'all_vulns': all_vulns,
-            'failed_tasks': failed_tasks,
-            'total_duration': round(total_duration, 3),
-            'aggregated_at': datetime.datetime.now().isoformat(),
+            "total_tasks": len(results),
+            "successful": len(results) - len(failed_tasks),
+            "failed": len(failed_tasks),
+            "total_vulns": len(all_vulns),
+            "severity_distribution": severity_count,
+            "all_vulns": all_vulns,
+            "failed_tasks": failed_tasks,
+            "total_duration": round(total_duration, 3),
+            "aggregated_at": datetime.datetime.now().isoformat(),
         }
 
 
 # ============================================================
 # Worker 节点
 # ============================================================
+
 
 class WorkerNode:
     """Worker 节点：从队列获取任务 + 执行扫描 + 推送结果
@@ -605,26 +599,28 @@ class WorkerNode:
     4. 循环直到收到停止信号
     """
 
-    def __init__(self, redis_url: str = 'redis://127.0.0.1:6379',
-                 worker_id: str = ''):
+    def __init__(self, redis_url: str = "redis://127.0.0.1:6379", worker_id: str = ""):
         self.queue = DistributedTaskQueue(redis_url)
-        self.worker_id = worker_id or f'worker-{uuid.uuid4().hex[:8]}'
+        self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self._running = False
         self._stats = {
-            'tasks_completed': 0,
-            'tasks_failed': 0,
-            'total_duration': 0.0,
+            "tasks_completed": 0,
+            "tasks_failed": 0,
+            "total_duration": 0.0,
         }
 
     @property
     def stats(self) -> Dict[str, Any]:
         return dict(self._stats)
 
-    def run(self, scan_fn: Callable[[ScanTask], List[Dict]],
-            poll_interval: int = 5,
-            max_tasks: int = 0,
-            heartbeat_interval: int = 30,
-            rate_limiter: Optional[DistributedRateLimiter] = None) -> None:
+    def run(
+        self,
+        scan_fn: Callable[[ScanTask], List[Dict]],
+        poll_interval: int = 5,
+        max_tasks: int = 0,
+        heartbeat_interval: int = 30,
+        rate_limiter: Optional[DistributedRateLimiter] = None,
+    ) -> None:
         """运行 Worker 循环
 
         Args:
@@ -640,7 +636,7 @@ class WorkerNode:
         last_heartbeat = time.time()
         processed = 0
 
-        print(f'[*]Worker {self.worker_id} 已启动，等待任务...')
+        print(f"[*]Worker {self.worker_id} 已启动，等待任务...")
 
         while self._running:
             # 心跳
@@ -653,7 +649,7 @@ class WorkerNode:
             if task is None:
                 continue
 
-            print(f'[*]收到任务: {task.task_id} → {task.target}')
+            print(f"[*]收到任务: {task.task_id} → {task.target}")
 
             # 执行扫描（P3: 传入限速器供扫描函数使用）
             start = time.time()
@@ -668,9 +664,9 @@ class WorkerNode:
                     duration=duration,
                 )
                 self.queue.push_result(result)
-                self._stats['tasks_completed'] += 1
-                self._stats['total_duration'] += duration
-                print(f'[+]任务完成: {task.task_id}（{len(results or [])} 个结果，{duration:.2f}s）')
+                self._stats["tasks_completed"] += 1
+                self._stats["total_duration"] += duration
+                print(f"[+]任务完成: {task.task_id}（{len(results or [])} 个结果，{duration:.2f}s）")
 
             except Exception as e:
                 duration = time.time() - start
@@ -681,16 +677,16 @@ class WorkerNode:
                     duration=duration,
                 )
                 self.queue.push_result(result)
-                self._stats['tasks_failed'] += 1
-                print(f'[!]任务失败: {task.task_id} - {e}')
+                self._stats["tasks_failed"] += 1
+                print(f"[!]任务失败: {task.task_id} - {e}")
 
             processed += 1
             if max_tasks > 0 and processed >= max_tasks:
-                print(f'[*]已处理 {processed} 个任务，Worker 退出')
+                print(f"[*]已处理 {processed} 个任务，Worker 退出")
                 break
 
-        print(f'[*]Worker {self.worker_id} 已停止')
-        print(f'    完成: {self._stats["tasks_completed"]} 失败: {self._stats["tasks_failed"]}')
+        print(f"[*]Worker {self.worker_id} 已停止")
+        print(f"    完成: {self._stats['tasks_completed']} 失败: {self._stats['tasks_failed']}")
 
     def stop(self) -> None:
         """停止 Worker"""
@@ -701,6 +697,7 @@ class WorkerNode:
 # 独立模式（无需 Redis，本机多线程）
 # ============================================================
 
+
 class StandaloneDistributor:
     """独立模式：本机多线程分发任务（无需 Redis）
 
@@ -710,9 +707,9 @@ class StandaloneDistributor:
     def __init__(self, max_workers: int = 10):
         self.max_workers = max_workers
 
-    def distribute_and_collect(self, targets: List[str],
-                               scan_fn: Callable[[str], List[Dict]],
-                               progress_callback: Optional[Callable] = None) -> List[Dict]:
+    def distribute_and_collect(
+        self, targets: List[str], scan_fn: Callable[[str], List[Dict]], progress_callback: Optional[Callable] = None
+    ) -> List[Dict]:
         """分发任务并收集结果
 
         Args:
@@ -729,9 +726,7 @@ class StandaloneDistributor:
         total = len(targets)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_target = {
-                executor.submit(scan_fn, t): t for t in targets
-            }
+            future_to_target = {executor.submit(scan_fn, t): t for t in targets}
 
             completed = 0
             for future in concurrent.futures.as_completed(future_to_target):
@@ -753,8 +748,8 @@ class StandaloneDistributor:
 # 模式入口
 # ============================================================
 
-def run_distributed_master_mode(args, targets: List[str],
-                                scan_config: Dict = None) -> int:
+
+def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = None) -> int:
     """分布式 Master 模式入口
 
     Args:
@@ -765,47 +760,47 @@ def run_distributed_master_mode(args, targets: List[str],
     Returns:
         0 表示成功
     """
-    redis_url = getattr(args, 'redis_url', None) or 'redis://127.0.0.1:6379'
-    mode = getattr(args, 'u', None) and 'full' or 'full'
+    redis_url = getattr(args, "redis_url", None) or "redis://127.0.0.1:6379"
+    mode = getattr(args, "u", None) and "full" or "full"
 
     try:
         master = MasterNode(redis_url)
     except ImportError as e:
-        print(f'[!]{e}')
+        print(f"[!]{e}")
         return 1
     except ConnectionError as e:
-        print(f'[!]{e}')
+        print(f"[!]{e}")
         return 1
 
-    print(f'[*]Master 节点启动，分发 {len(targets)} 个任务...')
+    print(f"[*]Master 节点启动，分发 {len(targets)} 个任务...")
     task_ids = master.distribute_tasks(targets, mode=mode, config=scan_config or {})
-    print(f'[+]已分发 {len(task_ids)} 个任务')
+    print(f"[+]已分发 {len(task_ids)} 个任务")
 
     # 等待结果
-    print(f'[*]等待 Worker 处理...')
+    print("[*]等待 Worker 处理...")
     results = master.collect_results(
         expected_count=len(task_ids),
-        timeout=getattr(args, 'distributed_timeout', 600),
-        progress_callback=lambda c, t: print(f'[*]进度: {c}/{t} 完成')
+        timeout=getattr(args, "distributed_timeout", 600),
+        progress_callback=lambda c, t: print(f"[*]进度: {c}/{t} 完成"),
     )
 
     # 聚合结果
     report = master.aggregate_results(results)
-    print(f'\n[+]扫描完成:')
-    print(f'    总任务: {report["total_tasks"]}')
-    print(f'    成功: {report["successful"]}')
-    print(f'    失败: {report["failed"]}')
-    print(f'    总漏洞: {report["total_vulns"]}')
-    print(f'    高危: {report["severity_distribution"]["high"]}')
-    print(f'    中危: {report["severity_distribution"]["medium"]}')
-    print(f'    低危: {report["severity_distribution"]["low"]}')
+    print("\n[+]扫描完成:")
+    print(f"    总任务: {report['total_tasks']}")
+    print(f"    成功: {report['successful']}")
+    print(f"    失败: {report['failed']}")
+    print(f"    总漏洞: {report['total_vulns']}")
+    print(f"    高危: {report['severity_distribution']['high']}")
+    print(f"    中危: {report['severity_distribution']['medium']}")
+    print(f"    低危: {report['severity_distribution']['low']}")
 
     # 保存报告
-    report_path = os.path.join('reports', 'distributed_report.json')
-    os.makedirs('reports', exist_ok=True)
-    with open(report_path, 'w', encoding='utf-8') as f:
+    report_path = os.path.join("reports", "distributed_report.json")
+    os.makedirs("reports", exist_ok=True)
+    with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f'[+]聚合报告已保存: {report_path}')
+    print(f"[+]聚合报告已保存: {report_path}")
 
     return 0
 
@@ -820,39 +815,41 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
     Returns:
         0 表示成功
     """
-    redis_url = getattr(args, 'redis_url', None) or 'redis://127.0.0.1:6379'
+    redis_url = getattr(args, "redis_url", None) or "redis://127.0.0.1:6379"
 
     try:
         worker = WorkerNode(redis_url=redis_url)
     except ImportError as e:
-        print(f'[!]{e}')
+        print(f"[!]{e}")
         return 1
     except ConnectionError as e:
-        print(f'[!]{e}')
+        print(f"[!]{e}")
         return 1
 
-    max_tasks = getattr(args, 'worker_max_tasks', 0) or 0
-    distributed_rate = getattr(args, 'distributed_rate', 0) or 0
+    max_tasks = getattr(args, "worker_max_tasks", 0) or 0
+    distributed_rate = getattr(args, "distributed_rate", 0) or 0
 
     # P3: 创建分布式全局限速器
     rate_limiter = None
     if distributed_rate > 0:
         rate_limiter = DistributedRateLimiter(worker.queue.redis, rate=distributed_rate)
-        print(f'[*]全局限速: {distributed_rate} req/s（{redis_url}）')
+        print(f"[*]全局限速: {distributed_rate} req/s（{redis_url}）")
 
     try:
         worker.run(scan_fn, max_tasks=max_tasks, rate_limiter=rate_limiter)
     except KeyboardInterrupt:
-        print('\n[*]停止 Worker...')
+        print("\n[*]停止 Worker...")
         worker.stop()
 
     return 0
 
 
-def run_distributed_standalone_mode(targets: List[str],
-                                    scan_fn: Callable[[str], List[Dict]],
-                                    max_workers: int = 10,
-                                    progress_callback: Optional[Callable] = None) -> List[Dict]:
+def run_distributed_standalone_mode(
+    targets: List[str],
+    scan_fn: Callable[[str], List[Dict]],
+    max_workers: int = 10,
+    progress_callback: Optional[Callable] = None,
+) -> List[Dict]:
     """独立模式入口（本机多线程，无需 Redis）
 
     Args:

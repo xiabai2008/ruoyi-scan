@@ -23,7 +23,7 @@ def space2comment(payload):
     """
     if not payload:
         return payload
-    return payload.replace(' ', '/**/')
+    return payload.replace(" ", "/**/")
 
 
 def mysql_version_comment(payload, version=50000):
@@ -34,13 +34,27 @@ def mysql_version_comment(payload, version=50000):
     """
     if not payload:
         return payload
-    keywords = ['SELECT', 'UNION', 'FROM', 'WHERE', 'AND', 'OR',
-                'ORDER', 'BY', 'GROUP', 'HAVING', 'INSERT', 'UPDATE',
-                'DELETE', 'DROP', 'CREATE', 'ALTER']
+    keywords = [
+        "SELECT",
+        "UNION",
+        "FROM",
+        "WHERE",
+        "AND",
+        "OR",
+        "ORDER",
+        "BY",
+        "GROUP",
+        "HAVING",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "CREATE",
+        "ALTER",
+    ]
     result = payload
     for kw in keywords:
-        result = re.sub(r'\b' + kw + r'\b', f'/*!{version}{kw}*/', result,
-                        flags=re.IGNORECASE)
+        result = re.sub(r"\b" + kw + r"\b", f"/*!{version}{kw}*/", result, flags=re.IGNORECASE)
     return result
 
 
@@ -54,20 +68,39 @@ def randomcase(payload, keywords=None):
     if not payload:
         return payload
     if keywords is None:
-        keywords = ['SELECT', 'UNION', 'FROM', 'WHERE', 'AND', 'OR',
-                    'ORDER', 'BY', 'GROUP', 'HAVING', 'INSERT', 'UPDATE',
-                    'DELETE', 'DROP', 'CREATE', 'ALTER', 'CONCAT',
-                    'DATABASE', 'USER', 'VERSION', 'SLEEP', 'BENCHMARK']
+        keywords = [
+            "SELECT",
+            "UNION",
+            "FROM",
+            "WHERE",
+            "AND",
+            "OR",
+            "ORDER",
+            "BY",
+            "GROUP",
+            "HAVING",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "DROP",
+            "CREATE",
+            "ALTER",
+            "CONCAT",
+            "DATABASE",
+            "USER",
+            "VERSION",
+            "SLEEP",
+            "BENCHMARK",
+        ]
     result = payload
     for kw in keywords:
         # 查找所有匹配（忽略大小写），逐个替换为随机大小写
         pattern = re.compile(re.escape(kw), re.IGNORECASE)
+
         def _randomize(match):
             word = match.group(0)
-            return ''.join(
-                c.upper() if random.random() > 0.5 else c.lower()
-                for c in word
-            )
+            return "".join(c.upper() if random.random() > 0.5 else c.lower() for c in word)
+
         result = pattern.sub(_randomize, result)
     return result
 
@@ -80,13 +113,15 @@ def between_replace(payload):
     """
     if not payload:
         return payload
+
     # 匹配 field=value 模式（不替换 == 和 <= >=）
     def _replace(match):
         field = match.group(1)
         value = match.group(2)
-        return f'{field} BETWEEN {value} AND {value}'
+        return f"{field} BETWEEN {value} AND {value}"
+
     # 匹配 标识符=值（数字或字符串）
-    return re.sub(r'(\w+)=([^\s&|<>]+)', _replace, payload)
+    return re.sub(r"(\w+)=([^\s&|<>]+)", _replace, payload)
 
 
 def url_encode(payload):
@@ -97,7 +132,7 @@ def url_encode(payload):
     """
     if not payload:
         return payload
-    return urllib.parse.quote(payload, safe='')
+    return urllib.parse.quote(payload, safe="")
 
 
 def double_urlencode(payload):
@@ -107,7 +142,7 @@ def double_urlencode(payload):
     """
     if not payload:
         return payload
-    return urllib.parse.quote(urllib.parse.quote(payload, safe=''), safe='')
+    return urllib.parse.quote(urllib.parse.quote(payload, safe=""), safe="")
 
 
 def hex_encode(payload):
@@ -117,7 +152,7 @@ def hex_encode(payload):
     """
     if not payload:
         return payload
-    return '0x' + payload.encode('utf-8').hex()
+    return "0x" + payload.encode("utf-8").hex()
 
 
 def base64_encode(payload):
@@ -127,7 +162,7 @@ def base64_encode(payload):
     """
     if not payload:
         return payload
-    return base64.b64encode(payload.encode('utf-8')).decode('ascii')
+    return base64.b64encode(payload.encode("utf-8")).decode("ascii")
 
 
 def split_for_chunked(payload, keywords=None):
@@ -139,15 +174,14 @@ def split_for_chunked(payload, keywords=None):
     if not payload:
         return payload
     if keywords is None:
-        keywords = ['UNION', 'SELECT', 'FROM', 'WHERE', 'AND', 'OR']
+        keywords = ["UNION", "SELECT", "FROM", "WHERE", "AND", "OR"]
     result = payload
     for kw in keywords:
-        result = re.sub(r'\b' + kw + r'\b', f'\\r\\n{kw}', result,
-                        flags=re.IGNORECASE)
+        result = re.sub(r"\b" + kw + r"\b", f"\\r\\n{kw}", result, flags=re.IGNORECASE)
     return result
 
 
-def hpp_duplicate(payload, param_name='id'):
+def hpp_duplicate(payload, param_name="id"):
     """HPP 参数污染（HTTP Parameter Pollution）
 
     在 payload 中追加重复参数，利用后端参数解析差异绕过 WAF。
@@ -156,13 +190,13 @@ def hpp_duplicate(payload, param_name='id'):
     if not payload:
         return payload
     # 如果 payload 含 =，拆分为参数名和值
-    if '=' in payload:
-        parts = payload.split('=', 1)
+    if "=" in payload:
+        parts = payload.split("=", 1)
         name = parts[0]
-        value = parts[1] if len(parts) > 1 else ''
-        return f'{name}={value}&{param_name}={value}'
+        value = parts[1] if len(parts) > 1 else ""
+        return f"{name}={value}&{param_name}={value}"
     # 否则在末尾追加重复参数
-    return f'{payload}&{param_name}={payload}'
+    return f"{payload}&{param_name}={payload}"
 
 
 def append_nullbyte(payload):
@@ -173,7 +207,7 @@ def append_nullbyte(payload):
     """
     if not payload:
         return payload
-    return payload + '%00'
+    return payload + "%00"
 
 
 def apply_chain(payload, *tampers):

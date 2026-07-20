@@ -17,26 +17,26 @@
 #
 # SARIF 2.1.0 规范：https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 import json
-from typing import Any, Dict, List
+from typing import Dict, List
 
 # SARIF 规范版本
-SARIF_VERSION = '2.1.0'
-SARIF_SCHEMA = 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/sarif-schema-2.1.0.json'
+SARIF_VERSION = "2.1.0"
+SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/sarif-schema-2.1.0.json"
 
 # GitHub Code Scanning 使用的 SARIF 规则
 GITHUB_SECURITY_SEVERITY = {
-    'high': 'error',
-    'medium': 'warning',
-    'low': 'note',
+    "high": "error",
+    "medium": "warning",
+    "low": "note",
 }
 
 # CVSS → GitHub Security Level 映射
 CVSS_TO_LEVEL = [
-    (9.0, 'error'),   # Critical
-    (7.0, 'error'),   # High
-    (4.0, 'warning'), # Medium
-    (0.1, 'note'),    # Low
-    (0.0, 'none'),
+    (9.0, "error"),  # Critical
+    (7.0, "error"),  # High
+    (4.0, "warning"),  # Medium
+    (0.1, "note"),  # Low
+    (0.0, "none"),
 ]
 
 
@@ -45,12 +45,12 @@ def _cvss_to_level(cvss_score: float) -> str:
     for threshold, level in CVSS_TO_LEVEL:
         if cvss_score >= threshold:
             return level
-    return 'none'
+    return "none"
 
 
 def _severity_to_level(severity: str) -> str:
     """严重度 → GitHub Security Level"""
-    return GITHUB_SECURITY_SEVERITY.get(severity, 'note')
+    return GITHUB_SECURITY_SEVERITY.get(severity, "note")
 
 
 def _build_rules(results: List) -> Dict[str, Dict]:
@@ -60,43 +60,41 @@ def _build_rules(results: List) -> Dict[str, Dict]:
     """
     rules = {}
     for r in results:
-        if r.status != 'CONFIRMED':
+        if r.status != "CONFIRMED":
             continue
         rule_id = r.name
         if rule_id in rules:
             continue
 
         # CVSS 分数
-        cvss = getattr(r, 'cvss_score', 0) or 0
+        cvss = getattr(r, "cvss_score", 0) or 0
         # 合规映射
-        compliance = getattr(r, 'compliance', {}) or {}
-        compliance_str = '; '.join(f'{k}:{v}' for k, v in compliance.items()) if compliance else ''
+        compliance = getattr(r, "compliance", {}) or {}
+        compliance_str = "; ".join(f"{k}:{v}" for k, v in compliance.items()) if compliance else ""
 
         rules[rule_id] = {
-            'id': rule_id,
-            'name': rule_id,
-            'shortDescription': {'text': r.name},
-            'fullDescription': {
-                'text': getattr(r, 'evidence', '') or getattr(r, 'name', '')
-            },
-            'help': {
-                'text': (
-                    f'修复建议: {getattr(r, "fix", "")}\n'
-                    f'修复详情: {getattr(r, "fix_detail", "")}\n'
-                    f'复现命令: {getattr(r, "reproduce", "")}\n'
-                    f'合规映射: {compliance_str}'
+            "id": rule_id,
+            "name": rule_id,
+            "shortDescription": {"text": r.name},
+            "fullDescription": {"text": getattr(r, "evidence", "") or getattr(r, "name", "")},
+            "help": {
+                "text": (
+                    f"修复建议: {getattr(r, 'fix', '')}\n"
+                    f"修复详情: {getattr(r, 'fix_detail', '')}\n"
+                    f"复现命令: {getattr(r, 'reproduce', '')}\n"
+                    f"合规映射: {compliance_str}"
                 )
             },
-            'defaultConfiguration': {
-                'level': _cvss_to_level(cvss) if cvss > 0 else _severity_to_level(r.severity),
+            "defaultConfiguration": {
+                "level": _cvss_to_level(cvss) if cvss > 0 else _severity_to_level(r.severity),
             },
-            'properties': {
-                'cve': getattr(r, 'cve', '') or '',
-                'cvss_score': cvss,
-                'cvss_vector': getattr(r, 'cvss_vector', '') or '',
-                'severity': r.severity,
-                'compliance': compliance_str,
-                'tags': ['security', f'severity:{r.severity}'],
+            "properties": {
+                "cve": getattr(r, "cve", "") or "",
+                "cvss_score": cvss,
+                "cvss_vector": getattr(r, "cvss_vector", "") or "",
+                "severity": r.severity,
+                "compliance": compliance_str,
+                "tags": ["security", f"severity:{r.severity}"],
             },
         }
     return rules
@@ -106,51 +104,51 @@ def _build_results(results: List, rules: Dict[str, Dict]) -> List[Dict]:
     """构建 SARIF results 数组"""
     sarif_results = []
     for r in results:
-        if r.status != 'CONFIRMED':
+        if r.status != "CONFIRMED":
             continue
 
         rule_id = r.name
-        cvss = getattr(r, 'cvss_score', 0) or 0
+        cvss = getattr(r, "cvss_score", 0) or 0
         level = _cvss_to_level(cvss) if cvss > 0 else _severity_to_level(r.severity)
 
         # 提取 URL 的 region 信息
-        url = r.url or ''
+        url = r.url or ""
         # 构建结果条目
         result_entry = {
-            'ruleId': rule_id,
-            'ruleIndex': list(rules.keys()).index(rule_id) if rule_id in rules else 0,
-            'level': level,
-            'message': {
-                'text': f'{r.name}: {getattr(r, "evidence", "") or ""}',
+            "ruleId": rule_id,
+            "ruleIndex": list(rules.keys()).index(rule_id) if rule_id in rules else 0,
+            "level": level,
+            "message": {
+                "text": f"{r.name}: {getattr(r, 'evidence', '') or ''}",
             },
-            'locations': [
+            "locations": [
                 {
-                    'physicalLocation': {
-                        'artifactLocation': {
-                            'uri': url,
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": url,
                         },
                     },
                 }
             ],
-            'partialFingerprints': {
-                'primaryLocationLineHash': f'{rule_id}:{hash(url) & 0xFFFFFFFF:08x}',
+            "partialFingerprints": {
+                "primaryLocationLineHash": f"{rule_id}:{hash(url) & 0xFFFFFFFF:08x}",
             },
-            'properties': {
-                'severity': r.severity,
-                'cve': getattr(r, 'cve', '') or '',
-                'cvss_score': cvss,
-                'status': r.status,
+            "properties": {
+                "severity": r.severity,
+                "cve": getattr(r, "cve", "") or "",
+                "cvss_score": cvss,
+                "status": r.status,
             },
         }
 
         # 添加修复建议（GitHub Code Scanning 会显示）
-        fix = getattr(r, 'fix', '') or ''
-        fix_detail = getattr(r, 'fix_detail', '') or ''
+        fix = getattr(r, "fix", "") or ""
+        fix_detail = getattr(r, "fix_detail", "") or ""
         if fix or fix_detail:
-            result_entry['fixes'] = [
+            result_entry["fixes"] = [
                 {
-                    'description': {
-                        'text': f'{fix}\n\n{fix_detail}',
+                    "description": {
+                        "text": f"{fix}\n\n{fix_detail}",
                     },
                 }
             ]
@@ -174,38 +172,38 @@ def to_sarif(report_builder) -> str:
 
     # 工具信息
     tool_info = {
-        'driver': {
-            'name': 'Ruoyi-Scan',
-            'version': '2.0',
-            'informationUri': 'https://github.com/ruoyi-scan/ruoyi-scan',
-            'rules': list(rules.values()),
+        "driver": {
+            "name": "Ruoyi-Scan",
+            "version": "2.0",
+            "informationUri": "https://github.com/ruoyi-scan/ruoyi-scan",
+            "rules": list(rules.values()),
         }
     }
 
     # 运行信息
     summary = report_builder.summary or {}
     run = {
-        'tool': tool_info,
-        'results': sarif_results,
-        'invocations': [
+        "tool": tool_info,
+        "results": sarif_results,
+        "invocations": [
             {
-                'executionSuccessful': True,
-                'endTimeUtc': summary.get('started_at', ''),
+                "executionSuccessful": True,
+                "endTimeUtc": summary.get("started_at", ""),
             }
         ],
-        'properties': {
-            'target': report_builder.target,
-            'scan_time': summary.get('started_at', ''),
-            'duration_sec': summary.get('duration', 0),
-            'request_count': summary.get('request_count', 0),
-            'mode': summary.get('mode', ''),
+        "properties": {
+            "target": report_builder.target,
+            "scan_time": summary.get("started_at", ""),
+            "duration_sec": summary.get("duration", 0),
+            "request_count": summary.get("request_count", 0),
+            "mode": summary.get("mode", ""),
         },
     }
 
     sarif_doc = {
-        '$schema': SARIF_SCHEMA,
-        'version': SARIF_VERSION,
-        'runs': [run],
+        "$schema": SARIF_SCHEMA,
+        "version": SARIF_VERSION,
+        "runs": [run],
     }
 
     return json.dumps(sarif_doc, ensure_ascii=False, indent=2)
@@ -219,5 +217,5 @@ def render_sarif(report_builder, filepath: str):
         filepath: 输出文件路径
     """
     sarif_content = to_sarif(report_builder)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(sarif_content)

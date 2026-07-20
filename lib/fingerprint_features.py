@@ -13,59 +13,59 @@
 #         至少命中一个强特征 → 高置信；仅弱特征 → 低置信（供人工复核）；无特征 → 未识别。
 
 # 真实采集的 RuoYi 4.7.8 favicon md5（2026-07-17 从运行实例 127.0.0.1:8080/favicon.ico 采集，size=16958）
-RUOYI_FAVICON_MD5 = 'e49fd30ea870c7a820464ca56a113e6e'
+RUOYI_FAVICON_MD5 = "e49fd30ea870c7a820464ca56a113e6e"
 
 # CMS 特征库：cms 标识 -> 特征 dict
 CMS_FEATURES = {
-    'ruoyi': {
-        'display': 'RuoYi',
-        'favicon_hashes': {RUOYI_FAVICON_MD5},
-        'strong_paths': [
-            {'path': '/prod-api/', 'expect': 'json'},      # 若依前后端分离版 API 前缀
-            {'path': '/captcha/image', 'expect': 'image'},  # 若依验证码图片接口
-            {'path': '/getInfo', 'expect': 'json'},         # 若依登录后用户信息接口
+    "ruoyi": {
+        "display": "RuoYi",
+        "favicon_hashes": {RUOYI_FAVICON_MD5},
+        "strong_paths": [
+            {"path": "/prod-api/", "expect": "json"},  # 若依前后端分离版 API 前缀
+            {"path": "/captcha/image", "expect": "image"},  # 若依验证码图片接口
+            {"path": "/getInfo", "expect": "json"},  # 若依登录后用户信息接口
         ],
-        'login_keywords': ['RuoYi', '若依管理系统', '若依管理'],
-        'weak_keywords': ['若依', 'ruoyi', 'RuoYi'],
-        'weight_strong': 0.5,
-        'weight_weak': 0.2,
+        "login_keywords": ["RuoYi", "若依管理系统", "若依管理"],
+        "weak_keywords": ["若依", "ruoyi", "RuoYi"],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
     },
-    'spring': {
-        'display': 'Spring Boot',
-        'favicon_hashes': set(),  # Spring Boot 默认绿叶 favicon 随版本变化，不设固定 hash
-        'strong_paths': [
-            {'path': '/actuator', 'expect': 'any'},          # Actuator 根端点 200 即强 Spring Boot 信号
+    "spring": {
+        "display": "Spring Boot",
+        "favicon_hashes": set(),  # Spring Boot 默认绿叶 favicon 随版本变化，不设固定 hash
+        "strong_paths": [
+            {"path": "/actuator", "expect": "any"},  # Actuator 根端点 200 即强 Spring Boot 信号
         ],
-        'login_keywords': [],                               # Spring Boot 无统一登录页
-        'weak_keywords': ['Whitelabel Error Page', 'Spring Boot', 'spring-boot'],
-        'weight_strong': 0.5,
-        'weight_weak': 0.2,
+        "login_keywords": [],  # Spring Boot 无统一登录页
+        "weak_keywords": ["Whitelabel Error Page", "Spring Boot", "spring-boot"],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
     },
     # D15：RuoYi-Cloud 微服务版（Nacos + Gateway + 前后端分离）
-    'ruoyi-cloud': {
-        'display': 'RuoYi-Cloud',
-        'favicon_hashes': set(),  # Cloud 版 favicon 与单机版可能不同
-        'strong_paths': [
-            {'path': '/nacos/', 'expect': 'any'},            # Nacos 控制台
-            {'path': '/gateway/', 'expect': 'any'},          # Spring Gateway
+    "ruoyi-cloud": {
+        "display": "RuoYi-Cloud",
+        "favicon_hashes": set(),  # Cloud 版 favicon 与单机版可能不同
+        "strong_paths": [
+            {"path": "/nacos/", "expect": "any"},  # Nacos 控制台
+            {"path": "/gateway/", "expect": "any"},  # Spring Gateway
         ],
-        'login_keywords': ['RuoYi-Cloud', '若依微服务'],
-        'weak_keywords': ['ruoyi-cloud', 'RuoYiCloud', 'nacos'],
-        'weight_strong': 0.5,
-        'weight_weak': 0.2,
+        "login_keywords": ["RuoYi-Cloud", "若依微服务"],
+        "weak_keywords": ["ruoyi-cloud", "RuoYiCloud", "nacos"],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
     },
     # D15：JeecgBoot（低代码平台，常与若依混淆的 Java 框架，负向特征）
-    'jeecgboot': {
-        'display': 'JeecgBoot',
-        'favicon_hashes': set(),
-        'strong_paths': [
-            {'path': '/jeecg-boot/', 'expect': 'any'},
-            {'path': '/sys/login', 'expect': 'json'},
+    "jeecgboot": {
+        "display": "JeecgBoot",
+        "favicon_hashes": set(),
+        "strong_paths": [
+            {"path": "/jeecg-boot/", "expect": "any"},
+            {"path": "/sys/login", "expect": "json"},
         ],
-        'login_keywords': ['JeecgBoot', 'Jeecg-Boot'],
-        'weak_keywords': ['jeecg', 'JEECG'],
-        'weight_strong': 0.5,
-        'weight_weak': 0.2,
+        "login_keywords": ["JeecgBoot", "Jeecg-Boot"],
+        "weak_keywords": ["jeecg", "JEECG"],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
     },
     # 注：thinkphp / weaver / shiro / struts2 特征已迁移至 cms-scan-extras/，本项目专注若依做深
 }

@@ -3,7 +3,7 @@
 import socket
 import threading
 import urllib.parse
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class ScanQueue:
@@ -16,7 +16,7 @@ class ScanQueue:
 
     def add(self, url):
         """添加 URL 到队列（自动去重）"""
-        normalized = url.rstrip('/') if url.endswith('/') else url
+        normalized = url.rstrip("/") if url.endswith("/") else url
         with self._lock:
             if normalized not in self._seen:
                 self._seen.add(normalized)
@@ -44,15 +44,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
     target_hosts = set()
 
     def do_GET(self):
-        self._handle_request('GET')
+        self._handle_request("GET")
 
     def do_POST(self):
-        self._handle_request('POST')
+        self._handle_request("POST")
 
     def do_CONNECT(self):
         """HTTPS CONNECT 隧道：建立隧道，记录域名"""
-        host, port = self.path.split(':') if ':' in self.path else (self.path, '443')
-        self._record_url(f'https://{host}:{port}/')
+        host, port = self.path.split(":") if ":" in self.path else (self.path, "443")
+        self._record_url(f"https://{host}:{port}/")
         try:
             self._tunnel(host, int(port))
         except Exception:
@@ -63,28 +63,28 @@ class ProxyHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.scheme and parsed.netloc:
             # 绝对 URL（代理模式）
-            url = f'{parsed.scheme}://{parsed.netloc}{parsed.path}'
+            url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
             self._record_url(url)
             self._forward(method, parsed)
         else:
-            self.send_error(400, 'Bad proxy request')
+            self.send_error(400, "Bad proxy request")
 
     def _record_url(self, url):
         """记录 URL 到扫描队列"""
         if self.queue is not None:
-            host = urllib.parse.urlparse(url).netloc.split(':')[0]
+            host = urllib.parse.urlparse(url).netloc.split(":")[0]
             self.target_hosts.add(host)
             if self.queue.add(url):
-                self.log_message('Captured: %s', url)
+                self.log_message("Captured: %s", url)
 
     def _tunnel(self, host, port):
         """建立 CONNECT 隧道"""
         try:
             remote = socket.create_connection((host, port), timeout=10)
         except Exception:
-            self.send_error(502, 'Cannot connect to remote')
+            self.send_error(502, "Cannot connect to remote")
             return
-        self.send_response(200, 'Connection Established')
+        self.send_response(200, "Connection Established")
         self.end_headers()
         # 双向转发
         self._relay(self.connection, remote)
@@ -93,6 +93,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _relay(self, client, remote):
         """双向数据转发"""
         import select
+
         sockets = [client, remote]
         try:
             while True:
@@ -114,20 +115,21 @@ class ProxyHandler(BaseHTTPRequestHandler):
         """转发 HTTP 请求并返回响应"""
         try:
             import http.client
+
             netloc = parsed.netloc
             host = netloc
             port = 80
-            if ':' in netloc:
-                host, port = netloc.split(':', 1)
+            if ":" in netloc:
+                host, port = netloc.split(":", 1)
                 port = int(port)
             conn = http.client.HTTPConnection(host, port, timeout=10)
-            path = parsed.path + ('?' + parsed.query if parsed.query else '')
-            headers = {k: v for k, v in self.headers.items() if k.lower() not in ('proxy-connection',)}
+            path = parsed.path + ("?" + parsed.query if parsed.query else "")
+            headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection",)}
             conn.request(method, path, body=self._read_body(), headers=headers)
             resp = conn.getresponse()
             self.send_response(resp.status)
             for k, v in resp.getheaders():
-                if k.lower() not in ('transfer-encoding',):
+                if k.lower() not in ("transfer-encoding",):
                     self.send_header(k, v)
             self.end_headers()
             self.wfile.write(resp.read())
@@ -137,7 +139,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def _read_body(self):
         """读取请求体"""
-        length = int(self.headers.get('Content-Length', 0))
+        length = int(self.headers.get("Content-Length", 0))
         return self.rfile.read(length) if length > 0 else None
 
     def log_message(self, fmt, *args):
@@ -157,7 +159,7 @@ class ProxyServer:
         proxy.stop()
     """
 
-    def __init__(self, host='127.0.0.1', port=8080, queue=None):
+    def __init__(self, host="127.0.0.1", port=8080, queue=None):
         self.host = host
         self.port = port
         self.queue = queue or ScanQueue()

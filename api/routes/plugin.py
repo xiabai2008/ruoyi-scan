@@ -4,13 +4,13 @@ from fastapi import APIRouter, HTTPException
 from api.models.schemas import PluginDTO
 from core.loader import load_plugins
 
-router = APIRouter(tags=['插件'])
+router = APIRouter(tags=["插件"])
 
 
 def _load_all_plugins():
     """加载所有已注册插件类"""
     plugins = []
-    for pkg in ['plugins.ruoyi', 'plugins.common']:
+    for pkg in ["plugins.ruoyi", "plugins.common"]:
         try:
             plugins.extend(load_plugins(pkg))
         except Exception:
@@ -18,7 +18,7 @@ def _load_all_plugins():
     return plugins
 
 
-@router.get('/plugins', response_model=list, summary='列出所有已加载插件')
+@router.get("/plugins", response_model=list, summary="列出所有已加载插件")
 async def list_plugins():
     """列出所有已加载的扫描插件"""
     result = []
@@ -28,35 +28,37 @@ async def list_plugins():
         if key in seen:
             continue
         seen.add(key)
-        result.append(PluginDTO(
-            name=getattr(cls, 'name', ''),
-            cms='ruoyi',
-            category=getattr(cls, 'category', ''),
-            severity=getattr(cls, 'severity', 'low'),
-            description=getattr(cls, 'description', ''),
-            cve=getattr(cls, 'cve', ''),
-            affected_versions=getattr(cls, 'affected_versions', ''),
-            vuln_type=getattr(cls, 'vuln_type', ''),
-            supports_waf_bypass=getattr(cls, 'supports_waf_bypass', False),
-        ))
+        result.append(
+            PluginDTO(
+                name=getattr(cls, "name", ""),
+                cms="ruoyi",
+                category=getattr(cls, "category", ""),
+                severity=getattr(cls, "severity", "low"),
+                description=getattr(cls, "description", ""),
+                cve=getattr(cls, "cve", ""),
+                affected_versions=getattr(cls, "affected_versions", ""),
+                vuln_type=getattr(cls, "vuln_type", ""),
+                supports_waf_bypass=getattr(cls, "supports_waf_bypass", False),
+            )
+        )
     return result
 
 
-@router.get('/plugins/{name}', response_model=PluginDTO, summary='查询单个插件元数据')
+@router.get("/plugins/{name}", response_model=PluginDTO, summary="查询单个插件元数据")
 async def get_plugin(name: str):
     """查询单个插件的元数据"""
     for cls in _load_all_plugins():
-        plugin_name = getattr(cls, 'name', '')
+        plugin_name = getattr(cls, "name", "")
         if plugin_name == name or cls.__name__ == name:
             return PluginDTO(
                 name=plugin_name,
-                cms='ruoyi',
-                category=getattr(cls, 'category', ''),
-                severity=getattr(cls, 'severity', 'low'),
-                description=getattr(cls, 'description', ''),
-                cve=getattr(cls, 'cve', ''),
-                affected_versions=getattr(cls, 'affected_versions', ''),
-                vuln_type=getattr(cls, 'vuln_type', ''),
-                supports_waf_bypass=getattr(cls, 'supports_waf_bypass', False),
+                cms="ruoyi",
+                category=getattr(cls, "category", ""),
+                severity=getattr(cls, "severity", "low"),
+                description=getattr(cls, "description", ""),
+                cve=getattr(cls, "cve", ""),
+                affected_versions=getattr(cls, "affected_versions", ""),
+                vuln_type=getattr(cls, "vuln_type", ""),
+                supports_waf_bypass=getattr(cls, "supports_waf_bypass", False),
             )
-    raise HTTPException(status_code=404, detail=f'插件不存在: {name}')
+    raise HTTPException(status_code=404, detail=f"插件不存在: {name}")

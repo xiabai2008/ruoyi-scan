@@ -7,8 +7,15 @@ import json
 import os
 
 from config import settings
-from core.models import (STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_CN)
+from core.models import (
+    SEVERITY_CN,
+    SEVERITY_HIGH,
+    SEVERITY_LOW,
+    SEVERITY_MEDIUM,
+    STATUS_CONFIRMED,
+    STATUS_SAFE,
+    STATUS_UNKNOWN,
+)
 
 
 class ReportBuilder:
@@ -18,15 +25,15 @@ class ReportBuilder:
     摘要：目标、耗时、请求数、风险分布、扫描时间
     """
 
-    def __init__(self, results=None, target='', summary=None, dedup=True):
+    def __init__(self, results=None, target="", summary=None, dedup=True):
         self.results = results or []
         self.target = target
         # summary: {duration, request_count, started_at, ended_at, mode, fingerprint}
         self.summary = summary or {}
         # D8: 结果去重聚合（渲染前合并同指纹漏洞，可 --no-dedup 关闭）
         self.dedup_enabled = dedup
-        self._cached_effective = None      # 缓存去重后结果
-        self._cached_dedup_report = None   # 缓存去重统计
+        self._cached_effective = None  # 缓存去重后结果
+        self._cached_dedup_report = None  # 缓存去重统计
 
     def _effective_results(self):
         """返回渲染用结果：dedup=True 时返回去重聚合后结果，否则返回原始结果
@@ -38,6 +45,7 @@ class ReportBuilder:
             return self.results
         if self._cached_effective is None:
             from core.dedup import aggregate
+
             self._cached_effective, self._cached_dedup_report = aggregate(self.results)
         return self._cached_effective
 
@@ -54,11 +62,11 @@ class ReportBuilder:
 
     # 风险分布：仅统计 CONFIRMED 漏洞
     def risk_distribution(self):
-        dist = {'high': 0, 'medium': 0, 'low': 0, 'total': 0}
+        dist = {"high": 0, "medium": 0, "low": 0, "total": 0}
         for r in self._effective_results():
             if r.status != STATUS_CONFIRMED:
                 continue
-            dist['total'] += 1
+            dist["total"] += 1
             if r.severity in dist:
                 dist[r.severity] += 1
         return dist
@@ -76,21 +84,22 @@ class ReportBuilder:
             s = status_order.get(r.status, 99)
             v = sev_order.get(r.severity, 99)
             return (s if confirmed_first else 0, v, r.name)
+
         return sorted(self._effective_results(), key=key)
 
     def to_dict(self):
         """整体报告字典（JSON 用）"""
         dist = self.risk_distribution()
         return {
-            'target': self.target,
-            'scan_time': self.summary.get('started_at', ''),
-            'duration_sec': round(self.summary.get('duration', 0), 2),
-            'request_count': self.summary.get('request_count', 0),
-            'mode': self.summary.get('mode', ''),
-            'fingerprint': self.summary.get('fingerprint', {}),
-            'risk_distribution': dist,
-            'vuln_count': dist['total'],
-            'results': [r.to_dict() for r in self._effective_results()],
+            "target": self.target,
+            "scan_time": self.summary.get("started_at", ""),
+            "duration_sec": round(self.summary.get("duration", 0), 2),
+            "request_count": self.summary.get("request_count", 0),
+            "mode": self.summary.get("mode", ""),
+            "fingerprint": self.summary.get("fingerprint", {}),
+            "risk_distribution": dist,
+            "vuln_count": dist["total"],
+            "results": [r.to_dict() for r in self._effective_results()],
         }
 
     def to_json(self):
@@ -101,24 +110,39 @@ class ReportBuilder:
         """CSV 格式（漏洞名称/URL/危害等级/状态/CVE/CVSS/合规/证据/修复建议/修复详情/复现命令）"""
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(['漏洞名称', 'URL', '危害等级', '状态', 'CVE', 'CVSS', '合规映射',
-                         '证据', '修复建议', '修复详情', '复现命令'])
+        writer.writerow(
+            [
+                "漏洞名称",
+                "URL",
+                "危害等级",
+                "状态",
+                "CVE",
+                "CVSS",
+                "合规映射",
+                "证据",
+                "修复建议",
+                "修复详情",
+                "复现命令",
+            ]
+        )
         for r in self._effective_results():
             # 合规映射拼接为字符串
-            compliance_str = ';'.join(f'{k}:{v}' for k, v in r.compliance.items()) if r.compliance else ''
-            writer.writerow([
-                r.name,
-                r.url,
-                SEVERITY_CN.get(r.severity, r.severity),
-                r.status,
-                r.cve or '',
-                f'{r.cvss_score:.1f}' if r.cvss_score > 0 else '',
-                compliance_str,
-                r.evidence,
-                r.fix,
-                getattr(r, 'fix_detail', '') or '',
-                getattr(r, 'reproduce', '') or '',
-            ])
+            compliance_str = ";".join(f"{k}:{v}" for k, v in r.compliance.items()) if r.compliance else ""
+            writer.writerow(
+                [
+                    r.name,
+                    r.url,
+                    SEVERITY_CN.get(r.severity, r.severity),
+                    r.status,
+                    r.cve or "",
+                    f"{r.cvss_score:.1f}" if r.cvss_score > 0 else "",
+                    compliance_str,
+                    r.evidence,
+                    r.fix,
+                    getattr(r, "fix_detail", "") or "",
+                    getattr(r, "reproduce", "") or "",
+                ]
+            )
         return buf.getvalue()
 
     def _render_risk_donut_svg(self, dist):
@@ -133,19 +157,19 @@ class ReportBuilder:
             SVG HTML 字符串（含外层 div 容器）
         """
         import math
-        high = dist['high']
-        medium = dist['medium']
-        low = dist['low']
-        total = dist['total']
+
+        high = dist["high"]
+        medium = dist["medium"]
+        low = dist["low"]
+        total = dist["total"]
         r = 80
         circumference = 2 * math.pi * r  # ≈ 502.65
         # 底环（灰色背景）
-        base_circle = (f'<circle cx="100" cy="100" r="{r}" fill="none" '
-                       f'stroke="#e0e0e0" stroke-width="20"/>')
+        base_circle = f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#e0e0e0" stroke-width="20"/>'
         if total == 0:
             arcs = base_circle
-            center_num = '0'
-            center_color = '#999'
+            center_num = "0"
+            center_color = "#999"
         else:
             # 各段弧长（按占比）
             high_len = (high / total) * circumference
@@ -155,19 +179,25 @@ class ReportBuilder:
             # stroke-dashoffset 控制起点偏移（负值=向远离起点方向移动，让弧从上一段末尾开始）
             arcs = base_circle
             if high > 0:
-                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#d9534f" '
-                         f'stroke-width="20" stroke-dasharray="{high_len:.2f} {circumference-high_len:.2f}" '
-                         f'stroke-dashoffset="0"/>')
+                arcs += (
+                    f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#d9534f" '
+                    f'stroke-width="20" stroke-dasharray="{high_len:.2f} {circumference - high_len:.2f}" '
+                    f'stroke-dashoffset="0"/>'
+                )
             if medium > 0:
-                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#f0ad4e" '
-                         f'stroke-width="20" stroke-dasharray="{medium_len:.2f} {circumference-medium_len:.2f}" '
-                         f'stroke-dashoffset="{-high_len:.2f}"/>')
+                arcs += (
+                    f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#f0ad4e" '
+                    f'stroke-width="20" stroke-dasharray="{medium_len:.2f} {circumference - medium_len:.2f}" '
+                    f'stroke-dashoffset="{-high_len:.2f}"/>'
+                )
             if low > 0:
-                arcs += (f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#5cb85c" '
-                         f'stroke-width="20" stroke-dasharray="{low_len:.2f} {circumference-low_len:.2f}" '
-                         f'stroke-dashoffset="{-high_len-medium_len:.2f}"/>')
+                arcs += (
+                    f'<circle cx="100" cy="100" r="{r}" fill="none" stroke="#5cb85c" '
+                    f'stroke-width="20" stroke-dasharray="{low_len:.2f} {circumference - low_len:.2f}" '
+                    f'stroke-dashoffset="{-high_len - medium_len:.2f}"/>'
+                )
             center_num = str(total)
-            center_color = '#333'
+            center_color = "#333"
         return (
             '<div style="margin:15px 0">'
             '<svg viewBox="0 0 200 200" width="200" height="200" role="img" '
@@ -177,8 +207,8 @@ class ReportBuilder:
             f'<text x="100" y="95" text-anchor="middle" dominant-baseline="central" '
             f'font-size="28" font-weight="bold" fill="{center_color}">{center_num}</text>'
             '<text x="100" y="120" text-anchor="middle" font-size="12" fill="#999">确认漏洞</text>'
-            '</svg>'
-            '</div>'
+            "</svg>"
+            "</div>"
         )
 
     def to_html(self, confirmed_only=False):
@@ -192,45 +222,45 @@ class ReportBuilder:
         sorted_list = self.sorted_results(confirmed_first=True)
         rows_html = []
         sev_color = {
-            SEVERITY_HIGH: '#d9534f',
-            SEVERITY_MEDIUM: '#f0ad4e',
-            SEVERITY_LOW: '#5cb85c',
+            SEVERITY_HIGH: "#d9534f",
+            SEVERITY_MEDIUM: "#f0ad4e",
+            SEVERITY_LOW: "#5cb85c",
         }
         sev_cn = SEVERITY_CN
         for r in sorted_list:
-            color = sev_color.get(r.severity, '#999')
+            color = sev_color.get(r.severity, "#999")
             sev_text = sev_cn.get(r.severity, r.severity)
-            status_cn = {'CONFIRMED': '确认存在', 'SAFE': '不存在', 'UNKNOWN': '未知'}.get(r.status, r.status)
+            status_cn = {"CONFIRMED": "确认存在", "SAFE": "不存在", "UNKNOWN": "未知"}.get(r.status, r.status)
             # CSS class 用于 show/hide 过滤
-            row_class = 'confirmed' if r.status == STATUS_CONFIRMED else 'not-confirmed'
+            row_class = "confirmed" if r.status == STATUS_CONFIRMED else "not-confirmed"
             # D7: WAF 绕过徽标（extra.waf_bypass 含 strategy_used 或 bypass_attempted）
-            bypass_badge = ''
-            extra = getattr(r, 'extra', None) or {}
-            waf_info = extra.get('waf_bypass') if isinstance(extra, dict) else None
+            bypass_badge = ""
+            extra = getattr(r, "extra", None) or {}
+            waf_info = extra.get("waf_bypass") if isinstance(extra, dict) else None
             if waf_info:
-                if waf_info.get('strategy_used'):
-                    sid = html_module.escape(str(waf_info.get('strategy_used', '')))
-                    sname = html_module.escape(str(waf_info.get('strategy_name', '')))
+                if waf_info.get("strategy_used"):
+                    sid = html_module.escape(str(waf_info.get("strategy_used", "")))
+                    sname = html_module.escape(str(waf_info.get("strategy_name", "")))
                     bypass_badge = f' <span class="bypass-badge" title="{sname}">WAF绕过:{sid}</span>'
-                elif waf_info.get('bypass_attempted'):
+                elif waf_info.get("bypass_attempted"):
                     bypass_badge = ' <span class="bypass-failed-badge">WAF绕过失败</span>'
             # D12：CVE/CVSS/合规列
-            cve_text = html_module.escape(r.cve) if r.cve else '—'
-            cvss_text = f'{r.cvss_score:.1f}' if r.cvss_score > 0 else '—'
+            cve_text = html_module.escape(r.cve) if r.cve else "—"
+            cvss_text = f"{r.cvss_score:.1f}" if r.cvss_score > 0 else "—"
             compliance_parts = []
             if r.compliance:
                 for std, clause in r.compliance.items():
-                    compliance_parts.append(f'{html_module.escape(std)}:{html_module.escape(clause)}')
-            compliance_text = '<br>'.join(compliance_parts) if compliance_parts else '—'
+                    compliance_parts.append(f"{html_module.escape(std)}:{html_module.escape(clause)}")
+            compliance_text = "<br>".join(compliance_parts) if compliance_parts else "—"
             # D18/D24：修复详情 + 复现命令（保留换行，转义 HTML）
-            fix_detail_text = html_module.escape(getattr(r, 'fix_detail', '') or '').replace('\n', '<br>') or '—'
-            reproduce_text = html_module.escape(getattr(r, 'reproduce', '') or '').replace('\n', '<br>') or '—'
+            fix_detail_text = html_module.escape(getattr(r, "fix_detail", "") or "").replace("\n", "<br>") or "—"
+            reproduce_text = html_module.escape(getattr(r, "reproduce", "") or "").replace("\n", "<br>") or "—"
             rows_html.append(
                 f'<tr class="{row_class}">'
                 f'<td class="sev-{r.severity}"><span class="badge" style="background:{color}">{html_module.escape(sev_text)}</span></td>'
-                f'<td>{html_module.escape(r.name)}</td>'
+                f"<td>{html_module.escape(r.name)}</td>"
                 f'<td class="url">{html_module.escape(r.url)}</td>'
-                f'<td>{html_module.escape(status_cn)}</td>'
+                f"<td>{html_module.escape(status_cn)}</td>"
                 f'<td class="cve">{cve_text}</td>'
                 f'<td class="cvss">{cvss_text}</td>'
                 f'<td class="evidence">{html_module.escape(r.evidence)}{bypass_badge}</td>'
@@ -238,39 +268,39 @@ class ReportBuilder:
                 f'<td class="fix-detail">{fix_detail_text}</td>'
                 f'<td class="reproduce">{reproduce_text}</td>'
                 f'<td class="compliance">{compliance_text}</td>'
-                '</tr>'
+                "</tr>"
             )
-        rows = '\n'.join(rows_html) if rows_html else '<tr><td colspan="11" class="empty">无扫描结果</td></tr>'
+        rows = "\n".join(rows_html) if rows_html else '<tr><td colspan="11" class="empty">无扫描结果</td></tr>'
 
         # 摘要区 + CMS 感知标题
-        started = html_module.escape(str(self.summary.get('started_at', '')))
-        duration = self.summary.get('duration', 0)
-        req_count = self.summary.get('request_count', 0)
-        fp = self.summary.get('fingerprint', {}) or {}
-        fp_cms = html_module.escape(str(fp.get('cms', '')))
-        fp_conf = fp.get('confidence', 0)
-        mode = html_module.escape(str(self.summary.get('mode', '')))
+        started = html_module.escape(str(self.summary.get("started_at", "")))
+        duration = self.summary.get("duration", 0)
+        req_count = self.summary.get("request_count", 0)
+        fp = self.summary.get("fingerprint", {}) or {}
+        fp_cms = html_module.escape(str(fp.get("cms", "")))
+        fp_conf = fp.get("confidence", 0)
+        mode = html_module.escape(str(self.summary.get("mode", "")))
 
         # 标题：多 CMS 感知（若识别到 CMS 则显示，否则默认 Ruoyi-Scan）
-        cms_display = fp_cms.capitalize() if fp_cms else ''
-        title_main = f'扫描报告 - {cms_display}' if cms_display else 'Ruoyi-Scan 扫描报告'
+        cms_display = fp_cms.capitalize() if fp_cms else ""
+        title_main = f"扫描报告 - {cms_display}" if cms_display else "Ruoyi-Scan 扫描报告"
 
         # 仅确认模式开关（CSS + checkbox）
-        filter_html = ''
+        filter_html = ""
         any_non = any(r.status != STATUS_CONFIRMED for r in self._effective_results())
         if any_non and not confirmed_only:
             filter_html = (
                 '<div style="margin:10px 0">'
                 '<label style="cursor:pointer;font-size:13px;color:#555">'
                 '<input type="checkbox" id="filter-confirmed" checked onchange="toggleFilter()">'
-                ' 仅显示确认存在的漏洞（隐藏 不存在/未知 行）'
-                '</label></div>'
+                " 仅显示确认存在的漏洞（隐藏 不存在/未知 行）"
+                "</label></div>"
             )
 
         # 阶段六：风险分布环形图（纯 SVG，零外部依赖）
         donut_svg = self._render_risk_donut_svg(dist)
 
-        return f'''<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -319,7 +349,7 @@ function toggleFilter() {{
 <h1>{title_main}</h1>
 <div class="summary">
   <span><b>目标：</b>{html_module.escape(self.target)}</span>
-  <span><b>CMS：</b>{fp_cms or '未识别'}（置信度 {fp_conf:.2f}）</span>
+  <span><b>CMS：</b>{fp_cms or "未识别"}（置信度 {fp_conf:.2f}）</span>
   <span><b>扫描模式：</b>{mode}</span>
   <span><b>扫描时间：</b>{started}</span>
   <span><b>耗时：</b>{duration:.2f} 秒</span>
@@ -327,10 +357,10 @@ function toggleFilter() {{
 </div>
 <h2>风险分布（仅统计确认存在的漏洞）</h2>
 <div>
-  <span class="risk-box risk-high">高 {dist['high']}</span>
-  <span class="risk-box risk-medium">中 {dist['medium']}</span>
-  <span class="risk-box risk-low">低 {dist['low']}</span>
-  <span>合计：{dist['total']} 个漏洞</span>
+  <span class="risk-box risk-high">高 {dist["high"]}</span>
+  <span class="risk-box risk-medium">中 {dist["medium"]}</span>
+  <span class="risk-box risk-low">低 {dist["low"]}</span>
+  <span>合计：{dist["total"]} 个漏洞</span>
 </div>
 {donut_svg}
 {filter_html}
@@ -347,7 +377,7 @@ function toggleFilter() {{
 </table>
 <div class="footer">由 Ruoyi-Scan 自动生成 · 仅用于授权范围内的安全测试</div>
 </body>
-</html>'''
+</html>"""
 
     def render_all(self, out_dir, formats=None):
         """渲染多格式到 out_dir，返回生成的文件路径列表
@@ -361,61 +391,65 @@ function toggleFilter() {{
         os.makedirs(out_dir, exist_ok=True)
 
         if formats is None:
-            formats = ['html', 'json', 'csv']
-        elif formats == 'all':
-            formats = ['html', 'json', 'csv', 'pdf', 'docx', 'xlsx', 'sarif']
+            formats = ["html", "json", "csv"]
+        elif formats == "all":
+            formats = ["html", "json", "csv", "pdf", "docx", "xlsx", "sarif"]
 
         paths = []
-        if 'json' in formats:
-            json_path = os.path.join(out_dir, 'report.json')
-            with open(json_path, 'w', encoding='utf-8') as f:
+        if "json" in formats:
+            json_path = os.path.join(out_dir, "report.json")
+            with open(json_path, "w", encoding="utf-8") as f:
                 f.write(self.to_json())
             paths.append(json_path)
-        if 'html' in formats:
-            html_path = os.path.join(out_dir, 'report.html')
-            with open(html_path, 'w', encoding='utf-8') as f:
+        if "html" in formats:
+            html_path = os.path.join(out_dir, "report.html")
+            with open(html_path, "w", encoding="utf-8") as f:
                 f.write(self.to_html())
             paths.append(html_path)
-        if 'csv' in formats:
-            csv_path = os.path.join(out_dir, 'report.csv')
+        if "csv" in formats:
+            csv_path = os.path.join(out_dir, "report.csv")
             # CSV 用 utf-8-sig 便于 Excel 正确显示中文
-            with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+            with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
                 f.write(self.to_csv())
             paths.append(csv_path)
         # D8.2-D8.4: PDF/Word/Excel 惰性 import + 降级友好
-        if 'pdf' in formats:
+        if "pdf" in formats:
             try:
                 from core.report_pdf import render_pdf
-                pdf_path = os.path.join(out_dir, 'report.pdf')
+
+                pdf_path = os.path.join(out_dir, "report.pdf")
                 render_pdf(self, pdf_path)
                 paths.append(pdf_path)
             except ImportError:
-                print('[警告] reportlab 未安装，跳过 PDF 报告（pip install reportlab）')
-        if 'docx' in formats:
+                print("[警告] reportlab 未安装，跳过 PDF 报告（pip install reportlab）")
+        if "docx" in formats:
             try:
                 from core.report_docx import render_docx
-                docx_path = os.path.join(out_dir, 'report.docx')
+
+                docx_path = os.path.join(out_dir, "report.docx")
                 render_docx(self, docx_path)
                 paths.append(docx_path)
             except ImportError:
-                print('[警告] python-docx 未安装，跳过 Word 报告（pip install python-docx）')
-        if 'xlsx' in formats:
+                print("[警告] python-docx 未安装，跳过 Word 报告（pip install python-docx）")
+        if "xlsx" in formats:
             try:
                 from core.report_xlsx import render_xlsx
-                xlsx_path = os.path.join(out_dir, 'report.xlsx')
+
+                xlsx_path = os.path.join(out_dir, "report.xlsx")
                 render_xlsx(self, xlsx_path)
                 paths.append(xlsx_path)
             except ImportError:
-                print('[警告] openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）')
+                print("[警告] openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）")
         # D22: SARIF 报告格式（GitHub Code Scanning）
-        if 'sarif' in formats:
+        if "sarif" in formats:
             try:
                 from core.report_sarif import render_sarif
-                sarif_path = os.path.join(out_dir, 'report.sarif')
+
+                sarif_path = os.path.join(out_dir, "report.sarif")
                 render_sarif(self, sarif_path)
                 paths.append(sarif_path)
             except Exception as e:
-                print(f'[警告] SARIF 报告生成失败: {e}')
+                print(f"[警告] SARIF 报告生成失败: {e}")
         return paths
 
 
@@ -433,23 +467,28 @@ class BatchReport:
         return len(self.builders)
 
     def total_confirmed(self):
-        return sum(b.risk_distribution()['total'] for b in self.builders)
+        return sum(b.risk_distribution()["total"] for b in self.builders)
 
     def to_csv(self):
         """CSV：目标,CMS,高,中,低,合计,请求数,耗时(秒)"""
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(['目标', 'CMS', '高', '中', '低', '合计', '请求数', '耗时秒'])
+        writer.writerow(["目标", "CMS", "高", "中", "低", "合计", "请求数", "耗时秒"])
         for b in self.builders:
             dist = b.risk_distribution()
-            fp = (b.summary or {}).get('fingerprint', {}) or {}
-            writer.writerow([
-                b.target,
-                fp.get('cms', '未识别'),
-                dist['high'], dist['medium'], dist['low'], dist['total'],
-                (b.summary or {}).get('request_count', 0),
-                round((b.summary or {}).get('duration', 0), 1),
-            ])
+            fp = (b.summary or {}).get("fingerprint", {}) or {}
+            writer.writerow(
+                [
+                    b.target,
+                    fp.get("cms", "未识别"),
+                    dist["high"],
+                    dist["medium"],
+                    dist["low"],
+                    dist["total"],
+                    (b.summary or {}).get("request_count", 0),
+                    round((b.summary or {}).get("duration", 0), 1),
+                ]
+            )
         return buf.getvalue()
 
     def _render_targets_bar_svg(self):
@@ -460,12 +499,12 @@ class BatchReport:
         无目标时返回空字符串。
         """
         if not self.builders:
-            return ''
+            return ""
         # 预计算各目标分布
         items = []
         for b in self.builders:
             d = b.risk_distribution()
-            items.append((b.target, d['high'], d['medium'], d['low'], d['total']))
+            items.append((b.target, d["high"], d["medium"], d["low"], d["total"]))
         max_total = max((it[4] for it in items), default=1) or 1
         bar_width = 40
         gap = 20
@@ -485,61 +524,60 @@ class BatchReport:
             y_med = y_high - h_med
             y_low = y_med - h_low
             if h_high > 0:
-                bars.append(
-                    f'<rect x="{x}" y="{y_high}" width="{bar_width}" height="{h_high}" fill="#d9534f"/>')
+                bars.append(f'<rect x="{x}" y="{y_high}" width="{bar_width}" height="{h_high}" fill="#d9534f"/>')
             if h_med > 0:
-                bars.append(
-                    f'<rect x="{x}" y="{y_med}" width="{bar_width}" height="{h_med}" fill="#f0ad4e"/>')
+                bars.append(f'<rect x="{x}" y="{y_med}" width="{bar_width}" height="{h_med}" fill="#f0ad4e"/>')
             if h_low > 0:
-                bars.append(
-                    f'<rect x="{x}" y="{y_low}" width="{bar_width}" height="{h_low}" fill="#5cb85c"/>')
+                bars.append(f'<rect x="{x}" y="{y_low}" width="{bar_width}" height="{h_low}" fill="#5cb85c"/>')
             # 柱顶标注总数
             if total > 0:
                 bars.append(
                     f'<text x="{x + bar_width // 2}" y="{y_low - 5}" text-anchor="middle" '
-                    f'font-size="11" fill="#333">{total}</text>')
+                    f'font-size="11" fill="#333">{total}</text>'
+                )
             # 底部序号（与表格行对应）
             bars.append(
                 f'<text x="{x + bar_width // 2}" y="{base_y + 15}" text-anchor="middle" '
-                f'font-size="11" fill="#666">{i + 1}</text>')
-        bars_str = '\n      '.join(bars)
+                f'font-size="11" fill="#666">{i + 1}</text>'
+            )
+        bars_str = "\n      ".join(bars)
         view_h = chart_h + 20
         return (
             f'<svg viewBox="0 0 {svg_w} {view_h}" width="{svg_w}" height="{view_h}" '
             f'style="margin:10px 0" role="img" aria-label="各目标漏洞数柱状图">\n      '
-            f'{bars_str}\n    </svg>'
+            f"{bars_str}\n    </svg>"
         )
 
     def to_html(self):
         """HTML 批量汇总：概览表 + 各目标摘要"""
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         bar_svg = self._render_targets_bar_svg()
         rows = []
         total_high = total_medium = total_low = total_vuln = total_req = 0.0
         total_dur = 0.0
         for b in self.builders:
             dist = b.risk_distribution()
-            fp = (b.summary or {}).get('fingerprint', {}) or {}
-            cms = html_module.escape(str(fp.get('cms', '未识别')))
-            dur = round((b.summary or {}).get('duration', 0), 1)
-            req = (b.summary or {}).get('request_count', 0)
-            total_high += dist['high']
-            total_medium += dist['medium']
-            total_low += dist['low']
-            total_vuln += dist['total']
+            fp = (b.summary or {}).get("fingerprint", {}) or {}
+            cms = html_module.escape(str(fp.get("cms", "未识别")))
+            dur = round((b.summary or {}).get("duration", 0), 1)
+            req = (b.summary or {}).get("request_count", 0)
+            total_high += dist["high"]
+            total_medium += dist["medium"]
+            total_low += dist["low"]
+            total_vuln += dist["total"]
             total_req += req
             total_dur += dur
             rows.append(
-                f'<tr>'
+                f"<tr>"
                 f'<td class="url">{html_module.escape(b.target)}</td>'
-                f'<td>{cms}</td>'
-                f'<td>{dist["high"]}</td><td>{dist["medium"]}</td><td>{dist["low"]}</td>'
-                f'<td><b>{dist["total"]}</b></td>'
-                f'<td>{req}</td><td>{dur}s</td>'
-                '</tr>'
+                f"<td>{cms}</td>"
+                f"<td>{dist['high']}</td><td>{dist['medium']}</td><td>{dist['low']}</td>"
+                f"<td><b>{dist['total']}</b></td>"
+                f"<td>{req}</td><td>{dur}s</td>"
+                "</tr>"
             )
-        rows_html = '\n'.join(rows) if rows else '<tr><td colspan="8" class="empty">无扫描目标</td></tr>'
-        return f'''<!DOCTYPE html>
+        rows_html = "\n".join(rows) if rows else '<tr><td colspan="8" class="empty">无扫描目标</td></tr>'
+        return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -592,7 +630,7 @@ class BatchReport:
 </table>
 <div class="footer">由 Ruoyi-Scan 批量扫描自动生成 · 仅用于授权范围内的安全测试</div>
 </body>
-</html>'''
+</html>"""
 
     def render_all(self, out_dir):
         """输出 batch_report.html + batch_report.csv"""
@@ -600,11 +638,11 @@ class BatchReport:
             out_dir = settings.REPORT_DIR
         os.makedirs(out_dir, exist_ok=True)
         paths = []
-        html_path = os.path.join(out_dir, 'batch_report.html')
-        csv_path = os.path.join(out_dir, 'batch_report.csv')
-        with open(html_path, 'w', encoding='utf-8') as f:
+        html_path = os.path.join(out_dir, "batch_report.html")
+        csv_path = os.path.join(out_dir, "batch_report.csv")
+        with open(html_path, "w", encoding="utf-8") as f:
             f.write(self.to_html())
-        with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+        with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
             f.write(self.to_csv())
         paths.extend([html_path, csv_path])
         return paths

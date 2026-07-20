@@ -14,18 +14,24 @@
 #   - 假 SAFE（被拦）尝试绕过，成功→CONFIRMED，失败→原状态+标记
 #   - UNKNOWN 尝试绕过，成功→CONFIRMED，失败→UNKNOWN+标记（不降级）
 #   - 绕过异常→原状态+UNKNOWN 兜底（绝不判 SAFE）
-import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
-from lib.tamper import (space2comment, mysql_version_comment, randomcase,
-                        between_replace, url_encode, double_urlencode,
-                        split_for_chunked, hpp_duplicate, append_nullbyte)
-
+from core.models import STATUS_CONFIRMED, ScanResult
+from lib.tamper import (
+    between_replace,
+    double_urlencode,
+    hpp_duplicate,
+    mysql_version_comment,
+    randomcase,
+    space2comment,
+    split_for_chunked,
+    url_encode,
+)
 
 # === 上下文 ===
+
 
 @dataclass
 class BypassContext:
@@ -41,17 +47,19 @@ class BypassContext:
         max_attempts: 最大尝试次数
         strategy: 当前策略实例（插件可调用 strategy.tamper_payload() 变形 payload）
     """
-    waf_type: str = ''
-    vuln_type: str = ''
-    original_payload: str = ''
-    original_url: str = ''
-    origin_ip: str = ''
+
+    waf_type: str = ""
+    vuln_type: str = ""
+    original_payload: str = ""
+    original_url: str = ""
+    origin_ip: str = ""
     attempt: int = 0
     max_attempts: int = 3
     strategy: Any = None  # WafBypassStrategy 实例（供插件调用 tamper_payload）
 
 
 # === 策略基类 ===
+
 
 class WafBypassStrategy(ABC):
     """WAF 绕过策略抽象基类
@@ -60,12 +68,13 @@ class WafBypassStrategy(ABC):
         - apply_transport: 返回传输层变换
         - tamper_payload: 变形 payload
     """
-    name = ''                  # 策略中文名
-    strategy_id = ''           # BP-XX-N
-    layer = ''                 # L1/L2/L3/L4
-    waf_types = []             # 适用的 WAF 标识列表（['cloudflare'] 或 ['*']）
-    vuln_types = []            # 适用的漏洞类型（['sqli','xss','rce','file_read','auth','*']）
-    priority = 50              # 优先级（小先执行，0-100）
+
+    name = ""  # 策略中文名
+    strategy_id = ""  # BP-XX-N
+    layer = ""  # L1/L2/L3/L4
+    waf_types = []  # 适用的 WAF 标识列表（['cloudflare'] 或 ['*']）
+    vuln_types = []  # 适用的漏洞类型（['sqli','xss','rce','file_read','auth','*']）
+    priority = 50  # 优先级（小先执行，0-100）
 
     @abstractmethod
     def apply_transport(self, ctx: BypassContext) -> dict:
@@ -83,24 +92,26 @@ class WafBypassStrategy(ABC):
 
     def is_applicable(self, waf_type: str, vuln_type: str) -> bool:
         """判断策略是否适用于当前 WAF 和漏洞类型"""
-        waf_ok = '*' in self.waf_types or waf_type in self.waf_types
-        vuln_ok = '*' in self.vuln_types or vuln_type in self.vuln_types
+        waf_ok = "*" in self.waf_types or waf_type in self.waf_types
+        vuln_ok = "*" in self.vuln_types or vuln_type in self.vuln_types
         return waf_ok and vuln_ok
 
 
 # === L1: payload 变形策略 ===
 
+
 class InlineCommentStrategy(WafBypassStrategy):
     """内联注释变形（空格→/**/）"""
-    name = '内联注释变形'
-    strategy_id = 'BP-SD-1'
-    layer = 'L1'
-    waf_types = ['safedog', 'aliyun_waf', 'modsecurity']
-    vuln_types = ['sqli']
+
+    name = "内联注释变形"
+    strategy_id = "BP-SD-1"
+    layer = "L1"
+    waf_types = ["safedog", "aliyun_waf", "modsecurity"]
+    vuln_types = ["sqli"]
     priority = 20
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return space2comment(payload)
@@ -108,15 +119,16 @@ class InlineCommentStrategy(WafBypassStrategy):
 
 class MysqlVersionCommentStrategy(WafBypassStrategy):
     """MySQL 版本注释变形"""
-    name = 'MySQL 版本注释'
-    strategy_id = 'BP-SD-1b'
-    layer = 'L1'
-    waf_types = ['safedog', 'aliyun_waf']
-    vuln_types = ['sqli']
+
+    name = "MySQL 版本注释"
+    strategy_id = "BP-SD-1b"
+    layer = "L1"
+    waf_types = ["safedog", "aliyun_waf"]
+    vuln_types = ["sqli"]
     priority = 25
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return mysql_version_comment(payload)
@@ -124,15 +136,16 @@ class MysqlVersionCommentStrategy(WafBypassStrategy):
 
 class RandomCaseStrategy(WafBypassStrategy):
     """大小写混淆（通用兜底，最轻量）"""
-    name = '大小写混淆'
-    strategy_id = 'BP-GEN-1'
-    layer = 'L1'
-    waf_types = ['*']
-    vuln_types = ['sqli', 'xss', 'rce']
+
+    name = "大小写混淆"
+    strategy_id = "BP-GEN-1"
+    layer = "L1"
+    waf_types = ["*"]
+    vuln_types = ["sqli", "xss", "rce"]
     priority = 10  # 通用策略，优先执行
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return randomcase(payload)
@@ -140,15 +153,16 @@ class RandomCaseStrategy(WafBypassStrategy):
 
 class BetweenReplaceStrategy(WafBypassStrategy):
     """between 替换（=→BETWEEN x AND x）"""
-    name = 'BETWEEN 替换'
-    strategy_id = 'BP-SD-3'
-    layer = 'L1'
-    waf_types = ['safedog', 'modsecurity']
-    vuln_types = ['sqli']
+
+    name = "BETWEEN 替换"
+    strategy_id = "BP-SD-3"
+    layer = "L1"
+    waf_types = ["safedog", "modsecurity"]
+    vuln_types = ["sqli"]
     priority = 30
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return between_replace(payload)
@@ -156,17 +170,19 @@ class BetweenReplaceStrategy(WafBypassStrategy):
 
 # === L2: 编码绕过策略 ===
 
+
 class UrlEncodeStrategy(WafBypassStrategy):
     """URL 编码（通用）"""
-    name = 'URL 编码'
-    strategy_id = 'BP-GEN-2'
-    layer = 'L2'
-    waf_types = ['*']
-    vuln_types = ['sqli', 'xss', 'rce', 'file_read']
+
+    name = "URL 编码"
+    strategy_id = "BP-GEN-2"
+    layer = "L2"
+    waf_types = ["*"]
+    vuln_types = ["sqli", "xss", "rce", "file_read"]
     priority = 15
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return url_encode(payload)
@@ -174,15 +190,16 @@ class UrlEncodeStrategy(WafBypassStrategy):
 
 class DoubleUrlEncodeStrategy(WafBypassStrategy):
     """双重 URL 编码"""
-    name = '双重 URL 编码'
-    strategy_id = 'BP-CP-1'
-    layer = 'L2'
-    waf_types = ['chaitin', 'modsecurity']
-    vuln_types = ['sqli', 'rce']
+
+    name = "双重 URL 编码"
+    strategy_id = "BP-CP-1"
+    layer = "L2"
+    waf_types = ["chaitin", "modsecurity"]
+    vuln_types = ["sqli", "rce"]
     priority = 35
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return double_urlencode(payload)
@@ -190,20 +207,22 @@ class DoubleUrlEncodeStrategy(WafBypassStrategy):
 
 # === L3: 协议层策略 ===
 
+
 class ChunkedTransferStrategy(WafBypassStrategy):
     """分块传输（通用，L3 最常用）"""
-    name = '分块传输'
-    strategy_id = 'BP-GEN-3'
-    layer = 'L3'
-    waf_types = ['*']
-    vuln_types = ['sqli', 'rce', 'file_read']
+
+    name = "分块传输"
+    strategy_id = "BP-GEN-3"
+    layer = "L3"
+    waf_types = ["*"]
+    vuln_types = ["sqli", "rce", "file_read"]
     priority = 40
 
     def apply_transport(self, ctx):
         return {
-            'headers': {'Transfer-Encoding': 'chunked'},
-            'chunked': True,
-            'http_version': '1.1',
+            "headers": {"Transfer-Encoding": "chunked"},
+            "chunked": True,
+            "http_version": "1.1",
         }
 
     def tamper_payload(self, payload, ctx):
@@ -212,15 +231,16 @@ class ChunkedTransferStrategy(WafBypassStrategy):
 
 class HppStrategy(WafBypassStrategy):
     """HPP 参数污染"""
-    name = 'HPP 参数污染'
-    strategy_id = 'BP-ALI-3'
-    layer = 'L3'
-    waf_types = ['aliyun_waf', 'tencent_waf']
-    vuln_types = ['sqli']
+
+    name = "HPP 参数污染"
+    strategy_id = "BP-ALI-3"
+    layer = "L3"
+    waf_types = ["aliyun_waf", "tencent_waf"]
+    vuln_types = ["sqli"]
     priority = 45
 
     def apply_transport(self, ctx):
-        return {'headers': {}, 'chunked': False}
+        return {"headers": {}, "chunked": False}
 
     def tamper_payload(self, payload, ctx):
         return hpp_duplicate(payload)
@@ -228,18 +248,19 @@ class HppStrategy(WafBypassStrategy):
 
 class Http10DowngradeStrategy(WafBypassStrategy):
     """HTTP/1.0 降级（部分 WAF 对 1.0 协议解析不同）"""
-    name = 'HTTP/1.0 降级'
-    strategy_id = 'BP-CP-2b'
-    layer = 'L3'
-    waf_types = ['chaitin', 'knownsec']
-    vuln_types = ['*']
+
+    name = "HTTP/1.0 降级"
+    strategy_id = "BP-CP-2b"
+    layer = "L3"
+    waf_types = ["chaitin", "knownsec"]
+    vuln_types = ["*"]
     priority = 50
 
     def apply_transport(self, ctx):
         return {
-            'headers': {'Connection': 'close'},
-            'chunked': False,
-            'http_version': '1.0',
+            "headers": {"Connection": "close"},
+            "chunked": False,
+            "http_version": "1.0",
         }
 
     def tamper_payload(self, payload, ctx):
@@ -248,19 +269,20 @@ class Http10DowngradeStrategy(WafBypassStrategy):
 
 class GooglebotStrategy(WafBypassStrategy):
     """Googlebot 伪装（Cloudflare 对 Googlebot 放行）"""
-    name = 'Googlebot 伪装'
-    strategy_id = 'BP-CF-2'
-    layer = 'L3'
-    waf_types = ['cloudflare']
-    vuln_types = ['*']
+
+    name = "Googlebot 伪装"
+    strategy_id = "BP-CF-2"
+    layer = "L3"
+    waf_types = ["cloudflare"]
+    vuln_types = ["*"]
     priority = 15
 
-    GOOGLEBOT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+    GOOGLEBOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
     def apply_transport(self, ctx):
         return {
-            'headers': {'User-Agent': self.GOOGLEBOT_UA},
-            'chunked': False,
+            "headers": {"User-Agent": self.GOOGLEBOT_UA},
+            "chunked": False,
         }
 
     def tamper_payload(self, payload, ctx):
@@ -269,20 +291,22 @@ class GooglebotStrategy(WafBypassStrategy):
 
 # === L4: 源站直连策略 ===
 
+
 class OriginDirectStrategy(WafBypassStrategy):
     """源站 IP 直连（绕过 CDN 边缘）"""
-    name = '源站 IP 直连'
-    strategy_id = 'BP-CF-1'
-    layer = 'L4'
-    waf_types = ['cloudflare', 'baidu_waf', 'chaitin']
-    vuln_types = ['*']
+
+    name = "源站 IP 直连"
+    strategy_id = "BP-CF-1"
+    layer = "L4"
+    waf_types = ["cloudflare", "baidu_waf", "chaitin"]
+    vuln_types = ["*"]
     priority = 60  # L4 策略优先级较低（需先探测源站 IP）
 
     def apply_transport(self, ctx):
         return {
-            'headers': {},
-            'chunked': False,
-            'origin_ip': ctx.origin_ip,
+            "headers": {},
+            "chunked": False,
+            "origin_ip": ctx.origin_ip,
         }
 
     def tamper_payload(self, payload, ctx):
@@ -290,6 +314,7 @@ class OriginDirectStrategy(WafBypassStrategy):
 
 
 # === 策略注册表 ===
+
 
 class StrategyRegistry:
     """策略注册表（按 WAF 类型索引）"""
@@ -335,8 +360,7 @@ class StrategyRegistry:
         Returns:
             排序后的策略列表（priority 小的在前）
         """
-        applicable = [s for s in self._strategies
-                      if s.is_applicable(waf_type, vuln_type)]
+        applicable = [s for s in self._strategies if s.is_applicable(waf_type, vuln_type)]
         return sorted(applicable, key=lambda s: s.priority)
 
     def all_strategies(self) -> List[WafBypassStrategy]:
@@ -345,6 +369,7 @@ class StrategyRegistry:
 
 
 # === D7.4: 策略成功率追踪器 ===
+
 
 class BypassStatsTracker:
     """策略成功率追踪器（D7.4 性能优化）
@@ -379,8 +404,8 @@ class BypassStatsTracker:
             success: True=成功，False=失败
         """
         if strategy_id not in self._stats:
-            self._stats[strategy_id] = {'success': 0, 'failure': 0}
-        key = 'success' if success else 'failure'
+            self._stats[strategy_id] = {"success": 0, "failure": 0}
+        key = "success" if success else "failure"
         self._stats[strategy_id][key] += 1
 
     def get_success_rate(self, strategy_id: str) -> float:
@@ -388,10 +413,10 @@ class BypassStatsTracker:
         s = self._stats.get(strategy_id)
         if not s:
             return -1.0
-        total = s['success'] + s['failure']
+        total = s["success"] + s["failure"]
         if total == 0:
             return -1.0
-        return s['success'] / total
+        return s["success"] / total
 
     def get_adjusted_priority(self, strategy_id: str, base_priority: int) -> int:
         """获取调整后的优先级
@@ -421,16 +446,17 @@ class BypassStatsTracker:
     def summary(self) -> str:
         """返回可读的统计摘要"""
         if not self._stats:
-            return '无绕过统计'
+            return "无绕过统计"
         lines = []
         for sid, s in sorted(self._stats.items()):
-            total = s['success'] + s['failure']
-            rate = (s['success'] / total * 100) if total > 0 else 0
-            lines.append(f'  {sid}: {s["success"]}/{total} ({rate:.0f}%)')
-        return '\n'.join(lines)
+            total = s["success"] + s["failure"]
+            rate = (s["success"] / total * 100) if total > 0 else 0
+            lines.append(f"  {sid}: {s['success']}/{total} ({rate:.0f}%)")
+        return "\n".join(lines)
 
 
 # === BypassSession: SessionManager 的轻量包装 ===
+
 
 class BypassSession:
     """绕过会话：包装 SessionManager，透明应用传输层变换
@@ -440,8 +466,7 @@ class BypassSession:
         - 在出站前注入 chunked/origin IP/自定义 headers
     """
 
-    def __init__(self, session, transport_config: dict = None,
-                 origin_url: str = None):
+    def __init__(self, session, transport_config: dict = None, origin_url: str = None):
         """初始化绕过会话
 
         Args:
@@ -453,7 +478,7 @@ class BypassSession:
         self._session = session
         self._transport = transport_config or {}
         self._origin_url = origin_url
-        self._extra_headers = self._transport.get('headers', {})
+        self._extra_headers = self._transport.get("headers", {})
 
     def _apply_transform(self, url, kwargs):
         """应用传输层变换"""
@@ -461,25 +486,28 @@ class BypassSession:
         if self._origin_url:
             url = self._replace_host(url, self._origin_url)
         # 合并自定义 headers
-        headers = kwargs.get('headers') or {}
+        headers = kwargs.get("headers") or {}
         headers = {**headers, **self._extra_headers}
         if headers:
-            kwargs['headers'] = headers
+            kwargs["headers"] = headers
         return url, kwargs
 
     def _replace_host(self, url, origin_url):
         """替换 URL 中的 host 部分为源站 IP"""
         from urllib.parse import urlparse, urlunparse
+
         parsed = urlparse(url)
         origin_parsed = urlparse(origin_url)
-        return urlunparse((
-            parsed.scheme,
-            origin_parsed.netloc,
-            parsed.path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment,
-        ))
+        return urlunparse(
+            (
+                parsed.scheme,
+                origin_parsed.netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
 
     def get(self, url, **kwargs):
         url, kwargs = self._apply_transform(url, kwargs)
@@ -503,6 +531,7 @@ class BypassSession:
 
 # === WafBypassCoordinator: 编排器 ===
 
+
 class WafBypassCoordinator:
     """WAF 绕过编排器（由 ScanEngine 在 WAF 命中后调用）
 
@@ -520,9 +549,13 @@ class WafBypassCoordinator:
         - 绕过异常 → 原状态 + UNKNOWN 兜底（绝不判 SAFE）
     """
 
-    def __init__(self, waf_type: str = '', origin_ip: str = '',
-                 registry: StrategyRegistry = None,
-                 stats_tracker: 'BypassStatsTracker' = None):
+    def __init__(
+        self,
+        waf_type: str = "",
+        origin_ip: str = "",
+        registry: StrategyRegistry = None,
+        stats_tracker: "BypassStatsTracker" = None,
+    ):
         """初始化编排器
 
         Args:
@@ -553,7 +586,7 @@ class WafBypassCoordinator:
             return original_result
 
         # 获取漏洞类型
-        vuln_type = getattr(plugin, 'vuln_type', '')
+        vuln_type = getattr(plugin, "vuln_type", "")
         if not vuln_type:
             return original_result  # 无漏洞类型，无法选择策略
 
@@ -567,7 +600,7 @@ class WafBypassCoordinator:
             strategies = self.stats_tracker.get_sorted_strategies(strategies)
 
         # 最大尝试次数
-        max_attempts = getattr(plugin, 'bypass_max_attempts', 3)
+        max_attempts = getattr(plugin, "bypass_max_attempts", 3)
         attempts = min(max_attempts, len(strategies))
 
         # 尝试每个策略
@@ -576,7 +609,7 @@ class WafBypassCoordinator:
             ctx = BypassContext(
                 waf_type=self.waf_type,
                 vuln_type=vuln_type,
-                original_payload='',  # 由插件 get_payloads 提供
+                original_payload="",  # 由插件 get_payloads 提供
                 original_url=target,
                 origin_ip=self.origin_ip,
                 attempt=i + 1,
@@ -588,10 +621,11 @@ class WafBypassCoordinator:
                 # 构建绕过会话
                 transport = strategy.apply_transport(ctx)
                 origin_url = None
-                if transport.get('origin_ip') and transport['origin_ip']:
+                if transport.get("origin_ip") and transport["origin_ip"]:
                     from lib.origin_finder import OriginIPFinder
+
                     finder = OriginIPFinder()
-                    origin_url = finder.build_origin_url(target, transport['origin_ip'])
+                    origin_url = finder.build_origin_url(target, transport["origin_ip"])
                 bypass_session = BypassSession(session, transport, origin_url)
 
                 # 调用插件的绕过验证
@@ -607,12 +641,12 @@ class WafBypassCoordinator:
                     # 标记绕过信息
                     if not result.extra:
                         result.extra = {}
-                    result.extra['waf_bypass'] = {
-                        'strategy_used': strategy.strategy_id,
-                        'strategy_name': strategy.name,
-                        'layer': strategy.layer,
-                        'attempt': i + 1,
-                        'waf_type': self.waf_type,
+                    result.extra["waf_bypass"] = {
+                        "strategy_used": strategy.strategy_id,
+                        "strategy_name": strategy.name,
+                        "layer": strategy.layer,
+                        "attempt": i + 1,
+                        "waf_type": self.waf_type,
                     }
                     # D7.4: 记录成功
                     if self.stats_tracker:
@@ -635,10 +669,10 @@ class WafBypassCoordinator:
         # 所有策略均失败，返回原结果 + 标记
         if not original_result.extra:
             original_result.extra = {}
-        original_result.extra['waf_bypass'] = {
-            'bypass_attempted': True,
-            'strategies_tried': attempts,
-            'waf_type': self.waf_type,
-            'bypass_success': False,
+        original_result.extra["waf_bypass"] = {
+            "bypass_attempted": True,
+            "strategies_tried": attempts,
+            "waf_type": self.waf_type,
+            "bypass_success": False,
         }
         return original_result

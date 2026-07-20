@@ -12,24 +12,52 @@
 #   from lib.crawler import Crawler
 #   c = Crawler(max_depth=2, max_pages=20)
 #   urls = c.crawl('http://target/', session)  # 返回所有发现的 URL（含起始）
-import re
 import threading
 from collections import deque
-from typing import List, Set, Optional, Callable
-from urllib.parse import urljoin, urlparse, urldefrag
 from html.parser import HTMLParser
-
+from typing import Callable, List, Optional, Set
+from urllib.parse import urldefrag, urljoin, urlparse
 
 # 默认跳过的静态资源后缀（按 .gitignore 风格小写匹配）
 # 注：.js 默认排除（避免常规爬虫抓取 JS），但 crawl_with_js_urls 临时移除以收集 JS URL
 DEFAULT_EXCLUDED_EXT = {
-    '.js',
-    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico', '.webp',
-    '.css', '.woff', '.woff2', '.ttf', '.eot', '.otf',
-    '.pdf', '.zip', '.tar', '.gz', '.rar', '.7z',
-    '.mp3', '.mp4', '.avi', '.mov', '.flv', '.webm',
-    '.exe', '.dmg', '.apk', '.ipa',
-    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    ".js",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".svg",
+    ".ico",
+    ".webp",
+    ".css",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".otf",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".rar",
+    ".7z",
+    ".mp3",
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".flv",
+    ".webm",
+    ".exe",
+    ".dmg",
+    ".apk",
+    ".ipa",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
 }
 
 
@@ -44,14 +72,14 @@ class LinkExtractor(HTMLParser):
 
     # 标签 -> 取 URL 的属性
     LINK_ATTRS = {
-        'a': 'href',
-        'form': 'action',
-        'iframe': 'src',
-        'script': 'src',
-        'link': 'href',
-        'area': 'href',
-        'embed': 'src',
-        'source': 'src',
+        "a": "href",
+        "form": "action",
+        "iframe": "src",
+        "script": "src",
+        "link": "href",
+        "area": "href",
+        "embed": "src",
+        "source": "src",
     }
 
     def __init__(self):
@@ -89,14 +117,14 @@ def normalize_link(base: str, link: str) -> Optional[str]:
     if not link:
         return None
     link = link.strip()
-    if not link or link.startswith('#'):
+    if not link or link.startswith("#"):
         return None
     # javascript: / mailto: / data: 等非 HTTP 协议跳过
-    if ':' in link and not link.startswith(('http://', 'https://')):
+    if ":" in link and not link.startswith(("http://", "https://")):
         # 处理 protocol-relative URL（//host/path）
-        if link.startswith('//'):
-            scheme = urlparse(base).scheme or 'http'
-            link = f'{scheme}:{link}'
+        if link.startswith("//"):
+            scheme = urlparse(base).scheme or "http"
+            link = f"{scheme}:{link}"
         else:
             return None
     # 拼接为绝对 URL
@@ -104,7 +132,7 @@ def normalize_link(base: str, link: str) -> Optional[str]:
     # 去 fragment
     absolute, _ = urldefrag(absolute)
     # 仅保留 http/https
-    if urlparse(absolute).scheme not in ('http', 'https'):
+    if urlparse(absolute).scheme not in ("http", "https"):
         return None
     return absolute
 
@@ -117,14 +145,16 @@ class Crawler:
         urls = c.crawl('http://target/', session)
     """
 
-    def __init__(self,
-                 max_depth: int = 2,
-                 max_pages: int = 50,
-                 same_host_only: bool = True,
-                 include_static: bool = False,
-                 excluded_ext: Optional[Set[str]] = None,
-                 delay: float = 0.0,
-                 on_page: Optional[Callable[[str, str], None]] = None):
+    def __init__(
+        self,
+        max_depth: int = 2,
+        max_pages: int = 50,
+        same_host_only: bool = True,
+        include_static: bool = False,
+        excluded_ext: Optional[Set[str]] = None,
+        delay: float = 0.0,
+        on_page: Optional[Callable[[str, str], None]] = None,
+    ):
         """初始化爬虫
 
         Args:
@@ -160,7 +190,7 @@ class Crawler:
             所有抓取到的 URL 列表（含起始 URL，按访问顺序）
         """
         # 规范化起始 URL
-        start_url = normalize_link('', start_url) or start_url
+        start_url = normalize_link("", start_url) or start_url
         if not start_url:
             return []
 
@@ -175,32 +205,33 @@ class Crawler:
             self.visited.add(url)
 
             # 抓取页面
-            html_text = ''
+            html_text = ""
             try:
                 if session is not None:
                     resp = session.get(url)
                     if resp.status_code == 200:
                         # 仅处理 HTML 响应（按 Content-Type）
-                        ct = resp.headers.get('Content-Type', '')
-                        if 'html' in ct.lower() or 'text' in ct.lower():
+                        ct = resp.headers.get("Content-Type", "")
+                        if "html" in ct.lower() or "text" in ct.lower():
                             html_text = resp.text
                         else:
                             # 非 HTML 响应（如 JS、JSON）只记录 URL，不解析
                             pass
                     else:
                         with self._lock:
-                            self.errors.append(f'{url} -> HTTP {resp.status_code}')
+                            self.errors.append(f"{url} -> HTTP {resp.status_code}")
                 else:
                     # 无 session 时使用 requests
                     import requests as _requests
+
                     resp = _requests.get(url, timeout=10)
                     if resp.status_code == 200:
-                        ct = resp.headers.get('Content-Type', '')
-                        if 'html' in ct.lower() or 'text' in ct.lower():
+                        ct = resp.headers.get("Content-Type", "")
+                        if "html" in ct.lower() or "text" in ct.lower():
                             html_text = resp.text
             except Exception as e:
                 with self._lock:
-                    self.errors.append(f'{url} -> {type(e).__name__}: {e}')
+                    self.errors.append(f"{url} -> {type(e).__name__}: {e}")
                 continue
 
             results.append(url)
@@ -214,6 +245,7 @@ class Crawler:
             if depth >= self.max_depth or not html_text:
                 if self.delay:
                     import time as _t
+
                     _t.sleep(self.delay)
                 continue
 
@@ -229,8 +261,7 @@ class Crawler:
                 if not absolute:
                     continue
                 # 去重
-                if absolute in self.visited or any(
-                        absolute == q[0] for q in queue):
+                if absolute in self.visited or any(absolute == q[0] for q in queue):
                     continue
                 # 同 host 限制
                 if self.same_host_only and not is_same_host(start_url, absolute):
@@ -244,6 +275,7 @@ class Crawler:
 
             if self.delay:
                 import time as _t
+
                 _t.sleep(self.delay)
 
         return results
@@ -263,30 +295,30 @@ class Crawler:
         # 临时移除 .js 排除（让 JS 文件通过过滤，但仍过滤图片/CSS 等）
         original_excluded = self.excluded_ext
         try:
-            self.excluded_ext = {ext for ext in original_excluded if ext != '.js'}
+            self.excluded_ext = {ext for ext in original_excluded if ext != ".js"}
             all_urls = self.crawl(start_url, session)
         finally:
             self.excluded_ext = original_excluded
 
-        pages = [u for u in all_urls if not u.lower().endswith('.js')]
-        js_urls = [u for u in all_urls if u.lower().endswith('.js')]
+        pages = [u for u in all_urls if not u.lower().endswith(".js")]
+        js_urls = [u for u in all_urls if u.lower().endswith(".js")]
         return {
-            'pages': pages,
-            'js': js_urls,
-            'all': all_urls,
+            "pages": pages,
+            "js": js_urls,
+            "all": all_urls,
         }
 
 
 # === 便捷函数 ===
 
-def crawl_target(target: str, session=None, max_depth: int = 2,
-                 max_pages: int = 50) -> List[str]:
+
+def crawl_target(target: str, session=None, max_depth: int = 2, max_pages: int = 50) -> List[str]:
     """便捷爬取函数（快速调用）"""
     c = Crawler(max_depth=max_depth, max_pages=max_pages)
     return c.crawl(target, session)
 
 
-def extract_links_from_html(html_text: str, base_url: str = '') -> List[str]:
+def extract_links_from_html(html_text: str, base_url: str = "") -> List[str]:
     """从 HTML 文本提取链接（不走网络，纯解析）
 
     Args:
@@ -299,6 +331,5 @@ def extract_links_from_html(html_text: str, base_url: str = '') -> List[str]:
     parser = LinkExtractor()
     parser.feed(html_text)
     if base_url:
-        return [normalize_link(base_url, link) for link in parser.links
-                if normalize_link(base_url, link)]
+        return [normalize_link(base_url, link) for link in parser.links if normalize_link(base_url, link)]
     return parser.links

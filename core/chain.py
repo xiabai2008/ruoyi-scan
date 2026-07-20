@@ -19,31 +19,35 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core.models import (ScanResult, FingerprintResult, STATUS_CONFIRMED,
-                          STATUS_SAFE, STATUS_UNKNOWN, SEVERITY_HIGH,
-                          SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_CN)
-
+from core.models import (
+    SEVERITY_HIGH,
+    STATUS_CONFIRMED,
+    STATUS_SAFE,
+    STATUS_UNKNOWN,
+    FingerprintResult,
+    ScanResult,
+)
 
 # === 失败策略常量 ===
-ON_FAIL_ABORT = 'abort'          # 关键节点失败则整链中断，下游全 skipped
-ON_FAIL_CONTINUE = 'continue'    # 忽略失败，继续执行下游
-ON_FAIL_FALLBACK = 'fallback'    # 失败时执行 fallback_steps
+ON_FAIL_ABORT = "abort"  # 关键节点失败则整链中断，下游全 skipped
+ON_FAIL_CONTINUE = "continue"  # 忽略失败，继续执行下游
+ON_FAIL_FALLBACK = "fallback"  # 失败时执行 fallback_steps
 
 # === 节点执行状态 ===
-NODE_SUCCESS = 'success'         # CONFIRMED
-NODE_FAILED = 'failed'           # SAFE 或异常
-NODE_AMBIGUOUS = 'ambiguous'     # UNKNOWN
-NODE_SKIPPED = 'skipped'         # condition 不满足或上游失败被跳过
-NODE_ERROR = 'error'             # 执行异常
+NODE_SUCCESS = "success"  # CONFIRMED
+NODE_FAILED = "failed"  # SAFE 或异常
+NODE_AMBIGUOUS = "ambiguous"  # UNKNOWN
+NODE_SKIPPED = "skipped"  # condition 不满足或上游失败被跳过
+NODE_ERROR = "error"  # 执行异常
 
 # === 链整体状态（四级，部分成功不升级为 CONFIRMED）===
-CHAIN_CONFIRMED = 'CONFIRMED'    # 所有关键节点 success
-CHAIN_PARTIAL = 'PARTIAL'        # 部分关键节点 success，部分 failed/skipped
-CHAIN_BLOCKED = 'BLOCKED'        # 关键节点 abort 导致链中断
-CHAIN_UNKNOWN = 'UNKNOWN'        # 存在 UNKNOWN 且无 failed（无法判定）
+CHAIN_CONFIRMED = "CONFIRMED"  # 所有关键节点 success
+CHAIN_PARTIAL = "PARTIAL"  # 部分关键节点 success，部分 failed/skipped
+CHAIN_BLOCKED = "BLOCKED"  # 关键节点 abort 导致链中断
+CHAIN_UNKNOWN = "UNKNOWN"  # 存在 UNKNOWN 且无 failed（无法判定）
 
 # === 敏感字段脱敏 ===
-_SECRET_MASK = '******'
+_SECRET_MASK = "******"
 
 
 @dataclass
@@ -62,21 +66,23 @@ class ChainStep:
         severity_override: 覆盖插件默认严重度
         description: 节点描述
     """
+
     id: str
     plugin_cls: type
-    condition: Optional[Callable[['ChainContext'], bool]] = None
+    condition: Optional[Callable[["ChainContext"], bool]] = None
     on_fail: str = ON_FAIL_ABORT
     depends_on: List[str] = field(default_factory=list)
     inputs: Dict[str, str] = field(default_factory=dict)
     outputs: Dict[str, str] = field(default_factory=dict)
     fallback_steps: List[str] = field(default_factory=list)
     severity_override: Optional[str] = None
-    description: str = ''
+    description: str = ""
 
 
 @dataclass
 class ChainEdge:
     """依赖边（显式声明，用于 DAG 拓扑排序）"""
+
     from_id: str
     to_id: str
 
@@ -95,11 +101,12 @@ class ChainDef:
         edges: 依赖边列表（可选，也可从 steps[].depends_on 推导）
         meta: 元信息（如 {'chain_type': 'sql_to_rce'}）
     """
+
     name: str
     display_name: str
     description: str
     severity: str = SEVERITY_HIGH
-    affected_versions: str = ''
+    affected_versions: str = ""
     steps: List[ChainStep] = field(default_factory=list)
     edges: List[ChainEdge] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
@@ -125,18 +132,18 @@ class ChainDef:
         seen = set()
         for sid in ids:
             if sid in seen:
-                errors.append(f'节点 id 重复: {sid}')
+                errors.append(f"节点 id 重复: {sid}")
             seen.add(sid)
         # depends_on 引用存在性
         for s in self.steps:
             for dep in s.depends_on:
                 if dep not in ids:
-                    errors.append(f'节点 {s.id} 依赖不存在的节点: {dep}')
+                    errors.append(f"节点 {s.id} 依赖不存在的节点: {dep}")
         # 循环依赖检测（DFS）
         if not errors:  # 只有在 id 都合法时才检测环
             cycle = self._detect_cycle()
             if cycle:
-                errors.append(f'检测到循环依赖: {" → ".join(cycle)}')
+                errors.append(f"检测到循环依赖: {' → '.join(cycle)}")
         return errors
 
     def _detect_cycle(self) -> Optional[List[str]]:
@@ -144,7 +151,7 @@ class ChainDef:
         # 构建邻接表
         adj: Dict[str, List[str]] = {s.id: list(s.depends_on) for s in self.steps}
         WHITE, GRAY, BLACK = 0, 1, 2
-        color = {sid: WHITE for sid in adj}
+        color = dict.fromkeys(adj, WHITE)
         path: List[str] = []
 
         def dfs(node: str) -> Optional[List[str]]:
@@ -209,20 +216,20 @@ class ChainContext:
         """
         for ctx_key, source in step.outputs.items():
             try:
-                if source.startswith('field:'):
+                if source.startswith("field:"):
                     field_name = source[6:]
-                    value = getattr(result, field_name, '')
-                elif source.startswith('extra:'):
+                    value = getattr(result, field_name, "")
+                elif source.startswith("extra:"):
                     extra_key = source[6:]
-                    value = result.extra.get(extra_key, '')
-                elif source.startswith('secret:'):
+                    value = result.extra.get(extra_key, "")
+                elif source.startswith("secret:"):
                     extra_key = source[7:]
-                    value = result.extra.get(extra_key, '')
+                    value = result.extra.get(extra_key, "")
                     self.secrets[ctx_key] = str(value)
                     continue
                 else:
                     # 直接取属性名（如 'evidence'）
-                    value = getattr(result, source, '')
+                    value = getattr(result, source, "")
                 self.facts[ctx_key] = value
             except Exception:
                 # 提取失败不影响链执行
@@ -231,24 +238,25 @@ class ChainContext:
     def snapshot(self) -> Dict[str, Any]:
         """返回上下文快照（secrets 脱敏）"""
         return {
-            'target': self.target,
-            'facts': dict(self.facts),
-            'secrets': {k: _SECRET_MASK for k in self.secrets},
-            'node_status': dict(self.node_status),
+            "target": self.target,
+            "facts": dict(self.facts),
+            "secrets": dict.fromkeys(self.secrets, _SECRET_MASK),
+            "node_status": dict(self.node_status),
         }
 
 
 @dataclass
 class ChainResult:
     """链执行结果"""
+
     chain_name: str
-    status: str = CHAIN_UNKNOWN               # CONFIRMED/PARTIAL/BLOCKED/UNKNOWN
+    status: str = CHAIN_UNKNOWN  # CONFIRMED/PARTIAL/BLOCKED/UNKNOWN
     node_results: Dict[str, ScanResult] = field(default_factory=dict)
     node_status: Dict[str, str] = field(default_factory=dict)
     facts: Dict[str, Any] = field(default_factory=dict)
     secrets_masked: Dict[str, str] = field(default_factory=dict)
     duration: float = 0.0
-    error: str = ''
+    error: str = ""
 
     def to_scan_result(self, chain_def: ChainDef) -> ScanResult:
         """转换为 ScanResult（kind='chain'），复用现有报告渲染
@@ -267,32 +275,29 @@ class ChainResult:
             status = STATUS_UNKNOWN
 
         # 证据：汇总各成功节点的关键信息
-        success_nodes = [
-            sid for sid, st in self.node_status.items()
-            if st == NODE_SUCCESS
-        ]
+        success_nodes = [sid for sid, st in self.node_status.items() if st == NODE_SUCCESS]
         evidence_parts = []
         for sid in success_nodes:
             r = self.node_results.get(sid)
             if r and r.evidence:
-                evidence_parts.append(f'[{sid}] {r.evidence}')
-        evidence = ' | '.join(evidence_parts) if evidence_parts else '链路未完成'
+                evidence_parts.append(f"[{sid}] {r.evidence}")
+        evidence = " | ".join(evidence_parts) if evidence_parts else "链路未完成"
 
         # facts 非敏感信息附带到 extra
         extra = {
-            'chain_type': 'chain',
-            'chain_name': chain_def.name,
-            'node_count': len(self.node_status),
-            'success_count': len(success_nodes),
-            'facts': dict(self.facts),
+            "chain_type": "chain",
+            "chain_name": chain_def.name,
+            "node_count": len(self.node_status),
+            "success_count": len(success_nodes),
+            "facts": dict(self.facts),
         }
 
         return ScanResult(
-            kind='chain',
+            kind="chain",
             name=chain_def.display_name,
             severity=chain_def.severity,
             status=status,
-            url='',
+            url="",
             evidence=evidence,
             extra=extra,
             fix=chain_def.description,
@@ -307,7 +312,7 @@ class ChainEngine:
         result = engine.run(chain_def, target, session, fp_result)
     """
 
-    def __init__(self, on_unknown: str = 'fail'):
+    def __init__(self, on_unknown: str = "fail"):
         """初始化链引擎
 
         Args:
@@ -339,8 +344,7 @@ class ChainEngine:
 
         # 从显式 edges 补充（去重）
         for edge in chain_def.edges:
-            if (edge.from_id in adj and edge.to_id in adj
-                    and edge.to_id not in adj[edge.from_id]):
+            if edge.from_id in adj and edge.to_id in adj and edge.to_id not in adj[edge.from_id]:
                 adj[edge.from_id].append(edge.to_id)
                 in_degree[edge.to_id] += 1
 
@@ -350,10 +354,7 @@ class ChainEngine:
         remaining = {s.id for s in chain_def.steps}
         while remaining:
             # 找出当前入度为 0 的节点（按定义顺序）
-            ready = [
-                s.id for s in chain_def.steps
-                if s.id in remaining and in_degree[s.id] == 0
-            ]
+            ready = [s.id for s in chain_def.steps if s.id in remaining and in_degree[s.id] == 0]
             if not ready:
                 # 不应发生（validate 已检测环），防御性处理
                 break
@@ -365,8 +366,7 @@ class ChainEngine:
                         in_degree[neighbor] -= 1
         return result
 
-    def _evaluate_condition(self, condition: Optional[Callable],
-                             ctx: ChainContext) -> bool:
+    def _evaluate_condition(self, condition: Optional[Callable], ctx: ChainContext) -> bool:
         """评估条件函数，异常默认返回 False（不执行）"""
         if condition is None:
             return True
@@ -403,8 +403,10 @@ class ChainEngine:
         except Exception as e:
             # 异常等同 failed，记录错误信息
             error_result = ScanResult(
-                kind='chain', name=step.id, status=STATUS_UNKNOWN,
-                evidence=f'节点执行异常: {e}',
+                kind="chain",
+                name=step.id,
+                status=STATUS_UNKNOWN,
+                evidence=f"节点执行异常: {e}",
             )
             return error_result, NODE_ERROR
 
@@ -414,13 +416,18 @@ class ChainEngine:
             return False
         # UNKNOWN 策略
         if node_status == NODE_AMBIGUOUS:
-            return self.on_unknown == 'fail'
+            return self.on_unknown == "fail"
         # FAILED / ERROR
         return True
 
-    def run(self, chain_def: ChainDef, target: str, session: Any,
-            fp_result: FingerprintResult = None,
-            on_result: Optional[Callable[[ScanResult], None]] = None) -> ChainResult:
+    def run(
+        self,
+        chain_def: ChainDef,
+        target: str,
+        session: Any,
+        fp_result: FingerprintResult = None,
+        on_result: Optional[Callable[[ScanResult], None]] = None,
+    ) -> ChainResult:
         """执行链定义
 
         Args:
@@ -440,7 +447,7 @@ class ChainEngine:
         errors = chain_def.validate()
         if errors:
             result.status = CHAIN_BLOCKED
-            result.error = '链定义校验失败: ' + '; '.join(errors)
+            result.error = "链定义校验失败: " + "; ".join(errors)
             result.duration = time.time() - t0
             return result
 
@@ -462,20 +469,32 @@ class ChainEngine:
 
             # 检查上游是否已 abort
             if step_id in aborted:
-                ctx.set_result(step_id, ScanResult(
-                    kind='chain', name=step_id, status=STATUS_SAFE,
-                    evidence='上游节点失败，本节点被跳过',
-                ), NODE_SKIPPED)
+                ctx.set_result(
+                    step_id,
+                    ScanResult(
+                        kind="chain",
+                        name=step_id,
+                        status=STATUS_SAFE,
+                        evidence="上游节点失败，本节点被跳过",
+                    ),
+                    NODE_SKIPPED,
+                )
                 result.node_results[step_id] = ctx.results[step_id]
                 result.node_status[step_id] = NODE_SKIPPED
                 continue
 
             # 评估 condition
             if not self._evaluate_condition(step.condition, ctx):
-                ctx.set_result(step_id, ScanResult(
-                    kind='chain', name=step_id, status=STATUS_SAFE,
-                    evidence='条件不满足，跳过执行',
-                ), NODE_SKIPPED)
+                ctx.set_result(
+                    step_id,
+                    ScanResult(
+                        kind="chain",
+                        name=step_id,
+                        status=STATUS_SAFE,
+                        evidence="条件不满足，跳过执行",
+                    ),
+                    NODE_SKIPPED,
+                )
                 result.node_results[step_id] = ctx.results[step_id]
                 result.node_status[step_id] = NODE_SKIPPED
                 continue
@@ -505,20 +524,18 @@ class ChainEngine:
         # 聚合链整体状态
         result.status = self._aggregate_status(chain_def, result.node_status)
         result.facts = dict(ctx.facts)
-        result.secrets_masked = {k: _SECRET_MASK for k in ctx.secrets}
+        result.secrets_masked = dict.fromkeys(ctx.secrets, _SECRET_MASK)
         result.duration = time.time() - t0
         return result
 
-    def _propagate_abort(self, chain_def: ChainDef, failed_id: str,
-                          aborted: set):
+    def _propagate_abort(self, chain_def: ChainDef, failed_id: str, aborted: set):
         """将 abort 传播到失败节点的所有下游节点（递归）"""
         for s in chain_def.steps:
             if failed_id in s.depends_on and s.id not in aborted:
                 aborted.add(s.id)
                 self._propagate_abort(chain_def, s.id, aborted)
 
-    def _aggregate_status(self, chain_def: ChainDef,
-                           node_status: Dict[str, str]) -> str:
+    def _aggregate_status(self, chain_def: ChainDef, node_status: Dict[str, str]) -> str:
         """聚合链整体状态
 
         判定规则（考虑 on_unknown 策略）：
@@ -545,7 +562,7 @@ class ChainEngine:
             elif status == NODE_AMBIGUOUS:
                 has_ambiguous = True
                 # 根据 on_unknown 策略将 ambiguous 视为 failed 或 success
-                if self.on_unknown == 'fail':
+                if self.on_unknown == "fail":
                     has_failed = True
                 else:
                     has_success = True

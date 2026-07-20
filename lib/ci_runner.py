@@ -24,23 +24,22 @@
 #   1 = 发现超阈值漏洞
 #   2 = 扫描异常
 import os
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import List
 
 # CI 模式退出码
-EXIT_SUCCESS = 0       # 无漏洞或漏洞低于阈值
-EXIT_VULN_FOUND = 1    # 发现超阈值漏洞
-EXIT_ERROR = 2         # 扫描异常
+EXIT_SUCCESS = 0  # 无漏洞或漏洞低于阈值
+EXIT_VULN_FOUND = 1  # 发现超阈值漏洞
+EXIT_ERROR = 2  # 扫描异常
 
 # 严重度等级（数值越高越严重）
 SEVERITY_LEVELS = {
-    'low': 1,
-    'medium': 2,
-    'high': 3,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
 }
 
 
-def should_fail_ci(results: List, severity_threshold: str = 'high') -> bool:
+def should_fail_ci(results: List, severity_threshold: str = "high") -> bool:
     """判断是否应让 CI 失败
 
     Args:
@@ -50,6 +49,7 @@ def should_fail_ci(results: List, severity_threshold: str = 'high') -> bool:
         True 表示应失败（发现超阈值漏洞）
     """
     from core.models import STATUS_CONFIRMED
+
     threshold_level = SEVERITY_LEVELS.get(severity_threshold, 3)
 
     for r in results:
@@ -61,8 +61,7 @@ def should_fail_ci(results: List, severity_threshold: str = 'high') -> bool:
     return False
 
 
-def get_ci_exit_code(results: List, severity_threshold: str = 'high',
-                     has_error: bool = False) -> int:
+def get_ci_exit_code(results: List, severity_threshold: str = "high", has_error: bool = False) -> int:
     """获取 CI 退出码
 
     Args:
@@ -90,27 +89,28 @@ def format_ci_summary(results: List, target: str, duration: float = 0) -> str:
         摘要字符串（纯文本，无 ANSI 颜色码）
     """
     from core.models import STATUS_CONFIRMED
-    dist = {'high': 0, 'medium': 0, 'low': 0, 'total': 0}
+
+    dist = {"high": 0, "medium": 0, "low": 0, "total": 0}
     for r in results:
         if r.status != STATUS_CONFIRMED:
             continue
-        dist['total'] += 1
+        dist["total"] += 1
         if r.severity in dist:
             dist[r.severity] += 1
 
     lines = [
-        '=' * 60,
-        'Ruoyi-Scan CI Summary',
-        '=' * 60,
-        f'Target: {target}',
-        f'Duration: {duration:.2f}s',
-        f'Confirmed vulns: {dist["total"]}',
-        f'  High:   {dist["high"]}',
-        f'  Medium: {dist["medium"]}',
-        f'  Low:    {dist["low"]}',
-        '=' * 60,
+        "=" * 60,
+        "Ruoyi-Scan CI Summary",
+        "=" * 60,
+        f"Target: {target}",
+        f"Duration: {duration:.2f}s",
+        f"Confirmed vulns: {dist['total']}",
+        f"  High:   {dist['high']}",
+        f"  Medium: {dist['medium']}",
+        f"  Low:    {dist['low']}",
+        "=" * 60,
     ]
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def format_ci_vulns(results: List, max_display: int = 50) -> str:
@@ -123,27 +123,28 @@ def format_ci_vulns(results: List, max_display: int = 50) -> str:
         漏洞列表字符串
     """
     from core.models import STATUS_CONFIRMED
+
     confirmed = [r for r in results if r.status == STATUS_CONFIRMED]
     if not confirmed:
-        return 'No confirmed vulnerabilities.'
+        return "No confirmed vulnerabilities."
 
-    lines = [f'Confirmed vulnerabilities ({len(confirmed)}):']
+    lines = [f"Confirmed vulnerabilities ({len(confirmed)}):"]
     for i, r in enumerate(confirmed[:max_display], 1):
-        cve_str = f' [{r.cve}]' if getattr(r, 'cve', '') else ''
-        lines.append(f'  {i}. [{r.severity.upper()}] {r.name}{cve_str}')
-        lines.append(f'     URL: {r.url}')
+        cve_str = f" [{r.cve}]" if getattr(r, "cve", "") else ""
+        lines.append(f"  {i}. [{r.severity.upper()}] {r.name}{cve_str}")
+        lines.append(f"     URL: {r.url}")
 
     if len(confirmed) > max_display:
-        lines.append(f'  ... and {len(confirmed) - max_display} more')
+        lines.append(f"  ... and {len(confirmed) - max_display} more")
 
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
 # CI 配置文件生成
 # ============================================================
 
-GITHUB_ACTIONS_TEMPLATE = '''# Ruoyi-Scan Security Scan
+GITHUB_ACTIONS_TEMPLATE = """# Ruoyi-Scan Security Scan
 # 自动生成 by Ruoyi-Scan --ci-init github
 name: Security Scan
 
@@ -193,10 +194,10 @@ jobs:
         with:
           name: security-reports
           path: reports/
-'''
+"""
 
 
-GITLAB_CI_TEMPLATE = '''# Ruoyi-Scan Security Scan
+GITLAB_CI_TEMPLATE = """# Ruoyi-Scan Security Scan
 # 自动生成 by Ruoyi-Scan --ci-init gitlab
 security-scan:
   stage: test
@@ -216,10 +217,10 @@ security-scan:
   only:
     - main
     - merge_requests
-'''
+"""
 
 
-JENKINSFILE_TEMPLATE = '''// Ruoyi-Scan Security Scan
+JENKINSFILE_TEMPLATE = """// Ruoyi-Scan Security Scan
 // 自动生成 by Ruoyi-Scan --ci-init jenkins
 pipeline {
     agent any
@@ -249,7 +250,7 @@ pipeline {
         }
     }
 }
-'''
+"""
 
 
 def generate_ci_config(platform: str, output_path: str = None) -> str:
@@ -262,26 +263,25 @@ def generate_ci_config(platform: str, output_path: str = None) -> str:
         配置文件内容
     """
     templates = {
-        'github': GITHUB_ACTIONS_TEMPLATE,
-        'gitlab': GITLAB_CI_TEMPLATE,
-        'jenkins': JENKINSFILE_TEMPLATE,
+        "github": GITHUB_ACTIONS_TEMPLATE,
+        "gitlab": GITLAB_CI_TEMPLATE,
+        "jenkins": JENKINSFILE_TEMPLATE,
     }
 
     if platform not in templates:
-        raise ValueError(f'不支持的 CI 平台: {platform}（支持: {list(templates.keys())}）')
+        raise ValueError(f"不支持的 CI 平台: {platform}（支持: {list(templates.keys())}）")
 
     content = templates[platform]
 
     if output_path:
-        os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
 
     return content
 
 
-def run_ci_mode(args, results: List, target: str, duration: float = 0,
-                has_error: bool = False) -> int:
+def run_ci_mode(args, results: List, target: str, duration: float = 0, has_error: bool = False) -> int:
     """CI 模式运行入口
 
     Args:
@@ -293,7 +293,7 @@ def run_ci_mode(args, results: List, target: str, duration: float = 0,
     Returns:
         退出码（0/1/2）
     """
-    severity_threshold = getattr(args, 'severity_threshold', 'high')
+    severity_threshold = getattr(args, "severity_threshold", "high")
 
     # 输出 CI 摘要
     print(format_ci_summary(results, target, duration))
@@ -304,10 +304,10 @@ def run_ci_mode(args, results: List, target: str, duration: float = 0,
     exit_code = get_ci_exit_code(results, severity_threshold, has_error)
 
     if exit_code == EXIT_VULN_FOUND:
-        print(f'\n[CI] FAILED: 发现 {severity_threshold}+ 级别漏洞')
+        print(f"\n[CI] FAILED: 发现 {severity_threshold}+ 级别漏洞")
     elif exit_code == EXIT_SUCCESS:
-        print(f'\n[CI] PASSED: 无超阈值漏洞')
+        print("\n[CI] PASSED: 无超阈值漏洞")
     elif exit_code == EXIT_ERROR:
-        print(f'\n[CI] ERROR: 扫描异常')
+        print("\n[CI] ERROR: 扫描异常")
 
     return exit_code

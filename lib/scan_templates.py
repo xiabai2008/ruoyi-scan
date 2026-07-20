@@ -34,6 +34,7 @@ class ScanTemplate:
         estimated_time: 预估耗时（描述性字符串）
         report_label: 报告模式标签（覆盖默认 mode 标签）
     """
+
     name: str
     display_name: str
     description: str
@@ -41,8 +42,8 @@ class ScanTemplate:
     category_filter: Set[str] = field(default_factory=set)
     compliance_filter: Set[str] = field(default_factory=set)
     default_args: Dict[str, Any] = field(default_factory=dict)
-    estimated_time: str = ''
-    report_label: str = ''
+    estimated_time: str = ""
+    report_label: str = ""
 
 
 # ============================================================
@@ -50,87 +51,75 @@ class ScanTemplate:
 # ============================================================
 
 TEMPLATES: Dict[str, ScanTemplate] = {
-    'quick': ScanTemplate(
-        name='quick',
-        display_name='快速扫描',
-        description=(
-            '仅执行高危漏洞检测 + 目录扫描，跳过低危和信息泄露类插件。'
-            '适合快速评估目标是否存在严重漏洞。'
-        ),
-        severity_filter={'high'},  # 只跑高危
-        category_filter=set(),     # 不限类别（vuln + recon + brute 都跑）
+    "quick": ScanTemplate(
+        name="quick",
+        display_name="快速扫描",
+        description=("仅执行高危漏洞检测 + 目录扫描，跳过低危和信息泄露类插件。适合快速评估目标是否存在严重漏洞。"),
+        severity_filter={"high"},  # 只跑高危
+        category_filter=set(),  # 不限类别（vuln + recon + brute 都跑）
         compliance_filter=set(),
         default_args={
-            'threads': 5,
-            'timeout': 8,
-            'crawl': False,
-            'subdomain': False,
-            'js_extract': False,
+            "threads": 5,
+            "timeout": 8,
+            "crawl": False,
+            "subdomain": False,
+            "js_extract": False,
         },
-        estimated_time='1-3 分钟',
-        report_label='快速扫描',
+        estimated_time="1-3 分钟",
+        report_label="快速扫描",
     ),
-    'deep': ScanTemplate(
-        name='deep',
-        display_name='深度扫描',
-        description=(
-            '全量插件扫描 + 主动爬虫（深度 3）+ JS 端点提取 + 子域名枚举。'
-            '发现面最广，适合全面安全评估。'
-        ),
-        severity_filter=set(),     # 不过滤严重度
-        category_filter=set(),     # 不过滤类别
+    "deep": ScanTemplate(
+        name="deep",
+        display_name="深度扫描",
+        description=("全量插件扫描 + 主动爬虫（深度 3）+ JS 端点提取 + 子域名枚举。发现面最广，适合全面安全评估。"),
+        severity_filter=set(),  # 不过滤严重度
+        category_filter=set(),  # 不过滤类别
         compliance_filter=set(),
         default_args={
-            'threads': 3,
-            'timeout': 15,
-            'crawl': True,
-            'crawl_depth': 3,
-            'crawl_max_pages': 100,
-            'subdomain': True,
-            'js_extract': True,
+            "threads": 3,
+            "timeout": 15,
+            "crawl": True,
+            "crawl_depth": 3,
+            "crawl_max_pages": 100,
+            "subdomain": True,
+            "js_extract": True,
         },
-        estimated_time='10-30 分钟',
-        report_label='深度扫描',
+        estimated_time="10-30 分钟",
+        report_label="深度扫描",
     ),
-    'compliance': ScanTemplate(
-        name='compliance',
-        display_name='OWASP 合规扫描',
-        description=(
-            '仅执行含 OWASP Top 10 映射的漏洞插件，生成 OWASP 合规报告。'
-            '适合合规审计场景。'
-        ),
+    "compliance": ScanTemplate(
+        name="compliance",
+        display_name="OWASP 合规扫描",
+        description=("仅执行含 OWASP Top 10 映射的漏洞插件，生成 OWASP 合规报告。适合合规审计场景。"),
         severity_filter=set(),
-        category_filter={'vuln'},  # 只跑漏洞类
-        compliance_filter={'OWASP'},  # 只跑含 OWASP 映射的
+        category_filter={"vuln"},  # 只跑漏洞类
+        compliance_filter={"OWASP"},  # 只跑含 OWASP 映射的
         default_args={
-            'threads': 3,
-            'timeout': 10,
-            'crawl': False,
-            'subdomain': False,
-            'js_extract': False,
+            "threads": 3,
+            "timeout": 10,
+            "crawl": False,
+            "subdomain": False,
+            "js_extract": False,
         },
-        estimated_time='5-10 分钟',
-        report_label='OWASP 合规扫描',
+        estimated_time="5-10 分钟",
+        report_label="OWASP 合规扫描",
     ),
-    'dengbao': ScanTemplate(
-        name='dengbao',
-        display_name='等保 2.0 合规扫描',
-        description=(
-            '仅执行含等保 2.0 映射的漏洞插件，生成等保合规报告。'
-            '适合等级保护测评场景。'
-        ),
+    "dengbao": ScanTemplate(
+        name="dengbao",
+        display_name="等保 2.0 合规扫描",
+        description=("仅执行含等保 2.0 映射的漏洞插件，生成等保合规报告。适合等级保护测评场景。"),
         severity_filter=set(),
-        category_filter={'vuln'},
-        compliance_filter={'等保'},  # 只跑含等保映射的
+        category_filter={"vuln"},
+        compliance_filter={"等保"},  # 只跑含等保映射的
         default_args={
-            'threads': 3,
-            'timeout': 10,
-            'crawl': False,
-            'subdomain': False,
-            'js_extract': False,
+            "threads": 3,
+            "timeout": 10,
+            "crawl": False,
+            "subdomain": False,
+            "js_extract": False,
         },
-        estimated_time='5-10 分钟',
-        report_label='等保 2.0 合规扫描',
+        estimated_time="5-10 分钟",
+        report_label="等保 2.0 合规扫描",
     ),
 }
 
@@ -173,8 +162,8 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
         return None
 
     if verbose:
-        print(f'  [*]应用模板: {tmpl.display_name}（{tmpl.estimated_time}）')
-        print(f'      {tmpl.description}')
+        print(f"  [*]应用模板: {tmpl.display_name}（{tmpl.estimated_time}）")
+        print(f"      {tmpl.description}")
 
     # 应用模板默认参数（仅填充未显式指定的）
     parser_defaults = _get_parser_defaults()
@@ -185,7 +174,7 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
         if current_value == default_value:
             setattr(args, key, tmpl_value)
             if verbose:
-                print(f'      {key}: {current_value} → {tmpl_value}')
+                print(f"      {key}: {current_value} → {tmpl_value}")
 
     return tmpl
 
@@ -204,22 +193,21 @@ def filter_plugins(plugins: List, template: ScanTemplate) -> List:
 
     filtered = []
     for cls in plugins:
-        instance = None
         # 按严重度过滤
         if template.severity_filter:
-            severity = getattr(cls, 'severity', '')
+            severity = getattr(cls, "severity", "")
             if severity not in template.severity_filter:
                 continue
 
         # 按类别过滤
         if template.category_filter:
-            category = getattr(cls, 'category', '')
+            category = getattr(cls, "category", "")
             if category not in template.category_filter:
                 continue
 
         # 按合规映射过滤
         if template.compliance_filter:
-            compliance = getattr(cls, 'compliance', '') or ''
+            compliance = getattr(cls, "compliance", "") or ""
             # compliance 格式：'等保2.0:8.1.4;OWASP:A01:2021'
             # 检查是否包含目标合规标准
             matched = False
@@ -256,6 +244,7 @@ def _get_parser_defaults() -> Dict[str, Any]:
     try:
         # 延迟导入避免循环依赖
         import main as _main
+
         parser = _main.build_parser()
         _parser_defaults_cache = dict(vars(parser.parse_args([])))
     except Exception:

@@ -10,9 +10,9 @@
 import json
 import re
 import socket
-import ssl
 import urllib.parse
-from typing import Dict, List, Optional, Tuple
+import urllib.request
+from typing import List
 
 
 class OriginIPFinder:
@@ -26,9 +26,24 @@ class OriginIPFinder:
     """
 
     # 常见子域名（常未挂 CDN）
-    _SUBDOMAINS = ['www', 'mail', 'dev', 'test', 'staging', 'api',
-                   'admin', 'portal', 'direct', 'origin', 'backend',
-                   'webmail', 'cpanel', 'ftp', 'ssh', 'vpn']
+    _SUBDOMAINS = [
+        "www",
+        "mail",
+        "dev",
+        "test",
+        "staging",
+        "api",
+        "admin",
+        "portal",
+        "direct",
+        "origin",
+        "backend",
+        "webmail",
+        "cpanel",
+        "ftp",
+        "ssh",
+        "vpn",
+    ]
 
     def __init__(self, timeout=5):
         self.timeout = timeout
@@ -77,29 +92,27 @@ class OriginIPFinder:
         """
         ips = []
         headers_to_check = [
-            'X-Originating-IP',
-            'X-Forwarded-For',
-            'X-Real-IP',
-            'Via',
-            'X-Cache',
-            'X-Served-By',
-            'CF-RAY',
+            "X-Originating-IP",
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "Via",
+            "X-Cache",
+            "X-Served-By",
+            "CF-RAY",
         ]
         try:
-            from lib.http import join_url
-            url = f'http://{domain}/'
-            if hasattr(session, 'get'):
+            url = f"http://{domain}/"
+            if hasattr(session, "get"):
                 resp = session.get(url)
             else:
                 resp = None
             if resp is None:
                 return ips
             for header in headers_to_check:
-                value = resp.headers.get(header, '')
+                value = resp.headers.get(header, "")
                 if value:
                     # 提取 IP 地址
-                    found = re.findall(
-                        r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', value)
+                    found = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", value)
                     for ip in found:
                         if not self._is_cdn_ip(ip):
                             ips.append(ip)
@@ -114,7 +127,7 @@ class OriginIPFinder:
         """
         ips = []
         for sub in self._SUBDOMAINS:
-            subdomain = f'{sub}.{domain}'
+            subdomain = f"{sub}.{domain}"
             try:
                 ip = socket.gethostbyname(subdomain)
                 if not self._is_cdn_ip(ip):
@@ -131,24 +144,22 @@ class OriginIPFinder:
         """
         ips = []
         try:
-            url = f'https://crt.sh/?q={urllib.parse.quote(domain)}&output=json'
-            if hasattr(session, 'get'):
+            url = f"https://crt.sh/?q={urllib.parse.quote(domain)}&output=json"
+            if hasattr(session, "get"):
                 resp = session.get(url)
                 text = resp.text
             else:
                 # 用 urllib 兜底
-                import urllib.request
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    text = r.read().decode('utf-8')
+                    text = r.read().decode("utf-8")
 
             # 解析 JSON
             data = json.loads(text)
             for entry in data:
-                name_value = entry.get('name_value', '')
+                name_value = entry.get("name_value", "")
                 # 从 SAN 中提取 IP
-                found = re.findall(
-                    r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', name_value)
+                found = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", name_value)
                 for ip in found:
                     if not self._is_cdn_ip(ip):
                         ips.append(ip)
@@ -163,14 +174,22 @@ class OriginIPFinder:
         """
         # Cloudflare 常见段
         cdn_prefixes = [
-            '104.16.', '104.17.', '104.18.', '104.19.', '104.20.',
-            '172.64.', '172.67.', '162.159.',
+            "104.16.",
+            "104.17.",
+            "104.18.",
+            "104.19.",
+            "104.20.",
+            "172.64.",
+            "172.67.",
+            "162.159.",
             # 阿里云 CDN
-            '47.246.', '120.241.',
+            "47.246.",
+            "120.241.",
             # 腾讯云 CDN
-            '119.91.', '129.226.',
+            "119.91.",
+            "129.226.",
             # 百度云加速
-            '182.61.',
+            "182.61.",
         ]
         for prefix in cdn_prefixes:
             if ip.startswith(prefix):
@@ -191,12 +210,11 @@ class OriginIPFinder:
         # 保留端口
         netloc = origin_ip
         if parsed.port:
-            netloc = f'{origin_ip}:{parsed.port}'
-        elif parsed.scheme == 'https':
-            netloc = f'{origin_ip}:443'
-        elif parsed.scheme == 'http':
-            netloc = f'{origin_ip}:80'
-        return urllib.parse.urlunparse((
-            parsed.scheme, netloc, parsed.path,
-            parsed.params, parsed.query, parsed.fragment
-        ))
+            netloc = f"{origin_ip}:{parsed.port}"
+        elif parsed.scheme == "https":
+            netloc = f"{origin_ip}:443"
+        elif parsed.scheme == "http":
+            netloc = f"{origin_ip}:80"
+        return urllib.parse.urlunparse(
+            (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+        )

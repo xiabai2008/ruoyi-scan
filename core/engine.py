@@ -4,13 +4,12 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, List, Optional
 
-from core.models import ScanResult, STATUS_UNKNOWN
+from core.models import STATUS_UNKNOWN, ScanResult
 
 if TYPE_CHECKING:
     from core.session import SessionManager
-    from plugins.base import PluginBase
 
 
 class ScanEngine:
@@ -22,9 +21,14 @@ class ScanEngine:
         self._timestamps = []  # 令牌桶：最近 1 秒内的请求时间戳
         self._rate_lock = threading.Lock()  # 保护 _rate_limit 的互斥锁（多线程安全）
 
-    def run(self, plugin_classes: List[type], target: str, session: SessionManager,
-            on_result: Optional[Callable[[ScanResult], None]] = None,
-            waf_bypass_coordinator: Optional[object] = None) -> List[ScanResult]:
+    def run(
+        self,
+        plugin_classes: List[type],
+        target: str,
+        session: SessionManager,
+        on_result: Optional[Callable[[ScanResult], None]] = None,
+        waf_bypass_coordinator: Optional[object] = None,
+    ) -> List[ScanResult]:
         """运行插件集合
 
         Args:
@@ -45,25 +49,26 @@ class ScanEngine:
                 inst = cls()
                 original = inst.verify(target, session)
                 # D7: WAF 绕过（仅当协调器存在且插件支持绕过且原结果非 CONFIRMED）
-                if (waf_bypass_coordinator is not None
-                        and getattr(inst, 'supports_waf_bypass', False)
-                        and original.status != 'CONFIRMED'):
+                if (
+                    waf_bypass_coordinator is not None
+                    and getattr(inst, "supports_waf_bypass", False)
+                    and original.status != "CONFIRMED"
+                ):
                     try:
-                        original = waf_bypass_coordinator.maybe_bypass(
-                            inst, target, session, original)
+                        original = waf_bypass_coordinator.maybe_bypass(inst, target, session, original)
                     except Exception as e:
                         # 绕过异常不降级为 SAFE，保持原状态
                         if not original.extra:
                             original.extra = {}
-                        original.extra['waf_bypass_error'] = str(e)
+                        original.extra["waf_bypass_error"] = str(e)
                 return original
             except Exception as e:
                 # 网络异常等不阻断整体流程，判为 UNKNOWN（绝不判 SAFE）
                 return ScanResult(
-                    kind='error',
-                    name=getattr(cls, 'name', cls.__name__),
+                    kind="error",
+                    name=getattr(cls, "name", cls.__name__),
                     status=STATUS_UNKNOWN,
-                    evidence=f'执行异常: {e}'
+                    evidence=f"执行异常: {e}",
                 )
 
         if self.threads <= 1:

