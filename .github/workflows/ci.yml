@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Pytest (core unit tests)
         run: python -m pytest -q
       - name: Regression ruoyi
@@ -59,7 +59,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: RuoYi signature lab
         run: |
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
@@ -82,7 +82,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies (含 D8 可选依赖)
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: D8 单元测试（dedup + PDF + Word + Excel + CLI 集成）
         run: python -m pytest tests/test_dedup.py tests/test_report_pdf.py tests/test_report_docx.py tests/test_report_xlsx.py tests/test_d8_cli.py -v
       - name: 全格式生成冒烟（render_all formats=all → 6 文件）
@@ -114,7 +114,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: D7 全量测试（tamper + bypass + origin + engine + plugins + acceptance + stats）
         run: python -m pytest tests/test_tamper.py tests/test_waf_bypass.py tests/test_origin_finder.py tests/test_d7_engine.py tests/test_d7_plugins.py tests/test_d7_acceptance.py tests/test_d7_stats.py -v
 
@@ -129,7 +129,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: D9 全量测试（orchestrator + API + WebSocket + 报告下载）
         run: python -m pytest tests/test_orchestrator.py tests/test_api_scan.py tests/test_api_ws.py -v
 
@@ -144,7 +144,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Scan real-spring lab (expect >= 11 CONFIRMED)
         run: |
           python scripts/run_e2e.py --lab lab/real-spring/server.py --lab-port 8086 \
@@ -175,7 +175,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
