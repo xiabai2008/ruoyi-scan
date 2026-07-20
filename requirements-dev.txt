@@ -10,3 +10,8 @@ pytest-asyncio>=0.21
 
 # FastAPI TestClient 依赖（starlette.testclient 需要）
 httpx2>=2.7.0
+
+# D8 报告格式依赖（PDF/Word/Excel）
+reportlab>=4.0
+python-docx>=1.1
+openpyxl>=3.1
