@@ -1,13 +1,20 @@
-# Ruoyi-Scan 依赖（阶段七 Docker 部署）
-# scanner 主程序仅依赖 requests；flask 供 lab 靶场；requests-mock 供 tests
-# 注：pyyaml（Nuclei 兼容用）已随 plugins/nuclei 迁移至 cms-scan-extras/
+# Ruoyi-Scan 依赖清单
+# 完整可选项请参考 pyproject.toml [project.optional-dependencies]
+#
+# 安装方式：
+#   pip install -r requirements.txt           # 核心 + 报告 + Web API（推荐）
+#   pip install ".[all]"                      # 全部可选依赖
+#   pip install ".[distributed,async,yaml]"   # 按需安装
 
-# === 主依赖（零系统依赖，必装）===
+# === 核心依赖（零系统依赖，必装）===
 requests>=2.28
-flask>=2.3
 requests-mock>=1.11
 
+# === 靶场环境（lab/）===
+flask>=2.3
+
 # === D8 报告增强（可选，缺时自动降级为 HTML/JSON/CSV）===
+# 安装：pip install ".[report]"
 # PDF 报告（reportlab 内置 STSong-Light CJK 字体，零系统字体依赖）
 reportlab>=4.0
 # Word 报告（python-docx 数据驱动，无需模板文件）
@@ -16,6 +23,13 @@ python-docx>=1.1
 openpyxl>=3.1
 
 # === D9 Web API（可选，仅 --serve 模式需要）===
+# 安装：pip install ".[serve]"
 # FastAPI + uvicorn 提供 REST API + WebSocket + Web 控制台
 fastapi>=0.100
 uvicorn[standard]>=0.23
+
+# === 以下可选依赖未包含在 requirements.txt，按需安装 ===
+# pip install ".[yaml]"         → pyyaml>=6.0      # --config YAML 配置文件
+# pip install ".[distributed]"  → redis>=4.5       # --distributed Redis 分布式扫描
+# pip install ".[async]"        → aiohttp>=3.8     # --async 异步 HTTP 客户端
+# pip install ".[dev]"          → pytest/ruff/mypy # 开发与测试

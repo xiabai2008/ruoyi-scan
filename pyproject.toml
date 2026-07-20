@@ -1,0 +1,135 @@
+# Ruoyi-Scan — 项目元数据与依赖规范（PEP 621）
+# 安装方式：
+#   pip install .                    # 仅核心依赖
+#   pip install ".[report]"          # 核心 + 报告增强
+#   pip install ".[serve]"           # 核心 + Web API
+#   pip install ".[distributed]"     # 核心 + Redis 分布式
+#   pip install ".[async]"           # 核心 + aiohttp 异步
+#   pip install ".[yaml]"            # 核心 + YAML 配置
+#   pip install ".[all]"             # 全部可选依赖
+#   pip install ".[dev]"             # 开发/测试依赖
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ruoyi-scan"
+version = "1.1.0"
+description = "若依（RuoYi）专项漏洞扫描器 — 插件化架构 / 三态判定 / 38 POC / OAST / 业务逻辑 / 分布式 / SIEM"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "XIABAI", email = "1204798391@qq.com" }
+]
+requires-python = ">=3.8"
+keywords = ["ruoyi", "vulnerability-scanner", "security", "pentest", "spring", "poc"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+# 核心依赖（零系统依赖，必装）
+dependencies = [
+    "requests>=2.28",
+    "requests-mock>=1.11",
+]
+
+# 可选依赖分组（pip install ".[group]"）
+[project.optional-dependencies]
+# 报告增强：PDF / Word / Excel
+report = [
+    "reportlab>=4.0",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+]
+# Web API 服务：FastAPI + WebSocket
+serve = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+]
+# 分布式扫描：Redis Master-Worker 队列
+distributed = [
+    "redis>=4.5",
+]
+# 异步引擎：aiohttp 异步 HTTP 客户端
+async = [
+    "aiohttp>=3.8",
+]
+# YAML 配置文件
+yaml = [
+    "pyyaml>=6.0",
+]
+# 靶场环境（lab/）
+lab = [
+    "flask>=2.3",
+]
+# 全部可选依赖
+all = [
+    "reportlab>=4.0",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+    "redis>=4.5",
+    "aiohttp>=3.8",
+    "pyyaml>=6.0",
+    "flask>=2.3",
+]
+# 开发/测试依赖
+dev = [
+    "pytest>=7.4",
+    "pytest-timeout>=2.2",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.21",
+    "pytest-benchmark>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.5",
+]
+
+# CLI 入口点：安装后可直接 ruoyi-scan -p http://target/
+[project.scripts]
+ruoyi-scan = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/xiabai2004/Ruoyi-Scan"
+Repository = "https://github.com/xiabai2004/Ruoyi-Scan"
+Issues = "https://github.com/xiabai2004/Ruoyi-Scan/issues"
+
+[tool.setuptools]
+# 显式声明包目录（非 src-layout）
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "lib*", "api*", "plugins*", "config*", "chains*", "data*"]
+exclude = ["tests*", "lab*", "web*", "monitoring*", ".github*", ".reasonix*"]
+
+# ── 开发工具配置 ──
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM"]
+ignore = ["E501"]  # 行长度由 line-length 控制，不强制警告
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "regression_*.py"]
+addopts = "-q"

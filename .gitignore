@@ -8,6 +8,16 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
+# 运行时数据库（扫描缓存 + 任务持久化，按需生成）
+data/*.db
+# 保留 data 目录但排除 db 文件（用 .gitkeep 占位）
+!data/.gitkeep
+
+# 构建产物
+build/
+dist/
+*.whl
+
 # 开发文档与 AI 提示词（不纳入版本库）
 agents.md
 P0P1P2升级计划.md
