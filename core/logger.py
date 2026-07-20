@@ -36,7 +36,10 @@ def setup_logging(debug: bool = False, level: int | None = None) -> None:
         handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT))
         root = logging.getLogger()
         # 避免重复添加 handler
-        if not any(isinstance(h, logging.StreamHandler) and h.formatter and "levelname" in (h.formatter._fmt or "") for h in root.handlers):
+        if not any(
+            isinstance(h, logging.StreamHandler) and h.formatter and "levelname" in (h.formatter._fmt or "")
+            for h in root.handlers
+        ):
             root.addHandler(handler)
         root.setLevel(level)
         _configured = True
