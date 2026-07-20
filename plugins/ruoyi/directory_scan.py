@@ -2,9 +2,9 @@
 import re
 
 from config import settings
+from core.http import join_url
 from core.models import STATUS_UNKNOWN, ScanResult
 from lib.colors import GREEN, RED, RESET, YELLOW
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

@@ -14,7 +14,7 @@ except ImportError:
     print('缺少依赖 requests_mock，请先执行：pip install requests_mock')
     sys.exit(1)
 
-from lib.ruoyi_versions import (
+from core.ruoyi_versions import (
     extract_version, detect_version, parse_version, version_in_range,
 )
 from core.session import SessionManager

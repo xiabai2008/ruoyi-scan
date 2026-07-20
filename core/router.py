@@ -33,7 +33,7 @@ class Router:
         # D2：按 affected_versions 过滤
         version = getattr(fingerprint_result, "version", "") or ""
         if version:
-            from lib.ruoyi_versions import version_in_range
+            from core.ruoyi_versions import version_in_range
 
             filtered = []
             for cls in plugins:

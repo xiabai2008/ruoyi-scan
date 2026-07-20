@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException
 
 from api.models.schemas import PluginDTO
 from core.loader import load_plugins
+from core.logger import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(tags=["插件"])
 
 
@@ -14,7 +16,7 @@ def _load_all_plugins():
         try:
             plugins.extend(load_plugins(pkg))
         except Exception:
-            pass
+            logger.debug("加载插件包 %s 失败", pkg, exc_info=True)
     return plugins
 
 

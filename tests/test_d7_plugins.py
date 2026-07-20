@@ -99,7 +99,7 @@ def test_vuln_type_coverage():
 
 def test_waf_features_have_block_signatures():
     """所有 WAF 特征含 block_signatures 字段"""
-    from lib.waf_features import WAF_FEATURES
+    from core.waf_features import WAF_FEATURES
     for waf_name, waf_data in WAF_FEATURES.items():
         assert 'block_signatures' in waf_data, \
             f'{waf_name} 缺 block_signatures'
@@ -110,7 +110,7 @@ def test_waf_features_have_block_signatures():
 
 def test_waf_features_have_recommended_strategies():
     """所有 WAF 特征含 recommended_strategies 字段"""
-    from lib.waf_features import WAF_FEATURES
+    from core.waf_features import WAF_FEATURES
     for waf_name, waf_data in WAF_FEATURES.items():
         assert 'recommended_strategies' in waf_data, \
             f'{waf_name} 缺 recommended_strategies'
@@ -119,7 +119,7 @@ def test_waf_features_have_recommended_strategies():
 
 def test_is_waf_blocked_status_code():
     """is_waf_blocked 按状态码判定"""
-    from lib.waf_features import is_waf_blocked
+    from core.waf_features import is_waf_blocked
     # Cloudflare 拦截码 403/503
     assert is_waf_blocked('cloudflare', status_code=403) is True
     assert is_waf_blocked('cloudflare', status_code=503) is True
@@ -128,7 +128,7 @@ def test_is_waf_blocked_status_code():
 
 def test_is_waf_blocked_body_signature():
     """is_waf_blocked 按响应体特征判定"""
-    from lib.waf_features import is_waf_blocked
+    from core.waf_features import is_waf_blocked
     # Cloudflare 拦截页特征
     assert is_waf_blocked('cloudflare', response_text='Attention Required! cloudflare') is True
     assert is_waf_blocked('cloudflare', response_text='normal page') is False
@@ -136,7 +136,7 @@ def test_is_waf_blocked_body_signature():
 
 def test_is_waf_blocked_unknown_waf():
     """未知 WAF 返回 False（不拦截）"""
-    from lib.waf_features import is_waf_blocked
+    from core.waf_features import is_waf_blocked
     assert is_waf_blocked('nonexistent', status_code=403) is False
 
 

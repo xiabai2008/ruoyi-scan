@@ -9,8 +9,8 @@
 #       链引擎通过 ctx.facts 共享上游数据（如 db_name）。
 import re
 
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

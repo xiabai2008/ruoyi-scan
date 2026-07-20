@@ -21,6 +21,10 @@ import threading
 from typing import Callable, List, Optional, Set
 from urllib.parse import urlparse
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # 内置 top 50 常见子域名字典（按出现频率排序）
 DEFAULT_SUBDOMAIN_WORDS = [
     "www",
@@ -175,7 +179,7 @@ class SubdomainEnumerator:
                     try:
                         self.on_found(subdomain)
                     except Exception:
-                        pass
+                        logger.debug("执行子域名发现回调失败", exc_info=True)
             else:
                 if source not in self.sources.get(subdomain, []):
                     self.sources[subdomain].append(source)

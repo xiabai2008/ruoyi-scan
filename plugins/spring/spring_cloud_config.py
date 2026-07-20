@@ -1,6 +1,6 @@
 # Spring Cloud Config 路径穿越 (CVE-2020-5410)
+from core.http import join_url
 from core.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

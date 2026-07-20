@@ -11,6 +11,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class TaskRecord:
@@ -74,7 +78,7 @@ class TaskRegistry:
             try:
                 self.storage.save_task(task_id, td)
             except Exception:
-                pass
+                logger.debug("任务状态落盘失败", exc_info=True)
 
     def update_task_dict(self, task_id: str, task_dict: dict):
         """更新任务快照"""
@@ -86,7 +90,7 @@ class TaskRegistry:
             try:
                 self.storage.save_task(task_id, task_dict)
             except Exception:
-                pass
+                logger.debug("任务快照落盘失败", exc_info=True)
 
     def get(self, task_id: str) -> Optional[TaskRecord]:
         """获取任务记录"""
@@ -132,7 +136,7 @@ class TaskRegistry:
             try:
                 self.storage.save_event(task_id, event_type, payload)
             except Exception:
-                pass
+                logger.debug("事件落盘失败", exc_info=True)
 
         # 跨线程投递到 asyncio loop
         if self._loop and subscribers:
@@ -140,7 +144,7 @@ class TaskRegistry:
                 try:
                     asyncio.run_coroutine_threadsafe(queue.put(event), self._loop)
                 except Exception:
-                    pass  # loop 可能已关闭
+                    logger.debug("事件投递到 asyncio loop 失败（loop 可能已关闭）", exc_info=True)
 
     async def subscribe(self, task_id: str) -> asyncio.Queue:
         """WS handler 调用：订阅任务事件
@@ -206,4 +210,4 @@ class TaskRegistry:
                         task_dict=td,
                     )
         except Exception:
-            pass  # 恢复失败不阻断启动
+            logger.debug("任务状态恢复失败，不阻断启动", exc_info=True)

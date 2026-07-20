@@ -2,9 +2,9 @@
 # 漏洞原因：/actuator/jolokia 端点暴露 Jolokia JMX-HTTP 桥，可通过 reloadByURL MBean
 #   加载远程恶意 logback XML 配置文件，触发 JNDI 注入 RCE（影响 Spring Boot + Jolokia）。
 # 本插件仅做存在性验证：POST /actuator/jolokia reloadByURL 探针，检测响应特征判定接口可达。
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_jolokia_response
 from plugins.base import PluginBase
 

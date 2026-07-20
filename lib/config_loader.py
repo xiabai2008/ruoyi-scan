@@ -29,6 +29,10 @@
 import os
 from typing import Any, Dict, Optional, Tuple
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def _try_import_yaml():
     """尝试导入 PyYAML，不可用时返回 None"""
@@ -122,12 +126,12 @@ def _infer_type(value: str) -> Any:
     try:
         return int(value)
     except ValueError:
-        pass
+        logger.debug("解析配置整数值失败，尝试浮点数", exc_info=True)
     # 尝试 float
     try:
         return float(value)
     except ValueError:
-        pass
+        logger.debug("解析配置浮点数值失败，使用原始字符串", exc_info=True)
     return value
 
 

@@ -17,6 +17,10 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ProxyStats:
@@ -94,7 +98,7 @@ class ProxyPool:
                     if line and not line.startswith("#"):
                         proxies.append(line)
         except FileNotFoundError:
-            pass
+            logger.debug("代理文件未找到，使用空代理列表", exc_info=True)
         return cls(proxies, strategy)
 
     def add(self, proxy_url: str):

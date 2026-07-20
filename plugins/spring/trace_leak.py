@@ -3,9 +3,9 @@
 #   可匿名访问，暴露最近请求历史（含 headers/cookies/sessions 等敏感信息），
 #   便于攻击者窃取会话凭证、复现请求链、绘制攻击面（影响 Spring Boot 默认暴露配置）。
 # 本插件仅做存在性验证：GET /actuator/trace 检测响应是否含 trace 泄露签名特征。
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_trace_leak
 from plugins.base import PluginBase
 

@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE
-from core.runner import (
+from cli.runner import (
     _parse_report_formats, _print_scan_result,
     MODE_CATEGORIES, MODE_LABELS,
 )
@@ -86,8 +86,8 @@ class TestE2EFullFlow(unittest.TestCase):
         self.assertEqual(args.u, 'http://example.com/')
 
     def test_runner_imports(self):
-        """验证 core/runner.py 所有公开函数可导入"""
-        from core.runner import (
+        """验证 cli/runner.py 所有公开函数可导入"""
+        from cli.runner import (
             run_mode, run_mode_batch, final_prompt,
             run_chain_mode, run_serve_mode, run_passive_mode,
             run_template_list_mode, run_diff_only_mode,

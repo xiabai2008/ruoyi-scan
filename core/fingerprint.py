@@ -2,9 +2,12 @@
 import hashlib
 import re
 
+from core.fingerprint_features import get_feature, list_cms
+from core.logger import get_logger
 from core.models import FingerprintResult
 from core.session import SessionManager
-from lib.fingerprint_features import get_feature, list_cms
+
+logger = get_logger(__name__)
 
 
 class Fingerprint:
@@ -65,7 +68,7 @@ class FeatureBasedFingerprint(Fingerprint):
                     matched.append("keyword:%s" % kw)
                     break
         except Exception:
-            pass
+            logger.debug("主页特征检测失败", exc_info=True)
 
         # 2. 强特征路径探测
         for item in f.get("strong_paths", []):
@@ -102,7 +105,7 @@ class FeatureBasedFingerprint(Fingerprint):
                     weak_hits += 1
                     matched.append("favicon:unknown:%s" % h[:8])
         except Exception:
-            pass
+            logger.debug("favicon hash 比对失败", exc_info=True)
 
         confidence = min(1.0, strong_hits * w_strong + weak_hits * w_weak)
         # D5 误报率修复：仅弱特征命中时需达到弱特征阈值（0.4），避免单弱特征误判
@@ -145,8 +148,8 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     # D2：若依版本探测（仅对 ruoyi 做，其他 CMS 暂不支持）
     if best.cms == "ruoyi":
         try:
-            from lib.http import join_url
-            from lib.ruoyi_versions import extract_version
+            from core.http import join_url
+            from core.ruoyi_versions import extract_version
 
             # 优先从缓存中已有的 /login 和根路径响应提取版本号（避免额外请求）
             cached_version = ""
@@ -160,7 +163,7 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
                             cached_version = v
                             break
                 except Exception:
-                    pass
+                    logger.debug("缓存响应版本号提取失败", exc_info=True)
             if cached_version:
                 best.version = cached_version
                 best.matched.append("version:%s" % cached_version)
@@ -168,7 +171,7 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
             # 避免 detect_cms 的请求次数超出缓存测试预期。
             # 版本号未在首页/login 出现时，Router 会按"版本未识别"处理（跑全部 POC）。
         except Exception:
-            pass
+            logger.debug("若依版本探测失败", exc_info=True)
     return best
 
 
@@ -183,7 +186,7 @@ def detect_waf(target: str, session: SessionManager) -> dict:
     Returns:
         dict: {'waf': 'WAF标识' 或 '', 'display': '显示名', 'bypass_hint': '绕过提示'}
     """
-    from lib.waf_features import WAF_FEATURES
+    from core.waf_features import WAF_FEATURES
 
     try:
         resp = session.get(target)

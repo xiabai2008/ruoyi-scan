@@ -36,7 +36,7 @@ PLUGIN_TEMPLATE = '''# {description}
 from plugins.base import PluginBase
 from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
-from lib.http import join_url
+from core.http import join_url
 
 
 class {class_name}(PluginBase):

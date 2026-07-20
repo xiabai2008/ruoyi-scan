@@ -1,6 +1,6 @@
 # 源码泄露探测 — IDE / SCM 残留文件（.svn/.hg/.idea/.vscode 等）
+from core.http import join_url
 from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

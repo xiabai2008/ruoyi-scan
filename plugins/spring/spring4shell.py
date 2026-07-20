@@ -2,9 +2,9 @@
 # 漏洞原因：JDK9+ 环境下 Spring 参数绑定可访问 ClassLoader，写 Tomcat AccessLogValve 日志
 #   文件 getshell（影响 Spring Framework 5.3.x + JDK9+ + Tomcat war 部署）。
 # 本插件仅做存在性验证：发送 class.module.classLoader 探针，检测响应特征判定接口是否可达。
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_spring4shell_response
 from plugins.base import PluginBase
 

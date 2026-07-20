@@ -21,12 +21,15 @@ from typing import Any, Callable, Dict, List, Optional
 from config import settings
 from core.engine import ScanEngine
 from core.fingerprint import detect_cms, detect_waf
+from core.http import normalize_target
 from core.loader import load_plugins
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, FingerprintResult, ScanResult
 from core.report import ReportBuilder
 from core.router import Router
 from core.session import SessionManager
-from lib.http import normalize_target
+
+logger = get_logger(__name__)
 
 # === 数据模型 ===
 
@@ -223,7 +226,7 @@ class ScanOrchestrator:
                 try:
                     on_event(event_type, payload)
                 except Exception:
-                    pass
+                    logger.debug("事件回调执行失败", exc_info=True)
             if self.registry:
                 # 为 registry 补充 task_id
                 if isinstance(payload, dict) and "task_id" not in payload:
@@ -390,7 +393,7 @@ class ScanOrchestrator:
                     {"common_count": len(common_plugins), "total_count": len(all_plugins), "task_id": task.task_id},
                 )
             except Exception:
-                pass
+                logger.debug("通用插件加载失败", exc_info=True)
 
             # 指定插件过滤（API 可指定插件子集）
             if req.plugins:
@@ -559,7 +562,7 @@ class ScanOrchestrator:
                     if ips:
                         origin_ip = ips[0]
             except Exception:
-                pass
+                logger.debug("源站 IP 探测失败", exc_info=True)
             return WafBypassCoordinator(waf_type=waf_type, origin_ip=origin_ip, stats_tracker=stats_tracker)
 
         if not waf_type and bypass_mode == "on":

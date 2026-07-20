@@ -1,6 +1,6 @@
 # RuoYi Swagger 未授权 API 文档泄露
+from core.http import join_url
 from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

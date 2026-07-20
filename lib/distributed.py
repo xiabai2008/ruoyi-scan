@@ -34,6 +34,10 @@ import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # ============================================================
 # Redis 连接（延迟导入，避免未安装时报错）
 # ============================================================
@@ -736,7 +740,7 @@ class StandaloneDistributor:
                     if results:
                         all_results.extend(results)
                 except Exception:
-                    pass
+                    logger.debug("分布式扫描获取任务结果失败", exc_info=True)
                 completed += 1
                 if progress_callback:
                     progress_callback(completed, total, target)

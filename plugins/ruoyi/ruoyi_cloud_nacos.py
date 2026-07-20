@@ -1,6 +1,6 @@
 # RuoYi-Cloud Nacos 配置泄露检测
+from core.http import join_url
 from core.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

@@ -1,5 +1,5 @@
-# Ruoyi-Scan 扫描编排器 — 各模式执行逻辑（从 main.py 拆分，P0 瘦身）
-"""扫描编排器：run_mode / run_mode_batch / run_chain_mode / run_serve_mode / run_passive_mode 等"""
+# Ruoyi-Scan CLI 控制层 — 各模式执行逻辑（从 core/ 迁移至 cli/，修复 lib/core 分层）
+"""CLI 控制层：run_mode / run_mode_batch / run_chain_mode / run_serve_mode / run_passive_mode 等"""
 
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ from typing import List, Optional
 
 from config import settings
 from core.fingerprint import detect_cms
+from core.http import normalize_target
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
 from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
-from lib.http import normalize_target
+
+logger = get_logger(__name__)
 
 # ── 模式配置（对齐原脚本）──
 MODE_CATEGORIES = {
@@ -457,7 +460,7 @@ def final_prompt() -> None:
     try:
         input("[*]工作完毕,感谢你的使用,回车退出.../")
     except EOFError:
-        pass
+        logger.debug("用户输入读取失败", exc_info=True)
 
 
 def run_chain_mode(chain_name: str, args: Namespace) -> None:

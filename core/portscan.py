@@ -4,6 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import List, Optional
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class PortResult:
@@ -234,7 +238,7 @@ class PortScanner:
                 data = sock.recv(1024)
                 return self._clean_banner(data)
             except Exception:
-                pass
+                logger.debug("Banner 探测失败", exc_info=True)
         # 无特定探测包，尝试直接 recv
         try:
             sock.settimeout(1)

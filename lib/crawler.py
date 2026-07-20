@@ -18,6 +18,10 @@ from html.parser import HTMLParser
 from typing import Callable, List, Optional, Set
 from urllib.parse import urldefrag, urljoin, urlparse
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # 默认跳过的静态资源后缀（按 .gitignore 风格小写匹配）
 # 注：.js 默认排除（避免常规爬虫抓取 JS），但 crawl_with_js_urls 临时移除以收集 JS URL
 DEFAULT_EXCLUDED_EXT = {
@@ -239,7 +243,7 @@ class Crawler:
                 try:
                     self.on_page(url, html_text)
                 except Exception:
-                    pass
+                    logger.debug("执行页面回调失败", exc_info=True)
 
             # 达到最大深度则不再扩展
             if depth >= self.max_depth or not html_text:
@@ -254,7 +258,7 @@ class Crawler:
             try:
                 parser.feed(html_text)
             except Exception:
-                pass
+                logger.debug("解析 HTML 提取链接失败", exc_info=True)
 
             for link in parser.links:
                 absolute = normalize_link(url, link)

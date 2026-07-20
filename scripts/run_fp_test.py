@@ -9,19 +9,22 @@
 #   - 假阳率 = 假阳靶场数 / 总靶场数
 #   - 目标：假阳率 <5%（10 个靶场最多 0 个假阳）
 import os
+import subprocess
 import sys
 import time
-import subprocess
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from lab.fp_lab.server import TARGETS
-from core.session import SessionManager
-from core.fingerprint import detect_cms
-from core.router import Router
-from core.models import STATUS_CONFIRMED
+from core.fingerprint import detect_cms  # noqa: E402
+from core.logger import get_logger  # noqa: E402
+from core.models import STATUS_CONFIRMED  # noqa: E402
+from core.router import Router  # noqa: E402
+from core.session import SessionManager  # noqa: E402
+from lab.fp_lab.server import TARGETS  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 def start_lab(target_id, port):
@@ -75,7 +78,7 @@ def scan_target(target_url):
                 if result.status == STATUS_CONFIRMED:
                     confirmed_count += 1
             except Exception:
-                pass
+                logger.debug("插件执行异常", exc_info=True)
     return cms, version, confidence, confirmed_count
 
 

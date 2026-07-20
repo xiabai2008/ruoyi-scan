@@ -7,9 +7,12 @@
 # 参考：Nacos 未授权访问漏洞（CVE-2021-29441）默认无需认证即可访问 /nacos/v1/auth/users?pageNo=1&pageSize=1
 import re
 
+from core.http import join_url
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class NacosUnauthPlugin(PluginBase):
@@ -60,7 +63,7 @@ class NacosUnauthPlugin(PluginBase):
                             },
                         )
                 except Exception:
-                    pass
+                    logger.debug("Nacos 配置解析失败", exc_info=True)
 
             # 检查 Nacos 首页可达（但可能需认证）
             home_url = join_url(target, f"{prefix}/")

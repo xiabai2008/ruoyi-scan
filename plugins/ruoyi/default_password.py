@@ -1,9 +1,12 @@
 # 后台默认口令：POST /login 尝试 admin/admin123，按 token/code:200/Set-Cookie 判定
+from core.http import join_url
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_positive
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class DefaultPasswordPlugin(PluginBase):
@@ -83,7 +86,7 @@ class DefaultPasswordPlugin(PluginBase):
         try:
             body = resp.json()
         except Exception:
-            pass
+            logger.debug("登录响应 JSON 解析失败", exc_info=True)
 
         # 1) 验证码拦截：服务端要求验证码 → 无法判定（非 SAFE，避免漏报）
         if match_positive(text, self.CAPTCHA_KEYWORDS):

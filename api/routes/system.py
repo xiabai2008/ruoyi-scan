@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException, Query
 from api.models.schemas import FingerprintDTO, HealthDTO, VersionDTO
 from config import settings
 from core.fingerprint import detect_cms, detect_waf
+from core.http import normalize_target
 from core.session import SessionManager
-from lib.http import normalize_target
 
 router = APIRouter(tags=["系统"])
 

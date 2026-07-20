@@ -1,8 +1,8 @@
 # Druid 弱口令爆破：6 用户 × password.txt 字典，POST /druid/submitLogin，判定 'success' in t
 from config import settings
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

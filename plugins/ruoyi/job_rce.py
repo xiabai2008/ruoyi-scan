@@ -1,9 +1,12 @@
 # 定时任务 RCE：未授权访问 /monitor/job/edit 接口存在性判定（不执行实际 RCE）
+from core.http import join_url
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_positive
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class JobRcePlugin(PluginBase):
@@ -84,7 +87,7 @@ class JobRcePlugin(PluginBase):
             body = resp.json()
             is_json = True
         except Exception:
-            pass
+            logger.debug("响应 JSON 解析失败", exc_info=True)
 
         # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE（使用 match_positive 统一降误报）
         if match_positive(text, self.AUTH_BLOCK_KEYWORDS):

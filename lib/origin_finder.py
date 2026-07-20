@@ -14,6 +14,10 @@ import urllib.parse
 import urllib.request
 from typing import List
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class OriginIPFinder:
     """源站真实 IP 探测器（4 路探测，标准库 + crt.sh 免费 API）
@@ -81,7 +85,7 @@ class OriginIPFinder:
             if not self._is_cdn_ip(direct_ip):
                 ips.add(direct_ip)
         except Exception:
-            pass
+            logger.debug("DNS 直接解析域名失败", exc_info=True)
 
         return list(ips)
 
@@ -117,7 +121,7 @@ class OriginIPFinder:
                         if not self._is_cdn_ip(ip):
                             ips.append(ip)
         except Exception:
-            pass
+            logger.debug("检查响应头源站 IP 泄漏失败", exc_info=True)
         return ips
 
     def _check_subdomains(self, domain: str) -> List[str]:
@@ -164,7 +168,7 @@ class OriginIPFinder:
                     if not self._is_cdn_ip(ip):
                         ips.append(ip)
         except Exception:
-            pass
+            logger.debug("查询 crt.sh 获取 SSL 证书 SAN 失败", exc_info=True)
         return list(set(ips))
 
     def _is_cdn_ip(self, ip: str) -> bool:

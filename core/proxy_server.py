@@ -5,6 +5,10 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class ScanQueue:
     """线程安全的 URL 去重队列（生产者：代理捕获 → 消费者：扫描引擎）"""
@@ -109,7 +113,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     else:
                         client.sendall(data)
         except Exception:
-            pass
+            logger.debug("代理双向数据转发失败", exc_info=True)
 
     def _forward(self, method, parsed):
         """转发 HTTP 请求并返回响应"""
@@ -189,7 +193,7 @@ class ProxyServer:
             try:
                 self._server.shutdown()
             except Exception:
-                pass
+                logger.debug("代理服务器关闭失败", exc_info=True)
         if self._thread:
             self._thread.join(timeout=2)
 

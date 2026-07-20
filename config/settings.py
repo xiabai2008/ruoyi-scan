@@ -6,7 +6,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _dict_path(name):
-    """字典路径：优先 data/，回退根目录（兼容 legacy Ruoyi-Scan.py 共用）
+    """字典路径：优先 data/，回退根目录
 
     字典内容原样保留（ruoyi.txt 保留 %20 前缀；password.txt 保留空行口令，勿 strip）。
     """

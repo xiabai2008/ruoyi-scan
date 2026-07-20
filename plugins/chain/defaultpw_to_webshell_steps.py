@@ -7,9 +7,12 @@
 # 注意：本链仅验证可利用性，不实际上传真实 webshell。
 import re
 
+from core.http import join_url
+from core.logger import get_logger
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 # Ruoyi 常见默认口令（仅用于授权测试）
 _DEFAULT_CREDS = [
@@ -148,7 +151,7 @@ class FileUploadVerifyPlugin(PluginBase):
                     },
                 )
             except Exception:
-                pass
+                logger.debug("JSP 上传验证失败", exc_info=True)
 
             # 仅 txt 上传成功
             return ScanResult(

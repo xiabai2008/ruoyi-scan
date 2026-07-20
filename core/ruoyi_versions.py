@@ -14,6 +14,10 @@
 #   ''            空串表示全版本适用（默认）
 import re
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # 若依版本指纹正则（匹配 X.Y.Z 格式，X/Y/Z 为数字）
 # 真实若依 /login 页面含 "4.7.8" 两次（footer + JS 变量）
 VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
@@ -51,7 +55,7 @@ def detect_version(target, session):
     Returns:
         str: 版本号字符串（如 '4.7.8'），未识别返回 ''
     """
-    from lib.http import join_url
+    from core.http import join_url
 
     # 1. /login 页面（最可靠）
     try:
@@ -61,7 +65,7 @@ def detect_version(target, session):
         if version:
             return version
     except Exception:
-        pass
+        logger.debug("探测 /login 页面版本失败", exc_info=True)
 
     # 2. 根路径 HTML（footer 或静态资源 ?v=4.7）
     try:
@@ -77,7 +81,7 @@ def detect_version(target, session):
             # 补全 patch 版本为 0（如 4.7 → 4.7.0）
             return m.group(1) + ".0"
     except Exception:
-        pass
+        logger.debug("探测根路径页面版本失败", exc_info=True)
 
     # 3. /actuator/info（微服务版）
     try:
@@ -87,7 +91,7 @@ def detect_version(target, session):
         if version:
             return version
     except Exception:
-        pass
+        logger.debug("探测 /actuator/info 版本失败", exc_info=True)
 
     return ""
 

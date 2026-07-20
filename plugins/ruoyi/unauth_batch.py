@@ -1,7 +1,7 @@
 # 未授权访问批量检测：Actuator / Druid / Swagger / 后台 列表接口
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_positive
 from plugins.base import PluginBase
 

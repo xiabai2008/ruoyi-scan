@@ -1,13 +1,12 @@
 # Ruoyi-Scan CLI 入口（-h/-u/-m/-p/-l 向后兼容 + 新长参数）
 """Ruoyi-Scan — 若依专项漏洞扫描工具 CLI 入口
 
-P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻辑全部迁移至 core/runner.py。
+P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻辑全部迁移至 cli/runner.py。
 """
 
 import argparse
 
-from config import settings
-from core.runner import (
+from cli.runner import (
     final_prompt,
     run_chain_mode,
     run_ci_init_mode,
@@ -22,6 +21,8 @@ from core.runner import (
     run_template_list_mode,
     run_wiki_mode,
 )
+from config import settings
+from core.logger import setup_logging
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 
@@ -268,6 +269,9 @@ def print_help():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # 初始化日志（--debug 启用 DEBUG 级别，默认 WARNING 静默）
+    setup_logging(debug=getattr(args, "debug", False))
 
     print_banner()
 

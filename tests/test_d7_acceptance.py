@@ -21,7 +21,7 @@ from lib.waf_bypass import (WafBypassCoordinator, BypassSession, BypassContext,
                             StrategyRegistry, RandomCaseStrategy,
                             InlineCommentStrategy, UrlEncodeStrategy,
                             OriginDirectStrategy, GooglebotStrategy)
-from lib.waf_features import is_waf_blocked, WAF_FEATURES
+from core.waf_features import is_waf_blocked, WAF_FEATURES
 
 
 # === 测试用插件：模拟 SQL 注入，支持 payload 变形绕过 ===

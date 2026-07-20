@@ -13,7 +13,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
 from api.deps import get_registry
+from core.logger import get_logger
 from core.task_registry import TaskRegistry
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -83,7 +86,7 @@ def _get_task_stats(registry: TaskRegistry) -> dict:
                 else:
                     stats[status] = 1
     except Exception:
-        pass
+        logger.debug("任务统计采集异常", exc_info=True)
     return stats
 
 
@@ -99,5 +102,5 @@ def _get_result_stats(registry: TaskRegistry) -> dict:
                 stats["confirmed"] += confirmed
                 stats["unknown"] += max(0, total - confirmed)
     except Exception:
-        pass
+        logger.debug("结果统计采集异常", exc_info=True)
     return stats

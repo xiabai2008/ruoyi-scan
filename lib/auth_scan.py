@@ -27,6 +27,10 @@ import os
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def parse_auth_arg(auth_args: List[str]) -> Dict[str, Any]:
     """解析 --auth 参数列表
@@ -214,7 +218,7 @@ def auto_login(
                 if verbose:
                     print("  [+]登录成功，获取到 Bearer Token")
         except Exception:
-            pass
+            logger.debug("从登录响应中提取 Token 失败", exc_info=True)
 
         if config["cookies"] and not config["headers"].get("Authorization"):
             if verbose:

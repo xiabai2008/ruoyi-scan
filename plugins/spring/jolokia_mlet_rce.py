@@ -4,9 +4,9 @@
 #   注册并调用任意代码 MBean（如自定义 MBean），实现远程代码执行。
 #   影响 Spring Boot + Jolokia 全版本（Jolokia 端点未授权暴露时）。
 # 本插件仅做存在性验证：GET /actuator/jolokia/list 检测响应是否含 MLet 链签名特征。
+from core.http import join_url
 from core.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from lib.colors import no, ok
-from lib.http import join_url
 from lib.matcher import match_jolokia_response
 from plugins.base import PluginBase
 

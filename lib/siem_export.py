@@ -23,8 +23,12 @@ import json
 import socket
 from typing import Any, Dict, List
 
+from core.logger import get_logger
+
 # 复用现有模型
 from core.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
+
+logger = get_logger(__name__)
 
 # ============================================================
 # 严重度映射
@@ -431,7 +435,7 @@ def send_to_syslog(events: List[str], host: str, port: int = 514, protocol: str 
             sent += 1
 
     except OSError:
-        pass
+        logger.debug("发送事件到 Syslog 服务器失败", exc_info=True)
     finally:
         if sock:
             sock.close()

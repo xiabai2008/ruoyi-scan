@@ -1,6 +1,6 @@
 # .env 配置文件泄露 — GET /.env 检测数据库/密钥关键字
+from core.http import join_url
 from core.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

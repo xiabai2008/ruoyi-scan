@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.fingerprint import RuoyiFingerprint, detect_cms
 import hashlib
-from lib.fingerprint_features import CMS_FEATURES
+from core.fingerprint_features import CMS_FEATURES
 
 
 class FakeResp:
@@ -150,7 +150,7 @@ def test_router_resolves_spring():
 
 def test_d15_ruoyi_cloud_feature_registered():
     """D15: RuoYi-Cloud 特征已注册"""
-    from lib.fingerprint_features import get_feature, list_cms
+    from core.fingerprint_features import get_feature, list_cms
     assert 'ruoyi-cloud' in list_cms()
     feat = get_feature('ruoyi-cloud')
     assert feat is not None
@@ -161,7 +161,7 @@ def test_d15_ruoyi_cloud_feature_registered():
 
 def test_d15_jeecgboot_feature_registered():
     """D15: JeecgBoot 特征已注册（负向特征，避免误判为若依）"""
-    from lib.fingerprint_features import get_feature, list_cms
+    from core.fingerprint_features import get_feature, list_cms
     assert 'jeecgboot' in list_cms()
     feat = get_feature('jeecgboot')
     assert feat is not None
@@ -171,7 +171,7 @@ def test_d15_jeecgboot_feature_registered():
 
 def test_d15_new_waf_registered():
     """D15: 新增 4 个 WAF（AWS/F5/Akamai/Imperva）已注册"""
-    from lib.waf_features import get_waf_names
+    from core.waf_features import get_waf_names
     names = get_waf_names()
     # 原 8 个 + D15 新增 4 个 = 12 个
     assert 'aws_waf' in names, '缺少 AWS WAF'
@@ -184,7 +184,7 @@ def test_d15_new_waf_registered():
 
 def test_d15_aws_waf_detection():
     """D15: AWS WAF 响应头识别"""
-    from lib.waf_features import is_waf_blocked
+    from core.waf_features import is_waf_blocked
     # 403 + AWS WAF 关键字
     assert is_waf_blocked('aws_waf', 'request blocked by AWS WAF', 403) is True
     # 正常响应
@@ -194,7 +194,7 @@ def test_d15_aws_waf_detection():
 
 def test_d15_f5_cookie_detection():
     """D15: F5 BIG-IP cookie 特征"""
-    from lib.waf_features import WAF_FEATURES
+    from core.waf_features import WAF_FEATURES
     feat = WAF_FEATURES['f5_asm']
     assert 'BIGipServer' in feat['cookie']
     print('PASS test_d15_f5_cookie_detection')
@@ -202,7 +202,7 @@ def test_d15_f5_cookie_detection():
 
 def test_d15_cms_count():
     """D15: CMS 总数 >= 4（ruoyi + spring + ruoyi-cloud + jeecgboot）"""
-    from lib.fingerprint_features import list_cms
+    from core.fingerprint_features import list_cms
     cms_list = list_cms()
     assert len(cms_list) >= 4, f'CMS 总数应 >= 4，实际 {len(cms_list)}: {cms_list}'
     print('PASS test_d15_cms_count: %d 个 CMS' % len(cms_list))

@@ -24,6 +24,10 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # ============================================================
 # 常量
 # ============================================================
@@ -193,7 +197,7 @@ def save_to_cache(cve: CVEInfo) -> None:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cve.to_dict(), f, ensure_ascii=False, indent=2)
     except OSError:
-        pass
+        logger.debug("保存 CVE 信息到缓存失败", exc_info=True)
 
 
 def clear_cache() -> int:
@@ -211,7 +215,7 @@ def clear_cache() -> int:
                 os.remove(os.path.join(CACHE_DIR, f))
                 count += 1
             except OSError:
-                pass
+                logger.debug("清除缓存文件失败", exc_info=True)
     return count
 
 

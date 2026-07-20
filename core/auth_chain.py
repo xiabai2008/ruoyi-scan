@@ -18,7 +18,10 @@
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
 
-from lib.http import join_url
+from core.http import join_url
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # 鉴权模式
 AUTH_NONE = "none"  # 无鉴权（如 VulnPreviewController 直接暴露）
@@ -86,7 +89,7 @@ class RuoYiAuthChain:
             self.auth_mode = AUTH_V5_JWT
             return AUTH_V5_JWT
         except (ValueError, TypeError):
-            pass
+            logger.debug("鉴权模式 JSON 响应解析失败", exc_info=True)
 
         # HTML 响应（含登录表单/html 标签）→ v4 Session
         # 严格判定：<html> 或 <form> 标签，避免 JSON msg 含"登录"误判
@@ -173,7 +176,7 @@ class RuoYiAuthChain:
         try:
             body = resp.json()
         except (ValueError, TypeError):
-            pass
+            logger.debug("登录响应 JSON 解析失败", exc_info=True)
 
         # code=0 或 code=200 → 登录成功（若依 success() 返回 code=0，部分版本 200）
         r_code = body.get("code")

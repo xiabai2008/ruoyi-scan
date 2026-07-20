@@ -1,6 +1,6 @@
 # 备份文件扫描 — 常见备份/交换/IDE 文件后缀拼接探测
+from core.http import join_url
 from core.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
-from lib.http import join_url
 from plugins.base import PluginBase
 
 

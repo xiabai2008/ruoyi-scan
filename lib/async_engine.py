@@ -18,6 +18,10 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 # ============================================================
 # 异步扫描引擎
 # ============================================================
@@ -225,7 +229,7 @@ def scan_batch_targets(
                 if results:
                     all_results.extend(results)
             except Exception:
-                pass
+                logger.debug("批量扫描获取任务结果失败", exc_info=True)
             completed += 1
             if progress_callback:
                 progress_callback(completed, total, target)
@@ -266,7 +270,7 @@ def scan_plugins_concurrent(
                 if result:
                     results.append(result)
             except Exception:
-                pass
+                logger.debug("单目标多插件扫描获取结果失败", exc_info=True)
 
         return results
 
@@ -373,7 +377,7 @@ def benchmark_sync_vs_async(sync_fn: Callable, targets: List[str], max_workers: 
             if result:
                 sync_results.extend(result if isinstance(result, list) else [result])
         except Exception:
-            pass
+            logger.debug("基准测试同步执行失败", exc_info=True)
     sync_duration = time.time() - start
 
     # 异步执行

@@ -18,7 +18,10 @@ import base64
 import io
 import re
 
-from lib.http import join_url
+from core.http import join_url
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # 验证码接口候选路径（按若依版本兼容性排序）
 CAPTCHA_PATHS = [
@@ -58,7 +61,7 @@ class CaptchaSolver:
             self._ocr_backend = "ddddocr"
             return self._ocr_backend
         except Exception:
-            pass
+            logger.debug("ddddocr 后端加载失败", exc_info=True)
         # 2. 备选 pytesseract
         try:
             import pytesseract
@@ -69,7 +72,7 @@ class CaptchaSolver:
             self._ocr_backend = "pytesseract"
             return self._ocr_backend
         except Exception:
-            pass
+            logger.debug("pytesseract 后端加载失败", exc_info=True)
         return None
 
     def detect_captcha(self):
@@ -99,7 +102,7 @@ class CaptchaSolver:
                             self._captcha_path = path
                             return True, path
                     except (ValueError, TypeError):
-                        pass
+                        logger.debug("验证码接口 JSON 响应解析失败", exc_info=True)
             except Exception:
                 continue
         return False, ""
@@ -168,7 +171,7 @@ class CaptchaSolver:
             if op == "/":
                 return str(a // b) if b != 0 else "0"
         except Exception:
-            pass
+            logger.debug("算术验证码求值失败", exc_info=True)
         return text
 
     def solve(self):

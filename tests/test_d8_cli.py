@@ -10,7 +10,7 @@ from core.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNO
                           SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
 from core.report import ReportBuilder
 from main import build_parser
-from core.runner import _parse_report_formats
+from cli.runner import _parse_report_formats
 
 
 def _sample_results():
