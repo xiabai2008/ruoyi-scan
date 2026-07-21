@@ -71,14 +71,29 @@
 
 ## 快速开始
 
+### 方式一：从 Release 下载安装（推荐）
+
+前往 [Releases 页面](https://github.com/xiabai2004/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
+
 ```bash
-# 安装依赖（核心依赖 + 报告 + Web API）
-pip install -r requirements.txt
+# 安装（自动安装核心依赖）
+pip install ruoyi_scan-1.1.0-py3-none-any.whl
 
 # 可选功能依赖（按需安装）
 pip install pyyaml          # --config YAML 配置文件
 pip install redis           # --distributed Redis 分布式扫描
 pip install aiohttp         # --async 异步 HTTP 客户端
+
+# 运行扫描
+ruoyi-scan -p http://target:8080/
+```
+
+### 方式二：源码安装
+
+```bash
+git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+cd Ruoyi-Scan
+pip install -r requirements.txt
 
 # 单目标漏洞扫描
 python main.py -p http://target:8080/

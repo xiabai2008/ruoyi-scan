@@ -1,0 +1,39 @@
+# Release workflow：打 tag 自动构建 wheel + sdist 并上传到 GitHub Release
+#
+# 触发条件：推送 v* 格式的 tag（如 v1.1.0）
+# 产物：ruoyi_scan-<version>-py3-none-any.whl + ruoyi_scan-<version>.tar.gz
+# 用户从 Release 页面下载后执行 pip install <file> 即可安装
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # 创建 Release 需要
+
+jobs:
+  release:
+    name: Build & Publish to GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build wheel and sdist
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz

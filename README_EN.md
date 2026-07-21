@@ -59,14 +59,29 @@
 
 ## Quick Start
 
+### Option 1: Install from Release (Recommended)
+
+Go to the [Releases page](https://github.com/xiabai2004/Ruoyi-Scan/releases), download the latest `.whl` file, then:
+
 ```bash
-# Install dependencies (core + reporting + Web API)
-pip install -r requirements.txt
+# Install (auto-installs core dependencies)
+pip install ruoyi_scan-1.1.0-py3-none-any.whl
 
 # Optional feature dependencies (install on demand)
 pip install pyyaml          # --config YAML configuration file
 pip install redis           # --distributed Redis distributed scanning
 pip install aiohttp         # --async async HTTP client
+
+# Run a scan
+ruoyi-scan -p http://target:8080/
+```
+
+### Option 2: Install from Source
+
+```bash
+git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+cd Ruoyi-Scan
+pip install -r requirements.txt
 
 # Single-target vulnerability scan
 python main.py -p http://target:8080/
