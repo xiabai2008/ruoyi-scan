@@ -9,6 +9,9 @@
 运行方式：
     python -m pytest tests/test_benchmark.py --benchmark-only -v
     python -m pytest tests/test_benchmark.py --benchmark-only --benchmark-compare
+
+注意：CI 默认不运行基准测试（pytest-benchmark 仅在 dev 依赖中）。
+CI 通过 --ignore tests/test_benchmark.py 跳过，或通过 pytest.ini 的 addopts 排除。
 """
 
 import os
@@ -20,6 +23,20 @@ import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# 当 pytest-benchmark 未安装时跳过所有基准测试
+# pytest-benchmark 注册 'benchmark' fixture，通过 _pytest.fixture 检测
+try:
+    import pytest_benchmark  # noqa: F401
+
+    _HAS_BENCHMARK = True
+except ImportError:
+    _HAS_BENCHMARK = False
+
+pytestmark = pytest.mark.skipif(
+    not _HAS_BENCHMARK,
+    reason="pytest-benchmark 未安装，跳过基准测试（pip install pytest-benchmark 启用）",
+)
 
 
 # ── SessionManager 连接池基准 ──────────────────────────
