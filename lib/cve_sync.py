@@ -380,10 +380,11 @@ def extract_cve_ids_from_plugins() -> List[Tuple[str, str]]:
     import importlib
     import pkgutil
 
+    from core.loader import discover_plugin_packages
     from plugins.base import PluginBase
 
     results = []
-    for pkg_name in ["plugins.ruoyi", "plugins.spring", "plugins.common"]:
+    for pkg_name in discover_plugin_packages():
         try:
             pkg = importlib.import_module(pkg_name)
             for _, name, is_pkg in pkgutil.iter_modules(pkg.__path__):

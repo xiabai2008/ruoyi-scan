@@ -132,6 +132,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         crawl_max_pages=getattr(args, "crawl_max_pages", 50),
         subdomain=getattr(args, "subdomain", False),
         js_extract=getattr(args, "js_extract", False),
+        plugin_paths=getattr(args, "plugin_path", None),
     )
 
 

@@ -117,6 +117,13 @@ def build_parser():
     parser.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
     parser.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
     parser.add_argument("--plugin-list", action="store_true", default=False, help="列出插件")
+    parser.add_argument(
+        "--plugin-path",
+        action="append",
+        default=None,
+        metavar="DIR/FILE",
+        help="加载外部插件（目录或 .py 文件，可多次指定）",
+    )
     parser.add_argument("--category", default="common", choices=["ruoyi", "spring", "common"], help="插件类别")
     # D28 CI/CD
     parser.add_argument("--ci", action="store_true", default=False, help="CI 模式")

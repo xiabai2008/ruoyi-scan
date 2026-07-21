@@ -71,6 +71,8 @@ class ScanRequest:
     auth: Optional[dict] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
     # D19：扫描模板名称（quick / deep / compliance / dengbao）
     template: str = ""
+    # P0：外部插件路径列表（--plugin-path 可多次指定）
+    plugin_paths: Optional[List[str]] = None
 
 
 @dataclass
@@ -394,6 +396,22 @@ class ScanOrchestrator:
                 )
             except Exception:
                 logger.debug("通用插件加载失败", exc_info=True)
+
+            # P0: 外部插件加载（--plugin-path）
+            if req.plugin_paths:
+                from core.loader import load_external_plugins
+
+                external_plugins = load_external_plugins(req.plugin_paths)
+                if external_plugins:
+                    all_plugins = all_plugins + external_plugins
+                    _emit(
+                        "plugins_loaded",
+                        {
+                            "external_count": len(external_plugins),
+                            "total_count": len(all_plugins),
+                            "task_id": task.task_id,
+                        },
+                    )
 
             # 指定插件过滤（API 可指定插件子集）
             if req.plugins:

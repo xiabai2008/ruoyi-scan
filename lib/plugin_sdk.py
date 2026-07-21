@@ -26,6 +26,8 @@ import pkgutil
 import re
 from typing import Any, Dict, List, Tuple
 
+from core.loader import discover_plugin_packages
+
 # ============================================================
 # 插件模板
 # ============================================================
@@ -350,7 +352,7 @@ def list_all_plugins() -> List[Dict[str, Any]]:
 
     plugins = []
 
-    for pkg_name in ["plugins.ruoyi", "plugins.spring", "plugins.common"]:
+    for pkg_name in discover_plugin_packages():
         try:
             pkg = importlib.import_module(pkg_name)
             for _, name, is_pkg in pkgutil.iter_modules(pkg.__path__):

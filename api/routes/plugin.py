@@ -3,16 +3,16 @@ from fastapi import APIRouter, HTTPException
 
 from api.models.schemas import PluginDTO
 from common.logger import get_logger
-from core.loader import load_plugins
+from core.loader import discover_plugin_packages, load_plugins
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["插件"])
 
 
 def _load_all_plugins():
-    """加载所有已注册插件类"""
+    """加载所有已注册插件类（自动发现，无硬编码）"""
     plugins = []
-    for pkg in ["plugins.ruoyi", "plugins.common"]:
+    for pkg in discover_plugin_packages():
         try:
             plugins.extend(load_plugins(pkg))
         except Exception:
