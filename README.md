@@ -1,7 +1,6 @@
 # Ruoyi-Scan — 若依专项漏洞扫描工具
 
 [![CI](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/ruoyi-scan.svg)](https://pypi.org/project/ruoyi-scan/)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Coverage](https://codecov.io/gh/xiabai2004/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2004/Ruoyi-Scan)

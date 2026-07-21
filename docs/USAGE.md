@@ -9,7 +9,6 @@
 ## 目录
 
 - [安装方式](#安装方式)
-  - [PyPI 安装](#pypi-安装)
   - [源码安装](#源码安装)
   - [Docker 安装](#docker-安装)
   - [依赖要求](#依赖要求)
@@ -35,48 +34,7 @@
 
 ## 安装方式
 
-Ruoyi-Scan 采用 PEP 621 元数据规范，提供三种主流安装方式。**核心依赖仅 `requests` 与 `requests-mock`，零系统级依赖**，其余能力通过可选依赖组按需启用。
-
-### PyPI 安装
-
-最简单的方式，直接从 Python 包索引安装：
-
-```bash
-# 1. 仅核心依赖（漏洞检测 + JSON/CSV/HTML 报告 + CLI）
-pip install ruoyi-scan
-
-# 2. 全功能安装（一次到位，包含所有可选依赖）
-pip install "ruoyi-scan[all]"
-
-# 3. 按需安装（推荐生产环境，减小依赖体积）
-pip install "ruoyi-scan[report]"          # PDF / Word / Excel 报告增强
-pip install "ruoyi-scan[serve]"           # FastAPI Web API + WebSocket + Web 控制台
-pip install "ruoyi-scan[distributed]"     # Redis 分布式扫描（master/worker）
-pip install "ruoyi-scan[async]"           # aiohttp 异步 HTTP 引擎
-pip install "ruoyi-scan[yaml]"            # --config YAML 配置文件支持
-pip install "ruoyi-scan[lab]"             # 内置 Flask 靶场环境
-
-# 4. 组合安装
-pip install "ruoyi-scan[report,serve,yaml]"
-
-# 5. 安装后即可使用全局命令
-ruoyi-scan -p http://target:8080/
-ruoyi-scan --version
-```
-
-#### 各可选依赖组说明
-
-| 依赖组 | 启用的功能 | 包含的 Python 包 | 推荐场景 |
-|--------|-----------|-----------------|---------|
-| （核心） | 漏洞检测、指纹识别、三态判定、HTML/JSON/CSV/SARIF 报告、CLI、插件 SDK | `requests`、`requests-mock` | 所有场景必装 |
-| `report` | PDF / Word / Excel 报告 | `reportlab`、`python-docx`、`openpyxl` | 需要交付正式报告 |
-| `serve` | Web API 服务、Web 控制台、WebSocket 实时推送 | `fastapi`、`uvicorn[standard]` | 团队共享、远程调用 |
-| `distributed` | Redis Master-Worker 分布式扫描 | `redis` | 大规模批量扫描 |
-| `async` | 异步 HTTP 引擎（高并发场景） | `aiohttp` | 千级目标批量扫描 |
-| `yaml` | `--config` YAML 配置文件 | `pyyaml` | 复杂参数固化 |
-| `lab` | 内置 Flask 靶场（用于测试） | `flask` | 本地验证、POC 开发 |
-| `all` | 上述全部 | 全部 | 全功能体验 |
-| `dev` | 测试与开发工具 | `pytest`、`ruff`、`mypy` 等 | 贡献代码、运行测试 |
+Ruoyi-Scan 采用 PEP 621 元数据规范，提供源码安装与 Docker 安装两种方式。**核心依赖仅 `requests` 与 `requests-mock`，零系统级依赖**，其余能力通过可选依赖组按需启用。
 
 ### 源码安装
 
@@ -93,16 +51,41 @@ pip install -e .
 # 3. 按需安装可选依赖（开发场景推荐 dev + all）
 pip install -e ".[dev,all]"
 
-# 4. 直接通过 main.py 运行
+# 4. 按需安装特定功能组（推荐生产环境，减小依赖体积）
+pip install -e ".[report]"          # PDF / Word / Excel 报告增强
+pip install -e ".[serve]"           # FastAPI Web API + WebSocket + Web 控制台
+pip install -e ".[distributed]"     # Redis 分布式扫描（master/worker）
+pip install -e ".[async]"           # aiohttp 异步 HTTP 引擎
+pip install -e ".[yaml]"            # --config YAML 配置文件支持
+pip install -e ".[lab]"             # 内置 Flask 靶场环境
+
+# 5. 组合安装
+pip install -e ".[report,serve,yaml]"
+
+# 6. 直接通过 main.py 运行
 python main.py -p http://target:8080/
 
-# 5. 运行测试验证安装
+# 7. 运行测试验证安装
 python -m pytest tests/ -q
 python tests/regression_ruoyi.py
 python tests/regression_spring.py
 ```
 
 > 提示：可编辑模式（`-e`）下，`ruoyi-scan` 命令同样可用，且对源码的修改立即生效，适合插件开发与调试。
+
+#### 各可选依赖组说明
+
+| 依赖组 | 启用的功能 | 包含的 Python 包 | 推荐场景 |
+|--------|-----------|-----------------|---------|
+| （核心） | 漏洞检测、指纹识别、三态判定、HTML/JSON/CSV/SARIF 报告、CLI、插件 SDK | `requests`、`requests-mock` | 所有场景必装 |
+| `report` | PDF / Word / Excel 报告 | `reportlab`、`python-docx`、`openpyxl` | 需要交付正式报告 |
+| `serve` | Web API 服务、Web 控制台、WebSocket 实时推送 | `fastapi`、`uvicorn[standard]` | 团队共享、远程调用 |
+| `distributed` | Redis Master-Worker 分布式扫描 | `redis` | 大规模批量扫描 |
+| `async` | 异步 HTTP 引擎（高并发场景） | `aiohttp` | 千级目标批量扫描 |
+| `yaml` | `--config` YAML 配置文件 | `pyyaml` | 复杂参数固化 |
+| `lab` | 内置 Flask 靶场（用于测试） | `flask` | 本地验证、POC 开发 |
+| `all` | 上述全部 | 全部 | 全功能体验 |
+| `dev` | 测试与开发工具 | `pytest`、`ruff`、`mypy` 等 | 贡献代码、运行测试 |
 
 ### Docker 安装
 
@@ -1496,8 +1479,9 @@ jobs:
 
       - name: Install Ruoyi-Scan
         run: |
-          pip install ruoyi-scan
-          pip install "ruoyi-scan[report]"  # PDF/Word/Excel 报告
+          git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+          cd Ruoyi-Scan
+          pip install -e ".[report]"  # 含 PDF/Word/Excel 报告
 
       - name: Run Security Scan
         env:
@@ -1536,7 +1520,8 @@ ruoyi-scan:
   stage: security
   image: python:3.11
   script:
-    - pip install ruoyi-scan
+    - git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+    - cd Ruoyi-Scan && pip install -e .
     - ruoyi-scan -p "$TARGET_URL" --ci --severity-threshold high --template quick
   artifacts:
     when: always
@@ -1557,7 +1542,7 @@ pipeline {
     stages {
         stage('Security Scan') {
             steps {
-                sh 'pip install ruoyi-scan'
+                sh 'git clone https://github.com/xiabai2004/Ruoyi-Scan.git && cd Ruoyi-Scan && pip install -e .'
                 sh '''
                     ruoyi-scan -p ${TARGET_URL} \
                       --ci \

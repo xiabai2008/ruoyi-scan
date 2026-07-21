@@ -5,7 +5,7 @@
 [![CI](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
-[![PyPI](https://img.shields.io/pypi/v/ruoyi-scan.svg)](https://pypi.org/project/ruoyi-scan/)
+[![Coverage](https://codecov.io/gh/xiabai2004/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2004/Ruoyi-Scan)
 
 > A legally authorized **RuoYi-dedicated vulnerability scanner** with a plugin-based architecture and three-state verdict (CONFIRMED / SAFE / UNKNOWN).
 > Supports enterprise-grade features such as batch scanning, multi-format reporting, WAF bypass, exploit chains, and a Web API.
