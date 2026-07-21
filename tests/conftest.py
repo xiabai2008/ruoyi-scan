@@ -12,7 +12,9 @@
 新 fixture 供后续测试迁移使用，保证渐进式重构安全。
 """
 
-import sys
+import atexit
+import os as _os
+import sys as _sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,8 +22,36 @@ import pytest
 
 # 确保项目根目录在 sys.path 中（替代各测试文件顶部的 sys.path.insert）
 PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+if PROJECT_ROOT not in _sys.path:
+    _sys.path.insert(0, PROJECT_ROOT)
+
+
+# ── 进程退出安全网 ──────────────────────────────────────────────
+
+# concurrent.futures 在 import 时通过 atexit.register(_python_exit) 注册了
+# atexit handler，它会 join 所有 ThreadPoolExecutor 线程——包括 ScanEngine
+# 内部线程池的非 daemon 线程。当 mock fixture 失效后后台线程加载真实插件
+# 并发起 HTTP 请求，join 无限等待导致 pytest 进程挂起（CI D9 超时根因）。
+#
+# 解决方案：在 _python_exit 之前注册我们的 atexit handler，用 os._exit 绕过
+# 后续 atexit handler（包括 _python_exit）。atexit 按后注册先执行的顺序调用，
+# 因此我们在 conftest import 时注册即可保证先于 _python_exit 执行。
+_exit_code_holder = {"code": 0}
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """记录最终 exitstatus，供 atexit handler 使用"""
+    _exit_code_holder["code"] = exitstatus
+
+
+def _force_exit_bypass_thread_join():
+    """绕过 concurrent.futures._python_exit，强制进程退出"""
+    _sys.stdout.flush()
+    _sys.stderr.flush()
+    _os._exit(_exit_code_holder["code"])
+
+
+atexit.register(_force_exit_bypass_thread_join)
 
 
 # ── P0: mock_router / mock_network ──────────────────────────────
@@ -92,8 +122,13 @@ def app_in_memory():
 
 
 @pytest.fixture
-def client(app):
-    """FastAPI TestClient（自动管理 startup/shutdown）"""
+def client(app, mock_network):
+    """FastAPI TestClient（自动管理 startup/shutdown）
+
+    依赖 mock_network：确保 mock 在 client 之前 setup、之后 teardown，
+    使 orchestrator.shutdown() 在 mock 仍生效时执行（避免后台线程脱离 mock 后
+    加载真实插件并发起 HTTP 请求导致进程挂起）。
+    """
     from starlette.testclient import TestClient
 
     with TestClient(app) as c:

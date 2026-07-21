@@ -10,11 +10,13 @@
 #   - core/engine.py 零修改（通过 on_result 回调）
 #   - core/router.py 零修改
 #   - core/models.py 零修改
-#   - ThreadPoolExecutor 保持不变
+#   - ThreadPoolExecutor 使用 daemon 线程（避免测试/进程退出时后台线程阻塞）
 import threading
 import time
 import uuid
+import weakref
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures.thread import _worker
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -28,6 +30,38 @@ from core.loader import load_plugins
 from core.report import ReportBuilder
 from core.router import Router
 from core.session import SessionManager
+
+
+class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
+    """daemon 线程池：线程标记为 daemon 且不注册到全局 _threads_queues。
+
+    标准 ThreadPoolExecutor 的线程会注册到 concurrent.futures.thread._threads_queues，
+    _python_exit atexit 处理器会 join 所有注册的线程——即使它们是 daemon。
+    本子类跳过 _threads_queues 注册，使 daemon 线程在进程退出时被自动终止，
+    避免 API 测试中后台扫描线程阻止 pytest 退出（CI 挂起根因）。
+    """
+
+    def _adjust_thread_count(self) -> None:
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            thread_name = "%s_%d" % (self._thread_name_prefix or self, num_threads)
+            t = threading.Thread(
+                name=thread_name,
+                target=_worker,
+                args=(
+                    weakref.ref(self, lambda _: self._work_queue.put(None)),
+                    self._work_queue,
+                    self._initializer,
+                    self._initargs,
+                ),
+                daemon=True,
+            )
+            t.start()
+            self._threads.add(t)
+            # 不注册到 _threads_queues，避免 _python_exit atexit handler join daemon 线程
+
 
 logger = get_logger(__name__)
 
@@ -195,7 +229,7 @@ class ScanOrchestrator:
         # 提交到线程池
         with self._pool_lock:
             if self._pool is None:
-                self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
+                self._pool = _DaemonThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
         self._pool.submit(self._run, task, self._api_event_handler)
         return task_id
 
@@ -747,8 +781,17 @@ class ScanOrchestrator:
         return parts or None
 
     def shutdown(self):
-        """关闭线程池（API 模式停服时调用）"""
+        """关闭线程池（API 模式停服 / 测试清理时调用）
+
+        策略：
+          1. cancel_futures=True 取消尚未开始的任务
+          2. join 运行中线程（5s 超时）——在 mock 仍生效的 TestClient 退出阶段，
+             后台线程应快速完成（空插件列表）；超时则放弃等待，由 daemon 标志兜底
+        """
         with self._pool_lock:
-            if self._pool:
-                self._pool.shutdown(wait=False)
-                self._pool = None
+            pool = self._pool
+            self._pool = None
+        if pool:
+            pool.shutdown(wait=False, cancel_futures=True)
+            for t in list(pool._threads):
+                t.join(timeout=5)
