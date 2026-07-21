@@ -51,7 +51,9 @@ class SessionManager:
         _retry = Retry(
             total=max_retries,
             backoff_factor=0.3,
-            status_forcelist=(500, 502, 503, 504),
+            # 仅重试网关/服务不可用错误（502/503/504），
+            # 不重试 500（应用错误可能包含漏洞证据，如 SQL 报错注入）
+            status_forcelist=(502, 503, 504),
             allowed_methods=frozenset(["GET", "POST", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]),
         )
         _adapter = HTTPAdapter(
