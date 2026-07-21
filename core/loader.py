@@ -159,3 +159,52 @@ def discover_plugin_packages() -> List[str]:
         if os.path.isdir(pkg_path) and os.path.isfile(os.path.join(pkg_path, "__init__.py")):
             packages.append(f"plugins.{name}")
     return packages
+
+
+def load_entry_point_plugins() -> List[type]:
+    """通过 entry_points 加载第三方注册的插件（P1: pip install 插件包）
+
+    第三方插件包在自身 pyproject.toml 中声明：
+        [project.entry-points."ruoyi_scan.plugins"]
+        my-plugin = "my_plugin_pkg:plugin_list"
+
+    安装后 ruoyi-scan 自动发现，无需 --plugin-path。
+
+    Returns:
+        插件类列表
+    """
+    from common.logger import get_logger
+
+    logger = get_logger(__name__)
+    result = []
+
+    try:
+        # Python 3.8+ 使用 importlib.metadata
+        try:
+            from importlib.metadata import entry_points
+        except ImportError:
+            from importlib_metadata import entry_points
+
+        # Python 3.10+ entry_points 返回SelectableGroups，3.8/3.9 返回 dict
+        try:
+            eps = entry_points(group="ruoyi_scan.plugins")
+        except TypeError:
+            eps = entry_points().get("ruoyi_scan.plugins", [])
+
+        for ep in eps:
+            try:
+                plugin_list = ep.load()
+                if isinstance(plugin_list, list):
+                    result.extend(plugin_list)
+                else:
+                    # 加载的是模块，尝试取 plugin_list 属性
+                    plugin_list = getattr(plugin_list, "plugin_list", [])
+                    if isinstance(plugin_list, list):
+                        result.extend(plugin_list)
+                logger.debug("entry_point 插件加载成功: %s (%d 个)", ep.name, len(result))
+            except Exception as e:
+                logger.debug("entry_point 插件加载失败 %s: %s", ep.name, e)
+    except Exception as e:
+        logger.debug("entry_points 发现失败: %s", e)
+
+    return result

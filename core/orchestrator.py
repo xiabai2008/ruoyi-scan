@@ -413,6 +413,24 @@ class ScanOrchestrator:
                         },
                     )
 
+            # P1: entry_points 注册的第三方插件（pip install 自动发现）
+            try:
+                from core.loader import load_entry_point_plugins
+
+                ep_plugins = load_entry_point_plugins()
+                if ep_plugins:
+                    all_plugins = all_plugins + ep_plugins
+                    _emit(
+                        "plugins_loaded",
+                        {
+                            "entry_point_count": len(ep_plugins),
+                            "total_count": len(all_plugins),
+                            "task_id": task.task_id,
+                        },
+                    )
+            except Exception:
+                logger.debug("entry_points 插件加载失败", exc_info=True)
+
             # 指定插件过滤（API 可指定插件子集）
             if req.plugins:
                 all_plugins = [cls for cls in all_plugins if getattr(cls, "name", "") in req.plugins]

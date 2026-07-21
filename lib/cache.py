@@ -91,13 +91,27 @@ class CacheStorage:
     def __init__(self, db_path: str = "data/scan_cache.db"):
         self.db_path = db_path
         self._lock = threading.Lock()
+        # P2: WAL 模式 + 持久连接（消除每次操作新建连接的开销）
+        # check_same_thread=False 允许多线程共享连接，配合 _lock 保证线程安全
+        self._conn: Optional[sqlite3.Connection] = None
         self._init_db()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """获取持久连接（惰性初始化，WAL 模式）"""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
+            # WAL 模式：读写不互斥，大幅提升并发性能
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            # 正常同步模式（兼顾安全和性能）
+            self._conn.execute("PRAGMA synchronous=NORMAL")
+        return self._conn
 
     def _init_db(self) -> None:
         """初始化数据库"""
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS cache_entries (
                     cache_key TEXT PRIMARY KEY,
@@ -112,7 +126,6 @@ class CacheStorage:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_target ON cache_entries(target)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_expires ON cache_entries(expires_at)")
             conn.commit()
-            conn.close()
 
     def get(self, cache_key: str) -> Optional[Dict[str, Any]]:
         """获取缓存
@@ -124,13 +137,11 @@ class CacheStorage:
             缓存的字典，或 None（不存在/已过期）
         """
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = self._get_conn()
             cursor = conn.execute("SELECT * FROM cache_entries WHERE cache_key = ?", (cache_key,))
             row = cursor.fetchone()
 
             if row is None:
-                conn.close()
                 return None
 
             # 检查过期
@@ -139,13 +150,11 @@ class CacheStorage:
                 # 已过期，删除
                 conn.execute("DELETE FROM cache_entries WHERE cache_key = ?", (cache_key,))
                 conn.commit()
-                conn.close()
                 return None
 
-            # 增加命中次数
+            # 增加命中次数（WAL 模式下写操作不阻塞读）
             conn.execute("UPDATE cache_entries SET hit_count = hit_count + 1 WHERE cache_key = ?", (cache_key,))
             conn.commit()
-            conn.close()
 
             return json.loads(row["result_json"])
 
@@ -163,7 +172,7 @@ class CacheStorage:
         expires_at = now + datetime.timedelta(seconds=ttl)
 
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.execute(
                 """
                 INSERT OR REPLACE INTO cache_entries
@@ -180,7 +189,6 @@ class CacheStorage:
                 ),
             )
             conn.commit()
-            conn.close()
 
     def delete(self, cache_key: str) -> bool:
         """删除缓存
@@ -189,11 +197,10 @@ class CacheStorage:
             True 表示删除成功
         """
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.execute("DELETE FROM cache_entries WHERE cache_key = ?", (cache_key,))
             conn.commit()
             deleted = cursor.rowcount > 0
-            conn.close()
             return deleted
 
     def clear_all(self) -> int:
@@ -203,12 +210,11 @@ class CacheStorage:
             清除的条目数
         """
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.execute("SELECT COUNT(*) FROM cache_entries")
             count = cursor.fetchone()[0]
             conn.execute("DELETE FROM cache_entries")
             conn.commit()
-            conn.close()
             return count
 
     def clear_expired(self) -> int:
@@ -219,17 +225,16 @@ class CacheStorage:
         """
         now = datetime.datetime.now().isoformat()
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.execute("DELETE FROM cache_entries WHERE expires_at < ?", (now,))
             conn.commit()
             count = cursor.rowcount
-            conn.close()
             return count
 
     def get_stats(self) -> Dict[str, Any]:
         """获取缓存统计"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.row_factory = sqlite3.Row
 
             # 总条目数
@@ -249,8 +254,6 @@ class CacheStorage:
             by_target = conn.execute(
                 "SELECT target, COUNT(*) as cnt FROM cache_entries GROUP BY target ORDER BY cnt DESC LIMIT 10"
             ).fetchall()
-
-            conn.close()
 
             return {
                 "total_entries": total,
@@ -272,12 +275,18 @@ class CacheStorage:
             缓存条目列表
         """
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("SELECT * FROM cache_entries WHERE target = ? ORDER BY created_at DESC", (target,))
             rows = cursor.fetchall()
-            conn.close()
             return [dict(r) for r in rows]
+
+    def close(self) -> None:
+        """关闭持久连接（进程退出时调用）"""
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
 
 
 # ============================================================

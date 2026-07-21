@@ -100,6 +100,14 @@ dev = [
 [project.scripts]
 ruoyi-scan = "main:main"
 
+# 插件入口点（P1: 第三方插件通过 pip install 自动注册）
+# 第三方插件包在自身 pyproject.toml 中声明：
+#   [project.entry-points."ruoyi_scan.plugins"]
+#   my-plugin = "my_plugin_pkg:plugin_list"
+# 安装后 ruoyi-scan 自动发现并加载，无需 --plugin-path
+[project.entry-points."ruoyi_scan.plugins"]
+# 内置插件不在此注册（通过 discover_plugin_packages 自动扫描）
+
 [project.urls]
 Homepage = "https://github.com/xiabai2004/Ruoyi-Scan"
 Repository = "https://github.com/xiabai2004/Ruoyi-Scan"

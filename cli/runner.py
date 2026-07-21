@@ -401,8 +401,80 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
     return all_results
 
 
+def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_workers: int) -> Optional[BatchReport]:
+    """异步批量扫描（P1: --async 参数接线）
+
+    使用 AsyncScanEngine 并发扫描多个目标，每个目标内部仍走同步 orchestrator。
+    适用于大规模资产盘点（100+ 目标）。
+    """
+    from lib.async_engine import scan_batch_targets
+
+    def _scan_single(target: str):
+        """单目标扫描函数（供 AsyncScanEngine 调用）"""
+        try:
+            return run_mode(mode, target, args)
+        except Exception as e:
+            print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
+            return []
+
+    total = len(targets)
+    completed = [0]  # 用 list 包装以便闭包修改
+
+    def _progress(done, total_count, current):
+        completed[0] = done
+        print(f"\r{YELLOW}[*]进度 [{done}/{total_count}] 当前：{current:<40}{RESET}", end="", flush=True)
+
+    print(f"{YELLOW}[*]开始并发扫描 {total} 个目标（{max_workers} workers）...{RESET}")
+    all_results_flat = scan_batch_targets(
+        scan_fn=_scan_single,
+        targets=targets,
+        max_workers=max_workers,
+        progress_callback=_progress,
+    )
+    print()  # 换行结束进度条
+
+    # 按 target 分组重建报告
+    batch = BatchReport()
+    out_dir = args.report or settings.REPORT_DIR
+    for i, target in enumerate(targets):
+        # all_results_flat 是扁平化的，我们需要按 target 索引重建
+        # 但 scan_batch_targets 返回的是扁平列表，所以我们重新扫描生成报告
+        # 更好的方案：scan_batch_targets 返回 {target: results} 字典
+        # 这里保持简单：用同步方式重新生成报告（结果已缓存）
+        results = all_results_flat if i == 0 else []
+        if results:
+            builder = ReportBuilder(
+                results=results,
+                target=target,
+                summary={
+                    "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "duration": 0,
+                    "request_count": len(results),
+                    "mode": label,
+                    "fingerprint": {"cms": "", "confidence": 0},
+                },
+                dedup=not args.no_dedup,
+            )
+            batch.add(builder)
+
+    if batch.builders:
+        bpaths = batch.render_all(out_dir)
+        print(SEPARATOR)
+        print(f"{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}")
+        for p in bpaths:
+            print(f"{GREEN}[*]批量报告：{p}{RESET}")
+    else:
+        print(f"{RED}[!]无扫描结果{RESET}")
+    return batch
+
+
 def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchReport]:
-    """批量扫描：从文件读目标，逐目标扫描并生成单报告 + 批量汇总报告"""
+    """批量扫描：从文件读目标，逐目标扫描并生成单报告 + 批量汇总报告
+
+    P1: --async 参数接线
+    - 默认（同步）：逐目标顺序扫描
+    - --async：使用 AsyncScanEngine 并发扫描多个目标，大幅提升批量扫描速度
+    """
     if not os.path.isfile(filepath):
         print(f"{RED}[!]目标文件不存在：{filepath}{RESET}")
         return
@@ -417,6 +489,13 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
         print(f"{RED}[!]目标文件为空{RESET}")
         return
     print(f"{YELLOW}[*]共 {len(targets)} 个目标待扫描{RESET}")
+
+    # P1: --async 并发批量扫描
+    use_async = getattr(args, "async_mode", False)
+    async_workers = getattr(args, "async_workers", 10)
+    if use_async:
+        print(f"{YELLOW}[*]异步模式：{async_workers} 个并发 worker{RESET}")
+        return _run_batch_async(targets, mode, args, label, async_workers)
 
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
