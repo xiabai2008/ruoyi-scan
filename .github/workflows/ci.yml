@@ -43,12 +43,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-      - name: Pytest (core unit tests)
-        run: python -m pytest -q --timeout-method=signal
+      - name: Pytest (core unit tests + coverage)
+        run: |
+          python -m pytest -q --timeout-method=signal \
+            --cov=core --cov=common --cov=lib --cov=api --cov=plugins --cov=chains \
+            --cov-report=xml:coverage.xml --cov-report=term-missing \
+            --cov-fail-under=70
       - name: Regression ruoyi
         run: python tests/regression_ruoyi.py
       - name: Regression spring
         run: python tests/regression_spring.py
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
 
   # ── 签名靶场端到端：2 个 vuln 模式靶场（ruoyi + spring），断言全部 CONFIRMED ──
   signature-e2e:

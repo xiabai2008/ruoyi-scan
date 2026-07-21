@@ -1,7 +1,27 @@
 # Ruoyi-Scan — 若依专项漏洞扫描工具
 
+[![CI](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ruoyi-scan.svg)](https://pypi.org/project/ruoyi-scan/)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Coverage](https://codecov.io/gh/xiabai2004/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2004/Ruoyi-Scan)
+
+[中文](README.md) | [English](README_EN.md)
+
 > 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定（CONFIRMED / SAFE / UNKNOWN）。
 > 支持批量扫描、多格式报告、WAF 绕过、漏洞利用链、Web API 等企业级特性。
+
+---
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [用户指南](docs/USAGE.md) | 安装配置、扫描模式、CLI 参数详解 |
+| [插件开发教程](docs/PLUGIN_DEV.md) | PluginBase、三态判定、entry_points 注册 |
+| [API 文档](docs/API.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
+| [贡献指南](CONTRIBUTING.md) | 开发流程、代码规范、提交约定 |
+| [变更日志](CHANGELOG.md) | 版本历史与变更记录 |
 
 ---
 
