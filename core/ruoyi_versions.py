@@ -172,6 +172,15 @@ RUOYI_VERSION_MILESTONES = {
     "4.2.0": "params[dataScope] SQL 注入存在；/common/upload 扩展名校验弱",
     "4.6.0": "修复 params[dataScope] SQL 注入；加强 /common/upload 扩展名校验",
     "4.7.0": "收紧 /monitor/job/edit 白名单；修复路径穿越",
-    "4.7.8": "当前最新稳定版（本靶场使用）",
+    "4.7.8": "当前最新单机稳定版（本靶场使用）",
     "5.0.0": "RuoYi-Vue 前后端分离，JWT 鉴权，接口前缀 /prod-api/",
+    # P0：RuoYi-Cloud 微服务版里程碑
+    "Cloud-2.x": "RuoYi-Cloud 微服务版，Nacos + Gateway + Sentinel，Spring Boot 2.x",
 }
+
+# RuoYi-Cloud 特征路径（用于 detect_version 识别 Cloud 版）
+RUOYI_CLOUD_PATHS = [
+    "/nacos/",        # Nacos 控制台
+    "/gateway/",      # Spring Gateway
+    "/auth/login",    # Cloud 版 Gateway 统一登录
+]

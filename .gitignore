@@ -57,3 +57,4 @@ lab/run-ruoyi.bat
 .ci_tmp/
 lab_*.log
 .coverage
+生成日期*

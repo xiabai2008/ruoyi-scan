@@ -10,8 +10,10 @@ class Router:
 
     # 显式映射兜底（优先于动态推导）
     # 注：thinkphp / weaver / shiro / struts2 已迁移至 cms-scan-extras/，本项目专注若依做深
+    # P0：ruoyi-cloud 也路由到 plugins.ruoyi（共享若依插件包）
     mapping = {
         "ruoyi": "plugins.ruoyi",
+        "ruoyi-cloud": "plugins.ruoyi",
         "spring": "plugins.spring",
     }
 

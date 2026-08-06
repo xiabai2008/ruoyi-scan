@@ -1,5 +1,5 @@
-# Ruoyi-Scan CLI 控制层 — 各模式执行逻辑（从 core/ 迁移至 cli/，修复 lib/core 分层）
-"""CLI 控制层：run_mode / run_mode_batch / run_chain_mode / run_serve_mode / run_passive_mode 等"""
+# Ruoyi-Scan CLI 控制层 — 核心扫描模式 + 子模块重导出
+"""CLI 控制层：run_mode / run_mode_batch（核心扫描）；其余模式见 cli/ 子模块"""
 
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ MODE_LABELS = {
     "l": ("登录爆破", GREEN),
 }
 
-
 def _print_scan_result(res: ScanResult) -> None:
     """实时输出扫描结果（作为 ScanEngine.run 的 on_result 回调）
 
@@ -51,6 +50,7 @@ def _print_scan_result(res: ScanResult) -> None:
         print(f"{RED}[/]不存在{res.name}{RESET}")
     else:
         print(f"{YELLOW}[?]无法判定{res.name}: {res.evidence}{RESET}")
+
 
 
 def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
@@ -70,6 +70,7 @@ def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
 
 
 # ── 主扫描流程 ──
+
 def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     """从 CLI args 构造 ScanRequest（供 ScanOrchestrator 统一执行）"""
 
@@ -134,6 +135,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         js_extract=getattr(args, "js_extract", False),
         plugin_paths=getattr(args, "plugin_path", None),
     )
+
 
 
 def _cli_event_handler(event_type: str, payload):
@@ -247,6 +249,7 @@ def _cli_event_handler(event_type: str, payload):
 
     elif event_type == "error":
         print(f"{RED}[!]扫描异常: {payload.get('error', '')}{RESET}")
+
 
 
 def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
@@ -401,6 +404,7 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
     return all_results
 
 
+
 def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_workers: int) -> Optional[BatchReport]:
     """异步批量扫描（P1: --async 参数接线）
 
@@ -468,6 +472,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     return batch
 
 
+
 def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchReport]:
     """批量扫描：从文件读目标，逐目标扫描并生成单报告 + 批量汇总报告
 
@@ -533,6 +538,7 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     return batch
 
 
+
 def final_prompt() -> None:
     """结尾交互（保留原 input 习惯；非 tty 时自动跳过）"""
     if not sys.stdin.isatty():
@@ -543,358 +549,18 @@ def final_prompt() -> None:
         logger.debug("用户输入读取失败", exc_info=True)
 
 
-def run_chain_mode(chain_name: str, args: Namespace) -> None:
-    """漏洞利用链执行模式（D6）：按链定义编排多插件"""
-    from chains.registry import get_chain, list_chains
-    from core.chain import ChainEngine
 
-    if chain_name == "list" or getattr(args, "chain_list", False):
-        print(f"{SEPARATOR}")
-        print(f"{YELLOW}[*]可用漏洞利用链{RESET}")
-        print(f"{SEPARATOR}")
-        for c in list_chains():
-            print(f"{GREEN}  {c['name']}{RESET}")
-            print(f"    名称：{c['display_name']}")
-            print(f"    描述：{c['description']}")
-            print(f"    严重度：{c['severity']}")
-            print()
-        return
+# ── P1 子模块重导出（保持向后兼容）──
+from cli.chain_runner import run_chain_mode
+from cli.serve_runner import run_serve_mode
+from cli.passive_runner import run_passive_mode
+from cli.plugin_runner import run_plugin_init_mode, run_plugin_check_mode, run_plugin_list_mode, run_plugin_new_mode
+from cli.tool_runner import run_template_list_mode, run_diff_only_mode, run_ci_init_mode, run_wiki_mode
 
-    target = args.u
-    if not target or target == "__flag__":
-        print(f"{RED}[!]--chain 需配合 -u <target> 指定目标{RESET}")
-        return
-
-    chain_def = get_chain(chain_name)
-    if chain_def is None:
-        print(f"{RED}[!]未找到链: {chain_name}（用 --chain list 查看可用链）{RESET}")
-        return
-
-    print(f"{YELLOW}[*]执行漏洞利用链: {chain_def.display_name}{RESET}")
-    print(f"{YELLOW}[*]链描述: {chain_def.description}{RESET}")
-    print(f"{YELLOW}[*]影响版本: {chain_def.affected_versions or '全版本'}{RESET}")
-    print(f"{SEPARATOR}")
-
-    errors = chain_def.validate()
-    if errors:
-        print(f"{RED}[!]链定义校验失败:{RESET}")
-        for e in errors:
-            print(f"{RED}  - {e}{RESET}")
-        return
-
-    target = normalize_target(target)
-    session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-
-    if args.cms:
-        fp_result = FingerprintResult(cms=args.cms, version="", confidence=1.0, matched=["manual"])
-        print(f"{YELLOW}[*]手动指定 CMS: {args.cms}（跳过指纹识别）{RESET}")
-    else:
-        fp_result = detect_cms(target, session)
-        if fp_result.cms:
-            print(f"{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f}{RESET}")
-        else:
-            print(f"{YELLOW}[*]指纹识别：未识别到已知 CMS{RESET}")
-
-    engine = ChainEngine()
-    started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    t0 = time.time()
-
-    def _on_chain_result(res):
-        if res.status == STATUS_CONFIRMED:
-            print(f"{GREEN}[*]节点成功: {res.name}{RESET}")
-        elif res.status == STATUS_SAFE:
-            print(f"{RED}[/]节点失败: {res.name}{RESET}")
-        else:
-            print(f"{YELLOW}[?]节点未知: {res.name} - {res.evidence}{RESET}")
-
-    chain_result = engine.run(chain_def, target, session, fp_result, on_result=_on_chain_result)
-    duration = time.time() - t0
-    session.close()
-
-    print(f"{SEPARATOR}")
-    status_color = (
-        GREEN if chain_result.status == "CONFIRMED" else (YELLOW if chain_result.status == "UNKNOWN" else RED)
-    )
-    print(f"{YELLOW}[*]链执行状态: {status_color}{chain_result.status}{YELLOW}{RESET}")
-    print(f"{YELLOW}[*]耗时: {duration:.2f}s{RESET}")
-
-    for step_id, status in chain_result.node_status.items():
-        color = GREEN if status == "success" else (YELLOW if status == "skipped" else RED)
-        print(f"  {color}{step_id}: {status}{RESET}")
-
-    if chain_result.facts:
-        print(f"{YELLOW}[*]提取事实:{RESET}")
-        for k, v in chain_result.facts.items():
-            print(f"  {k} = {v}")
-
-    chain_scan_result = chain_result.to_scan_result(chain_def)
-    all_results = [chain_scan_result]
-
-    if args.report:
-        summary = {
-            "started_at": started_at,
-            "duration": duration,
-            "request_count": session.request_count,
-            "mode": f"链执行: {chain_def.display_name}",
-            "fingerprint": {"cms": fp_result.cms, "confidence": fp_result.confidence, "matched": fp_result.matched},
-        }
-        builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not args.no_dedup)
-        paths = builder.render_all(args.report, formats=_parse_report_formats(args.report_format))
-        print(f"{SEPARATOR}")
-        for p in paths:
-            print(f"{GREEN}[*]报告已生成：{p}{RESET}")
-
-
-def run_serve_mode(args: Namespace) -> None:
-    """Web API 服务模式（D9 + D11）：启动 FastAPI + WebSocket + Web 控制台"""
-    print(f"{YELLOW}[*]启动 Web API 服务模式（D9 + D11）{RESET}")
-    print(f"{YELLOW}[*]监听地址: {args.host}:{args.port}{RESET}")
-    print(f"{YELLOW}[*]API 文档: http://{args.host}:{args.port}/docs{RESET}")
-    print(f"{YELLOW}[*]Web 控制台: http://{args.host}:{args.port}/{RESET}")
-
-    api_key = getattr(args, "api_key", None) or ""
-    if not api_key:
-        api_key = os.environ.get("RUOYI_SCAN_API_KEY", "")
-    if api_key:
-        print(f"{GREEN}[*]API 鉴权: 已启用（X-API-Key 头）{RESET}")
-    else:
-        print(f"{YELLOW}[*]API 鉴权: 未设置 API Key，仅允许 127.0.0.1 访问{RESET}")
-
-    db_path = args.db_path or "data/tasks.db"
-    print(f"{YELLOW}[*]任务持久化: {db_path}{RESET}")
-    print(f"{SEPARATOR}")
-
-    try:
-        import uvicorn
-
-        from api.app import create_app
-
-        cors_origins = None
-        if args.cors_origins:
-            cors_origins = [o.strip() for o in args.cors_origins.split(",") if o.strip()]
-        app = create_app(api_key=api_key, cors_origins=cors_origins, db_path=args.db_path or "")
-        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
-    except ImportError as e:
-        print(f"{RED}[!]启动 API 服务需要 fastapi + uvicorn，请安装：pip install fastapi uvicorn[standard]{RESET}")
-        print(f"{RED}[!]缺失模块: {e}{RESET}")
-
-
-def run_passive_mode(args: Namespace) -> None:
-    """被动代理模式：启动 HTTP/HTTPS 代理，捕获流量 URL 自动扫描"""
-    from core.proxy_server import ProxyServer, ScanQueue
-
-    queue = ScanQueue()
-    host = args.passive_host
-    port = args.passive_port
-    proxy = ProxyServer(host=host, port=port, queue=queue)
-    proxy.start()
-
-    print(f"{SEPARATOR}")
-    print(f"{GREEN}[*]被动扫描模式启动{RESET}")
-    print(f"{YELLOW}[*]代理监听: http://{host}:{port}")
-    print(f"{YELLOW}[*]请将浏览器/工具代理设为 http://{host}:{port}")
-    print(f"{YELLOW}[*]所有经过代理的 HTTP/HTTPS 请求目标会自动加入扫描队列")
-    print(f"{YELLOW}[*]按 Ctrl+C 停止被动扫描{RESET}")
-    print(f"{SEPARATOR}")
-
-    scanned = set()
-    try:
-        while True:
-            time.sleep(3)
-            urls = queue.drain()
-            if not urls:
-                continue
-            for url in urls:
-                if url in scanned:
-                    continue
-                scanned.add(url)
-                print(f"\n{SEPARATOR}")
-                print(f"{YELLOW}[*]被动捕获: {url}{RESET}")
-                try:
-                    run_mode("p", url, args)
-                except Exception as e:
-                    print(f"{RED}[!]扫描异常 ({url}): {e}{RESET}")
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}[*]被动扫描已停止，共扫描 {len(scanned)} 个目标{RESET}")
-    finally:
-        proxy.stop()
-
-
-def run_template_list_mode() -> None:
-    """列出所有可用的扫描模板（D19）"""
-    from lib.scan_templates import list_templates
-
-    print(f"{SEPARATOR}")
-    print(f"{YELLOW}[*]可用扫描模板{RESET}")
-    print(f"{SEPARATOR}")
-    for t in list_templates():
-        print(f"{GREEN}  {t.name}{RESET}")
-        print(f"    名称：{t.display_name}")
-        print(f"    描述：{t.description}")
-        print(f"    预估耗时：{t.estimated_time}")
-        if t.severity_filter:
-            print(f"    严重度过滤：{', '.join(sorted(t.severity_filter))}")
-        if t.category_filter:
-            print(f"    类别过滤：{', '.join(sorted(t.category_filter))}")
-        if t.compliance_filter:
-            print(f"    合规过滤：{', '.join(sorted(t.compliance_filter))}")
-        if t.default_args:
-            defaults_str = ", ".join(f"{k}={v}" for k, v in t.default_args.items())
-            print(f"    默认参数：{defaults_str}")
-        print()
-    print(f"{YELLOW}用法：python main.py --template <name> -u <target>{RESET}")
-    print(f"{SEPARATOR}")
-
-
-def run_diff_only_mode(old_path: str, new_path: str) -> None:
-    """仅对比两个 JSON 报告（D20）"""
-    import json as _json
-
-    from lib.diff_scan import diff_reports, load_report, render_diff_report
-
-    print(f"{YELLOW}[*]差异对比模式{RESET}")
-    print(f"    旧报告: {old_path}")
-    print(f"    新报告: {new_path}")
-    try:
-        old_report = load_report(old_path)
-        new_report = load_report(new_path)
-    except FileNotFoundError as e:
-        print(f"{RED}[!]{e}{RESET}")
-        return
-    except _json.JSONDecodeError as e:
-        print(f"{RED}[!]JSON 解析失败: {e}{RESET}")
-        return
-
-    diff = diff_reports(old_report, new_report)
-    print(f"{SEPARATOR}")
-    print(f"{YELLOW}[*]差异结果{RESET}")
-    print(f"    旧扫描: {diff.old_scan_time}（{diff.old_total} 个漏洞）")
-    print(f"    新扫描: {diff.new_scan_time}（{diff.new_total} 个漏洞）")
-    print(f"    {GREEN}🆕 新增: {diff.total_new} 个{RESET}")
-    print(f"    {GREEN}✅ 已修复: {diff.total_fixed} 个{RESET}")
-    print(f"    {YELLOW}⚠️ 状态变化: {diff.total_changed} 个{RESET}")
-    print(f"    {YELLOW}⏳ 未变: {diff.total_persisted} 个{RESET}")
-
-    out_dir = os.path.dirname(new_path) or "."
-    paths = render_diff_report(diff, os.path.join(out_dir, "diff"))
-    print(f"{SEPARATOR}")
-    print(f"{GREEN}[+]差异报告已生成:{RESET}")
-    for p in paths:
-        print(f"    {p}")
-    print(f"{SEPARATOR}")
-
-
-def run_plugin_init_mode(args: Namespace) -> None:
-    """生成插件模板（D25）"""
-    from lib.plugin_sdk import init_plugin_file
-
-    name = args.plugin_init
-    category = args.category
-    print(f"{YELLOW}[*]生成插件模板{RESET}")
-    print(f"    名称: {name}")
-    print(f"    类别: {category}")
-    try:
-        filepath = init_plugin_file(name, category=category)
-        print(f"{GREEN}[+]插件已生成: {filepath}{RESET}")
-        print(f"{YELLOW}[*]下一步:{RESET}")
-        print(f"    1. 编辑 {filepath} 完善检测逻辑")
-        print(f"    2. 运行 python main.py --plugin-check {filepath} 验证")
-        print("    3. 运行 python main.py -u http://target/ 扫描")
-    except FileExistsError as e:
-        print(f"{RED}[!]{e}{RESET}")
-
-
-def run_plugin_check_mode(args: Namespace) -> None:
-    """验证插件文件（D25）"""
-    from lib.plugin_sdk import check_plugin, check_plugin_by_import
-
-    filepath = args.plugin_check
-    print(f"{YELLOW}[*]验证插件: {filepath}{RESET}")
-
-    ok1, errors1, warnings1 = check_plugin(filepath)
-    print(f"{SEPARATOR}")
-    print("静态检查:")
-    if ok1:
-        print(f"  {GREEN}✓ 通过{RESET}")
-    else:
-        print(f"  {RED}✗ 失败{RESET}")
-    for e in errors1:
-        print(f"  {RED}错误: {e}{RESET}")
-    for w in warnings1:
-        print(f"  {YELLOW}警告: {w}{RESET}")
-
-    ok2, errors2, warnings2 = check_plugin_by_import(filepath)
-    print("导入检查:")
-    if ok2:
-        print(f"  {GREEN}✓ 通过{RESET}")
-    else:
-        print(f"  {RED}✗ 失败{RESET}")
-    for e in errors2:
-        print(f"  {RED}错误: {e}{RESET}")
-    for w in warnings2:
-        print(f"  {YELLOW}警告: {w}{RESET}")
-
-    print(f"{SEPARATOR}")
-    if ok1 and ok2:
-        print(f"{GREEN}[+]插件验证通过{RESET}")
-    else:
-        print(f"{RED}[!]插件验证失败{RESET}")
-
-
-def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
-    """列出所有插件元数据（D25）"""
-    from lib.plugin_sdk import list_all_plugins
-
-    plugins = list_all_plugins()
-    print(f"{SEPARATOR}")
-    print(f"{YELLOW}[*]已加载插件列表（{len(plugins)} 个）{RESET}")
-    print(f"{SEPARATOR}")
-    print(f"{'#':<3} {'漏洞名称':<25} {'类别':<10} {'严重度':<8} {'CVE':<18} {'修复':<4} {'复现':<4}")
-    print(f"{'-' * 80}")
-    for i, p in enumerate(plugins, 1):
-        has_fix = "✓" if p["has_fix_detail"] else "✗"
-        has_reproduce = "✓" if p["has_reproduce"] else "✗"
-        print(
-            f"{i:<3} {p['name'][:25]:<25} {p['category']:<10} "
-            f"{p['severity']:<8} {(p['cve'] or 'N/A')[:18]:<18} "
-            f"{has_fix:<4} {has_reproduce:<4}"
-        )
-    print(f"{SEPARATOR}")
-
-
-def run_ci_init_mode(args: Namespace) -> None:
-    """生成 CI 配置文件（D28）"""
-    from lib.ci_runner import generate_ci_config
-
-    platform = args.ci_init
-    output_paths = {
-        "github": ".github/workflows/security-scan.yml",
-        "gitlab": ".gitlab-ci-security.yml",
-        "jenkins": "Jenkinsfile.security",
-    }
-    output_path = output_paths.get(platform, f"ci-{platform}.yml")
-    print(f"{YELLOW}[*]生成 CI 配置: {platform}{RESET}")
-    try:
-        generate_ci_config(platform, output_path)
-        print(f"{GREEN}[+]CI 配置已生成: {output_path}{RESET}")
-        if platform == "github":
-            print(f"{YELLOW}[*]使用方法:{RESET}")
-            print("    1. 将文件提交到仓库")
-            print("    2. 在 GitHub Secrets 中设置 SCAN_TARGET")
-            print("    3. 推送代码触发扫描")
-            print("    4. 在 GitHub → Security → Code scanning 查看结果")
-    except ValueError as e:
-        print(f"{RED}[!]{e}{RESET}")
-
-
-def run_wiki_mode(args: Namespace) -> None:
-    """生成漏洞知识库（D29）"""
-    from lib.vuln_wiki import generate_wiki
-
-    output_path = args.wiki_output or "vuln_wiki.html"
-    print(f"{YELLOW}[*]生成漏洞知识库{RESET}")
-    paths = generate_wiki(output_path, formats=["html", "json"])
-    print(f"{GREEN}[+]知识库已生成:{RESET}")
-    for p in paths:
-        print(f"    {p}")
-    print(f"{YELLOW}[*]用浏览器打开 HTML 文件查看{RESET}")
+__all__ = [
+    "run_mode", "run_mode_batch", "final_prompt",
+    "run_chain_mode", "run_serve_mode", "run_passive_mode",
+    "run_plugin_new_mode", "run_plugin_init_mode", "run_plugin_check_mode", "run_plugin_list_mode",
+    "run_template_list_mode", "run_diff_only_mode", "run_ci_init_mode",
+    "run_wiki_mode",
+]

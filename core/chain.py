@@ -16,6 +16,7 @@
 #   - ChainEngine:  执行引擎（拓扑排序 + 节点执行 + 状态聚合）
 #   - ChainResult:  链执行结果（状态 + 节点结果 + 证据）
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -38,6 +39,7 @@ NODE_SUCCESS = "success"  # CONFIRMED
 NODE_FAILED = "failed"  # SAFE 或异常
 NODE_AMBIGUOUS = "ambiguous"  # UNKNOWN
 NODE_SKIPPED = "skipped"  # condition 不满足或上游失败被跳过
+NODE_TIMEOUT = "timeout"  # P2：节点执行超时
 NODE_ERROR = "error"  # 执行异常
 
 # === 链整体状态（四级，部分成功不升级为 CONFIRMED）===
@@ -312,15 +314,18 @@ class ChainEngine:
         result = engine.run(chain_def, target, session, fp_result)
     """
 
-    def __init__(self, on_unknown: str = "fail"):
+    def __init__(self, on_unknown: str = "fail", step_timeout: float = 30.0):
         """初始化链引擎
 
         Args:
             on_unknown: UNKNOWN 节点的处理策略
                 - 'fail': 按失败处理（默认，保守）
                 - 'continue': 按 success 处理（激进，不推荐）
+            step_timeout: 单节点执行超时秒数（默认 30s，0 不限制）
+                P2 增强：防止某步卡住导致链永远不返回
         """
         self.on_unknown = on_unknown
+        self.step_timeout = step_timeout
 
     def _topological_sort(self, chain_def: ChainDef) -> List[str]:
         """拓扑排序（Kahn 算法），返回节点 id 的执行顺序
@@ -382,15 +387,27 @@ class ChainEngine:
         - CONFIRMED → success
         - SAFE      → failed
         - UNKNOWN   → ambiguous
-        - 异常      → error
+        - 超时       → timeout
+        - 异常       → error
+
+        P2 增强：使用 ThreadPoolExecutor 实现单节点超时控制，
+        防止 verify() 中网络请求无限等待导致链永远不返回。
         """
-        try:
+        def _do_verify():
             plugin = step.plugin_cls()
             result = plugin.verify(ctx.target, ctx.session)
-            # severity 覆盖
             if step.severity_override:
                 result.severity = step.severity_override
-            # 状态映射
+            return result
+
+        try:
+            if self.step_timeout > 0:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_do_verify)
+                    result = future.result(timeout=self.step_timeout)
+            else:
+                result = _do_verify()
+
             if result.status == STATUS_CONFIRMED:
                 node_status = NODE_SUCCESS
             elif result.status == STATUS_SAFE:
@@ -400,8 +417,15 @@ class ChainEngine:
             else:
                 node_status = NODE_FAILED
             return result, node_status
+        except FutureTimeoutError:
+            error_result = ScanResult(
+                kind="chain",
+                name=step.id,
+                status=STATUS_UNKNOWN,
+                evidence=f"节点执行超时（{self.step_timeout}s）",
+            )
+            return error_result, "timeout"
         except Exception as e:
-            # 异常等同 failed，记录错误信息
             error_result = ScanResult(
                 kind="chain",
                 name=step.id,
@@ -414,6 +438,9 @@ class ChainEngine:
         """判断节点是否为关键失败（影响链整体状态）"""
         if node_status in (NODE_SUCCESS, NODE_SKIPPED):
             return False
+        # P2：超时视为关键失败
+        if node_status == NODE_TIMEOUT:
+            return True
         # UNKNOWN 策略
         if node_status == NODE_AMBIGUOUS:
             return self.on_unknown == "fail"
@@ -462,10 +489,15 @@ class ChainEngine:
         # 记录被跳过的节点（上游 abort 传播）
         aborted = set()
 
+        import logging
+        _log = logging.getLogger(__name__)
+
         for step_id in order:
             step = chain_def.step_by_id(step_id)
             if step is None:
                 continue
+
+            step_t0 = time.time()
 
             # 检查上游是否已 abort
             if step_id in aborted:
@@ -505,6 +537,16 @@ class ChainEngine:
             ctx.extract_outputs(step_id, step, scan_result)
             result.node_results[step_id] = scan_result
             result.node_status[step_id] = node_status
+
+            step_duration = time.time() - step_t0
+            _log.info(
+                "链节点 [%s/%s] %s: status=%s duration=%.2fs",
+                step_id,
+                step.plugin_cls.__name__ if hasattr(step.plugin_cls, '__name__') else type(step.plugin_cls).__name__,
+                step.description or step_id,
+                node_status,
+                step_duration,
+            )
 
             # 回调
             if on_result and scan_result:
@@ -557,7 +599,7 @@ class ChainEngine:
         for status in node_status.values():
             if status == NODE_SUCCESS:
                 has_success = True
-            elif status == NODE_FAILED or status == NODE_ERROR:
+            elif status == NODE_FAILED or status == NODE_ERROR or status == NODE_TIMEOUT:
                 has_failed = True
             elif status == NODE_AMBIGUOUS:
                 has_ambiguous = True

@@ -116,6 +116,7 @@ def build_parser():
     # D25 插件 SDK
     parser.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
     parser.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
+    parser.add_argument("--plugin-new", default=None, metavar="NAME", help="P3: 创建新插件脚手架")
     parser.add_argument("--plugin-list", action="store_true", default=False, help="列出插件")
     parser.add_argument(
         "--plugin-path",
@@ -329,7 +330,7 @@ def main(argv=None):
             args.template_list,
             args.diff_only,
             args.plugin_init,
-            args.plugin_check,
+            args.plugin_new, args.plugin_check,
             args.plugin_list,
             args.ci_init,
             args.wiki,
@@ -346,100 +347,9 @@ def main(argv=None):
         print_help()
         return
 
-    # ── 纯工具模式（不涉及扫描）──
-    if args.diff_only:
-        run_diff_only_mode(args.diff_only[0], args.diff_only[1])
-        return
-    if args.template_list:
-        run_template_list_mode()
-        return
-    if args.plugin_init:
-        run_plugin_init_mode(args)
-        return
-    if args.plugin_check:
-        run_plugin_check_mode(args)
-        return
-    if args.plugin_list:
-        run_plugin_list_mode()
-        return
-    if args.ci_init:
-        run_ci_init_mode(args)
-        return
-    if args.wiki:
-        run_wiki_mode(args)
-        return
-    if args.oast_server:
-        from lib.oast import run_oast_mode
-
-        run_oast_mode(args)
-        return
-    if args.cve_sync or args.cve_id:
-        from lib.cve_sync import run_cve_sync_mode
-
-        run_cve_sync_mode(args)
-        return
-    if args.web_ui:
-        from lib.web_ui import run_web_ui_mode
-
-        run_web_ui_mode(args)
-        return
-    if args.cache_stats:
-        from lib.cache import run_cache_stats_mode
-
-        run_cache_stats_mode(args)
-        return
-    if args.cache_clear:
-        from lib.cache import run_cache_clear_mode
-
-        run_cache_clear_mode(args)
-        return
-
-    # ── 服务/链/代理模式（独立进程）──
-    if args.serve:
-        run_serve_mode(args)
-        return
-    if args.chain_list or (args.chain == "list"):
-        run_chain_mode("list", args)
-        return
-    if args.chain:
-        run_chain_mode(args.chain, args)
-        return
-    if args.passive:
-        run_passive_mode(args)
-        return
-
-    # ── 标准扫描模式 ──
-    def _mode_flag(val):
-        return val is not None and val != "__flag__"
-
-    target_for = {}
-    flag_for = {}
-    for k in ("u", "m", "p", "l"):
-        val = getattr(args, k, None)
-        if val is not None:
-            if val == "__flag__":
-                flag_for[k] = True
-            else:
-                target_for[k] = val
-
-    if args.file:
-        mode = None
-        for k in ("u", "m", "p", "l"):
-            if k in flag_for:
-                mode = k
-                break
-        if not mode:
-            print(f"{RED}[!]-f 批量扫描需配合 -u/-m/-p/-l 指定扫描模式，如：main.py -f targets.txt -p{RESET}")
-            return
-        run_mode_batch(args.file, mode, args)
-    elif target_for:
-        for k in ("u", "m", "p", "l"):
-            if k in target_for:
-                run_mode(k, target_for[k], args)
-                break
-
-    final_prompt()
-
+    # P1：模式分发委托给 cli/dispatcher.py
+    from cli.dispatcher import dispatch
+    dispatch(args)
 
 if __name__ == "__main__":
     main()

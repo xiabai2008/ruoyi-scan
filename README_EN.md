@@ -2,10 +2,10 @@
 
 [English](README_EN.md) | [中文](README.md)
 
-[![CI](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml)
+[![CI](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
-[![Coverage](https://codecov.io/gh/xiabai2004/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2004/Ruoyi-Scan)
+[![Coverage](https://codecov.io/gh/xiabai2008/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/Ruoyi-Scan)
 
 > A legally authorized **RuoYi-dedicated vulnerability scanner** with a plugin-based architecture and three-state verdict (CONFIRMED / SAFE / UNKNOWN).
 > Supports enterprise-grade features such as batch scanning, multi-format reporting, WAF bypass, exploit chains, and a Web API.
@@ -16,7 +16,7 @@
 
 - **Author**: XIABAI
 - **Version**: 1.1.0
-- **Repository**: https://github.com/xiabai2004/Ruoyi-Scan
+- **Repository**: https://github.com/xiabai2008/Ruoyi-Scan
 - **Tech Stack**: Python 3.8+ / requests / FastAPI / Docker
 - **License**: MIT License
 
@@ -61,7 +61,7 @@
 
 ### Option 1: Install from Release (Recommended)
 
-Go to the [Releases page](https://github.com/xiabai2004/Ruoyi-Scan/releases), download the latest `.whl` file, then:
+Go to the [Releases page](https://github.com/xiabai2008/Ruoyi-Scan/releases), download the latest `.whl` file, then:
 
 ```bash
 # Install (auto-installs core dependencies)
@@ -79,7 +79,7 @@ ruoyi-scan -p http://target:8080/
 ### Option 2: Install from Source
 
 ```bash
-git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+git clone https://github.com/xiabai2008/Ruoyi-Scan.git
 cd Ruoyi-Scan
 pip install -r requirements.txt
 

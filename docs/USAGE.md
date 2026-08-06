@@ -42,7 +42,7 @@ Ruoyi-Scan 采用 PEP 621 元数据规范，提供源码安装与 Docker 安装�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+git clone https://github.com/xiabai2008/Ruoyi-Scan.git
 cd Ruoyi-Scan
 
 # 2. 可编辑模式安装（修改源码即时生效）
@@ -1479,7 +1479,7 @@ jobs:
 
       - name: Install Ruoyi-Scan
         run: |
-          git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+          git clone https://github.com/xiabai2008/Ruoyi-Scan.git
           cd Ruoyi-Scan
           pip install -e ".[report]"  # 含 PDF/Word/Excel 报告
 
@@ -1520,7 +1520,7 @@ ruoyi-scan:
   stage: security
   image: python:3.11
   script:
-    - git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+    - git clone https://github.com/xiabai2008/Ruoyi-Scan.git
     - cd Ruoyi-Scan && pip install -e .
     - ruoyi-scan -p "$TARGET_URL" --ci --severity-threshold high --template quick
   artifacts:
@@ -1542,7 +1542,7 @@ pipeline {
     stages {
         stage('Security Scan') {
             steps {
-                sh 'git clone https://github.com/xiabai2004/Ruoyi-Scan.git && cd Ruoyi-Scan && pip install -e .'
+                sh 'git clone https://github.com/xiabai2008/Ruoyi-Scan.git && cd Ruoyi-Scan && pip install -e .'
                 sh '''
                     ruoyi-scan -p ${TARGET_URL} \
                       --ci \
@@ -1782,8 +1782,8 @@ A：使用 `--template quick` 减少扫描范围，或增大 CI 任务超时时�
 
 ### 技术支持
 
-- 仓库：https://github.com/xiabai2004/Ruoyi-Scan
-- 问题反馈：https://github.com/xiabai2004/Ruoyi-Scan/issues
+- 仓库：https://github.com/xiabai2008/Ruoyi-Scan
+- 问题反馈：https://github.com/xiabai2008/Ruoyi-Scan/issues
 - 许可：MIT License © 2026 XIABAI
 
 ---

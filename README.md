@@ -1,9 +1,9 @@
 # Ruoyi-Scan — 若依专项漏洞扫描工具
 
-[![CI](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/Ruoyi-Scan/actions/workflows/ci.yml)
+[![CI](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Coverage](https://codecov.io/gh/xiabai2004/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2004/Ruoyi-Scan)
+[![Coverage](https://codecov.io/gh/xiabai2008/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/Ruoyi-Scan)
 
 [中文](README.md) | [English](README_EN.md)
 
@@ -28,7 +28,7 @@
 
 - **作者**：XIABAI
 - **版本**：1.1.0
-- **仓库**：https://github.com/xiabai2004/Ruoyi-Scan
+- **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
 
@@ -73,7 +73,7 @@
 
 ### 方式一：从 Release 下载安装（推荐）
 
-前往 [Releases 页面](https://github.com/xiabai2004/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
+前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
 
 ```bash
 # 安装（自动安装核心依赖）
@@ -91,7 +91,7 @@ ruoyi-scan -p http://target:8080/
 ### 方式二：源码安装
 
 ```bash
-git clone https://github.com/xiabai2004/Ruoyi-Scan.git
+git clone https://github.com/xiabai2008/Ruoyi-Scan.git
 cd Ruoyi-Scan
 pip install -r requirements.txt
 

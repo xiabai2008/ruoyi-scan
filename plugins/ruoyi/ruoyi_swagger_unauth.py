@@ -1,5 +1,5 @@
 # RuoYi Swagger 未授权 API 文档泄露
-from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
 
@@ -45,10 +45,13 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
+        # P3 三态补全：所有请求异常 → UNKNOWN，不误判为 SAFE
+        any_success = False
         for path in ["/swagger-ui.html", "/doc.html", "/v2/api-docs"]:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
+                any_success = True
                 if resp.status_code == 200:
                     if any(kw in (resp.text or "")[:500] for kw in ["swagger", "Knife4j", "接口文档", '"swagger"']):
                         return ScanResult(
@@ -62,11 +65,14 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                         )
             except Exception:
                 continue
+        if not any_success:
+            return ScanResult(
+                kind=self.category, name=self.name, severity=self.severity,
+                status=STATUS_UNKNOWN, url=target,
+                evidence="所有 Swagger 路径请求失败（网络异常）",
+            )
         return ScanResult(
-            kind=self.category,
-            name=self.name,
-            severity=self.severity,
-            status=STATUS_SAFE,
-            url=target,
+            kind=self.category, name=self.name, severity=self.severity,
+            status=STATUS_SAFE, url=target,
             evidence="Swagger/Doc 路径未公开",
         )

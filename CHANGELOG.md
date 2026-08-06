@@ -8,6 +8,10 @@
 
 ### Added
 
+- **P0 版本矩阵**: 新增若依版本兼容性矩阵文档 `docs/version-matrix.md`
+- **P0 Cloud 路由**: `core/router.py` 添加 `ruoyi-cloud` → `plugins.ruoyi` 路由映射
+- **P0 Cloud 里程碑**: `core/ruoyi_versions.py` 添加 RuoYi-Cloud 版本里程碑和特征路径
+
 - 方向 1-5: README 文档同步 + 依赖规范化 + pyproject.toml 现代打包 + PyPI 发布工作流 + CI 代码质量门禁
 - 方向 6: 社区治理文档（CONTRIBUTING / SECURITY / CHANGELOG + Issue/PR 模板）
 
@@ -59,6 +63,6 @@
 - 签名靶场（Flask lab）
 - 887 单元测试 + 回归测试
 
-[Unreleased]: https://github.com/xiabai2004/Ruoyi-Scan/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/xiabai2004/Ruoyi-Scan/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/xiabai2004/Ruoyi-Scan/releases/tag/v1.0.0
+[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/xiabai2008/Ruoyi-Scan/releases/tag/v1.0.0

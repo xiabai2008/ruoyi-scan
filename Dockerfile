@@ -30,7 +30,7 @@ FROM python:3.11-slim AS runtime
 
 LABEL org.opencontainers.image.title="Ruoyi-Scan"
 LABEL org.opencontainers.image.description="若依（RuoYi）专项漏洞扫描器"
-LABEL org.opencontainers.image.source="https://github.com/xiabai2004/Ruoyi-Scan"
+LABEL org.opencontainers.image.source="https://github.com/xiabai2008/Ruoyi-Scan"
 LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app

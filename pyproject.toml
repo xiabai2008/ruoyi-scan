@@ -109,9 +109,9 @@ ruoyi-scan = "main:main"
 # 内置插件不在此注册（通过 discover_plugin_packages 自动扫描）
 
 [project.urls]
-Homepage = "https://github.com/xiabai2004/Ruoyi-Scan"
-Repository = "https://github.com/xiabai2004/Ruoyi-Scan"
-Issues = "https://github.com/xiabai2004/Ruoyi-Scan/issues"
+Homepage = "https://github.com/xiabai2008/Ruoyi-Scan"
+Repository = "https://github.com/xiabai2008/Ruoyi-Scan"
+Issues = "https://github.com/xiabai2008/Ruoyi-Scan/issues"
 
 [tool.setuptools]
 # 显式声明包目录（非 src-layout）

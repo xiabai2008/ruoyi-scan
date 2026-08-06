@@ -361,6 +361,83 @@ def test_chain_result_to_scan_result_blocked():
     assert scan_result.status == STATUS_SAFE, 'BLOCKED → SAFE'
 
 
+# === P2 新增：拓扑排序正确性 + 超时控制 + 真实链定义验证 ===
+
+def test_topological_sort_real_chain_sql_to_rce():
+    from chains.ruoyi_sql_to_rce import CHAIN
+    engine = ChainEngine()
+    order = engine._topological_sort(CHAIN)
+    sql_step = next((s.id for s in CHAIN.steps if 'sql' in s.id.lower()), None)
+    if sql_step:
+        assert order.index(sql_step) < len(order) - 1, f'{sql_step} 不应排最后'
+    assert CHAIN.validate() == [], f'链定义校验失败: {CHAIN.validate()}'
+    assert len(order) == len(CHAIN.steps), f'排序后节点数={len(order)} != 定义节点数={len(CHAIN.steps)}'
+
+
+def test_topological_sort_real_chain_defaultpw():
+    from chains.ruoyi_defaultpw_to_webshell import CHAIN
+    engine = ChainEngine()
+    order = engine._topological_sort(CHAIN)
+    login_steps = [s.id for s in CHAIN.steps if 'login' in s.id.lower() or 'password' in s.id.lower()]
+    upload_steps = [s.id for s in CHAIN.steps if 'upload' in s.id.lower()]
+    if login_steps and upload_steps:
+        max_login_idx = max(order.index(s) for s in login_steps if s in order)
+        min_upload_idx = min(order.index(s) for s in upload_steps if s in order)
+        assert max_login_idx < min_upload_idx, '登录节点必须在上传节点之前执行'
+    assert CHAIN.validate() == [], f'链定义校验失败: {CHAIN.validate()}'
+
+
+def test_topological_sort_real_chain_nacos():
+    from chains.ruoyi_nacos_to_dbcreds import CHAIN
+    engine = ChainEngine()
+    order = engine._topological_sort(CHAIN)
+    assert CHAIN.validate() == [], f'链定义校验失败: {CHAIN.validate()}'
+    assert len(order) == len(CHAIN.steps)
+
+
+def test_all_chains_no_cycles():
+    from chains.registry import list_chains, get_chain
+    for c in list_chains():
+        chain_def = get_chain(c['name'])
+        assert chain_def is not None, f'链 {c["name"]} 获取失败'
+        errors = chain_def.validate()
+        assert errors == [], f'链 {c["name"]} 校验失败: {errors}'
+
+
+def test_chain_step_timeout_configurable():
+    engine_default = ChainEngine()
+    assert engine_default.step_timeout == 30.0, f'默认超时应为 30s, 实际 {engine_default.step_timeout}'
+    engine_custom = ChainEngine(step_timeout=5.0)
+    assert engine_custom.step_timeout == 5.0
+    engine_unlimited = ChainEngine(step_timeout=0)
+    assert engine_unlimited.step_timeout == 0
+
+
+def test_chain_node_timeout_constant():
+    from core.chain import NODE_TIMEOUT
+    assert NODE_TIMEOUT == 'timeout'
+
+
+class MockSlowPlugin(PluginBase):
+    name = 'Mock Slow'
+    severity = 'medium'
+    category = 'vuln'
+    def verify(self, target, session):
+        import time
+        time.sleep(2.0)
+        return ScanResult(kind='vuln', name=self.name, status=STATUS_CONFIRMED, url=target, evidence='should not reach')
+
+
+def test_chain_step_timeout_triggers():
+    chain = _make_chain([
+        ChainStep(id='slow', plugin_cls=MockSlowPlugin, on_fail=ON_FAIL_CONTINUE),
+    ])
+    engine = ChainEngine(step_timeout=1.0)
+    session = {}
+    result = engine.run(chain, 'http://test/', session)
+    assert result.node_status['slow'] == 'timeout', f'应返回 timeout, 实际 {result.node_status["slow"]}'
+
+
 if __name__ == '__main__':
     test_chain_def_validate_no_cycle()
     test_chain_def_validate_cycle_detected()
