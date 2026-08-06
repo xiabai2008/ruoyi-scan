@@ -9,6 +9,7 @@
     # 等待任务状态
     wait_for_status(client, task_id, "done", timeout=5)
 """
+
 import time
 from typing import Callable
 

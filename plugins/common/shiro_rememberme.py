@@ -81,8 +81,7 @@ class ShiroRemembermePlugin(PluginBase):
                     status=STATUS_UNKNOWN,
                     url=url,
                     evidence=(
-                        f"检测到 Shiro rememberMe 特征（{self.DELETE_ME}），"
-                        "存在反序列化风险，需进一步验证密钥可利用性"
+                        f"检测到 Shiro rememberMe 特征（{self.DELETE_ME}），存在反序列化风险，需进一步验证密钥可利用性"
                     ),
                     fix=self.fix,
                     fix_detail=self.fix_detail,

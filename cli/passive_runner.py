@@ -44,6 +44,7 @@ def run_passive_mode(args: Namespace) -> None:
                 print(f"{YELLOW}[*]被动捕获: {url}{RESET}")
                 try:
                     from cli.runner import run_mode
+
                     run_mode("p", url, args)
                 except Exception as e:
                     print(f"{RED}[!]扫描异常 ({url}): {e}{RESET}")
