@@ -1,20 +1,18 @@
 """CLI submodule — 漏洞利用链执行"""
+
 from __future__ import annotations
 
 import datetime
-import os
-import sys
 import time
 from argparse import Namespace
-from typing import Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
-from config import settings
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 logger = get_logger(__name__)
+
 
 def run_chain_mode(chain_name: str, args: Namespace) -> None:
     """漏洞利用链执行模式（D6）：按链定义编排多插件"""
@@ -54,6 +52,9 @@ def run_chain_mode(chain_name: str, args: Namespace) -> None:
         for e in errors:
             print(f"{RED}  - {e}{RESET}")
         return
+
+    from core.fingerprint import detect_cms
+    from core.http import normalize_target
 
     target = normalize_target(target)
     session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
@@ -111,10 +112,11 @@ def run_chain_mode(chain_name: str, args: Namespace) -> None:
             "mode": f"链执行: {chain_def.display_name}",
             "fingerprint": {"cms": fp_result.cms, "confidence": fp_result.confidence, "matched": fp_result.matched},
         }
+        from cli.runner import _parse_report_formats
+        from core.report import ReportBuilder
+
         builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not args.no_dedup)
         paths = builder.render_all(args.report, formats=_parse_report_formats(args.report_format))
         print(f"{SEPARATOR}")
         for p in paths:
             print(f"{GREEN}[*]报告已生成：{p}{RESET}")
-
-

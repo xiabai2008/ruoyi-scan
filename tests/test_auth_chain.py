@@ -14,11 +14,16 @@ except ImportError:
     print('缺少依赖 requests_mock，请先执行：pip install requests_mock')
     sys.exit(1)
 
-from core.session import SessionManager
 from core.auth_chain import (
-    RuoYiAuthChain, AUTH_V4_SESSION, AUTH_V5_JWT, AUTH_NONE,
-    LOGIN_OK, LOGIN_CAPTCHA, LOGIN_FAIL,
+    AUTH_NONE,
+    AUTH_V4_SESSION,
+    AUTH_V5_JWT,
+    LOGIN_CAPTCHA,
+    LOGIN_FAIL,
+    LOGIN_OK,
+    RuoYiAuthChain,
 )
+from core.session import SessionManager
 
 MOCK_TARGET = 'http://ruoyi-auth.test'
 

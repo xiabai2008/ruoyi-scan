@@ -7,8 +7,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from openpyxl import load_workbook
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
+from common.models import (
+    SEVERITY_HIGH,
+    SEVERITY_LOW,
+    SEVERITY_MEDIUM,
+    STATUS_CONFIRMED,
+    STATUS_SAFE,
+    ScanResult,
+)
 from core.report import ReportBuilder
 from core.report_xlsx import render_xlsx
 

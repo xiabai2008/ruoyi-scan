@@ -1,20 +1,15 @@
 """CLI submodule — 被动代理模式"""
+
 from __future__ import annotations
 
-import datetime
-import os
-import sys
 import time
 from argparse import Namespace
-from typing import Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
-from config import settings
-from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 logger = get_logger(__name__)
+
 
 def run_passive_mode(args: Namespace) -> None:
     """被动代理模式：启动 HTTP/HTTPS 代理，捕获流量 URL 自动扫描"""
@@ -48,6 +43,7 @@ def run_passive_mode(args: Namespace) -> None:
                 print(f"\n{SEPARATOR}")
                 print(f"{YELLOW}[*]被动捕获: {url}{RESET}")
                 try:
+                    from cli.runner import run_mode
                     run_mode("p", url, args)
                 except Exception as e:
                     print(f"{RED}[!]扫描异常 ({url}): {e}{RESET}")
@@ -55,5 +51,3 @@ def run_passive_mode(args: Namespace) -> None:
         print(f"\n{YELLOW}[*]被动扫描已停止，共扫描 {len(scanned)} 个目标{RESET}")
     finally:
         proxy.stop()
-
-

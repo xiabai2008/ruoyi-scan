@@ -1,19 +1,20 @@
 # e2e 全流程测试：CLI → 指纹 → 插件 → 报告
 """端到端集成测试：模拟完整扫描流程，验证 main.py CLI 入口到报告生成的端到端链路"""
-import json
 import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE
 from cli.runner import (
-    _parse_report_formats, _print_scan_result,
-    MODE_CATEGORIES, MODE_LABELS,
+    MODE_CATEGORIES,
+    MODE_LABELS,
+    _parse_report_formats,
+    _print_scan_result,
 )
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 
 
 class TestE2EFullFlow(unittest.TestCase):
@@ -78,7 +79,7 @@ class TestE2EFullFlow(unittest.TestCase):
 
     def test_main_imports(self):
         """验证 main.py 核心 import 链路"""
-        from main import build_parser, print_banner, print_help
+        from main import build_parser
         parser = build_parser()
         self.assertIsNotNone(parser)
         # 验证核心参数存在
@@ -88,11 +89,12 @@ class TestE2EFullFlow(unittest.TestCase):
     def test_runner_imports(self):
         """验证 cli/runner.py 所有公开函数可导入"""
         from cli.runner import (
-            run_mode, run_mode_batch, final_prompt,
-            run_chain_mode, run_serve_mode, run_passive_mode,
-            run_template_list_mode, run_diff_only_mode,
-            run_plugin_init_mode, run_plugin_check_mode, run_plugin_list_mode,
-            run_ci_init_mode, run_wiki_mode,
+            final_prompt,
+            run_chain_mode,
+            run_mode,
+            run_mode_batch,
+            run_passive_mode,
+            run_serve_mode,
         )
         self.assertTrue(callable(run_mode))
         self.assertTrue(callable(run_chain_mode))
@@ -115,11 +117,8 @@ class TestE2EFullFlow(unittest.TestCase):
 
     def test_core_imports_with_type_hints(self):
         """验证 core/ 模块 type hints 导入正常"""
+        from common.models import STATUS_CONFIRMED, FingerprintResult, ScanResult
         from core.engine import ScanEngine
-        from common.models import ScanResult, FingerprintResult, STATUS_CONFIRMED
-        from core.loader import load_plugins
-        from core.router import Router
-        from core.session import SessionManager
 
         # 实例化基本检查
         engine = ScanEngine(threads=1)
@@ -179,7 +178,7 @@ class TestE2EFullFlow(unittest.TestCase):
 
     def test_distributed_rate_limiter_enhanced(self):
         """验证 P3 增强：DistributedRateLimiter burst + stats"""
-        from lib.distributed import DistributedRateLimiter, RATE_STATS_KEY
+        from lib.distributed import DistributedRateLimiter
 
         # 本地模式（无 Redis）
         limiter = DistributedRateLimiter(None, rate=10, burst=2, worker_id='test_worker')

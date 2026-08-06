@@ -16,7 +16,8 @@
 #   - ChainEngine:  执行引擎（拓扑排序 + 节点执行 + 状态聚合）
 #   - ChainResult:  链执行结果（状态 + 节点结果 + 证据）
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -393,6 +394,7 @@ class ChainEngine:
         P2 增强：使用 ThreadPoolExecutor 实现单节点超时控制，
         防止 verify() 中网络请求无限等待导致链永远不返回。
         """
+
         def _do_verify():
             plugin = step.plugin_cls()
             result = plugin.verify(ctx.target, ctx.session)
@@ -490,6 +492,7 @@ class ChainEngine:
         aborted = set()
 
         import logging
+
         _log = logging.getLogger(__name__)
 
         for step_id in order:
@@ -542,7 +545,7 @@ class ChainEngine:
             _log.info(
                 "链节点 [%s/%s] %s: status=%s duration=%.2fs",
                 step_id,
-                step.plugin_cls.__name__ if hasattr(step.plugin_cls, '__name__') else type(step.plugin_cls).__name__,
+                step.plugin_cls.__name__ if hasattr(step.plugin_cls, "__name__") else type(step.plugin_cls).__name__,
                 step.description or step_id,
                 node_status,
                 step_duration,

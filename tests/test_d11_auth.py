@@ -7,15 +7,14 @@
 #   4. API 端到端鉴权（带/不带 X-API-Key 头）
 import os
 import sys
-import tempfile
 import time
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.storage import Storage
 from core.task_registry import TaskRegistry
-
 
 # === 1. Storage SQLite CRUD ===
 

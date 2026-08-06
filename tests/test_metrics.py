@@ -9,17 +9,17 @@
 #   6. /api/system/metrics 免鉴权（PUBLIC_PATHS）
 #   7. Prometheus 文本格式规范（HELP/TYPE/metric 行）
 import os
-import sys
 import re
-import time
+import sys
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient
+
 from api.app import create_app
 from core.task_registry import TaskRegistry
-
 
 # === fixtures ===
 
@@ -122,7 +122,7 @@ def test_metrics_uptime_is_numeric(client):
     resp = client.get('/api/system/metrics')
     match = re.search(r'^ruoyi_scan_uptime_seconds\s+([\d.]+)\s*$',
                       resp.text, re.MULTILINE)
-    assert match, f'未找到 uptime 数值行'
+    assert match, '未找到 uptime 数值行'
     value = float(match.group(1))
     assert value >= 0, f'uptime 应 >= 0，实际 {value}'
 
@@ -182,7 +182,7 @@ def test_metrics_tasks_total_reflects_registry(client, app):
     resp = client.get('/api/system/metrics')
     # 应该能找到 pending 状态的计数 >= 1
     match = re.search(r'ruoyi_scan_tasks_total\{status="pending"\}\s+(\d+)', resp.text)
-    assert match, f'应包含 pending 状态任务计数'
+    assert match, '应包含 pending 状态任务计数'
     count = int(match.group(1))
     assert count >= 1, f'pending 任务计数应 >= 1，实际 {count}'
 

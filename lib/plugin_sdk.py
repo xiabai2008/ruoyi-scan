@@ -453,28 +453,27 @@ def generate_plugin_docs(output_path: str) -> str:
     return output_path
 
 
-
-
-def generate_plugin_template(name, category='ruoyi'):
+def generate_plugin_template(name, category="ruoyi"):
     import os as _os
-    if category not in ('ruoyi', 'spring', 'common'):
-        raise ValueError(f'unsupported category: {category}')
-    target_dir = _os.path.join('plugins', category)
+
+    if category not in ("ruoyi", "spring", "common"):
+        raise ValueError(f"unsupported category: {category}")
+    target_dir = _os.path.join("plugins", category)
     _os.makedirs(target_dir, exist_ok=True)
-    filename = f'{name}.py'
+    filename = f"{name}.py"
     filepath = _os.path.join(target_dir, filename)
     if _os.path.exists(filepath):
-        raise FileExistsError(f'plugin file exists: {filepath}')
-    class_name = ''.join(w.capitalize() for w in name.split('_')) + 'Plugin'
+        raise FileExistsError(f"plugin file exists: {filepath}")
+    class_name = "".join(w.capitalize() for w in name.split("_")) + "Plugin"
 
     lines = []
-    lines.append(f'# {name} - RuoYi plugin')
-    lines.append('from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult')
-    lines.append('from core.http import join_url')
-    lines.append('from plugins.base import PluginBase')
-    lines.append('')
-    lines.append('')
-    lines.append(f'class {class_name}(PluginBase):')
+    lines.append(f"# {name} - RuoYi plugin")
+    lines.append("from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult")
+    lines.append("from core.http import join_url")
+    lines.append("from plugins.base import PluginBase")
+    lines.append("")
+    lines.append("")
+    lines.append(f"class {class_name}(PluginBase):")
     lines.append(f'    name = "{name}"')
     lines.append('    cve = "N/A"')
     lines.append('    severity = "high"')
@@ -487,25 +486,25 @@ def generate_plugin_template(name, category='ruoyi'):
     lines.append('    cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"')
     lines.append('    compliance = "Dengbao2.0:8.1.3;OWASP:A03:2021"')
     lines.append('    vuln_type = "rce"')
-    lines.append('    supports_waf_bypass = False')
-    lines.append('')
-    lines.append('    def verify(self, target, session) -> ScanResult:')
+    lines.append("    supports_waf_bypass = False")
+    lines.append("")
+    lines.append("    def verify(self, target, session) -> ScanResult:")
     lines.append('        url = join_url(target, "/vulnerable/path")')
-    lines.append('        try:')
-    lines.append('            resp = session.get(url)')
-    lines.append('            # TODO: multi-condition check')
-    lines.append('            return ScanResult(')
-    lines.append('                kind=self.category, name=self.name,')
-    lines.append('                severity=self.severity, status=STATUS_UNKNOWN,')
+    lines.append("        try:")
+    lines.append("            resp = session.get(url)")
+    lines.append("            # TODO: multi-condition check")
+    lines.append("            return ScanResult(")
+    lines.append("                kind=self.category, name=self.name,")
+    lines.append("                severity=self.severity, status=STATUS_UNKNOWN,")
     lines.append('                url=url, evidence="plugin not implemented",')
-    lines.append('            )')
-    lines.append('        except Exception as e:')
-    lines.append('            return ScanResult(')
+    lines.append("            )")
+    lines.append("        except Exception as e:")
+    lines.append("            return ScanResult(")
     lines.append('                kind="error", name=self.name,')
-    lines.append('                status=STATUS_UNKNOWN,')
+    lines.append("                status=STATUS_UNKNOWN,")
     lines.append('                evidence=f"exception: {e}",')
-    lines.append('            )')
+    lines.append("            )")
 
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(chr(10).join(lines) + chr(10))
     return filepath

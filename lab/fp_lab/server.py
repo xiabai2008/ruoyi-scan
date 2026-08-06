@@ -5,8 +5,8 @@
 #   1. 指纹识别不应判为 ruoyi（假阳）
 #   2. 即使误判，POC 不应 CONFIRMED
 import os
-import sys
-from flask import Flask, Response, jsonify
+
+from flask import Flask, Response
 
 app = Flask(__name__)
 

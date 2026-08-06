@@ -8,10 +8,10 @@
 # - 本靶场返回真实 Spring Boot 漏洞响应（如 propertySources JSON、JAVA PROFILE 二进制等）
 #
 # 仅用于合法授权测试 / 教学验证，不实现任何真实漏洞利用。
-import os
 import json
+import os
 
-from flask import Flask, request, Response
+from flask import Flask, Response, request
 
 PORT = int(os.environ.get('LAB_PORT', '8086'))
 
@@ -301,5 +301,5 @@ def _route(p):
 
 if __name__ == '__main__':
     print(f'[*] Spring Boot 真实漏洞响应复现靶场启动：PORT={PORT}')
-    print(f'[*] 仅用于阶段九交叉验证，返回真实 Spring Boot 漏洞响应特征（不含 marker）')
+    print('[*] 仅用于阶段九交叉验证，返回真实 Spring Boot 漏洞响应特征（不含 marker）')
     app.run(host='0.0.0.0', port=PORT, debug=False)

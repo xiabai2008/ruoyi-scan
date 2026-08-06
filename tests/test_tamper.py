@@ -4,11 +4,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lib.tamper import (space2comment, mysql_version_comment, randomcase,
-                          between_replace, url_encode, double_urlencode,
-                          hex_encode, base64_encode, split_for_chunked,
-                          hpp_duplicate, append_nullbyte, apply_chain)
-
+from lib.tamper import (
+    append_nullbyte,
+    apply_chain,
+    base64_encode,
+    between_replace,
+    double_urlencode,
+    hex_encode,
+    hpp_duplicate,
+    mysql_version_comment,
+    randomcase,
+    space2comment,
+    split_for_chunked,
+    url_encode,
+)
 
 # === space2comment ===
 
@@ -47,7 +56,6 @@ def test_mysql_version_comment_custom_version():
 
 def test_randomcase_changes_case():
     """大小写混淆后仍能匹配原词（忽略大小写）"""
-    import re
     original = 'SELECT UNION FROM WHERE'
     result = randomcase(original)
     # 长度不变

@@ -180,7 +180,7 @@ RUOYI_VERSION_MILESTONES = {
 
 # RuoYi-Cloud 特征路径（用于 detect_version 识别 Cloud 版）
 RUOYI_CLOUD_PATHS = [
-    "/nacos/",        # Nacos 控制台
-    "/gateway/",      # Spring Gateway
-    "/auth/login",    # Cloud 版 Gateway 统一登录
+    "/nacos/",  # Nacos 控制台
+    "/gateway/",  # Spring Gateway
+    "/auth/login",  # Cloud 版 Gateway 统一登录
 ]

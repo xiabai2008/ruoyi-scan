@@ -1,20 +1,15 @@
 """CLI submodule — 插件管理"""
+
 from __future__ import annotations
 
-import datetime
-import os
-import sys
-import time
 from argparse import Namespace
 from typing import Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
-from config import settings
-from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 logger = get_logger(__name__)
+
 
 def run_plugin_init_mode(args: Namespace) -> None:
     """生成插件模板（D25）"""
@@ -34,7 +29,6 @@ def run_plugin_init_mode(args: Namespace) -> None:
         print("    3. 运行 python main.py -u http://target/ 扫描")
     except FileExistsError as e:
         print(f"{RED}[!]{e}{RESET}")
-
 
 
 def run_plugin_check_mode(args: Namespace) -> None:
@@ -74,7 +68,6 @@ def run_plugin_check_mode(args: Namespace) -> None:
         print(f"{RED}[!]插件验证失败{RESET}")
 
 
-
 def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
     """列出所有插件元数据（D25）"""
     from lib.plugin_sdk import list_all_plugins
@@ -96,8 +89,6 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
     print(f"{SEPARATOR}")
 
 
-
-
 def run_plugin_new_mode(args: Namespace) -> None:
     """P3: 创建新插件脚手架"""
     from lib.plugin_sdk import generate_plugin_template
@@ -111,9 +102,9 @@ def run_plugin_new_mode(args: Namespace) -> None:
         filepath = generate_plugin_template(name, category=category)
         print(f"{GREEN}[+]插件已创建: {filepath}{RESET}")
         print(f"{YELLOW}[*]下一步:{RESET}")
-        print(f"    1. 编辑插件文件实现 verify() 方法")
+        print("    1. 编辑插件文件实现 verify() 方法")
         print(f"    2. 运行 python main.py --plugin-check {filepath} 验证")
-        print(f"    3. 运行 python main.py -u http://target/ 扫描")
+        print("    3. 运行 python main.py -u http://target/ 扫描")
     except FileExistsError as e:
         print(f"{RED}[!]{e}{RESET}")
     except Exception as e:

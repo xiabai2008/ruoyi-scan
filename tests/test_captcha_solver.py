@@ -16,6 +16,7 @@ except ImportError:
 
 # 生成一个最小有效 PNG 图片（供 mock 返回）
 import io
+
 try:
     from PIL import Image, ImageDraw
     _buf = io.BytesIO()
@@ -33,10 +34,11 @@ except ImportError:
                       b'\xfe\xa3=\x01_\x00\x00\x00\x00IEND\xaeB`\x82')
     HAS_PIL = False
 
-from core.session import SessionManager
-from core.captcha_solver import CaptchaSolver
-from core.auth_chain import RuoYiAuthChain, LOGIN_OK, LOGIN_CAPTCHA
 import base64
+
+from core.auth_chain import LOGIN_CAPTCHA, LOGIN_OK, RuoYiAuthChain
+from core.captcha_solver import CaptchaSolver
+from core.session import SessionManager
 
 MOCK_TARGET = 'http://ruoyi-captcha.test'
 

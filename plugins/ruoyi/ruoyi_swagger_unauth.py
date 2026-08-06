@@ -67,12 +67,18 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 continue
         if not any_success:
             return ScanResult(
-                kind=self.category, name=self.name, severity=self.severity,
-                status=STATUS_UNKNOWN, url=target,
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=target,
                 evidence="所有 Swagger 路径请求失败（网络异常）",
             )
         return ScanResult(
-            kind=self.category, name=self.name, severity=self.severity,
-            status=STATUS_SAFE, url=target,
+            kind=self.category,
+            name=self.name,
+            severity=self.severity,
+            status=STATUS_SAFE,
+            url=target,
             evidence="Swagger/Doc 路径未公开",
         )

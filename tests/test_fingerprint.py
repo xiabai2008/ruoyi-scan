@@ -4,8 +4,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.fingerprint import RuoyiFingerprint, detect_cms
 import hashlib
+
+from core.fingerprint import RuoyiFingerprint, detect_cms
 from core.fingerprint_features import CMS_FEATURES
 
 
@@ -117,8 +118,8 @@ def test_non_ruoyi_target():
 
 def test_router_resolves_ruoyi():
     """Router 对 ruoyi 指纹返回插件类列表（阶段八扩充至 13 个）"""
-    from core.router import Router
     from common.models import FingerprintResult
+    from core.router import Router
     fp_result = FingerprintResult(cms='ruoyi', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
     assert len(plugins) == 16, f'应有 16 个若依插件，实际 {len(plugins)}（阶段九 nacos_unauth + file_read_path + 3 new）'
@@ -138,8 +139,8 @@ def test_detect_cms_selects_spring():
 
 def test_router_resolves_spring():
     """Router 对 spring 指纹返回插件类列表（阶段九扩充至 14 个 POC）"""
-    from core.router import Router
     from common.models import FingerprintResult
+    from core.router import Router
     fp_result = FingerprintResult(cms='spring', confidence=1.0, matched=['test'])
     plugins = Router().resolve(fp_result)
     assert len(plugins) == 14, f'应有 14 个 Spring 插件，实际 {len(plugins)}（阶段九 spring_cloud_config + spring_boot_admin + spring_data_rest）'

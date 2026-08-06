@@ -3,15 +3,12 @@ import json
 import os
 import socket
 import sys
-import tempfile
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
-
+from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 
 # ============================================================
 # D30: OAST 带外检测测试
@@ -149,7 +146,7 @@ class TestOASTClient:
         assert result is True
 
     def test_get_callbacks(self):
-        from lib.oast import OASTClient, OASTServer, get_store
+        from lib.oast import OASTClient, get_store
         get_store()._records.clear()
         client = OASTClient(provider='interactsh')
         client.get_payload()
@@ -271,14 +268,14 @@ class TestIDORDetector:
         assert 'id=1' in new_url
 
     def test_test_idor_no_session(self):
-        from lib.logic_scan import IDORDetector, EndpointInfo
+        from lib.logic_scan import EndpointInfo, IDORDetector
         detector = IDORDetector(session=None)
         ep = EndpointInfo(url='http://x.com/api?id=1', params=['id'])
         assert detector.test_idor(ep) is None
 
     def test_test_idor_with_mock_session_denied(self):
         """模拟权限拒绝响应"""
-        from lib.logic_scan import IDORDetector, EndpointInfo
+        from lib.logic_scan import EndpointInfo, IDORDetector
         mock_resp = MagicMock()
         mock_resp.text = '无权限访问'
         mock_resp.status_code = 200
@@ -291,7 +288,7 @@ class TestIDORDetector:
 
     def test_test_idor_with_mock_session_success(self):
         """模拟 IDOR 成功"""
-        from lib.logic_scan import IDORDetector, EndpointInfo
+        from lib.logic_scan import EndpointInfo, IDORDetector
         # 基准响应（自己的资源）
         baseline_resp = MagicMock()
         baseline_resp.text = 'data' * 200  # 800B
@@ -348,7 +345,7 @@ class TestParameterTamperingDetector:
     """参数篡改检测器测试"""
 
     def test_detect_tamperable_params(self):
-        from lib.logic_scan import ParameterTamperingDetector, EndpointInfo
+        from lib.logic_scan import EndpointInfo, ParameterTamperingDetector
         detector = ParameterTamperingDetector()
         ep = EndpointInfo(url='http://x.com/order', params=['price', 'quantity', 'name'])
         tamperable = detector.detect_tamperable_params(ep)
@@ -363,7 +360,7 @@ class TestParameterTamperingDetector:
         assert 'price=0.01' in url
 
     def test_test_tampering_success(self):
-        from lib.logic_scan import ParameterTamperingDetector, EndpointInfo
+        from lib.logic_scan import EndpointInfo, ParameterTamperingDetector
         mock_resp = MagicMock()
         mock_resp.text = '订单成功'
         mock_resp.status_code = 200
@@ -518,9 +515,9 @@ class TestCVECache:
     """CVE 缓存测试"""
 
     def test_save_and_load(self, tmp_path):
-        from lib.cve_sync import CVEInfo, save_to_cache, load_from_cache, CACHE_DIR
         # 临时修改缓存目录
         import lib.cve_sync as cve_mod
+        from lib.cve_sync import CVEInfo, load_from_cache, save_to_cache
         original_cache = cve_mod.CACHE_DIR
         cve_mod.CACHE_DIR = str(tmp_path)
         try:
@@ -548,7 +545,7 @@ class TestCVECache:
         original_cache = cve_mod.CACHE_DIR
         cve_mod.CACHE_DIR = str(tmp_path)
         try:
-            from lib.cve_sync import CVEInfo, save_to_cache, clear_cache
+            from lib.cve_sync import CVEInfo, clear_cache, save_to_cache
             save_to_cache(CVEInfo(cve_id='CVE-2024-A'))
             save_to_cache(CVEInfo(cve_id='CVE-2024-B'))
             count = clear_cache()
@@ -710,7 +707,7 @@ class TestSIEMUnified:
     """统一 SIEM 导出接口测试"""
 
     def test_render_siem_all_formats(self):
-        from lib.siem_export import render_siem, SUPPORTED_FORMATS
+        from lib.siem_export import SUPPORTED_FORMATS, render_siem
         results = [
             ScanResult(kind='vuln', name='Test', severity=SEVERITY_HIGH,
                        status=STATUS_CONFIRMED, url='http://x.com'),

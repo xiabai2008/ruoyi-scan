@@ -14,9 +14,9 @@ except ImportError:
     print('缺少依赖 requests_mock，请先执行：pip install requests_mock')
     sys.exit(1)
 
-from lab.fp_lab.server import TARGETS, render
-from core.session import SessionManager
 from core.fingerprint import detect_cms
+from core.session import SessionManager
+from lab.fp_lab.server import TARGETS, render
 
 MOCK_TARGET = 'http://fp-target.test'
 

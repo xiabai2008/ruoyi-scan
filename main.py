@@ -6,21 +6,6 @@ P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻�
 
 import argparse
 
-from cli.runner import (
-    final_prompt,
-    run_chain_mode,
-    run_ci_init_mode,
-    run_diff_only_mode,
-    run_mode,
-    run_mode_batch,
-    run_passive_mode,
-    run_plugin_check_mode,
-    run_plugin_init_mode,
-    run_plugin_list_mode,
-    run_serve_mode,
-    run_template_list_mode,
-    run_wiki_mode,
-)
 from common.logger import setup_logging
 from config import settings
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
@@ -330,7 +315,8 @@ def main(argv=None):
             args.template_list,
             args.diff_only,
             args.plugin_init,
-            args.plugin_new, args.plugin_check,
+            args.plugin_new,
+            args.plugin_check,
             args.plugin_list,
             args.ci_init,
             args.wiki,
@@ -349,7 +335,9 @@ def main(argv=None):
 
     # P1：模式分发委托给 cli/dispatcher.py
     from cli.dispatcher import dispatch
+
     dispatch(args)
+
 
 if __name__ == "__main__":
     main()

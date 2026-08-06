@@ -9,8 +9,8 @@ import requests
 import requests_mock
 
 from core.cache import FingerprintCache
-from core.session import SessionManager
 from core.fingerprint_features import list_cms
+from core.session import SessionManager
 
 
 class TestFingerprintCache(unittest.TestCase):

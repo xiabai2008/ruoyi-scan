@@ -11,11 +11,9 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
+from lib.waf_bypass import BypassStatsTracker, StrategyRegistry, WafBypassCoordinator
 from plugins.base import PluginBase
-from lib.waf_bypass import (BypassStatsTracker, WafBypassCoordinator,
-                            StrategyRegistry, BypassContext)
-
 
 # === BypassStatsTracker 单元测试 ===
 

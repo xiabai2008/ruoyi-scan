@@ -4,19 +4,27 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dataclasses import dataclass
 
-from core.chain import (ChainStep, ChainEdge, ChainDef, ChainContext,
-                          ChainEngine, ChainResult,
-                          ON_FAIL_ABORT, ON_FAIL_CONTINUE, ON_FAIL_FALLBACK,
-                          NODE_SUCCESS, NODE_FAILED, NODE_AMBIGUOUS,
-                          NODE_SKIPPED, NODE_ERROR,
-                          CHAIN_CONFIRMED, CHAIN_PARTIAL, CHAIN_BLOCKED,
-                          CHAIN_UNKNOWN)
-from common.models import (ScanResult, FingerprintResult, STATUS_CONFIRMED,
-                          STATUS_SAFE, STATUS_UNKNOWN, SEVERITY_HIGH)
+from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
+from core.chain import (
+    CHAIN_BLOCKED,
+    CHAIN_CONFIRMED,
+    CHAIN_PARTIAL,
+    NODE_AMBIGUOUS,
+    NODE_ERROR,
+    NODE_FAILED,
+    NODE_SKIPPED,
+    NODE_SUCCESS,
+    ON_FAIL_ABORT,
+    ON_FAIL_CONTINUE,
+    ON_FAIL_FALLBACK,
+    ChainContext,
+    ChainDef,
+    ChainEdge,
+    ChainEngine,
+    ChainStep,
+)
 from plugins.base import PluginBase
-
 
 # === 测试用 Mock 插件 ===
 
@@ -396,7 +404,7 @@ def test_topological_sort_real_chain_nacos():
 
 
 def test_all_chains_no_cycles():
-    from chains.registry import list_chains, get_chain
+    from chains.registry import get_chain, list_chains
     for c in list_chains():
         chain_def = get_chain(c['name'])
         assert chain_def is not None, f'链 {c["name"]} 获取失败'

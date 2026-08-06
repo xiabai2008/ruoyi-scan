@@ -8,20 +8,18 @@
 #   5. _build_result 自动填充
 #   6. CSV/JSON 报告包含新列
 #   7. 插件实例字段完整性（抽样校验）
-import io
 import json
 import os
 import sys
-import tempfile
+
 import pytest
 
 # 路径修正
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from plugins.base import PluginBase, cvss_score, parse_compliance
-from common.models import ScanResult, STATUS_CONFIRMED, SEVERITY_HIGH
+from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, ScanResult
 from core.report import ReportBuilder
-
+from plugins.base import PluginBase, cvss_score, parse_compliance
 
 # === 1. CVSS v3.1 计算 ===
 

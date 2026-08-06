@@ -1,7 +1,7 @@
 # D7.1 源站 IP 探测单元测试
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

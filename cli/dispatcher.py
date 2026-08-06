@@ -3,6 +3,7 @@
 P1 重构：将 main() 中的 if-elif 分发链提取为独立函数，
 main.py 保留参数解析 + Banner，调用 dispatch() 执行。
 """
+
 from __future__ import annotations
 
 from argparse import Namespace
@@ -10,7 +11,6 @@ from argparse import Namespace
 from cli.runner import (
     final_prompt,
     run_chain_mode,
-    run_plugin_new_mode,
     run_ci_init_mode,
     run_diff_only_mode,
     run_mode,
@@ -19,11 +19,12 @@ from cli.runner import (
     run_plugin_check_mode,
     run_plugin_init_mode,
     run_plugin_list_mode,
+    run_plugin_new_mode,
     run_serve_mode,
     run_template_list_mode,
     run_wiki_mode,
 )
-from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
+from lib.colors import RED, RESET
 
 
 def dispatch(args: Namespace) -> None:
@@ -59,22 +60,27 @@ def dispatch(args: Namespace) -> None:
         return
     if args.oast_server:
         from lib.oast import run_oast_mode
+
         run_oast_mode(args)
         return
     if args.cve_sync or args.cve_id:
         from lib.cve_sync import run_cve_sync_mode
+
         run_cve_sync_mode(args)
         return
     if args.web_ui:
         from lib.web_ui import run_web_ui_mode
+
         run_web_ui_mode(args)
         return
     if args.cache_stats:
         from lib.cache import run_cache_stats_mode
+
         run_cache_stats_mode(args)
         return
     if args.cache_clear:
         from lib.cache import run_cache_clear_mode
+
         run_cache_clear_mode(args)
         return
 

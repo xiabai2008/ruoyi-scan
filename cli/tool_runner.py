@@ -1,20 +1,15 @@
 """CLI submodule — 工具模式"""
+
 from __future__ import annotations
 
-import datetime
 import os
-import sys
-import time
 from argparse import Namespace
-from typing import Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
-from config import settings
-from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 logger = get_logger(__name__)
+
 
 def run_template_list_mode() -> None:
     """列出所有可用的扫描模板（D19）"""
@@ -40,7 +35,6 @@ def run_template_list_mode() -> None:
         print()
     print(f"{YELLOW}用法：python main.py --template <name> -u <target>{RESET}")
     print(f"{SEPARATOR}")
-
 
 
 def run_diff_only_mode(old_path: str, new_path: str) -> None:
@@ -81,7 +75,6 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
     print(f"{SEPARATOR}")
 
 
-
 def run_ci_init_mode(args: Namespace) -> None:
     """生成 CI 配置文件（D28）"""
     from lib.ci_runner import generate_ci_config
@@ -107,7 +100,6 @@ def run_ci_init_mode(args: Namespace) -> None:
         print(f"{RED}[!]{e}{RESET}")
 
 
-
 def run_wiki_mode(args: Namespace) -> None:
     """生成漏洞知识库（D29）"""
     from lib.vuln_wiki import generate_wiki
@@ -119,4 +111,3 @@ def run_wiki_mode(args: Namespace) -> None:
     for p in paths:
         print(f"    {p}")
     print(f"{YELLOW}[*]用浏览器打开 HTML 文件查看{RESET}")
-

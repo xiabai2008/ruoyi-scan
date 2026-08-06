@@ -5,23 +5,22 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入所有 ruoyi 插件
-from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
-from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
+from plugins.ruoyi.default_password import DefaultPasswordPlugin
+from plugins.ruoyi.directory_scan import DirectoryScanPlugin
+from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
 from plugins.ruoyi.file_read_time import FileReadTimePlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
-from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
-from plugins.ruoyi.default_password import DefaultPasswordPlugin
-from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
 from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin
-from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
 from plugins.ruoyi.ruoyi_gen_rce import RuoyiGenRcePlugin
+from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
+from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
+from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
+from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
 from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
-from plugins.ruoyi.directory_scan import DirectoryScanPlugin
-
 
 # 全量插件列表（除 directory_scan 外都应支持绕过）
 _BYPASS_PLUGINS = [

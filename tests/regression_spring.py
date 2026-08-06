@@ -4,9 +4,9 @@
 # 验收范围：plugins/spring 五个 POC 插件的 vuln→CONFIRMED / safe→SAFE 判定正确性。
 # 运行：python tests/regression_spring.py
 # 退出码：0 全部通过，非 0 表示有失败用例
+import json
 import os
 import sys
-import json
 import unittest
 
 # 将项目根目录加入 sys.path，便于直接运行
@@ -20,29 +20,28 @@ except ImportError:
     print('缺少依赖 requests_mock，请先执行：pip install requests_mock')
     sys.exit(1)
 
-from core.session import SessionManager
 from common.models import STATUS_CONFIRMED, STATUS_SAFE
-
-from plugins.spring.spring4shell import (
-    Spring4shellPlugin, S4S_MARKER as MARKER_S4S)
-from plugins.spring.gateway_rce import (
-    SpringGatewayRcePlugin, GW_MARKER as MARKER_GW)
-from plugins.spring.actuator_env_rce import (
-    SpringActuatorEnvRcePlugin, ENV_MARKER as MARKER_ENV)
+from core.session import SessionManager
+from plugins.spring.actuator_env_rce import ENV_MARKER as MARKER_ENV
+from plugins.spring.actuator_env_rce import SpringActuatorEnvRcePlugin
 from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
-from plugins.spring.heapdump_leak import (
-    SpringHeapdumpLeakPlugin, HEAP_MARKER as MARKER_HEAP)
-from plugins.spring.jolokia_rce import (
-    SpringJolokiaRcePlugin, JOLOKIA_MARKER as MARKER_JOLOKIA)
-from plugins.spring.jolokia_mlet_rce import (
-    SpringJolokiaMletRcePlugin, JOLOKIA_MLET_MARKER as MARKER_JOLOKIA_MLET)
-from plugins.spring.cloud_function_rce import (
-    SpringCloudFunctionRcePlugin, SCF_MARKER as MARKER_SCF)
-from plugins.spring.h2_console_rce import (
-    SpringH2ConsoleRcePlugin, H2_MARKER as MARKER_H2)
+from plugins.spring.cloud_function_rce import SCF_MARKER as MARKER_SCF
+from plugins.spring.cloud_function_rce import SpringCloudFunctionRcePlugin
+from plugins.spring.gateway_rce import GW_MARKER as MARKER_GW
+from plugins.spring.gateway_rce import SpringGatewayRcePlugin
+from plugins.spring.h2_console_rce import H2_MARKER as MARKER_H2
+from plugins.spring.h2_console_rce import SpringH2ConsoleRcePlugin
+from plugins.spring.heapdump_leak import HEAP_MARKER as MARKER_HEAP
+from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
+from plugins.spring.jolokia_mlet_rce import JOLOKIA_MLET_MARKER as MARKER_JOLOKIA_MLET
+from plugins.spring.jolokia_mlet_rce import SpringJolokiaMletRcePlugin
+from plugins.spring.jolokia_rce import JOLOKIA_MARKER as MARKER_JOLOKIA
+from plugins.spring.jolokia_rce import SpringJolokiaRcePlugin
 from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
-from plugins.spring.trace_leak import (
-    SpringTraceLeakPlugin, TRACE_LEAK_MARKER as MARKER_TRACE)
+from plugins.spring.spring4shell import S4S_MARKER as MARKER_S4S
+from plugins.spring.spring4shell import Spring4shellPlugin
+from plugins.spring.trace_leak import TRACE_LEAK_MARKER as MARKER_TRACE
+from plugins.spring.trace_leak import SpringTraceLeakPlugin
 
 # 统一 mock 目标
 MOCK_TARGET = 'http://spring-mock.test'

@@ -27,32 +27,31 @@ except ImportError:
     print('缺少依赖 requests_mock，请先执行：pip install requests_mock')
     sys.exit(1)
 
-from core.session import SessionManager
 from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,
 )
+from core.session import SessionManager
+from plugins.ruoyi.default_password import DefaultPasswordPlugin
+from plugins.ruoyi.directory_scan import DirectoryScanPlugin
+from plugins.ruoyi.druid_brute import DruidBrutePlugin
 
 # 原有 6 个插件（Step 2 迁移）
 from plugins.ruoyi.file_read import FileReadPlugin
+from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
 from plugins.ruoyi.file_read_time import FileReadTimePlugin
-from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
-from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
-from plugins.ruoyi.druid_brute import DruidBrutePlugin
-from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 
 # Step 5 新增 5 个 POC 插件
 from plugins.ruoyi.file_upload import FileUploadPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
-from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
-from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
-from plugins.ruoyi.default_password import DefaultPasswordPlugin
 
 # Step 8 新增 2 个 POC 插件（含签名 marker 常量）
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
-from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
-
+from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
+from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
+from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
+from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 
 # 统一 mock 目标（不使用真实域名，避免误发请求）
 # 注意：无尾部斜杠，配合 join_url() 归一化（P1-6 修复后所有插件使用 join_url，

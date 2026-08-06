@@ -4,11 +4,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
-from core.dedup import (fingerprint, aggregate, AggregatedVuln, DedupReport,
-                          _normalize_endpoint, _strip_parens, VULN_TYPE_CN)
-
+from common.models import (
+    SEVERITY_HIGH,
+    SEVERITY_LOW,
+    SEVERITY_MEDIUM,
+    STATUS_CONFIRMED,
+    STATUS_SAFE,
+    STATUS_UNKNOWN,
+    ScanResult,
+)
+from core.dedup import (
+    AggregatedVuln,
+    aggregate,
+    fingerprint,
+)
 
 # === 指纹计算 ===
 

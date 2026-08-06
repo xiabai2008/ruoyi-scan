@@ -1,11 +1,8 @@
 # D34/D35/D36/D37 单元测试
 import asyncio
-import json
 import os
 import sys
-import tempfile
 import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -610,8 +607,8 @@ class TestD34D35D36D37Integration:
 
     def test_distributed_with_cache(self, tmp_path):
         """分布式 standalone + 缓存"""
-        from lib.distributed import StandaloneDistributor
         from lib.cache import ScanCache
+        from lib.distributed import StandaloneDistributor
         cache = ScanCache(db_path=str(tmp_path / 'cache.db'))
 
         def scan_fn(target):
@@ -635,8 +632,8 @@ class TestD34D35D36D37Integration:
 
     def test_web_ui_with_async_stats(self, tmp_path):
         """Web UI 文件生成 + 异步引擎统计"""
-        from lib.web_ui import generate_web_ui
         from lib.async_engine import AsyncScanEngine
+        from lib.web_ui import generate_web_ui
 
         # 生成 Web UI
         web_ui_path = generate_web_ui(output_path=str(tmp_path / 'ui' / 'index.html'))

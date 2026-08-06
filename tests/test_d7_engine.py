@@ -5,14 +5,13 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.engine import ScanEngine
-from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from plugins.base import PluginBase
-from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.file_read import FileReadPlugin
-from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
-
+from plugins.ruoyi.job_rce import JobRcePlugin
+from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 
 # === 插件 WAF 绕过属性测试 ===
 

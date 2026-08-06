@@ -4,13 +4,12 @@ import os
 import sys
 import tempfile
 import types
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
-
+from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 
 # ============================================================
 # D23：国际化
@@ -31,7 +30,7 @@ class TestI18n:
 
     def test_get_text_default_lang(self):
         """默认语言为中文"""
-        from lib.i18n import get_text, DEFAULT_LANG
+        from lib.i18n import DEFAULT_LANG, get_text
         assert DEFAULT_LANG == 'zh'
         assert get_text('target') == '目标'
 
@@ -472,8 +471,8 @@ class TestVulnWiki:
 
     def test_generate_wiki_with_real_plugins(self):
         """使用真实插件生成知识库"""
-        from lib.vuln_wiki import generate_wiki
         from lib.plugin_sdk import list_all_plugins
+        from lib.vuln_wiki import generate_wiki
         plugins = list_all_plugins()
         assert len(plugins) > 0
         with tempfile.TemporaryDirectory() as d:
@@ -495,7 +494,7 @@ class TestD23D25D28D29Integration:
 
     def test_plugin_init_then_check(self):
         """生成插件后验证"""
-        from lib.plugin_sdk import init_plugin_file, check_plugin, check_plugin_by_import
+        from lib.plugin_sdk import check_plugin, check_plugin_by_import, init_plugin_file
         with tempfile.TemporaryDirectory() as d:
             filepath = init_plugin_file('集成测试漏洞', category='common', output_dir=d)
             # 静态检查
@@ -508,7 +507,6 @@ class TestD23D25D28D29Integration:
     def test_ci_with_i18n(self):
         """CI 模式 + 国际化"""
         from lib.ci_runner import format_ci_summary
-        from lib.i18n import get_text
         # CI 摘要始终用英文（适合国际日志）
         results = [ScanResult(kind='vuln', name='Test', severity=SEVERITY_HIGH,
                               status=STATUS_CONFIRMED, url='http://x/')]
@@ -517,8 +515,8 @@ class TestD23D25D28D29Integration:
 
     def test_wiki_with_ci_exit_code(self):
         """知识库生成不影响 CI 退出码"""
-        from lib.vuln_wiki import generate_wiki
         from lib.ci_runner import get_ci_exit_code
+        from lib.vuln_wiki import generate_wiki
         # 生成知识库
         with tempfile.TemporaryDirectory() as d:
             paths = generate_wiki(os.path.join(d, 'wiki.html'), formats=['html'])

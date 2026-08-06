@@ -4,9 +4,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from chains.registry import get_chain, list_chains, register_chain
 from main import build_parser
-from chains.registry import list_chains, get_chain, register_chain
-
 
 # === CLI 参数解析测试 ===
 
@@ -72,6 +71,7 @@ def test_get_chain_returns_none_for_unknown():
 def test_register_chain_dynamic():
     """动态注册链（mock 导入避免依赖未创建的模块）"""
     from unittest.mock import patch
+
     from core.chain import ChainDef
     mock_chain = ChainDef(name='mock', display_name='Mock', description='test')
     # mock importlib.import_module 返回含 CHAIN 属性的 mock 对象

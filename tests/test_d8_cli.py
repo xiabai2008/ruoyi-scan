@@ -6,11 +6,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
+from cli.runner import _parse_report_formats
+from common.models import SEVERITY_HIGH, SEVERITY_MEDIUM, STATUS_CONFIRMED, ScanResult
 from core.report import ReportBuilder
 from main import build_parser
-from cli.runner import _parse_report_formats
 
 
 def _sample_results():

@@ -5,28 +5,34 @@
 #   2. lib/subdomain.py：子域名枚举（crt.sh mock + 字典 + DNS 验证）
 #   3. lib/js_extractor.py：JS 端点提取（路径、URL、fetch 调用）
 #   4. orchestrator 集成：ScanRequest.crawl/subdomain/js_extract 字段
+import json
 import os
 import sys
-import json
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lib.crawler import (
-    Crawler, LinkExtractor, normalize_link, is_same_host,
-    is_static_resource, extract_links_from_html, crawl_target,
-    DEFAULT_EXCLUDED_EXT,
-)
-from lib.subdomain import (
-    SubdomainEnumerator, enumerate_subdomains,
-    get_default_word_list, DEFAULT_SUBDOMAIN_WORDS,
+    Crawler,
+    LinkExtractor,
+    crawl_target,
+    extract_links_from_html,
+    is_same_host,
+    is_static_resource,
+    normalize_link,
 )
 from lib.js_extractor import (
-    JSExtractor, Endpoint, extract_endpoints, extract_from_urls,
-    NOISE_PREFIXES,
+    Endpoint,
+    JSExtractor,
+    extract_endpoints,
 )
-
+from lib.subdomain import (
+    SubdomainEnumerator,
+    enumerate_subdomains,
+    get_default_word_list,
+)
 
 # === fixtures ===
 
@@ -893,19 +899,19 @@ class TestJSExtractRealWorld:
             baseUrl: "/prod-api",
             captchaUrl: "/captcha/image"
         };
-        
+
         function login() {
             axios.post("/login", {username: "admin", password: "123"});
         }
-        
+
         function getUserInfo() {
             fetch("/getInfo").then(r => r.json());
         }
-        
+
         function listUsers() {
             axios.get("/system/user/list");
         }
-        
+
         // 第三方库（应被过滤）
         var jquery = "/node_modules/jquery/dist/jquery.js";
         var lodash = "/webpack/lodash.js";

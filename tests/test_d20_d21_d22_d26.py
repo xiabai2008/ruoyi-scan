@@ -3,15 +3,13 @@ import json
 import os
 import sys
 import tempfile
-import types
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.models import (ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN,
-                          SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW)
+from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.report import ReportBuilder
-
 
 # ============================================================
 # D20：增量扫描与差异对比
@@ -143,7 +141,7 @@ class TestDiffReport:
 
     def test_save_and_load_baseline(self):
         """保存和加载基线"""
-        from lib.diff_scan import save_baseline, load_report
+        from lib.diff_scan import load_report, save_baseline
         report_data = self._make_report(vulns=[{'name': 'A', 'url': 'http://x/a'}])
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, 'baseline.json')
@@ -379,7 +377,7 @@ class TestBuildNotificationMessage:
         assert msg['vulns'][0]['name'] == 'SQL注入'
 
     def test_build_text_message(self):
-        from lib.notifier import build_notification_message, _build_text_message
+        from lib.notifier import _build_text_message, build_notification_message
         msg = build_notification_message(self._make_builder())
         text = _build_text_message(msg)
         assert 'Ruoyi-Scan' in text
@@ -387,7 +385,7 @@ class TestBuildNotificationMessage:
         assert 'SQL注入' in text
 
     def test_build_markdown_message(self):
-        from lib.notifier import build_notification_message, _build_markdown_message
+        from lib.notifier import _build_markdown_message, build_notification_message
         msg = build_notification_message(self._make_builder())
         md = _build_markdown_message(msg)
         assert '##' in md  # Markdown 标题
@@ -413,9 +411,10 @@ class TestSendNotifications:
 
     def test_send_webhook_mock(self, monkeypatch):
         """Webhook 发送 mock 测试"""
-        from lib.notifier import send_webhook
         # mock requests.post
         import requests
+
+        from lib.notifier import send_webhook
         class MockResp:
             status_code = 200
         monkeypatch.setattr(requests, 'post', lambda *a, **kw: MockResp())
@@ -428,8 +427,9 @@ class TestSendNotifications:
 
     def test_send_webhook_failure(self, monkeypatch):
         """Webhook 发送失败"""
-        from lib.notifier import send_webhook
         import requests
+
+        from lib.notifier import send_webhook
         class MockResp:
             status_code = 500
         monkeypatch.setattr(requests, 'post', lambda *a, **kw: MockResp())
@@ -569,8 +569,8 @@ class TestApplyAuthToSession:
     """认证信息应用到 SessionManager 测试"""
 
     def test_apply_cookies(self):
-        from lib.auth_scan import apply_auth_to_session
         from core.session import SessionManager
+        from lib.auth_scan import apply_auth_to_session
         session = SessionManager()
         auth_config = {
             'cookies': {'JSESSIONID': 'abc123'},
@@ -581,8 +581,8 @@ class TestApplyAuthToSession:
         assert session.session.cookies.get('JSESSIONID') == 'abc123'
 
     def test_apply_headers(self):
-        from lib.auth_scan import apply_auth_to_session
         from core.session import SessionManager
+        from lib.auth_scan import apply_auth_to_session
         session = SessionManager()
         auth_config = {
             'cookies': {},
@@ -593,8 +593,8 @@ class TestApplyAuthToSession:
         assert session.session.headers['Authorization'] == 'Bearer xyz'
 
     def test_apply_empty_config(self):
-        from lib.auth_scan import apply_auth_to_session
         from core.session import SessionManager
+        from lib.auth_scan import apply_auth_to_session
         session = SessionManager()
         original_cookie = session.session.cookies.get('test', None)
         apply_auth_to_session(session, {'cookies': {}, 'headers': {}, 'type': None})

@@ -1,20 +1,15 @@
 """CLI submodule — Web API 服务"""
+
 from __future__ import annotations
 
-import datetime
 import os
-import sys
-import time
 from argparse import Namespace
-from typing import Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
-from config import settings
-from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 logger = get_logger(__name__)
+
 
 def run_serve_mode(args: Namespace) -> None:
     """Web API 服务模式（D9 + D11）：启动 FastAPI + WebSocket + Web 控制台"""
@@ -48,5 +43,3 @@ def run_serve_mode(args: Namespace) -> None:
     except ImportError as e:
         print(f"{RED}[!]启动 API 服务需要 fastapi + uvicorn，请安装：pip install fastapi uvicorn[standard]{RESET}")
         print(f"{RED}[!]缺失模块: {e}{RESET}")
-
-

@@ -10,19 +10,19 @@
 #   4. 验证三态判定保护矩阵的铁律不被违反
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.engine import ScanEngine
-from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from core.waf_features import WAF_FEATURES, is_waf_blocked
+from lib.waf_bypass import (
+    BypassSession,
+    StrategyRegistry,
+    WafBypassCoordinator,
+)
 from plugins.base import PluginBase
-from lib.waf_bypass import (WafBypassCoordinator, BypassSession, BypassContext,
-                            StrategyRegistry, RandomCaseStrategy,
-                            InlineCommentStrategy, UrlEncodeStrategy,
-                            OriginDirectStrategy, GooglebotStrategy)
-from core.waf_features import is_waf_blocked, WAF_FEATURES
-
 
 # === 测试用插件：模拟 SQL 注入，支持 payload 变形绕过 ===
 

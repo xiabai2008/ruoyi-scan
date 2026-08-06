@@ -140,7 +140,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # 测试文件允许更宽松
-"tests/*" = ["N802", "N803"]
+"tests/*" = ["N802", "N803", "E402", "F841"]
 
 [tool.mypy]
 python_version = "3.8"

@@ -1,13 +1,10 @@
 # D13 测试：代理池 + 请求轮换
 import os
 import sys
-import tempfile
-import time
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from lib.proxy_pool import ProxyPool, ProxyStats
+from lib.proxy_pool import ProxyPool
 
 
 class TestProxyPool:

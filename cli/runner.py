@@ -11,9 +11,8 @@ from argparse import Namespace
 from typing import List, Optional
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from config import settings
-from core.fingerprint import detect_cms
 from core.http import normalize_target
 from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
@@ -36,6 +35,7 @@ MODE_LABELS = {
     "l": ("登录爆破", GREEN),
 }
 
+
 def _print_scan_result(res: ScanResult) -> None:
     """实时输出扫描结果（作为 ScanEngine.run 的 on_result 回调）
 
@@ -50,7 +50,6 @@ def _print_scan_result(res: ScanResult) -> None:
         print(f"{RED}[/]不存在{res.name}{RESET}")
     else:
         print(f"{YELLOW}[?]无法判定{res.name}: {res.evidence}{RESET}")
-
 
 
 def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
@@ -70,6 +69,7 @@ def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
 
 
 # ── 主扫描流程 ──
+
 
 def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     """从 CLI args 构造 ScanRequest（供 ScanOrchestrator 统一执行）"""
@@ -135,7 +135,6 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         js_extract=getattr(args, "js_extract", False),
         plugin_paths=getattr(args, "plugin_path", None),
     )
-
 
 
 def _cli_event_handler(event_type: str, payload):
@@ -249,7 +248,6 @@ def _cli_event_handler(event_type: str, payload):
 
     elif event_type == "error":
         print(f"{RED}[!]扫描异常: {payload.get('error', '')}{RESET}")
-
 
 
 def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
@@ -404,7 +402,6 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
     return all_results
 
 
-
 def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_workers: int) -> Optional[BatchReport]:
     """异步批量扫描（P1: --async 参数接线）
 
@@ -472,7 +469,6 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     return batch
 
 
-
 def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchReport]:
     """批量扫描：从文件读目标，逐目标扫描并生成单报告 + 批量汇总报告
 
@@ -538,7 +534,6 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     return batch
 
 
-
 def final_prompt() -> None:
     """结尾交互（保留原 input 习惯；非 tty 时自动跳过）"""
     if not sys.stdin.isatty():
@@ -549,18 +544,32 @@ def final_prompt() -> None:
         logger.debug("用户输入读取失败", exc_info=True)
 
 
-
 # ── P1 子模块重导出（保持向后兼容）──
-from cli.chain_runner import run_chain_mode
-from cli.serve_runner import run_serve_mode
-from cli.passive_runner import run_passive_mode
-from cli.plugin_runner import run_plugin_init_mode, run_plugin_check_mode, run_plugin_list_mode, run_plugin_new_mode
-from cli.tool_runner import run_template_list_mode, run_diff_only_mode, run_ci_init_mode, run_wiki_mode
+# noqa: E402 — 底部导入以避免循环依赖
+from cli.chain_runner import run_chain_mode  # noqa: E402
+from cli.passive_runner import run_passive_mode  # noqa: E402
+from cli.plugin_runner import (  # noqa: E402
+    run_plugin_check_mode,
+    run_plugin_init_mode,
+    run_plugin_list_mode,
+    run_plugin_new_mode,
+)
+from cli.serve_runner import run_serve_mode  # noqa: E402
+from cli.tool_runner import run_ci_init_mode, run_diff_only_mode, run_template_list_mode, run_wiki_mode  # noqa: E402
 
 __all__ = [
-    "run_mode", "run_mode_batch", "final_prompt",
-    "run_chain_mode", "run_serve_mode", "run_passive_mode",
-    "run_plugin_new_mode", "run_plugin_init_mode", "run_plugin_check_mode", "run_plugin_list_mode",
-    "run_template_list_mode", "run_diff_only_mode", "run_ci_init_mode",
+    "run_mode",
+    "run_mode_batch",
+    "final_prompt",
+    "run_chain_mode",
+    "run_serve_mode",
+    "run_passive_mode",
+    "run_plugin_new_mode",
+    "run_plugin_init_mode",
+    "run_plugin_check_mode",
+    "run_plugin_list_mode",
+    "run_template_list_mode",
+    "run_diff_only_mode",
+    "run_ci_init_mode",
     "run_wiki_mode",
 ]

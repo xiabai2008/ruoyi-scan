@@ -4,17 +4,20 @@
 # 验证链编排器的端到端行为（状态聚合、上下文传递、失败策略）。
 import os
 import sys
-import json
-from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.chain import (ChainEngine, CHAIN_CONFIRMED, CHAIN_PARTIAL,
-                          CHAIN_BLOCKED, CHAIN_UNKNOWN,
-                          NODE_SUCCESS, NODE_FAILED, NODE_SKIPPED)
-from common.models import FingerprintResult
 from chains.registry import get_chain, list_chains
-
+from common.models import FingerprintResult
+from core.chain import (
+    CHAIN_BLOCKED,
+    CHAIN_CONFIRMED,
+    CHAIN_PARTIAL,
+    NODE_FAILED,
+    NODE_SKIPPED,
+    NODE_SUCCESS,
+    ChainEngine,
+)
 
 # === Mock SessionManager ===
 
