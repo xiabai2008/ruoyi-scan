@@ -1,0 +1,73 @@
+# Ruoyi-Scan Nightly Acceptance（F4）
+# 每晚对 lab/ 真实靶场跑全量验收：vuln 模式漏报门禁 + safe 模式误报门禁
+# 失败时自动创建 GitHub issue
+name: Nightly Acceptance
+
+on:
+  schedule:
+    # 每天 20:00 UTC = 北京 04:00
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build & start lab targets (vuln + safe)
+        run: |
+          docker build -q -t ruoyi-scan-lab ./lab
+          docker run -d --name lab-vuln --rm -e LAB_MODE=vuln -e LAB_PORT=8080 -p 8080:8080 ruoyi-scan-lab
+          docker run -d --name lab-safe --rm -e LAB_MODE=safe -e LAB_PORT=8081 -p 8081:8081 ruoyi-scan-lab
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/ >/dev/null 2>&1 && curl -sf http://127.0.0.1:8081/ >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "lab 靶场启动超时" && exit 1
+
+      - name: Run acceptance comparison
+        id: acceptance
+        run: |
+          set +e
+          python lab/run_acceptance.py \
+            --baseline data/acceptance_baseline.json \
+            --output acceptance.json
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat acceptance.json
+
+      - name: Upload acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-report
+          path: acceptance.json
+
+      - name: Create issue on failure
+        if: steps.acceptance.outputs.exit != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "⚠️ Nightly 验收失败（$(date -u +%Y-%m-%d)）" \
+            --label "acceptance" \
+            --body "Nightly 真实靶场验收未通过，详见 acceptance.json artifact。
+
+\`\`\`json
+$(cat acceptance.json)
+\`\`\`
+"

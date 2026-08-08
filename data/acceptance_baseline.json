@@ -1,0 +1,51 @@
+{
+  "schema": "ruoyi-scan-acceptance-baseline",
+  "version": "1.0.2",
+  "description": "lab/ 签名靶场（Tier A）真实环境验收基线：vuln 模式核心命中门禁 / safe 模式零误报门禁（无害探测项豁免）",
+  "targets": [
+    {
+      "name": "lab-ruoyi-vuln",
+      "url": "http://127.0.0.1:8080",
+      "mode": "vuln",
+      "scan_mode": "u",
+      "expected_confirmed": [
+        "任意文件读取",
+        "定时任务任意文件读取",
+        "POST型报错注入（role）",
+        "POST型报错注入（dept）",
+        "任意文件上传",
+        "定时任务 RCE（未授权访问）",
+        "Thymeleaf/SpEL 模板注入",
+        "任意文件读取（路径穿越）",
+        "未授权访问（批量）",
+        "后台默认口令（admin/admin123）",
+        "Druid 弱口令爆破"
+      ],
+      "allowed_confirmed": [
+        "HTTP 方法探测",
+        "目录扫描",
+        ".env 配置文件泄露",
+        ".git 源码泄露",
+        "IDE/SCM 残留文件泄露",
+        "Swagger API 文档泄露",
+        "备份文件泄露",
+        "CORS 跨域配置不当",
+        "Nacos 未授权访问",
+        "RuoYi-Cloud Nacos 配置泄露",
+        "RuoYi Swagger 未授权访问",
+        "RuoYi 代码生成模块 SSTI"
+      ],
+      "expected_safe": []
+    },
+    {
+      "name": "lab-ruoyi-safe",
+      "url": "http://127.0.0.1:8081",
+      "mode": "safe",
+      "scan_mode": "u",
+      "expected_confirmed": [],
+      "allowed_confirmed": ["HTTP 方法探测"],
+      "expected_safe_all": true,
+      "note": "safe 模式除豁免项外应全部 SAFE/UNKNOWN，零 CONFIRMED（误报门禁）"
+    }
+  ]
+}
