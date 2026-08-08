@@ -41,12 +41,14 @@ class Router:
         if not cms:
             return []
         plugins = self.resolve_by_name(cms)
-        # E1：按 variant 过滤（插件 variant='' 全变体适用）
+        # E1/F6：按 variant 过滤（无条件执行——插件 variant='' 全变体适用；
+        # variant='X' 仅当指纹 variant=='X' 时执行；指纹无 variant 时专属插件不执行）
         variant = getattr(fingerprint_result, "variant", "") or ""
-        if variant:
-            plugins = [
-                cls for cls in plugins if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
-            ]
+        plugins = [
+            cls
+            for cls in plugins
+            if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
+        ]
         # D2：按 affected_versions 过滤
         version = getattr(fingerprint_result, "version", "") or ""
         if version:

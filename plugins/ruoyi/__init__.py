@@ -11,6 +11,8 @@ from plugins.ruoyi.file_read_time import FileReadTimePlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+from plugins.ruoyi.plus_auth_login import PlusAuthLoginProbePlugin
+from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
 from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin
 from plugins.ruoyi.ruoyi_gen_rce import RuoyiGenRcePlugin
 from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
@@ -42,4 +44,7 @@ plugin_list = [
     RuoyiCloudNacosPlugin,  # RuoYi-Cloud Nacos 配置泄露（high）
     RuoyiSwaggerUnauthPlugin,  # Swagger 未授权 API 文档（medium）
     RuoyiGenRcePlugin,  # 代码生成模块 SSTI（high）
+    # F6：RuoYi-Plus 变体专项（variant='ruoyi-plus'，仅 Plus 变体目标执行）
+    PlusAuthLoginProbePlugin,  # 认证服务探测（low）
+    PlusJobUnauthPlugin,  # 定时任务未授权（high）
 ]

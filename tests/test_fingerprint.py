@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import hashlib
 
+from common.models import STATUS_CONFIRMED, STATUS_SAFE
 from core.fingerprint import RuoyiFingerprint, detect_cms
 from core.fingerprint_features import CMS_FEATURES
 
@@ -130,7 +131,7 @@ def test_router_resolves_ruoyi():
     fp_result = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp_result)
     assert len(plugins) == 16, (
-        f"应有 16 个若依插件，实际 {len(plugins)}（阶段九 nacos_unauth + file_read_path + 3 new）"
+        f"通用 ruoyi 应 16 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
     )
     print("PASS test_router_resolves_ruoyi: %d 个插件" % len(plugins))
 
@@ -356,14 +357,82 @@ def test_e1_router_variant_filter():
         plugins2 = Router().resolve(fp2)
         names2 = [getattr(p, "name", "") for p in plugins2]
         assert "app_only_test" not in names2, f"ruoyi-plus 不应包含 app_only_test，实际 {names2}"
-        # 无 variant（通用）时全变体适用
+        # 无 variant（通用）时仅全变体插件适用，变体专属插件不执行
         fp3 = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
         plugins3 = Router().resolve(fp3)
         names3 = [getattr(p, "name", "") for p in plugins3]
-        assert "app_only_test" in names3, "通用 ruoyi 应包含 app_only_test"
+        assert "app_only_test" not in names3, "通用 ruoyi 不应包含 app_only_test（变体专属）"
     finally:
         pkg.plugin_list = orig_list
     print("PASS test_e1_router_variant_filter")
+
+
+# === F6 RuoYi-Plus 专项 POC 测试 ===
+
+
+def test_f6_plus_plugins_registered():
+    """F6: 2 个 Plus 专项插件已注册且 variant='ruoyi-plus'"""
+    from core.loader import load_plugins
+
+    plugins = load_plugins("plugins.ruoyi")
+    plus_plugins = [p for p in plugins if getattr(p, "variant", "") == "ruoyi-plus"]
+    assert len(plus_plugins) == 2, f"应有 2 个 Plus 专项插件，实际 {len(plus_plugins)}"
+    names = [getattr(p, "name", "") for p in plus_plugins]
+    assert "RuoYi-Plus 定时任务未授权" in names
+    assert "RuoYi-Plus 认证接口探测" in names
+    print("PASS test_f6_plus_plugins_registered: %s" % names)
+
+
+def test_f6_variant_filter_plus():
+    """F6: ruoyi-plus 变体只跑 Plus 专项；通用 ruoyi 不跑 Plus 专项"""
+    from common.models import FingerprintResult
+    from core.router import Router
+
+    fp_plus = FingerprintResult(cms="ruoyi", variant="ruoyi-plus", confidence=1.0, matched=["test"])
+    names_plus = [getattr(p, "name", "") for p in Router().resolve(fp_plus)]
+    assert "RuoYi-Plus 定时任务未授权" in names_plus, names_plus
+
+    fp_generic = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
+    names_generic = [getattr(p, "name", "") for p in Router().resolve(fp_generic)]
+    assert "RuoYi-Plus 定时任务未授权" not in names_generic, "通用 ruoyi 不应跑 Plus 专项"
+    print("PASS test_f6_variant_filter_plus")
+
+
+def test_f6_plus_job_confirm():
+    """F6: 定时任务未授权 — 未登录返回业务 JSON → CONFIRMED"""
+    from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
+
+    class FakeResp:
+        status_code = 200
+        text = '{"code":200,"rows":[{"jobId":1}],"total":1}'
+        headers = {"Content-Type": "application/json"}
+
+    class FakeSession:
+        def get(self, url, **kw):
+            return FakeResp()
+
+    res = PlusJobUnauthPlugin().verify("http://target/", FakeSession())
+    assert res.status == STATUS_CONFIRMED, res.status
+    assert res.severity == "high"
+    print("PASS test_f6_plus_job_confirm")
+
+
+def test_f6_plus_job_safe():
+    """F6: 定时任务未授权 — 401 已鉴权 → SAFE"""
+    from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
+
+    class FakeResp:
+        status_code = 401
+        text = '{"code":401,"msg":"未登录"}'
+        headers = {"Content-Type": "application/json"}
+
+    class FakeSession:
+        def get(self, url, **kw):
+            return FakeResp()
+
+    res = PlusJobUnauthPlugin().verify("http://target/", FakeSession())
+    assert res.status == STATUS_SAFE, res.status
+    print("PASS test_f6_plus_job_safe")
 
 
 if __name__ == "__main__":
