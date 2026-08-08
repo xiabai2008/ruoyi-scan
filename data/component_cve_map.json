@@ -1,0 +1,30 @@
+{
+  "fastjson": [
+    {"range": "<=1.2.80", "cve": "CVE-2022-25845", "fix": "1.2.83 / 2.0.64", "cvss": 9.8, "note": "fastjson 反序列化绕过 autoType 限制，可致 RCE"},
+    {"range": "<=2.0.25", "cve": "CVE-2022-25845", "fix": "2.0.64", "cvss": 9.8, "note": "fastjson2 反序列化绕过"},
+    {"range": "*", "cve": "", "fix": "2.0.64+", "cvss": 0.0, "note": "fastjson 历史多次爆出反序列化漏洞（CVE-2017-18349/CVE-2020-10673 等），建议升级至 2.0.64+"}
+  ],
+  "spring-boot": [
+    {"range": "<=2.6.14", "cve": "CVE-2022-22965", "fix": "2.6.15+ / 2.7.x", "cvss": 9.8, "note": "Spring4Shell 远程代码执行（Spring Framework <5.3.18/<5.2.20，需确认 spring-webmvc 组件）"},
+    {"range": "<=1.5.22", "cve": "CVE-2018-1275", "fix": "2.0+", "cvss": 7.5, "note": "Spring Framework 反射绕过漏洞"},
+    {"range": "*", "cve": "", "fix": "最新稳定版", "cvss": 0.0, "note": "建议保持 Spring Boot 2.7.x LTS 或 3.x 最新补丁"}
+  ],
+  "shiro": [
+    {"range": "<=1.2.4", "cve": "CVE-2016-4437", "fix": "1.2.5+（强烈建议 1.4.2+ 并更换默认密钥）", "cvss": 9.8, "note": "rememberMe 默认密钥反序列化 RCE"},
+    {"range": "<=1.5.2", "cve": "CVE-2020-1957", "fix": "1.5.3+", "cvss": 7.5, "note": "Spring 集成下路径绕过认证"},
+    {"range": "<1.12.0", "cve": "CVE-2023-34478", "fix": "1.12.0+", "cvss": 9.8, "note": "默认密钥反序列化 RCE（需确认未更换密钥）"},
+    {"range": "<1.13.0", "cve": "CVE-2023-46749", "fix": "1.13.0+", "cvss": 7.5, "note": "认证绕过漏洞"},
+    {"range": "*", "cve": "", "fix": "1.13.0+", "cvss": 0.0, "note": "注意更换默认 rememberMe 密钥并升级至最新版"}
+  ],
+  "nacos": [
+    {"range": "<=1.4.1", "cve": "CVE-2021-29441", "fix": "1.4.2+ / 2.0.0+", "cvss": 10.0, "note": "AuthFilter 鉴权绕过，未授权访问管理接口"},
+    {"range": "<2.2.3", "cve": "CVE-2023-25551", "fix": "2.2.3+", "cvss": 9.8, "note": "Nacos 配置中心越权/权限绕过"},
+    {"range": "*", "cve": "", "fix": "2.4.x+", "cvss": 0.0, "note": "建议开启鉴权（nacos.core.auth.enabled=true）并升级最新版"}
+  ],
+  "log4j": [
+    {"range": ">=2.0,<2.15", "cve": "CVE-2021-44228", "fix": "2.15.0+（建议 2.17.1+）", "cvss": 10.0, "note": "Log4Shell JNDI 注入 RCE"},
+    {"range": ">=2.0,<2.16", "cve": "CVE-2021-45046", "fix": "2.16.0+（建议 2.17.1+）", "cvss": 9.0, "note": "Log4Shell 绕过修复的变种"},
+    {"range": ">=2.0,<2.17.1", "cve": "CVE-2021-44832", "fix": "2.17.1+", "cvss": 6.6, "note": "JDBC Appender 反序列化"},
+    {"range": "*", "cve": "", "fix": "2.17.1+", "cvss": 0.0, "note": "Log4j 1.x 无官方修复建议直接升级 2.17.1+"}
+  ]
+}

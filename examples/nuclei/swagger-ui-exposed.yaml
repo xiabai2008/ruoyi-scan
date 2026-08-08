@@ -1,0 +1,22 @@
+id: swagger-ui-exposed
+info:
+  name: Swagger API 文档未授权
+  author: ruoyi-scan
+  severity: low
+  description: Swagger/OpenAPI 文档接口未授权访问，泄露 API 结构
+  tags: swagger,exposure,api
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/swagger-ui/index.html"
+      - "{{BaseURL}}/prod-api/swagger-ui/index.html"
+      - "{{BaseURL}}/v3/api-docs"
+    matchers:
+      - type: word
+        words:
+          - "swagger-ui"
+          - "Swagger"
+      - type: status
+        status:
+          - 200
+    matchers-condition: or

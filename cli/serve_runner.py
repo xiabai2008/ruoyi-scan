@@ -28,6 +28,15 @@ def run_serve_mode(args: Namespace) -> None:
 
     db_path = args.db_path or "data/tasks.db"
     print(f"{YELLOW}[*]任务持久化: {db_path}{RESET}")
+
+    # E9：定时扫描（--schedule "cron" --schedule-target <url>）
+    schedule_expr = getattr(args, "schedule", None) or ""
+    schedule_target = getattr(args, "schedule_target", None) or ""
+    if schedule_expr and schedule_target:
+        print(f"{YELLOW}[*]定时扫描: {schedule_expr} → {schedule_target}{RESET}")
+    elif schedule_expr or schedule_target:
+        print(f"{RED}[!]定时扫描需同时指定 --schedule 与 --schedule-target{RESET}")
+
     print(f"{SEPARATOR}")
 
     try:
@@ -38,7 +47,13 @@ def run_serve_mode(args: Namespace) -> None:
         cors_origins = None
         if args.cors_origins:
             cors_origins = [o.strip() for o in args.cors_origins.split(",") if o.strip()]
-        app = create_app(api_key=api_key, cors_origins=cors_origins, db_path=args.db_path or "")
+        app = create_app(
+            api_key=api_key,
+            cors_origins=cors_origins,
+            db_path=args.db_path or "",
+            schedule_expr=schedule_expr or None,
+            schedule_target=schedule_target or None,
+        )
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     except ImportError as e:
         print(f"{RED}[!]启动 API 服务需要 fastapi + uvicorn，请安装：pip install fastapi uvicorn[standard]{RESET}")

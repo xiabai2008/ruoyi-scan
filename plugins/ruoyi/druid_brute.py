@@ -40,7 +40,7 @@ class DruidBrutePlugin(PluginBase):
         'curl "http://target/druid/sql.html" -b "JSESSIONID=<已登录的 session>"'
     )
     # D2：Druid 监控未授权全版本存在（取决于配置）
-    affected_versions = ""
+    affected_versions = ""  # Druid 监控页弱口令与若依版本无关，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A07:2021"

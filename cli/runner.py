@@ -134,6 +134,13 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         subdomain=getattr(args, "subdomain", False),
         js_extract=getattr(args, "js_extract", False),
         plugin_paths=getattr(args, "plugin_path", None),
+        # E2：组件版本检测（--components 启用；默认关闭，向后兼容）
+        components=getattr(args, "components", False),
+        # E4：nuclei YAML 模板
+        nuclei_paths=getattr(args, "nuclei", None),
+        nuclei_tags=[t.strip() for t in (args.nuclei_tags or "").split(",") if t.strip()],
+        nuclei_severity=[s.strip() for s in (args.nuclei_severity or "").split(",") if s.strip()],
+        nuclei_exclude_tags=[t.strip() for t in (args.nuclei_exclude_tags or "").split(",") if t.strip()],
     )
 
 
@@ -204,12 +211,33 @@ def _cli_event_handler(event_type: str, payload):
     elif event_type == "fingerprint":
         cms = payload.get("cms", "")
         if cms:
+            variant = payload.get("variant", "")
+            variant_txt = f" variant={variant}" if variant else ""
             print(
-                f"{YELLOW}[*]指纹识别：cms={cms} 置信度={payload.get('confidence', 0):.2f} "
+                f"{YELLOW}[*]指纹识别：cms={cms}{variant_txt} 置信度={payload.get('confidence', 0):.2f} "
                 f"命中={payload.get('matched', [])}{RESET}"
             )
         else:
             print(f"{YELLOW}[*]指纹识别：未识别到已知 CMS 特征{RESET}")
+
+    elif event_type == "component":
+        # E2：组件版本检测结果（绿=命中 CVE 风险 / 黄=UNKNOWN / 红=SAFE 或不适用）
+        if "error" in payload:
+            print(f"{RED}[!]组件检测异常: {payload['error']}{RESET}")
+            return
+        component = payload.get("component", "")
+        status = payload.get("status", "")
+        cve = payload.get("cve", "")
+        version = payload.get("detected_version", "")
+        evidence = payload.get("evidence", "")
+        ver_txt = f" 版本={version}" if version else ""
+        cve_txt = f" 命中={cve}" if cve else ""
+        if status == STATUS_CONFIRMED:
+            print(f"{GREEN}[*]组件风险: {component}{ver_txt}{cve_txt} — {evidence}{RESET}")
+        elif status == STATUS_SAFE:
+            print(f"{RED}[/]组件安全: {component}{ver_txt} — {evidence}{RESET}")
+        else:
+            print(f"{YELLOW}[?]组件未知: {component}{ver_txt} — {evidence}{RESET}")
 
     elif event_type == "waf":
         waf = payload.get("waf", "")
@@ -351,6 +379,20 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
             notifications = parse_notify_arg(args.notify)
             if notifications:
                 send_notifications(notifications, builder, verbose=True)
+
+        # E8：AI 报告解读（--ai-report zh|en）
+        if getattr(args, "ai_report", None):
+            from lib.ai_report import run_ai_report_mode
+
+            lang = args.ai_report
+            if lang not in ("zh", "en"):
+                lang = "zh"
+            print(f"{YELLOW}[*]AI 漏洞分析生成中（%s）...{RESET}" % lang)
+            try:
+                analysis_path = run_ai_report_mode(args.report, builder.to_dict(), lang=lang)
+                print(f"{GREEN}[*]AI 分析已生成：{analysis_path}{RESET}")
+            except Exception as e:
+                print(f"{RED}[!]AI 分析生成失败: {e}{RESET}")
 
     # D31：业务逻辑漏洞扫描
     if getattr(args, "logic_scan", False):
@@ -545,7 +587,7 @@ def final_prompt() -> None:
 
 
 # ── P1 子模块重导出（保持向后兼容）──
-# noqa: E402 — 底部导入以避免循环依赖
+# noqa: E402 �?底部导入以避免循环依�?
 from cli.chain_runner import run_chain_mode  # noqa: E402
 from cli.passive_runner import run_passive_mode  # noqa: E402
 from cli.plugin_runner import (  # noqa: E402
@@ -556,6 +598,100 @@ from cli.plugin_runner import (  # noqa: E402
 )
 from cli.serve_runner import run_serve_mode  # noqa: E402
 from cli.tool_runner import run_ci_init_mode, run_diff_only_mode, run_template_list_mode, run_wiki_mode  # noqa: E402
+
+# E4：nuclei 模板校验模式（--nuclei-validate，不扫描）
+
+
+def run_nuclei_validate_mode(path: str) -> None:
+    """校验 nuclei 模板（输出校验结果，不扫描）"""
+    from lib.nuclei_loader import discover_nuclei_files, validate_template
+
+    files = discover_nuclei_files(path)
+    if not files:
+        print(f"{RED}[!]未找到模板文件: {path}{RESET}")
+        return
+    total_ok = 0
+    for f in files:
+        errors = validate_template(f)
+        if errors:
+            print(f"{RED}[!]{f}{RESET}")
+            for e in errors:
+                print(f"{RED}    - {e}{RESET}")
+        else:
+            total_ok += 1
+            print(f"{GREEN}[*]校验通过: {f}{RESET}")
+    print(f"{YELLOW}[*]校验完成：{total_ok}/{len(files)} 个模板通过{RESET}")
+
+
+# E5：插件模板仓库模式（导出/清单/更新）
+
+
+def run_plugin_export_mode(out_dir: str) -> None:
+    """导出插件源码与元信息到目录（模板仓库）"""
+    from lib.plugin_repo import export_plugins
+
+    try:
+        hashes = export_plugins(out_dir)
+        print(f"{GREEN}[*]导出完成: {out_dir}（{len(hashes)} 个文件）{RESET}")
+        print(f"{YELLOW}[*]下一步: --plugin-manifest {out_dir} 生成 manifest.json{RESET}")
+    except Exception as e:
+        print(f"{RED}[!]导出失败: {e}{RESET}")
+
+
+def run_plugin_manifest_mode(out_dir: str) -> None:
+    """生成/校验 manifest.json（Ed25519 签名，cryptography 可选）"""
+    from lib.plugin_repo import build_manifest, verify_manifest
+
+    try:
+        import json
+        import os
+
+        manifest_path = os.path.join(out_dir, "manifest.json")
+        if os.path.isfile(manifest_path):
+            # 校验模式
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            errors = verify_manifest(manifest, out_dir)
+            if errors:
+                print(f"{RED}[!]manifest 校验失败:{RESET}")
+                for e in errors:
+                    print(f"{RED}    - {e}{RESET}")
+            else:
+                print(f"{GREEN}[*]manifest 校验通过: {manifest_path}{RESET}")
+                if manifest.get("signature"):
+                    print(f"{GREEN}[*]签名验证通过（Ed25519）{RESET}")
+                else:
+                    print(f"{YELLOW}[*]manifest 未签名（需 cryptography + 私钥才可签名）{RESET}")
+        else:
+            manifest = build_manifest(out_dir)
+            print(f"{GREEN}[*]manifest 已生成: {manifest_path}（{len(manifest['files'])} 个文件）{RESET}")
+            if manifest.get("signature"):
+                print(f"{GREEN}[*]已签名（Ed25519）{RESET}")
+            else:
+                print(f"{YELLOW}[*]未签名（仅摘要校验；生成私钥: cryptography 库 + --plugin-manifest 重复执行自动创建签名密钥）{RESET}")
+    except Exception as e:
+        print(f"{RED}[!]manifest 处理失败: {e}{RESET}")
+
+
+def run_plugin_update_mode(url: str) -> None:
+    """从模板仓库更新插件（下载 → 校验 → 安装到 ~/.ruoyi-scan/plugins/）"""
+    from config import settings
+    from lib.plugin_repo import download_and_install
+
+    if url == "default":
+        url = settings.PLUGIN_REPO_URL
+    if not url:
+        print(f"{RED}[!]未配置插件仓库地址（config/settings.py PLUGIN_REPO_URL）{RESET}")
+        return
+    print(f"{YELLOW}[*]插件仓库更新: {url} ...{RESET}")
+    try:
+        installed = download_and_install(url)
+        print(f"{GREEN}[*]更新完成：安装 {len(installed)} 个文件到 ~/.ruoyi-scan/plugins/{RESET}")
+        for rel in installed:
+            print(f"{GREEN}  [*] {rel}{RESET}")
+    except ValueError as e:
+        print(f"{RED}[!]更新失败: {e}{RESET}")
+
 
 __all__ = [
     "run_mode",
@@ -568,8 +704,12 @@ __all__ = [
     "run_plugin_init_mode",
     "run_plugin_check_mode",
     "run_plugin_list_mode",
+    "run_plugin_export_mode",
+    "run_plugin_manifest_mode",
+    "run_plugin_update_mode",
     "run_template_list_mode",
     "run_diff_only_mode",
     "run_ci_init_mode",
     "run_wiki_mode",
+    "run_nuclei_validate_mode",
 ]

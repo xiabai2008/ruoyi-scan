@@ -44,7 +44,7 @@ class DefaultPasswordPlugin(PluginBase):
         "  # 返回用户信息即确认默认口令有效"
     )
     # D2：默认口令全版本存在（取决于是否修改默认 admin/admin123）
-    affected_versions = ""
+    affected_versions = ""  # 默认口令为配置类风险，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.4;OWASP:A07:2021"

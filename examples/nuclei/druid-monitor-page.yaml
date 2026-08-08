@@ -1,0 +1,17 @@
+id: druid-monitor-page
+info:
+  name: Druid 监控页暴露
+  author: ruoyi-scan
+  severity: medium
+  description: Druid 数据库连接池监控页未授权访问
+  tags: druid,exposure,ruoyi
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/druid/index.html"
+      - "{{BaseURL}}/prod-api/druid/index.html"
+    matchers:
+      - type: word
+        words:
+          - "DruidStatService"
+          - "druid.index"

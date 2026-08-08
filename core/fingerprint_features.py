@@ -70,6 +70,79 @@ CMS_FEATURES = {
     # 注：thinkphp / weaver / shiro / struts2 特征已迁移至 cms-scan-extras/，本项目专注若依做深
 }
 
+# ── E1：若依变体特征库 ──
+# 设计说明：变体（variant）是主 CMS=ruoyi 之下的细分标识。RuoYi 官方 + 社区衍生已分裂为
+# 多个变体，不同变体的路由前缀/认证机制/漏洞面不同：
+#   - RuoYi-Vue3       官方 Vue3 前端（TypeScript 版），后端仍为 ruoyi 单机版
+#   - RuoYi-App        官方移动端版（app 登录接口 /prod-api/app/）
+#   - RuoYi-Vue-Plus   社区增强版（Sa-Token 认证 + /auth/login，无 /captcha/image）
+#   - RuoYi-Cloud-Plus 微服务增强版（Nacos + 独立认证服务 /auth/）
+#   - ruoyi-magic      魔改版（无统一强特征，靠弱关键字低置信，供人工复核）
+# 判定规则（在核心 ruoyi 识别命中后执行）：
+#   1. strong_paths 命中至少 1 个（复用主指纹的 expect 语义）
+#   2. negative_paths 全部未命中（返回 404/非 200 才算排除项成立）
+#   3. 多个变体命中时取命中数最多者；全部未命中 → variant=''（通用版，跑全部 POC）
+VARIANT_FEATURES = {
+    "ruoyi-vue3": {
+        "display": "RuoYi-Vue3",
+        "strong_paths": [
+            {"path": "/prod-api/", "expect": "json"},
+        ],
+        # Vue3 版前端打包产物含 vite 指纹（index-*.js），弱特征辅助
+        "weak_keywords": ["vue3", "vite", "index-"],
+        "negative_paths": [],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
+    "ruoyi-app": {
+        "display": "RuoYi-App",
+        "strong_paths": [
+            {"path": "/prod-api/app/", "expect": "json"},  # 移动端 API 前缀
+            {"path": "/app/login", "expect": "json"},  # App 登录接口
+        ],
+        "weak_keywords": ["RuoYi-App", "若依移动端"],
+        "negative_paths": [],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
+    "ruoyi-plus": {
+        "display": "RuoYi-Vue-Plus",
+        "strong_paths": [
+            {"path": "/auth/login", "expect": "json"},  # Sa-Token 认证服务
+            {"path": "/auth/logout", "expect": "any"},
+        ],
+        "weak_keywords": ["RuoYi-Vue-Plus", "Sa-Token", "plus"],
+        # Plus 版使用 /captchaImage 而非原版 /captcha/image（关键区分特征）
+        "negative_paths": [
+            {"path": "/captcha/image"},
+        ],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
+    "ruoyi-cloud-plus": {
+        "display": "RuoYi-Cloud-Plus",
+        "strong_paths": [
+            {"path": "/auth/login", "expect": "json"},  # 独立认证服务
+            {"path": "/nacos/", "expect": "any"},  # Nacos 注册中心
+        ],
+        "weak_keywords": ["RuoYi-Cloud-Plus", "cloud-plus"],
+        # 微服务版无单机 /prod-api/ 网关前缀（/prod-api 404）
+        "negative_paths": [
+            {"path": "/prod-api/"},
+        ],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
+    "ruoyi-magic": {
+        "display": "RuoYi 魔改版",
+        "strong_paths": [],
+        "weak_keywords": ["若依", "ruoyi", "RuoYi"],
+        "negative_paths": [],
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
+}
+
 
 def get_feature(cms):
     """返回某 CMS 的特征 dict，未注册返回 None"""
@@ -79,3 +152,13 @@ def get_feature(cms):
 def list_cms():
     """返回所有已注册 CMS 标识列表"""
     return list(CMS_FEATURES.keys())
+
+
+def list_variants():
+    """返回所有已注册若依变体标识列表（E1）"""
+    return list(VARIANT_FEATURES.keys())
+
+
+def get_variant_feature(variant):
+    """返回某变体的特征 dict，未注册返回 None（E1）"""
+    return VARIANT_FEATURES.get(variant)

@@ -93,7 +93,7 @@ class RuoyiNacosUnauthPlugin(PluginBase):
         '  -d "username=backdoor&password=Backdoor@123"'
     )
     # D2：Nacos 未授权全版本存在（取决于是否开启 nacos.core.auth.enabled）
-    affected_versions = ""
+    affected_versions = ""  # Nacos 未授权由组件版本决定（见 E2 组件检测），若依版本维度全适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

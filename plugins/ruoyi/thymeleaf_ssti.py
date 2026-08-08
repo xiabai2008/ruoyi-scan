@@ -47,7 +47,7 @@ class ThymeleafSstiPlugin(PluginBase):
         "  # 响应会执行 id 命令，需结合响应时间或 OOB 验证"
     )
     # D2：Thymeleaf SSTI 全版本存在（取决于 Controller 是否返回用户可控视图名）
-    affected_versions = ""
+    affected_versions = ""  # 模板注入风险各版本均需验证，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"

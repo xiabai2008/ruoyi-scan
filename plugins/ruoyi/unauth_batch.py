@@ -48,7 +48,7 @@ class UnauthBatchPlugin(PluginBase):
         "  # 返回 JSON 含用户名、手机号、邮箱等敏感信息即未授权"
     )
     # D2：未授权访问全版本存在（取决于配置）
-    affected_versions = ""
+    affected_versions = ""  # 未授权访问检测为配置类风险，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

@@ -144,6 +144,34 @@ def client_with_key(app_with_key):
         yield c
 
 
+@pytest.fixture
+def client_factory(mock_network):
+    """API Key / 调度参数可配置的 TestClient 工厂（E9 团队版测试用）
+
+    用法：
+        def test_xxx(client_factory):
+            with client_factory(api_key="k1:read,k2:admin") as client:
+                ...
+    """
+    import tempfile
+
+    from api.app import create_app
+    from starlette.testclient import TestClient
+
+    def _create(api_key="", schedule_expr="", schedule_target=""):
+        tmp_dir = tempfile.mkdtemp(prefix="ruoyi_scan_e9_")
+        db_path = _os.path.join(tmp_dir, "tasks.db")
+        app_inst = create_app(
+            api_key=api_key,
+            db_path=db_path,
+            schedule_expr=schedule_expr,
+            schedule_target=schedule_target,
+        )
+        return TestClient(app_inst)
+
+    return _create
+
+
 # ── P1: storage / registry ──────────────────────────────────────
 
 

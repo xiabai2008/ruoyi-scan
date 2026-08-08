@@ -42,9 +42,9 @@ def run_plugin_check_mode(args: Namespace) -> None:
     print(f"{SEPARATOR}")
     print("静态检查:")
     if ok1:
-        print(f"  {GREEN}✓ 通过{RESET}")
+        print(f"  {GREEN}[OK] 通过{RESET}")
     else:
-        print(f"  {RED}✗ 失败{RESET}")
+        print(f"  {RED}[X] 失败{RESET}")
     for e in errors1:
         print(f"  {RED}错误: {e}{RESET}")
     for w in warnings1:
@@ -53,9 +53,9 @@ def run_plugin_check_mode(args: Namespace) -> None:
     ok2, errors2, warnings2 = check_plugin_by_import(filepath)
     print("导入检查:")
     if ok2:
-        print(f"  {GREEN}✓ 通过{RESET}")
+        print(f"  {GREEN}[OK] 通过{RESET}")
     else:
-        print(f"  {RED}✗ 失败{RESET}")
+        print(f"  {RED}[X] 失败{RESET}")
     for e in errors2:
         print(f"  {RED}错误: {e}{RESET}")
     for w in warnings2:
@@ -79,8 +79,8 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
     print(f"{'#':<3} {'漏洞名称':<25} {'类别':<10} {'严重度':<8} {'CVE':<18} {'修复':<4} {'复现':<4}")
     print(f"{'-' * 80}")
     for i, p in enumerate(plugins, 1):
-        has_fix = "✓" if p["has_fix_detail"] else "✗"
-        has_reproduce = "✓" if p["has_reproduce"] else "✗"
+        has_fix = "[Y]" if p["has_fix_detail"] else "[N]"
+        has_reproduce = "[Y]" if p["has_reproduce"] else "[N]"
         print(
             f"{i:<3} {p['name'][:25]:<25} {p['category']:<10} "
             f"{p['severity']:<8} {(p['cve'] or 'N/A')[:18]:<18} "

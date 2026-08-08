@@ -44,7 +44,7 @@ class RuoyiCloudNacosPlugin(PluginBase):
         '  -H "serverIdentity: identity"'
     )
     # D2：RuoYi-Cloud 微服务版集成了 Nacos，全版本适用
-    affected_versions = ""
+    affected_versions = ""  # 仅 RuoYi-Cloud 微服务版适用（Nacos 组件风险见 E2 组件检测）
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

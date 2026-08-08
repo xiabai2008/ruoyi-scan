@@ -1,0 +1,19 @@
+id: ruoyi-actuator-exposed
+info:
+  name: Spring Boot Actuator 未授权暴露
+  author: ruoyi-scan
+  severity: medium
+  description: Spring Boot Actuator 端点未授权访问，可泄露环境信息
+  tags: spring,misconfig,exposure
+  metadata:
+    cve: ""
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "_links"
+          - "actuator"

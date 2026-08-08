@@ -97,6 +97,8 @@ class ReportBuilder:
             "request_count": self.summary.get("request_count", 0),
             "mode": self.summary.get("mode", ""),
             "fingerprint": self.summary.get("fingerprint", {}),
+            # E3：版本对照矩阵（检测版本 vs 插件适用性，无版本识别时为空列表）
+            "version_matrix": self.summary.get("version_matrix", []),
             "risk_distribution": dist,
             "vuln_count": dist["total"],
             "results": [r.to_dict() for r in self._effective_results()],
@@ -300,6 +302,28 @@ class ReportBuilder:
         # 阶段六：风险分布环形图（纯 SVG，零外部依赖）
         donut_svg = self._render_risk_donut_svg(dist)
 
+        # E3：版本对照矩阵（检测版本 vs 插件适用性）
+        version_matrix = self.summary.get("version_matrix", []) or []
+        version_html = ""
+        if version_matrix:
+            fp_version = html_module.escape(str((fp or {}).get("version", "")))
+            rows_vm = []
+            for item in version_matrix:
+                ok = item.get("applicable", True)
+                mark = "适用" if ok else "跳过"
+                color = "#27ae60" if ok else "#d9534f"
+                rows_vm.append(
+                    f'<tr><td>{html_module.escape(str(item.get("name", "")))}</td>'
+                    f'<td>{html_module.escape(str(item.get("category", "")))}</td>'
+                    f'<td>{html_module.escape(str(item.get("affected_versions", "全版本")))}</td>'
+                    f'<td style="color:{color}">{mark}</td></tr>'
+                )
+            version_html = (
+                f'<h2>版本对照（检测版本：{fp_version or "未识别"}）</h2>'
+                "<table><thead><tr><th>插件</th><th>类别</th><th>适用版本</th><th>结论</th></tr></thead>"
+                f"<tbody>{''.join(rows_vm)}</tbody></table>"
+            )
+
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -364,6 +388,7 @@ function toggleFilter() {{
 </div>
 {donut_svg}
 {filter_html}
+{version_html}
 <h2>详细结果</h2>
 <table>
   <thead>

@@ -1,0 +1,50 @@
+# Ruoyi-Scan 持续安全扫描（E6：GitHub Code Scanning 闭环）
+# PR 触发 + 每周定时扫描；SARIF 上传到 GitHub Code Scanning，高危漏洞在 PR 页面展示
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # 每周一凌晨 2 点（UTC 18:00 = Beijing 02:00）
+    - cron: '0 18 * * 1'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.actor != 'dependabot[bot]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyyaml
+
+      - name: Run Ruoyi-Scan
+        env:
+          SCAN_TARGET: ${{ secrets.SCAN_TARGET }}
+        run: |
+          python main.py --ci -u "$SCAN_TARGET" \
+            --report reports/ \
+            --report-format sarif,json \
+            --severity-threshold high \
+            --components
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/report.sarif
+
+      - name: Upload scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: reports/

@@ -36,7 +36,7 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
         "  # 返回的 JSON 含所有接口路径、参数定义、响应模型"
     )
     # D2：Swagger 未授权全版本存在（取决于配置）
-    affected_versions = ""
+    affected_versions = ""  # springfox/springdoc 未授权文档各版本均存在风险，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

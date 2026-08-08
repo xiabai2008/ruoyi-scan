@@ -68,6 +68,17 @@ class Storage:
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+                # E9：定时扫描任务表
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS schedules (
+                        job_id TEXT PRIMARY KEY,
+                        cron TEXT NOT NULL,
+                        target TEXT NOT NULL,
+                        mode TEXT NOT NULL DEFAULT 'u',
+                        payload TEXT,
+                        created_at REAL
+                    )
+                """)
                 conn.commit()
             finally:
                 conn.close()
@@ -201,5 +212,77 @@ class Storage:
             try:
                 row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
                 return row[0] if row else 0
+            finally:
+                conn.close()
+
+    # ── E9：定时扫描任务 ──
+
+    def save_schedule(self, job_id: str, cron: str, target: str, mode: str = "u", payload: Dict[str, Any] = None):
+        """保存/更新定时扫描任务（upsert）"""
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO schedules (job_id, cron, target, mode, payload, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(job_id) DO UPDATE SET
+                        cron=excluded.cron, target=excluded.target,
+                        mode=excluded.mode, payload=excluded.payload
+                """,
+                    (job_id, cron, target, mode, json.dumps(payload or {}, ensure_ascii=False), time.time()),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def list_schedules(self) -> List[Dict[str, Any]]:
+        """列出全部定时扫描任务"""
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT * FROM schedules ORDER BY created_at ASC").fetchall()
+                return [
+                    {
+                        "job_id": r["job_id"],
+                        "cron": r["cron"],
+                        "target": r["target"],
+                        "mode": r["mode"],
+                        "payload": json.loads(r["payload"]) if r["payload"] else {},
+                        "created_at": r["created_at"],
+                    }
+                    for r in rows
+                ]
+            finally:
+                conn.close()
+
+    def get_schedule(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """查询单个定时任务"""
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute("SELECT * FROM schedules WHERE job_id = ?", (job_id,)).fetchone()
+                if row:
+                    return {
+                        "job_id": row["job_id"],
+                        "cron": row["cron"],
+                        "target": row["target"],
+                        "mode": row["mode"],
+                        "payload": json.loads(row["payload"]) if row["payload"] else {},
+                        "created_at": row["created_at"],
+                    }
+                return None
+            finally:
+                conn.close()
+
+    def delete_schedule(self, job_id: str):
+        """删除定时任务"""
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.execute("DELETE FROM schedules WHERE job_id = ?", (job_id,))
+                conn.commit()
             finally:
                 conn.close()

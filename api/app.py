@@ -21,7 +21,7 @@ from core.task_registry import TaskRegistry
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：startup 绑定 loop + 恢复历史，shutdown 清理资源"""
+    """应用生命周期：startup 绑定 loop + 恢复历史 + 启动调度器，shutdown 清理资源"""
     import asyncio
 
     # Startup: 绑定 asyncio loop 到 registry（跨线程推送需要）
@@ -30,19 +30,26 @@ async def lifespan(app: FastAPI):
     # D11：从 SQLite 恢复历史任务到内存
     if app.state.storage:
         app.state.registry.restore_from_storage(app.state.storage)
+    # E9：启动定时扫描调度器（恢复 storage 中的任务 + --schedule 参数任务）
+    if app.state.scheduler:
+        app.state.scheduler.start()
     yield
     # Shutdown: 清理资源
+    if app.state.scheduler:
+        app.state.scheduler.shutdown()
     app.state.registry.unbind_loop()
     app.state.orchestrator.shutdown()
 
 
-def create_app(api_key: str = "", cors_origins: list = None, db_path: str = "") -> FastAPI:
+def create_app(api_key: str = "", cors_origins: list = None, db_path: str = "", schedule_expr: str = "", schedule_target: str = "") -> FastAPI:
     """创建 FastAPI 应用实例
 
     Args:
         api_key: API Key（空则从环境变量获取，仍空则仅允许本地访问）
         cors_origins: 允许的 CORS 源列表（None 默认仅 localhost）
         db_path: SQLite 路径（空则用默认 data/tasks.db）
+        schedule_expr: E9 定时扫描表达式（cron 5 段式或 every:<秒>）
+        schedule_target: E9 定时扫描目标 URL
 
     Returns:
         配置好的 FastAPI 应用
@@ -82,18 +89,31 @@ def create_app(api_key: str = "", cors_origins: list = None, db_path: str = "") 
     # 核心组件
     registry = TaskRegistry(storage=storage)
     orchestrator = ScanOrchestrator(registry=registry)
+    # E9：定时扫描调度器
+    scheduler = None
+    try:
+        from lib.scheduler import ScanScheduler
+
+        scheduler = ScanScheduler(orchestrator=orchestrator, storage=storage)
+        if schedule_expr and schedule_target:
+            scheduler.add_job(schedule_expr, schedule_target, mode="u")
+    except Exception:
+        scheduler = None
 
     # 挂载到 app.state（路由通过 Depends 访问）
     app.state.registry = registry
     app.state.orchestrator = orchestrator
     app.state.storage = storage
     app.state.api_key = key
+    app.state.scheduler = scheduler
 
     # 注册 REST 路由
     app.include_router(scan.router, prefix="/api")
     app.include_router(report.router, prefix="/api")
     app.include_router(plugin.router, prefix="/api")
     app.include_router(system.router, prefix="/api")
+    # E9：定时扫描任务路由
+    app.include_router(scan.schedule_router, prefix="/api")
     # D16：Prometheus 指标端点
     app.include_router(metrics.router, prefix="/api")
 

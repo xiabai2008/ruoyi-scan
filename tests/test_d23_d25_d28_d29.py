@@ -379,6 +379,22 @@ class TestCIRunner:
         assert "runs-on: ubuntu-latest" in content
         assert "upload-sarif" in content
 
+    def test_e6_repo_workflow_has_sarif_upload(self):
+        """E6: 仓库内置 security-scan.yml 含 upload-sarif + 组件检测"""
+        import os
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            ".github", "workflows", "security-scan.yml",
+        )
+        assert os.path.isfile(path), "缺少 .github/workflows/security-scan.yml"
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "upload-sarif" in content, "workflow 缺少 SARIF 上传步骤"
+        assert "codeql-action/upload-sarif" in content
+        assert "--components" in content, "workflow 应启用组件检测"
+        assert "schedule" in content, "workflow 应含定时扫描"
+
     def test_generate_ci_config_gitlab(self):
         """生成 GitLab CI 配置"""
         from lib.ci_runner import generate_ci_config

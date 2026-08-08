@@ -31,135 +31,188 @@ def print_banner():
 def build_parser():
     """构建参数解析（-h/-u/-m/-p/-l 向后兼容，新增能力用长参数）"""
     parser = argparse.ArgumentParser(add_help=False)
-    # 核心短参数（向后兼容）
-    parser.add_argument("-h", dest="help", nargs="?", const="flag", default=None, help="帮助")
-    parser.add_argument("-u", metavar="target", nargs="?", const="__flag__", default=None, help="综合扫描")
-    parser.add_argument("-m", metavar="target", nargs="?", const="__flag__", default=None, help="目录扫描")
-    parser.add_argument("-p", metavar="target", nargs="?", const="__flag__", default=None, help="漏洞检测")
-    parser.add_argument("-l", metavar="target", nargs="?", const="__flag__", default=None, help="登录爆破")
-    parser.add_argument("-f", metavar="file", dest="file", default=None, help="批量扫描：从文件读取目标列表")
-    # 通用参数
-    parser.add_argument("--proxy", default=None, help="代理地址（如 http://127.0.0.1:8080）")
-    parser.add_argument("--proxy-file", default=None, help="代理池文件")
-    parser.add_argument(
+    group = parser.add_argument_group("核心参数（向后兼容）")
+    group.add_argument("-h", dest="help", nargs="?", const="flag", default=None, help="帮助")
+    group.add_argument("-u", metavar="target", nargs="?", const="__flag__", default=None, help="综合扫描")
+    group.add_argument("-m", metavar="target", nargs="?", const="__flag__", default=None, help="目录扫描")
+    group.add_argument("-p", metavar="target", nargs="?", const="__flag__", default=None, help="漏洞检测")
+    group.add_argument("-l", metavar="target", nargs="?", const="__flag__", default=None, help="登录爆破")
+    group.add_argument("-f", metavar="file", dest="file", default=None, help="批量扫描：从文件读取目标列表")
+
+    group = parser.add_argument_group("通用参数")
+    group.add_argument("--proxy", default=None, help="代理地址（如 http://127.0.0.1:8080）")
+    group.add_argument("--proxy-file", default=None, help="代理池文件")
+    group.add_argument(
         "--proxy-rotate", choices=["round-robin", "random", "least-fail"], default="round-robin", help="代理轮换策略"
     )
-    parser.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
-    parser.add_argument("--rate", type=int, default=settings.RATE, help="每秒请求数（0 不限速）")
-    parser.add_argument("--report", default=None, help="报告输出目录")
-    parser.add_argument("--debug", action="store_true", default=False, help="调试模式")
-    parser.add_argument(
+    group.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
+    group.add_argument("--rate", type=int, default=settings.RATE, help="每秒请求数（0 不限速）")
+    group.add_argument("--report", default=None, help="报告输出目录")
+    group.add_argument("--debug", action="store_true", default=False, help="调试模式")
+    group.add_argument(
         "--timeout", type=int, default=settings.TIMEOUT, help=f"请求超时秒数（默认 {settings.TIMEOUT}s）"
     )
-    parser.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
-    parser.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
-    # 扫描模式
-    parser.add_argument("--portscan", action="store_true", default=False, help="端口扫描")
-    parser.add_argument("--ports", default=None, help="自定义端口（逗号分隔）")
-    parser.add_argument("--passive", action="store_true", default=False, help="被动代理模式")
-    parser.add_argument("--passive-host", default="127.0.0.1", help="代理监听地址")
-    parser.add_argument("--passive-port", type=int, default=8080, help="代理监听端口")
-    # 报告
-    parser.add_argument("--report-format", default="all", help="报告格式 html/json/csv/pdf/docx/xlsx/sarif")
-    parser.add_argument("--no-dedup", action="store_true", default=False, help="关闭结果去重")
-    # D6 利用链
-    parser.add_argument("--chain", default=None, metavar="NAME", help="执行漏洞利用链")
-    parser.add_argument("--chain-list", action="store_true", default=False, help="列出可用链")
-    # D7 WAF
-    parser.add_argument("--bypass-waf", choices=["auto", "on", "off"], default="auto", help="WAF 绕过策略")
-    # D9 Web API
-    parser.add_argument("--serve", action="store_true", default=False, help="启动 Web API 服务")
-    parser.add_argument("--host", default="0.0.0.0", help="API 监听地址")
-    parser.add_argument("--port", type=int, default=8000, help="API 监听端口")
-    # D11 API 鉴权
-    parser.add_argument("--api-key", default=None, help="API Key 鉴权")
-    parser.add_argument("--cors-origins", default=None, help="CORS 源（逗号分隔）")
-    parser.add_argument("--db-path", default=None, help="SQLite 数据库路径")
-    # D14 信息收集
-    parser.add_argument("--crawl", action="store_true", default=False, help="主动爬虫")
-    parser.add_argument("--crawl-depth", type=int, default=2, help="爬虫深度")
-    parser.add_argument("--crawl-max-pages", type=int, default=50, help="爬虫最大页面数")
-    parser.add_argument("--subdomain", action="store_true", default=False, help="子域名枚举")
-    parser.add_argument("--js-extract", action="store_true", default=False, help="JS 端点提取")
-    # D19 扫描模板
-    parser.add_argument("--template", default=None, choices=["quick", "deep", "compliance", "dengbao"], help="扫描模板")
-    parser.add_argument("--template-list", action="store_true", default=False, help="列出模板")
-    # D27 YAML 配置
-    parser.add_argument("--config", default=None, metavar="PATH", help="YAML 配置文件")
-    # D20 差异对比
-    parser.add_argument("--diff", default=None, metavar="OLD_REPORT", help="与历史报告对比")
-    parser.add_argument("--diff-only", nargs=2, metavar=("OLD", "NEW"), help="仅对比两个 JSON 报告")
-    parser.add_argument("--save-baseline", action="store_true", default=False, help="保存基线")
-    # D21 通知
-    parser.add_argument("--notify", action="append", default=None, metavar="TYPE=TARGET", help="扫描完成通知")
-    # D26 认证
-    parser.add_argument("--auth", action="append", default=None, metavar="TYPE=VALUE", help="认证信息注入")
-    parser.add_argument("--auth-file", default=None, metavar="PATH", help="从文件加载认证")
-    parser.add_argument("--auth-login", default=None, metavar="USER:PASS", help="自动登录")
-    # D23 国际化
-    parser.add_argument("--lang", default="zh", choices=["zh", "en"], help="报告语言")
-    # D25 插件 SDK
-    parser.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
-    parser.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
-    parser.add_argument("--plugin-new", default=None, metavar="NAME", help="P3: 创建新插件脚手架")
-    parser.add_argument("--plugin-list", action="store_true", default=False, help="列出插件")
-    parser.add_argument(
+    group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
+    group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
+
+    group = parser.add_argument_group("扫描模式")
+    group.add_argument("--portscan", action="store_true", default=False, help="端口扫描")
+    group.add_argument("--ports", default=None, help="自定义端口（逗号分隔）")
+    group.add_argument("--passive", action="store_true", default=False, help="被动代理模式")
+    group.add_argument("--passive-host", default="127.0.0.1", help="代理监听地址")
+    group.add_argument("--passive-port", type=int, default=8080, help="代理监听端口")
+    # E2：组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）
+    group.add_argument("--components", action="store_true", default=False, help="组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）")
+    group.add_argument("--no-components", action="store_true", default=False, help="关闭组件版本检测")
+    # E4：nuclei YAML 模板兼容层
+    group.add_argument("--nuclei", action="append", default=None, metavar="DIR/FILE", help="加载 nuclei YAML 模板（可多次指定）")
+    group.add_argument("--nuclei-tags", default=None, metavar="a,b", help="仅加载含指定 tag 的模板")
+    group.add_argument("--nuclei-severity", default=None, metavar="high,medium", help="仅加载指定严重度模板")
+    group.add_argument("--nuclei-exclude-tags", default=None, metavar="a,b", help="排除含指定 tag 的模板")
+    group.add_argument("--nuclei-validate", default=None, metavar="DIR/FILE", help="校验 nuclei 模板（不扫描）")
+
+    group = parser.add_argument_group("报告")
+    group.add_argument("--report-format", default="all", help="报告格式 html/json/csv/pdf/docx/xlsx/sarif")
+    group.add_argument("--no-dedup", action="store_true", default=False, help="关闭结果去重")
+
+    group = parser.add_argument_group("D6 利用链")
+    group.add_argument("--chain", default=None, metavar="NAME", help="执行漏洞利用链")
+    group.add_argument("--chain-list", action="store_true", default=False, help="列出可用链")
+
+    group = parser.add_argument_group("D7 WAF 绕过")
+    group.add_argument("--bypass-waf", choices=["auto", "on", "off"], default="auto", help="WAF 绕过策略")
+
+    group = parser.add_argument_group("D9 Web API 服务")
+    group.add_argument("--serve", action="store_true", default=False, help="启动 Web API 服务")
+    group.add_argument("--host", default="0.0.0.0", help="API 监听地址")
+    group.add_argument("--port", type=int, default=8000, help="API 监听端口")
+
+    group = parser.add_argument_group("D11 API 鉴权")
+    group.add_argument("--api-key", default=None, help="API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）")
+    group.add_argument("--cors-origins", default=None, help="CORS 源（逗号分隔）")
+    group.add_argument("--db-path", default=None, help="SQLite 数据库路径")
+
+    group = parser.add_argument_group("E9 定时扫描")
+    group.add_argument("--schedule", default=None, metavar="CRON", help="定时扫描表达式（cron 5 段式 或 every:<秒>）")
+    group.add_argument("--schedule-target", default=None, metavar="URL", help="定时扫描目标 URL")
+
+    group = parser.add_argument_group("D14 信息收集")
+    group.add_argument("--crawl", action="store_true", default=False, help="主动爬虫")
+    group.add_argument("--crawl-depth", type=int, default=2, help="爬虫深度")
+    group.add_argument("--crawl-max-pages", type=int, default=50, help="爬虫最大页面数")
+    group.add_argument("--subdomain", action="store_true", default=False, help="子域名枚举")
+    group.add_argument("--js-extract", action="store_true", default=False, help="JS 端点提取")
+
+    group = parser.add_argument_group("D19 扫描模板")
+    group.add_argument("--template", default=None, choices=["quick", "deep", "compliance", "dengbao"], help="扫描模板")
+    group.add_argument("--template-list", action="store_true", default=False, help="列出模板")
+
+    group = parser.add_argument_group("D27 YAML 配置")
+    group.add_argument("--config", default=None, metavar="PATH", help="YAML 配置文件")
+
+    group = parser.add_argument_group("D20 差异对比")
+    group.add_argument("--diff", default=None, metavar="OLD_REPORT", help="与历史报告对比")
+    group.add_argument("--diff-only", nargs=2, metavar=("OLD", "NEW"), help="仅对比两个 JSON 报告")
+    group.add_argument("--save-baseline", action="store_true", default=False, help="保存基线")
+
+    group = parser.add_argument_group("D21 通知")
+    group.add_argument("--notify", action="append", default=None, metavar="TYPE=TARGET", help="扫描完成通知")
+
+    group = parser.add_argument_group("D26 认证扫描")
+    group.add_argument("--auth", action="append", default=None, metavar="TYPE=VALUE", help="认证信息注入")
+    group.add_argument("--auth-file", default=None, metavar="PATH", help="从文件加载认证")
+    group.add_argument("--auth-login", default=None, metavar="USER:PASS", help="自动登录")
+
+    group = parser.add_argument_group("D23 国际化")
+    group.add_argument("--lang", default="zh", choices=["zh", "en"], help="报告语言")
+
+    group = parser.add_argument_group("D25 插件 SDK")
+    group.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
+    group.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
+    group.add_argument("--plugin-new", default=None, metavar="NAME", help="P3: 创建新插件脚手架")
+    group.add_argument("--plugin-list", action="store_true", default=False, help="列出插件")
+    group.add_argument(
         "--plugin-path",
         action="append",
         default=None,
         metavar="DIR/FILE",
         help="加载外部插件（目录或 .py 文件，可多次指定）",
     )
-    parser.add_argument("--category", default="common", choices=["ruoyi", "spring", "common"], help="插件类别")
-    # D28 CI/CD
-    parser.add_argument("--ci", action="store_true", default=False, help="CI 模式")
-    parser.add_argument("--severity-threshold", default="high", choices=["low", "medium", "high"], help="CI 阈值")
-    parser.add_argument(
+    group.add_argument("--category", default="common", choices=["ruoyi", "spring", "common"], help="插件类别")
+
+    group = parser.add_argument_group("E5 插件模板仓库")
+    group.add_argument("--plugin-export", default=None, metavar="DIR", help="导出插件源码与元信息到目录（模板仓库）")
+    group.add_argument("--plugin-manifest", default=None, metavar="DIR", help="生成/校验 manifest.json（Ed25519 签名）")
+    group.add_argument("--plugin-update", default=None, nargs="?", const="default", metavar="URL", help="从模板仓库更新插件（默认官方仓库）")
+
+    group = parser.add_argument_group("E7 AI 插件生成")
+    group.add_argument("--ai", default=None, metavar="DESC", help="AI 生成插件（漏洞描述）")
+    group.add_argument("--ai-name", default=None, metavar="NAME", help="AI 插件名称（默认取描述）")
+    group.add_argument("--ai-api-key", default=None, metavar="KEY", help="LLM API Key（环境变量 RUOYI_AI_API_KEY）")
+    group.add_argument("--ai-model", default=None, metavar="MODEL", help="LLM 模型名（默认 gpt-4o-mini）")
+    group.add_argument("--ai-retries", type=int, default=3, help="AI 自验证最大重试轮数")
+
+    group = parser.add_argument_group("E8 AI 报告解读")
+    group.add_argument("--ai-report", default=None, nargs="?", const="zh", metavar="zh|en", help="AI 生成漏洞分析摘要（报告生成后）")
+
+    group = parser.add_argument_group("D28 CI/CD 集成")
+    group.add_argument("--ci", action="store_true", default=False, help="CI 模式")
+    group.add_argument("--severity-threshold", default="high", choices=["low", "medium", "high"], help="CI 阈值")
+    group.add_argument(
         "--ci-init", default=None, metavar="PLATFORM", choices=["github", "gitlab", "jenkins"], help="生成 CI 配置"
     )
-    # D29 知识库
-    parser.add_argument("--wiki", action="store_true", default=False, help="生成漏洞知识库")
-    parser.add_argument("--wiki-output", default=None, metavar="PATH", help="知识库输出路径")
-    # D30 OAST
-    parser.add_argument("--oast", action="store_true", default=False, help="OAST 带外检测")
-    parser.add_argument("--oast-server", action="store_true", default=False, help="OAST 回调服务器")
-    parser.add_argument("--oast-host", default="127.0.0.1", help="OAST 监听地址")
-    parser.add_argument("--oast-port", type=int, default=5555, help="OAST 监听端口")
-    # D31 业务逻辑
-    parser.add_argument("--logic-scan", action="store_true", default=False, help="业务逻辑漏洞检测")
-    parser.add_argument("--logic-endpoints", default=None, metavar="FILE", help="端点列表文件")
-    parser.add_argument("--logic-concurrency", type=int, default=10, help="竞争条件并发数")
-    # D32 CVE
-    parser.add_argument("--cve-sync", action="store_true", default=False, help="同步 NVD CVE")
-    parser.add_argument("--cve-id", default=None, metavar="CVE-ID", help="查询 CVE 信息")
-    parser.add_argument("--nvd-api-key", default=None, help="NVD API Key")
-    # D33 SIEM
-    parser.add_argument("--siem-export", default=None, metavar="FORMAT", help="SIEM 格式导出")
-    parser.add_argument("--siem-output", default=None, metavar="PATH", help="SIEM 输出路径")
-    parser.add_argument("--siem-syslog", default=None, metavar="HOST[:PORT]", help="Syslog 服务器")
-    parser.add_argument("--siem-protocol", default="udp", choices=["udp", "tcp"], help="Syslog 协议")
-    # D34 异步
-    parser.add_argument("--async", dest="async_mode", action="store_true", default=False, help="异步引擎")
-    parser.add_argument("--async-workers", type=int, default=10, help="异步线程数")
-    # D35 Web UI
-    parser.add_argument("--web-ui", action="store_true", default=False, help="生成 Web UI")
-    parser.add_argument("--web-ui-output", default=None, metavar="PATH", help="Web UI 输出路径")
-    parser.add_argument("--web-ui-api", default=None, metavar="URL", help="Web UI API 地址")
-    # D36 分布式
-    parser.add_argument(
+
+    group = parser.add_argument_group("D29 漏洞知识库")
+    group.add_argument("--wiki", action="store_true", default=False, help="生成漏洞知识库")
+    group.add_argument("--wiki-output", default=None, metavar="PATH", help="知识库输出路径")
+
+    group = parser.add_argument_group("D30 OAST 带外检测")
+    group.add_argument("--oast", action="store_true", default=False, help="OAST 带外检测")
+    group.add_argument("--oast-server", action="store_true", default=False, help="OAST 回调服务器")
+    group.add_argument("--oast-host", default="127.0.0.1", help="OAST 监听地址")
+    group.add_argument("--oast-port", type=int, default=5555, help="OAST 监听端口")
+
+    group = parser.add_argument_group("D31 业务逻辑检测")
+    group.add_argument("--logic-scan", action="store_true", default=False, help="业务逻辑漏洞检测")
+    group.add_argument("--logic-endpoints", default=None, metavar="FILE", help="端点列表文件")
+    group.add_argument("--logic-concurrency", type=int, default=10, help="竞争条件并发数")
+
+    group = parser.add_argument_group("D32 CVE 同步")
+    group.add_argument("--cve-sync", action="store_true", default=False, help="同步 NVD CVE")
+    group.add_argument("--cve-id", default=None, metavar="CVE-ID", help="查询 CVE 信息")
+    group.add_argument("--nvd-api-key", default=None, help="NVD API Key")
+
+    group = parser.add_argument_group("D33 SIEM 集成")
+    group.add_argument("--siem-export", default=None, metavar="FORMAT", help="SIEM 格式导出")
+    group.add_argument("--siem-output", default=None, metavar="PATH", help="SIEM 输出路径")
+    group.add_argument("--siem-syslog", default=None, metavar="HOST[:PORT]", help="Syslog 服务器")
+    group.add_argument("--siem-protocol", default="udp", choices=["udp", "tcp"], help="Syslog 协议")
+
+    group = parser.add_argument_group("D34 异步引擎")
+    group.add_argument("--async", dest="async_mode", action="store_true", default=False, help="异步引擎")
+    group.add_argument("--async-workers", type=int, default=10, help="异步线程数")
+
+    group = parser.add_argument_group("D35 Web UI")
+    group.add_argument("--web-ui", action="store_true", default=False, help="生成 Web UI")
+    group.add_argument("--web-ui-output", default=None, metavar="PATH", help="Web UI 输出路径")
+    group.add_argument("--web-ui-api", default=None, metavar="URL", help="Web UI API 地址")
+
+    group = parser.add_argument_group("D36 分布式扫描")
+    group.add_argument(
         "--distributed", default=None, metavar="MODE", choices=["master", "worker", "standalone"], help="分布式模式"
     )
-    parser.add_argument("--redis-url", default="redis://127.0.0.1:6379", help="Redis URL")
-    parser.add_argument("--distributed-rate", type=int, default=0, help="P3: 分布式全局限速（每秒请求数，0 不限速）")
-    parser.add_argument("--worker-max-tasks", type=int, default=0, help="Worker 最大任务数")
-    parser.add_argument("--distributed-timeout", type=int, default=600, help="分布式超时")
-    # D37 缓存
-    parser.add_argument("--cache", action="store_true", default=False, help="启用缓存")
-    parser.add_argument("--cache-ttl", type=int, default=3600, help="缓存 TTL")
-    parser.add_argument("--cache-db", default="data/scan_cache.db", help="缓存数据库路径")
-    parser.add_argument("--cache-stats", action="store_true", default=False, help="缓存统计")
-    parser.add_argument("--cache-clear", action="store_true", default=False, help="清除过期缓存")
-    parser.add_argument("--cache-clear-all", action="store_true", default=False, help="清除全部缓存")
+    group.add_argument("--redis-url", default="redis://127.0.0.1:6379", help="Redis URL")
+    group.add_argument("--distributed-rate", type=int, default=0, help="P3: 分布式全局限速（每秒请求数，0 不限速）")
+    group.add_argument("--worker-max-tasks", type=int, default=0, help="Worker 最大任务数")
+    group.add_argument("--distributed-timeout", type=int, default=600, help="分布式超时")
+
+    group = parser.add_argument_group("D37 结果缓存")
+    group.add_argument("--cache", action="store_true", default=False, help="启用缓存")
+    group.add_argument("--cache-ttl", type=int, default=3600, help="缓存 TTL")
+    group.add_argument("--cache-db", default="data/scan_cache.db", help="缓存数据库路径")
+    group.add_argument("--cache-stats", action="store_true", default=False, help="缓存统计")
+    group.add_argument("--cache-clear", action="store_true", default=False, help="清除过期缓存")
+    group.add_argument("--cache-clear-all", action="store_true", default=False, help="清除全部缓存")
     return parser
 
 
@@ -189,6 +242,13 @@ def print_help():
         ("--passive", "启动被动代理模式（监听 HTTP/HTTPS 流量）"),
         ("--passive-host", "代理监听地址（默认 127.0.0.1）"),
         ("--passive-port", "代理监听端口（默认 8080）"),
+        ("--components", "组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）"),
+        ("--no-components", "关闭组件版本检测"),
+        ("--nuclei <dir|file>", "加载 nuclei YAML 模板（可多次指定）"),
+        ("--nuclei-tags <a,b>", "仅加载含指定 tag 的模板"),
+        ("--nuclei-severity <s>", "仅加载指定严重度模板（high/medium/low）"),
+        ("--nuclei-exclude-tags <a,b>", "排除含指定 tag 的模板"),
+        ("--nuclei-validate <path>", "校验 nuclei 模板（不扫描）"),
         ("--report-format <f>", "报告格式 html/json/csv/pdf/docx/xlsx/sarif"),
         ("--no-dedup", "关闭结果去重聚合"),
         ("--chain <name>", "执行漏洞利用链"),
@@ -197,9 +257,11 @@ def print_help():
         ("--serve", "启动 Web API 服务（FastAPI + WebSocket + Web 控制台）"),
         ("--host <addr>", "API 服务监听地址（默认 0.0.0.0）"),
         ("--port <n>", "API 服务监听端口（默认 8000）"),
-        ("--api-key <key>", "API Key 鉴权"),
+        ("--api-key <key>", "API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）"),
         ("--cors-origins <o>", "允许的 CORS 源（逗号分隔）"),
         ("--db-path <path>", "SQLite 数据库路径"),
+        ("--schedule <cron>", "定时扫描表达式（cron 5 段式 或 every:<秒>）"),
+        ("--schedule-target <url>", "定时扫描目标 URL"),
         ("--crawl", "启用主动爬虫"),
         ("--crawl-depth <n>", "爬虫最大深度（默认 2）"),
         ("--crawl-max-pages <n>", "爬虫最大页面数（默认 50）"),
@@ -219,6 +281,15 @@ def print_help():
         ("--plugin-init <name>", "生成插件模板"),
         ("--plugin-check <path>", "验证插件文件完整性"),
         ("--plugin-list", "列出所有已加载插件"),
+        ("--plugin-export <dir>", "导出插件源码与元信息到目录（模板仓库）"),
+        ("--plugin-manifest <dir>", "生成/校验 manifest.json（Ed25519 签名）"),
+        ("--plugin-update [url]", "从模板仓库更新插件（默认官方仓库）"),
+        ("--ai <desc>", "AI 生成插件（LLM 优先，无 Key 降级规则模板）"),
+        ("--ai-name <name>", "AI 插件名称（默认取描述）"),
+        ("--ai-api-key <key>", "LLM API Key（环境变量 RUOYI_AI_API_KEY）"),
+        ("--ai-model <model>", "LLM 模型名（默认 gpt-4o-mini）"),
+        ("--ai-retries <n>", "AI 自验证最大重试轮数"),
+        ("--ai-report [zh|en]", "AI 生成漏洞分析摘要（报告生成后，无 Key 降级模板）"),
         ("--ci", "CI 模式"),
         ("--severity-threshold <level>", "CI 失败阈值（默认 high）"),
         ("--ci-init <platform>", "生成 CI 配置（github/gitlab/jenkins）"),
@@ -318,6 +389,10 @@ def main(argv=None):
             args.plugin_new,
             args.plugin_check,
             args.plugin_list,
+            args.plugin_export,
+            args.plugin_manifest,
+            args.plugin_update,
+            args.ai,
             args.ci_init,
             args.wiki,
             args.oast_server,
@@ -327,6 +402,7 @@ def main(argv=None):
             args.distributed,
             args.cache_stats,
             args.cache_clear,
+            args.nuclei_validate,
         ]
     )
     if args.help is not None or not has_mode:

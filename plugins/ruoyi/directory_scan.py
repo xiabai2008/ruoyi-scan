@@ -42,7 +42,7 @@ class DirectoryScanPlugin(PluginBase):
         "# 预期响应：HTTP 200 即表示端点未授权可访问"
     )
     # D2：目录扫描全版本适用（取决于目标配置）
-    affected_versions = ""
+    affected_versions = ""  # recon 类目录探测与版本无关，全版本适用
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A05:2021"

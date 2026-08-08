@@ -90,3 +90,6 @@ VERSION = "1.1.0"
 AUTHOR = "XIABAI"
 GITHUB = "https://github.com/xiabai2008/Ruoyi-Scan"
 CONTACT = "https://github.com/xiabai2008"
+
+# E5：插件模板仓库地址（--plugin-update 默认拉取源，占位待官方仓库建立）
+PLUGIN_REPO_URL = ""

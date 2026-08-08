@@ -15,11 +15,15 @@ from cli.runner import (
     run_diff_only_mode,
     run_mode,
     run_mode_batch,
+    run_nuclei_validate_mode,
     run_passive_mode,
     run_plugin_check_mode,
     run_plugin_init_mode,
     run_plugin_list_mode,
     run_plugin_new_mode,
+    run_plugin_export_mode,
+    run_plugin_manifest_mode,
+    run_plugin_update_mode,
     run_serve_mode,
     run_template_list_mode,
     run_wiki_mode,
@@ -82,6 +86,26 @@ def dispatch(args: Namespace) -> None:
         from lib.cache import run_cache_clear_mode
 
         run_cache_clear_mode(args)
+        return
+    # E4：nuclei 模板校验（不扫描）
+    if args.nuclei_validate:
+        run_nuclei_validate_mode(args.nuclei_validate)
+        return
+    # E5：插件模板仓库（导出/清单/更新）
+    if args.plugin_export:
+        run_plugin_export_mode(args.plugin_export)
+        return
+    if args.plugin_manifest:
+        run_plugin_manifest_mode(args.plugin_manifest)
+        return
+    if args.plugin_update:
+        run_plugin_update_mode(args.plugin_update)
+        return
+    # E7：AI POC 生成器（--ai）
+    if args.ai:
+        from lib.ai_generator import run_ai_generate_mode
+
+        run_ai_generate_mode(args)
         return
 
     # ── 服务/链/代理模式（独立进程）──

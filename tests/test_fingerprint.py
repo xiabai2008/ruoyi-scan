@@ -230,6 +230,142 @@ def test_d15_cms_count():
     print("PASS test_d15_cms_count: %d 个 CMS" % len(cms_list))
 
 
+# === E1 若依变体指纹库测试 ===
+
+
+def test_e1_variants_registered():
+    """E1: 5 个若依变体特征已注册（vue3/app/plus/cloud-plus/magic）"""
+    from core.fingerprint_features import get_variant_feature, list_variants
+
+    variants = list_variants()
+    for v in ["ruoyi-vue3", "ruoyi-app", "ruoyi-plus", "ruoyi-cloud-plus", "ruoyi-magic"]:
+        assert v in variants, f"缺少变体 {v}"
+        feat = get_variant_feature(v)
+        assert feat is not None and feat["display"], f"变体 {v} 特征不完整"
+    print("PASS test_e1_variants_registered: %d 个变体" % len(variants))
+
+
+def test_e1_detect_variant_plus():
+    """E1: /auth/login 命中 + /captcha/image 404 → ruoyi-plus"""
+    from core.fingerprint import detect_variant
+
+    sess = FakeSession(
+        {
+            "http://target/auth/login": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/auth/logout": FakeResp("", 200, {"Content-Type": "text/html"}),
+            "http://target/captcha/image": FakeResp("", 404),
+        }
+    )
+    variant = detect_variant("http://target/", sess)
+    assert variant == "ruoyi-plus", f"应识别为 ruoyi-plus，实际 {variant}"
+    print("PASS test_e1_detect_variant_plus: %s" % variant)
+
+
+def test_e1_detect_variant_app():
+    """E1: /prod-api/app/ 命中 → ruoyi-app"""
+    from core.fingerprint import detect_variant
+
+    sess = FakeSession(
+        {
+            "http://target/prod-api/app/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+        }
+    )
+    variant = detect_variant("http://target/", sess)
+    assert variant == "ruoyi-app", f"应识别为 ruoyi-app，实际 {variant}"
+    print("PASS test_e1_detect_variant_app: %s" % variant)
+
+
+def test_e1_detect_variant_cloud_plus_excluded_by_prod_api():
+    """E1: /prod-api/ 200 → 排除 ruoyi-cloud-plus（微服务版负向特征）"""
+    from core.fingerprint import detect_variant
+
+    sess = FakeSession(
+        {
+            "http://target/auth/login": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/prod-api/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+        }
+    )
+    variant = detect_variant("http://target/", sess)
+    assert variant != "ruoyi-cloud-plus", f"不应识别为 ruoyi-cloud-plus，实际 {variant}"
+    print("PASS test_e1_detect_variant_cloud_plus_excluded_by_prod_api: %s" % variant)
+
+
+def test_e1_detect_variant_unknown():
+    """E1: 无变体强特征 → 返回 ''（通用版）"""
+    from core.fingerprint import detect_variant
+
+    sess = FakeSession({})
+    variant = detect_variant("http://target/", sess)
+    assert variant == "", f"应返回空变体，实际 {variant}"
+    print("PASS test_e1_detect_variant_unknown: %s" % variant)
+
+
+def test_e1_detect_cms_variant_integration():
+    """E1: detect_cms 集成 — ruoyi 主指纹 + app 变体识别"""
+    html = "<html><head><title>若依管理系统</title></head><body>RuoYi</body></html>"
+    sess = FakeSession(
+        {
+            "http://target/": FakeResp(html, 200, {"Content-Type": "text/html"}),
+            "http://target/prod-api/app/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+        }
+    )
+    res = detect_cms("http://target/", sess)
+    assert res.cms == "ruoyi", res.cms
+    assert res.variant == "ruoyi-app", f"variant 应为 ruoyi-app，实际 {res.variant}"
+    assert any("variant" in m for m in res.matched), res.matched
+    print("PASS test_e1_detect_cms_variant_integration: cms=%s variant=%s" % (res.cms, res.variant))
+
+
+def test_e1_router_variant_mapping():
+    """E1: Router 变体映射 — 全部变体路由到 plugins.ruoyi"""
+    from core.router import Router
+
+    for v in ["ruoyi-vue3", "ruoyi-app", "ruoyi-plus", "ruoyi-cloud-plus", "ruoyi-magic"]:
+        plugins = Router().resolve_by_name(v)
+        assert len(plugins) >= 10, f"变体 {v} 路由插件数异常: {len(plugins)}"
+    print("PASS test_e1_router_variant_mapping: 5 个变体均路由到 plugins.ruoyi")
+
+
+def test_e1_router_variant_filter():
+    """E1: Router variant 过滤 — variant 专用插件只在匹配变体执行"""
+    from common.models import FingerprintResult
+    from core.router import Router
+    from plugins.base import PluginBase
+
+    class AppOnlyPlugin(PluginBase):
+        name = "app_only_test"
+        variant = "ruoyi-app"
+        category = "vuln"
+
+        def verify(self, target, session):
+            from common.models import ScanResult, STATUS_SAFE
+
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE)
+
+    # 动态追加到 plugin_list 验证过滤逻辑（不影响全局）
+    import plugins.ruoyi as pkg
+
+    orig_list = list(pkg.plugin_list)
+    try:
+        pkg.plugin_list.append(AppOnlyPlugin)
+        fp = FingerprintResult(cms="ruoyi", variant="ruoyi-app", confidence=1.0, matched=["test"])
+        plugins = Router().resolve(fp)
+        names = [getattr(p, "name", "") for p in plugins]
+        assert "app_only_test" in names, f"ruoyi-app 应包含 app_only_test，实际 {names}"
+        fp2 = FingerprintResult(cms="ruoyi", variant="ruoyi-plus", confidence=1.0, matched=["test"])
+        plugins2 = Router().resolve(fp2)
+        names2 = [getattr(p, "name", "") for p in plugins2]
+        assert "app_only_test" not in names2, f"ruoyi-plus 不应包含 app_only_test，实际 {names2}"
+        # 无 variant（通用）时全变体适用
+        fp3 = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
+        plugins3 = Router().resolve(fp3)
+        names3 = [getattr(p, "name", "") for p in plugins3]
+        assert "app_only_test" in names3, "通用 ruoyi 应包含 app_only_test"
+    finally:
+        pkg.plugin_list = orig_list
+    print("PASS test_e1_router_variant_filter")
+
+
 if __name__ == "__main__":
     test_ruoyi_login_page_keyword()
     test_ruoyi_captcha_image()
@@ -240,4 +376,12 @@ if __name__ == "__main__":
     test_router_resolves_ruoyi()
     test_detect_cms_selects_spring()
     test_router_resolves_spring()
+    test_e1_variants_registered()
+    test_e1_detect_variant_plus()
+    test_e1_detect_variant_app()
+    test_e1_detect_variant_cloud_plus_excluded_by_prod_api()
+    test_e1_detect_variant_unknown()
+    test_e1_detect_cms_variant_integration()
+    test_e1_router_variant_mapping()
+    test_e1_router_variant_filter()
     print("ALL_FP_TESTS_PASS")

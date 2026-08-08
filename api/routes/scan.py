@@ -1,7 +1,7 @@
 # D9 扫描任务路由：提交/查询/取消/结果
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.deps import get_orchestrator, get_registry
 from api.models.schemas import ScanCreateRequest, ScanCreateResponse, ScanResultDTO, ScanTaskDTO
@@ -9,6 +9,52 @@ from core.orchestrator import ScanOrchestrator, ScanRequest
 from core.task_registry import TaskRegistry
 
 router = APIRouter(tags=["扫描任务"])
+
+# E9：定时扫描任务路由（管理端）
+schedule_router = APIRouter(tags=["定时扫描"])
+
+
+@schedule_router.get("/schedule", summary="列出定时扫描任务")
+async def list_schedules(request: Request):
+    """列出全部定时扫描任务（E9）"""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    return scheduler.list_jobs()
+
+
+@schedule_router.post("/schedule", summary="创建定时扫描任务")
+async def create_schedule(request: Request, body: dict):
+    """创建定时扫描任务（E9）
+
+    body: {"cron": "*/5 * * * *" 或 "every:300", "target": "http://...", "mode": "u"}
+    """
+    from lib.scheduler import parse_schedule_expr
+
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    cron = body.get("cron", "")
+    target = body.get("target", "")
+    mode = body.get("mode", "u")
+    if not cron or not target:
+        raise HTTPException(status_code=400, detail="cron 与 target 必填")
+    try:
+        parse_schedule_expr(cron)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    job_id = scheduler.add_job(cron, target, mode=mode, payload=body.get("payload") or {})
+    return {"job_id": job_id, "cron": cron, "target": target, "status": "scheduled"}
+
+
+@schedule_router.delete("/schedule/{job_id}", summary="删除定时扫描任务")
+async def delete_schedule(job_id: str, request: Request):
+    """删除定时扫描任务（E9）"""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    scheduler.remove_job(job_id)
+    return {"job_id": job_id, "status": "removed"}
 
 
 @router.post("/scan", response_model=ScanCreateResponse, summary="提交扫描任务")

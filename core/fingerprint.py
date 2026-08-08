@@ -4,7 +4,7 @@ import re
 
 from common.logger import get_logger
 from common.models import FingerprintResult
-from core.fingerprint_features import get_feature, list_cms
+from core.fingerprint_features import get_feature, get_variant_feature, list_cms, list_variants
 from core.session import SessionManager
 
 logger = get_logger(__name__)
@@ -125,6 +125,73 @@ class RuoyiFingerprint(FeatureBasedFingerprint):
         super().__init__("ruoyi")
 
 
+def detect_variant(target: str, session: SessionManager, cache=None) -> str:
+    """E1：若依变体细分识别（仅在主 CMS=ruoyi 确认后调用）
+
+    遍历 VARIANT_FEATURES 注册的变体：
+      1. strong_paths 命中 >=1（复用 expect 语义，走 cache 避免重复请求）
+      2. negative_paths 全部未命中（404/非 200 才算排除成立）
+    多个变体命中时取强特征命中数最多者；全部未命中返回 ''（通用版）。
+
+    Args:
+        target: 目标 URL
+        session: SessionManager 实例
+        cache: 可选 FingerprintCache（多 CMS 遍历时共享响应）
+
+    Returns:
+        变体标识字符串（如 'ruoyi-vue3'），未识别返回 ''
+    """
+
+    def _get(url):
+        if cache is not None:
+            return cache.get(url)
+        return session.get(url)
+
+    def _expect_ok(r, expect):
+        """复用主指纹的 expect 语义：json/image/any"""
+        if r.status_code != 200:
+            return False
+        ct = (r.headers.get("Content-Type") or "").lower()
+        body = r.text or ""
+        if expect == "json":
+            return ("json" in ct) and ("code" in body or "msg" in body)
+        if expect == "image":
+            return "image" in ct
+        return True
+
+    best_variant = ""
+    best_hits = 0
+    for variant in list_variants():
+        f = get_variant_feature(variant)
+        if not f:
+            continue
+        hits = 0
+        # 负向特征：任一命中（200 且符合 expect）→ 排除该变体
+        excluded = False
+        for item in f.get("negative_paths", []):
+            try:
+                r = _get(target + item["path"].lstrip("/"))
+                if r.status_code == 200:
+                    excluded = True
+                    break
+            except Exception:
+                continue
+        if excluded:
+            continue
+        # 正向强特征路径
+        for item in f.get("strong_paths", []):
+            try:
+                r = _get(target + item["path"].lstrip("/"))
+                if _expect_ok(r, item.get("expect", "any")):
+                    hits += 1
+            except Exception:
+                continue
+        if hits > 0 and hits > best_hits:
+            best_hits = hits
+            best_variant = variant
+    return best_variant
+
+
 def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     """多 CMS 指纹识别：遍历所有注册 CMS，返回置信度最高的结果
 
@@ -147,6 +214,14 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
             best = res
     # D2：若依版本探测（仅对 ruoyi 做，其他 CMS 暂不支持）
     if best.cms == "ruoyi":
+        # E1：变体细分识别（复用 cache，不增加额外请求数之外的请求）
+        try:
+            variant = detect_variant(target, session, cache=cache)
+            if variant:
+                best.variant = variant
+                best.matched.append("variant:%s" % variant)
+        except Exception:
+            logger.debug("若依变体识别失败", exc_info=True)
         try:
             from core.http import join_url
             from core.ruoyi_versions import extract_version

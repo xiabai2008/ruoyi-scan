@@ -11,17 +11,24 @@ class Router:
     # 显式映射兜底（优先于动态推导）
     # 注：thinkphp / weaver / shiro / struts2 已迁移至 cms-scan-extras/，本项目专注若依做深
     # P0：ruoyi-cloud 也路由到 plugins.ruoyi（共享若依插件包）
+    # E1：若依全部变体（vue3/app/plus/cloud-plus/magic）共享 plugins.ruoyi 插件包
     mapping = {
         "ruoyi": "plugins.ruoyi",
         "ruoyi-cloud": "plugins.ruoyi",
+        "ruoyi-vue3": "plugins.ruoyi",
+        "ruoyi-app": "plugins.ruoyi",
+        "ruoyi-plus": "plugins.ruoyi",
+        "ruoyi-cloud-plus": "plugins.ruoyi",
+        "ruoyi-magic": "plugins.ruoyi",
         "spring": "plugins.spring",
     }
 
     def resolve(self, fingerprint_result: FingerprintResult) -> List[type]:
-        """根据指纹结果返回插件类列表（D2：按 affected_versions 过滤）
+        """根据指纹结果返回插件类列表（D2：按 affected_versions 过滤；E1：按 variant 过滤）
 
         D2 阶段：若指纹识别出版本号，则过滤掉 affected_versions 不匹配的插件。
         版本未识别（空串）时不过滤，保守策略：跑全部 POC。
+        E1 阶段：若识别出变体，则过滤掉 variant 不匹配的插件（插件 variant='' 表示全变体适用）。
 
         Args:
             fingerprint_result: FingerprintResult 实例（含 cms / version / confidence）
@@ -32,6 +39,14 @@ class Router:
         if not cms:
             return []
         plugins = self.resolve_by_name(cms)
+        # E1：按 variant 过滤（插件 variant='' 全变体适用）
+        variant = getattr(fingerprint_result, "variant", "") or ""
+        if variant:
+            plugins = [
+                cls
+                for cls in plugins
+                if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
+            ]
         # D2：按 affected_versions 过滤
         version = getattr(fingerprint_result, "version", "") or ""
         if version:

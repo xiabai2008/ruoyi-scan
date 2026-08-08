@@ -107,6 +107,13 @@ class ScanRequest:
     template: str = ""
     # P0：外部插件路径列表（--plugin-path 可多次指定）
     plugin_paths: Optional[List[str]] = None
+    # E2：组件版本检测（--components 启用；默认关闭，向后兼容）
+    components: bool = False
+    # E4：nuclei YAML 模板（--nuclei 可多次指定路径/目录）
+    nuclei_paths: Optional[List[str]] = None
+    nuclei_tags: Optional[List[str]] = None
+    nuclei_severity: Optional[List[str]] = None
+    nuclei_exclude_tags: Optional[List[str]] = None
 
 
 @dataclass
@@ -145,6 +152,7 @@ class ScanTask:
             "error": self.error,
             "fingerprint": {
                 "cms": self.fingerprint.cms if self.fingerprint else "",
+                "variant": getattr(self.fingerprint, "variant", "") if self.fingerprint else "",
                 "confidence": self.fingerprint.confidence if self.fingerprint else 0,
                 "matched": self.fingerprint.matched if self.fingerprint else [],
             }
@@ -378,6 +386,7 @@ class ScanOrchestrator:
                 {
                     "cms": fp_result.cms,
                     "version": fp_result.version,
+                    "variant": getattr(fp_result, "variant", ""),
                     "confidence": fp_result.confidence,
                     "matched": fp_result.matched,
                     "task_id": task.task_id,
@@ -396,6 +405,30 @@ class ScanOrchestrator:
                     "task_id": task.task_id,
                 },
             )
+
+            # E2：组件版本检测（--components 启用）
+            component_results = []
+            if req.components:
+                from lib.component_detect import ComponentDetector, to_scan_result
+
+                try:
+                    detector = ComponentDetector()
+                    component_results = detector.detect_all(target, session, ruoyi_version=fp_result.version)
+                    for cr in component_results:
+                        _emit(
+                            "component",
+                            {
+                                "component": cr.component,
+                                "status": cr.status,
+                                "cve": cr.cve,
+                                "detected_version": cr.detected_version,
+                                "evidence": cr.evidence,
+                                "task_id": task.task_id,
+                            },
+                        )
+                except Exception as e:
+                    logger.debug("组件检测失败", exc_info=True)
+                    _emit("component", {"error": str(e), "task_id": task.task_id})
 
             waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
 
@@ -447,6 +480,24 @@ class ScanOrchestrator:
                         },
                     )
 
+            # E5: 用户安装目录插件（~/.ruoyi-scan/plugins/，--plugin-update 安装）
+            try:
+                from lib.plugin_repo import load_user_installed_plugins
+
+                user_plugins = load_user_installed_plugins()
+                if user_plugins:
+                    all_plugins = all_plugins + user_plugins
+                    _emit(
+                        "plugins_loaded",
+                        {
+                            "user_plugin_count": len(user_plugins),
+                            "total_count": len(all_plugins),
+                            "task_id": task.task_id,
+                        },
+                    )
+            except Exception:
+                logger.debug("用户插件目录加载失败", exc_info=True)
+
             # P1: entry_points 注册的第三方插件（pip install 自动发现）
             try:
                 from core.loader import load_entry_point_plugins
@@ -464,6 +515,31 @@ class ScanOrchestrator:
                     )
             except Exception:
                 logger.debug("entry_points 插件加载失败", exc_info=True)
+
+            # E4: nuclei YAML 模板（--nuclei）
+            if req.nuclei_paths:
+                from lib.nuclei_loader import load_nuclei_templates
+
+                try:
+                    nuclei_plugins = load_nuclei_templates(
+                        req.nuclei_paths,
+                        tags=req.nuclei_tags,
+                        severities=req.nuclei_severity,
+                        exclude_tags=req.nuclei_exclude_tags,
+                    )
+                    if nuclei_plugins:
+                        all_plugins = all_plugins + nuclei_plugins
+                        _emit(
+                            "plugins_loaded",
+                            {
+                                "nuclei_count": len(nuclei_plugins),
+                                "total_count": len(all_plugins),
+                                "task_id": task.task_id,
+                            },
+                        )
+                except Exception as e:
+                    logger.debug("nuclei 模板加载失败", exc_info=True)
+                    _emit("nuclei_error", {"error": str(e), "task_id": task.task_id})
 
             # 指定插件过滤（API 可指定插件子集）
             if req.plugins:
@@ -552,10 +628,29 @@ class ScanOrchestrator:
 
             task.results = all_results
             task.request_count = session.request_count
+            # E2：组件检测结果并入任务结果（报告统计口径：vuln 类 CONFIRMED 计入）
+            for cr in component_results:
+                all_results.append(to_scan_result(cr))
+            task.results = all_results
             session.close()
 
             # 8. 报告生成（可选）
             if req.report_dir:
+                # E3：版本对照矩阵（检测版本 vs 各插件适用性）
+                version_matrix = []
+                if fp_result.version:
+                    from core.ruoyi_versions import version_in_range
+
+                    for cls in all_plugins:
+                        spec = getattr(cls, "affected_versions", "") or ""
+                        version_matrix.append(
+                            {
+                                "name": getattr(cls, "name", cls.__name__),
+                                "category": getattr(cls, "category", ""),
+                                "affected_versions": spec or "全版本",
+                                "applicable": version_in_range(fp_result.version, spec),
+                            }
+                        )
                 summary = {
                     "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(task.started_at)),
                     "duration": time.time() - task.started_at,
@@ -563,9 +658,12 @@ class ScanOrchestrator:
                     "mode": req.mode,
                     "fingerprint": {
                         "cms": fp_result.cms,
+                        "variant": getattr(fp_result, "variant", ""),
+                        "version": fp_result.version,
                         "confidence": fp_result.confidence,
                         "matched": fp_result.matched,
                     },
+                    "version_matrix": version_matrix,
                 }
                 builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
                 formats = self._parse_formats(req.report_format)

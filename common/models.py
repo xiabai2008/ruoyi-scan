@@ -77,3 +77,40 @@ class FingerprintResult:
     version: str = ""
     confidence: float = 0.0  # 0~1
     matched: List[str] = field(default_factory=list)  # 命中的特征列表
+    # E1：变体标识（如 ruoyi-vue3 / ruoyi-plus；空串=通用版或未细分，向后兼容）
+    variant: str = ""
+
+
+@dataclass
+class ComponentVersionResult:
+    """E2：组件版本检测结果（fastjson/SpringBoot/Shiro/Nacos/Log4j）
+
+    由 lib/component_detect.py 产出，经 orchestrator 转换为 ScanResult
+    （category='component'）进入统一报告管线。
+    """
+
+    component: str = ""  # 组件名（fastjson/spring-boot/shiro/nacos/log4j）
+    detected_version: str = ""  # 已识别版本（'' = 无法识别）
+    status: str = STATUS_UNKNOWN  # 三态判定
+    cve: str = ""  # 命中的 CVE（有则 CONFIRMED 依据）
+    fix_version: str = ""  # 建议升级版本
+    evidence: str = ""  # 探测证据
+    url: str = ""  # 探测 URL
+    severity: str = SEVERITY_MEDIUM
+    cvss_score: float = 0.0
+    compliance: Dict[str, str] = field(default_factory=dict)  # 合规映射
+
+    def to_dict(self) -> dict:
+        """转为字典（报告渲染用）"""
+        return {
+            "component": self.component,
+            "detected_version": self.detected_version,
+            "status": self.status,
+            "cve": self.cve,
+            "fix_version": self.fix_version,
+            "evidence": self.evidence,
+            "url": self.url,
+            "severity": self.severity,
+            "cvss_score": self.cvss_score,
+            "compliance": self.compliance,
+        }

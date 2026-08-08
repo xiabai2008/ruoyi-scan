@@ -145,6 +145,8 @@ class PluginBase(ABC):
     reproduce = ""
     # D2：影响版本范围（空串表示全版本适用，如 '>=4.2,<4.6'）
     affected_versions = ""
+    # E1：适用变体标识（空串=全变体适用；如 'ruoyi-app' / 'ruoyi-plus'）
+    variant = ""
     # D12：CVSS 评分与合规映射
     cvss_vector = ""  # CVSS v3.1 向量字符串（如 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'）
     compliance = ""  # 合规映射标签（如 '等保2.0:8.1.3;OWASP:A03:2021'）
@@ -223,4 +225,5 @@ class PluginBase(ABC):
             "cvss_score": cvss_score(self.cvss_vector),
             "compliance": parse_compliance(self.compliance),
             "affected_versions": self.affected_versions,
+            "variant": self.variant,
         }
