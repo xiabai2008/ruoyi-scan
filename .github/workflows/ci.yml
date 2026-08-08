@@ -78,12 +78,14 @@ jobs:
         run: |
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
             --target http://127.0.0.1:8080/ --mode p \
-            --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed
+            --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed \
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权"
       - name: Spring signature lab
         run: |
           python scripts/run_e2e.py --lab lab/spring_server.py --lab-port 8091 \
             --target http://127.0.0.1:8091/ --mode p \
-            --report-dir /tmp/e2e/spring --name spring-signature --require-all-confirmed
+            --report-dir /tmp/e2e/spring --name spring-signature --require-all-confirmed \
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权"
 
   # ── D8 报告格式验收：PDF/Word/Excel 生成 + 去重聚合 + 降级 ──────────
   report-format:

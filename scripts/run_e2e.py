@@ -82,14 +82,24 @@ def run_scan(target, mode, report_dir):
     subprocess.run(cmd, cwd=REPO_ROOT, check=True, stdin=subprocess.DEVNULL)
 
 
-def check_report(json_path, name, min_confirmed, require_all):
-    """解析 report.json 并断言，返回是否通过"""
+def check_report(json_path, name, min_confirmed, require_all, allow_safe_names=None):
+    """解析 report.json 并断言，返回是否通过
+
+    Args:
+        json_path: report.json 路径
+        name: 标签（日志显示）
+        min_confirmed: CONFIRMED 数量下限
+        require_all: 是否要求全部 CONFIRMED
+        allow_safe_names: SAFE/UNKNOWN 豁免名单（插件名集合，如 F7 中间件插件——
+            签名靶场未部署 Redis/MinIO/RocketMQ，属预期 SAFE）
+    """
+    allow_safe = set(allow_safe_names or [])
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     results = data.get("results", [])
     confirmed = sum(1 for r in results if r.get("status") == STATUS_CONFIRMED)
-    safe = sum(1 for r in results if r.get("status") == STATUS_SAFE)
-    unknown = sum(1 for r in results if r.get("status") == STATUS_UNKNOWN)
+    safe = sum(1 for r in results if r.get("status") == STATUS_SAFE and r.get("name") not in allow_safe)
+    unknown = sum(1 for r in results if r.get("status") == STATUS_UNKNOWN and r.get("name") not in allow_safe)
     print(f"[{name}] total={len(results)} CONFIRMED={confirmed} SAFE={safe} UNKNOWN={unknown}")
 
     ok = True
@@ -126,6 +136,12 @@ def main(argv=None):
         action="store_true",
         help="要求所有 result 均为 CONFIRMED（签名靶场 vuln 模式用此断言）",
     )
+    p.add_argument(
+        "--allow-safe",
+        default=None,
+        metavar="NAME1,NAME2",
+        help="SAFE/UNKNOWN 豁免插件名（逗号分隔；如签名靶场未部署的中间件插件）",
+    )
     p.add_argument("--timeout", type=int, default=30, help="等待端口可达的超时秒数")
     a = p.parse_args(argv)
 
@@ -148,7 +164,8 @@ def main(argv=None):
             print(f"[{a.name}] FAIL: 报告未生成 {json_path}")
             return 1
 
-        ok = check_report(json_path, a.name, a.min_confirmed, a.require_all_confirmed)
+        allow_safe = [n.strip() for n in (a.allow_safe or "").split(",") if n.strip()]
+        ok = check_report(json_path, a.name, a.min_confirmed, a.require_all_confirmed, allow_safe_names=allow_safe)
         return 0 if ok else 1
     except subprocess.CalledProcessError as e:
         print(f"[{a.name}] FAIL: 扫描进程异常退出 (returncode={e.returncode})")
