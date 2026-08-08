@@ -76,11 +76,16 @@ def mock_network(mock_router):
 
     适用于 API 集成测试（test_api_scan / test_api_ws）和
     orchestrator 的 submit/run_sync 测试，避免真实网络请求和插件加载。
+
+    注意：detect_cms 返回真实 FingerprintResult（而非裸 MagicMock），
+    保证 fingerprint 事件 payload 可 JSON 序列化（WS 推送 / 历史落盘契约）。
     """
+    from common.models import FingerprintResult
+
     with patch("core.orchestrator.detect_cms") as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
         "core.orchestrator.load_plugins"
     ) as mock_load:
-        mock_cms.return_value = MagicMock(cms="", version="", confidence=0, matched=[])
+        mock_cms.return_value = FingerprintResult(cms="", version="", confidence=0, matched=[])
         mock_waf.return_value = {"waf": "", "display": "", "bypass_hint": ""}
         mock_load.return_value = []
         yield {"router": mock_router, "cms": mock_cms, "waf": mock_waf, "load": mock_load}

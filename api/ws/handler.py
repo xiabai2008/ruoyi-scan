@@ -7,6 +7,9 @@ from core.task_registry import TaskRegistry
 
 router = APIRouter()
 
+# 心跳间隔（秒）：事件队列空闲时发送 ping 保持连接（测试可缩短验证）
+HEARTBEAT_INTERVAL = 30.0
+
 
 async def scan_ws(websocket: WebSocket, task_id: str):
     """WebSocket 端点：订阅扫描任务实时事件
@@ -61,7 +64,7 @@ async def scan_ws(websocket: WebSocket, task_id: str):
         while True:
             # 等待新事件（带超时心跳）
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_INTERVAL)
                 await websocket.send_json(event)
 
                 # 任务完成事件后关闭连接

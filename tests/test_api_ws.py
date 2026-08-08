@@ -294,26 +294,23 @@ def test_ws_receives_historical_events(ws_client):
         assert data["task_id"] == task_id
 
 
-def test_ws_ping_heartbeat(ws_client):
-    """WebSocket 心跳机制（30秒超时发送 ping）"""
-    resp = ws_client.post("/api/scan", json={"target": "http://x.com/", "mode": "p"})
-    task_id = resp.json()["task_id"]
+def test_ws_ping_heartbeat(ws_client, monkeypatch):
+    """WebSocket 心跳机制（间隔可配置，缩短后验证 ping 送达）"""
+    import api.ws.handler as handler
 
-    # 连接后任务可能在 pending 状态，连接应保持
-    try:
-        with ws_client.websocket_connect(f"/ws/scan/{task_id}") as ws:
-            # 接收所有历史事件（可能多个）
-            for _ in range(10):
-                try:
-                    data = ws.receive_json()
-                    if data.get("type") == "ping":
-                        assert "ts" in data["data"]
-                        break
-                except Exception:
-                    break
-    except Exception:
-        # 连接关闭是正常的（任务完成后自动关闭）
-        pass
+    # 缩短心跳间隔到 1 秒（原 30 秒等待会触发 CI 超时）
+    monkeypatch.setattr(handler, "HEARTBEAT_INTERVAL", 1.0)
+    # 手动注册一个 running 任务（不依赖后台扫描时序，队列保持空闲）
+    registry = ws_client.app.state.registry
+    registry.register(
+        "hb-task",
+        {"task_id": "hb-task", "status": "running", "target": "http://x.com/", "mode": "p"},
+    )
+
+    with ws_client.websocket_connect("/ws/scan/hb-task") as ws:
+        data = ws.receive_json()
+        assert data.get("type") == "ping", "1 秒内应收到 ping 心跳"
+        assert "ts" in data.get("data", {})
 
 
 def test_ws_closed_on_task_completion(ws_client):
