@@ -13,6 +13,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -120,7 +121,9 @@ def build_manifest(out_dir: str, version: str = "1.0.0", sign_key_path: str = ""
         manifest 字典（已写入 out_dir/manifest.json）
     """
     hashes = {}
-    for root, _dirs, names in os.walk(out_dir):
+    for root, dirs, names in os.walk(out_dir):
+        # 排除 .git 等元目录（manifest 只描述分发内容）
+        dirs[:] = [d for d in dirs if d != ".git"]
         for n in sorted(names):
             if n in ("manifest.json",):
                 continue
@@ -232,6 +235,18 @@ def verify_manifest(manifest: dict, repo_dir: str, pubkey_path: str = "") -> Lis
 # === 远程更新 ===
 
 
+def _github_api_fallback(url: str) -> str:
+    """GitHub codeload 受限时的 API 回退地址
+
+    示例：https://github.com/o/r/archive/refs/heads/main.zip
+          → https://api.github.com/repos/o/r/zipball/main
+    """
+    m = re.match(r"https?://github\.com/([^/]+)/([^/]+)/archive/refs/heads/([^/]+)\.zip", url)
+    if m:
+        return "https://api.github.com/repos/%s/%s/zipball/%s" % (m.group(1), m.group(2), m.group(3))
+    return ""
+
+
 def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int = 30) -> List[str]:
     """从远程仓库下载 zip → 校验 → 安装到用户插件目录
 
@@ -251,11 +266,28 @@ def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int 
     import requests
 
     dest = dest_dir or user_plugin_dir()
-    try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-    except Exception as e:
-        raise ValueError("仓库下载失败: %s" % e)
+    candidates = [url]
+    fb = _github_api_fallback(url)
+    if fb:
+        candidates.append(fb)
+    resp = None
+    last_err = ""
+    for candidate in candidates:
+        try:
+            # GitHub codeload/api 要求合法 User-Agent（python-requests 默认 UA 会 403）
+            resp = requests.get(
+                candidate,
+                timeout=timeout,
+                headers={"User-Agent": "ruoyi-scan/1.1.0"},
+            )
+            resp.raise_for_status()
+            break
+        except Exception as e:
+            last_err = str(e)
+            resp = None
+            continue
+    if resp is None:
+        raise ValueError("仓库下载失败: %s" % last_err)
 
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_repo_")
     try:

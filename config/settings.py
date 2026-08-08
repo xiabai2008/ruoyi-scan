@@ -91,5 +91,5 @@ AUTHOR = "XIABAI"
 GITHUB = "https://github.com/xiabai2008/Ruoyi-Scan"
 CONTACT = "https://github.com/xiabai2008"
 
-# E5：插件模板仓库地址（--plugin-update 默认拉取源，占位待官方仓库建立）
-PLUGIN_REPO_URL = ""
+# E5：插件模板仓库地址（--plugin-update 默认拉取源）
+PLUGIN_REPO_URL = "https://github.com/xiabai2008/ruoyi-scan-templates/archive/refs/heads/main.zip"
