@@ -43,9 +43,14 @@ class JeecgDefaultPasswordPlugin(PluginBase):
         if resp.status_code == 200 and "token" in text:
             print(ok("存在 JeecgBoot 默认口令"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="admin/123456 登录成功（响应含 token）",
-                fix=self.fix, extra={"vuln_type": "default_password", "plugin_name": "jeecg_default_pw"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="admin/123456 登录成功（响应含 token）",
+                fix=self.fix,
+                extra={"vuln_type": "default_password", "plugin_name": "jeecg_default_pw"},
             )
         print(no("不存在 JeecgBoot 默认口令"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

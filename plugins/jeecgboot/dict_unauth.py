@@ -38,9 +38,14 @@ class JeecgDictUnauthPlugin(PluginBase):
         if resp.status_code == 200 and match_all(text, ["records", "code"]):
             print(ok("存在 JeecgBoot 字典越权"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="未授权返回字典列表 JSON",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "jeecg_dict_unauth"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="未授权返回字典列表 JSON",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "jeecg_dict_unauth"},
             )
         print(no("不存在 JeecgBoot 字典越权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

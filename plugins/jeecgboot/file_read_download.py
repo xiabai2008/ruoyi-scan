@@ -17,7 +17,7 @@ class JeecgFileReadDownloadPlugin(PluginBase):
         "【升级方案】升级至 JeecgBoot 3.5.1+（download 路径校验修复）\n"
         "【代码修复】CommonController.download 对 fileName 做规范化校验：\n"
         "  Path path = Paths.get(fileName).normalize();\n"
-        "  if (!path.startsWith(uploadRoot)) { throw new ServiceException(\"非法路径\"); }\n"
+        '  if (!path.startsWith(uploadRoot)) { throw new ServiceException("非法路径"); }\n'
         "【WAF 规则】拦截 fileName 参数含 ../ 与 ..%2f 的请求\n"
         "【合规】OWASP A01:2021 失效的访问控制；等保 2.0 8.1.4"
     )
@@ -40,9 +40,14 @@ class JeecgFileReadDownloadPlugin(PluginBase):
         if match_all(text, ["root", ":/"]):
             print(ok("存在 JeecgBoot 任意文件读取"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="响应含 root 与 :/ 特征（/etc/passwd）",
-                fix=self.fix, extra={"vuln_type": "arbitrary_file_read", "plugin_name": "jeecg_file_read"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="响应含 root 与 :/ 特征（/etc/passwd）",
+                fix=self.fix,
+                extra={"vuln_type": "arbitrary_file_read", "plugin_name": "jeecg_file_read"},
             )
         print(no("不存在 JeecgBoot 任意文件读取"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

@@ -27,7 +27,7 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
         '  -H "Content-Type: application/json" \\\n'
         '  -d \'{"dbType":"MYSQL","dbName":"test","url":"jdbc:mysql://127.0.0.1:3306/test",'
         '"userName":"root","password":"x","connUrl":"jdbc:mysql://127.0.0.1:3306/test?query='
-        '${7*7}"}\'\n'
+        "${7*7}\"}'\n"
         "# 预期响应：响应体含 49（Freemarker 表达式求值成功）"
     )
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
@@ -51,9 +51,14 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
         if resp.status_code == 200 and "49" in text:
             print(ok("存在 JeecgBoot 报表 SSTI"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="响应含 49（${7*7} 模板求值）",
-                fix=self.fix, extra={"vuln_type": "ssti", "plugin_name": "jeecg_ssti"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="响应含 49（${7*7} 模板求值）",
+                fix=self.fix,
+                extra={"vuln_type": "ssti", "plugin_name": "jeecg_ssti"},
             )
         print(no("不存在 JeecgBoot 报表 SSTI"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

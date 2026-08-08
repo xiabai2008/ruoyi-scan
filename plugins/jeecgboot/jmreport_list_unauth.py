@@ -16,7 +16,7 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
     fix_detail = (
         "【升级方案】升级至 JeecgBoot 3.5.2+\n"
         "【配置加固】sa-token 拦截器配置中移除 /jmreport/** 白名单：\n"
-        '  # application.yml\n  sa-token:\n    exclude-path-list: []  # 移除 jmreport 免鉴权\n'
+        "  # application.yml\n  sa-token:\n    exclude-path-list: []  # 移除 jmreport 免鉴权\n"
         "【合规】OWASP A01:2021 失效的访问控制；等保 2.0 8.1.4"
     )
     reproduce = (
@@ -40,9 +40,14 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
         if resp.status_code == 200 and match_all(text, ["records", "code"]):
             print(ok("存在 JeecgBoot 报表未授权"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="未授权返回报表列表 JSON",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "jeecg_jmreport_list"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="未授权返回报表列表 JSON",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "jeecg_jmreport_list"},
             )
         print(no("不存在 JeecgBoot 报表未授权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

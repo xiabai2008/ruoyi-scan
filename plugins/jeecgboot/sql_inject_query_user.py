@@ -49,9 +49,14 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
         ):
             print(ok("存在 JeecgBoot queryUserByDepId SQL注入"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="响应含 SQL 报错特征（extractvalue/XPATH）",
-                fix=self.fix, extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_query_user"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="响应含 SQL 报错特征（extractvalue/XPATH）",
+                fix=self.fix,
+                extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_query_user"},
             )
         print(no("不存在 JeecgBoot queryUserByDepId SQL注入"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

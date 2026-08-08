@@ -35,9 +35,9 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
         # multipart 探针（上传无害 txt，仅验证接口可写）
         boundary = "----ruoyi-scan-probe"
         body = (
-            "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"ruoyi_scan_probe.txt\"\r\n"
+            '--%s\r\nContent-Disposition: form-data; name="file"; filename="ruoyi_scan_probe.txt"\r\n'
             "Content-Type: text/plain\r\n\r\nruoyi-scan-probe\r\n"
-            "--%s\r\nContent-Disposition: form-data; name=\"biz\"\r\n\r\ntest\r\n"
+            '--%s\r\nContent-Disposition: form-data; name="biz"\r\n\r\ntest\r\n'
             "--%s--\r\n" % (boundary, boundary, boundary)
         )
         try:
@@ -53,9 +53,14 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
         if resp.status_code == 200 and match_all(text, ["url", "fileName"]):
             print(ok("存在 JeecgBoot jmreport 文件上传"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="上传接口返回 url/fileName（可写）",
-                fix=self.fix, extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="上传接口返回 url/fileName（可写）",
+                fix=self.fix,
+                extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
             )
         print(no("不存在 JeecgBoot jmreport 文件上传"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

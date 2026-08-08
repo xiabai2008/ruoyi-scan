@@ -48,9 +48,14 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
         if resp.status_code == 200 and match_all(text, ["code", "result"]):
             print(ok("存在 JeecgBoot jmreport SQL注入"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="SQL 执行接口返回业务 JSON",
-                fix=self.fix, extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_jmreport"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="SQL 执行接口返回业务 JSON",
+                fix=self.fix,
+                extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_jmreport"},
             )
         print(no("不存在 JeecgBoot jmreport SQL注入"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
