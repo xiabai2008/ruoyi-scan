@@ -26,19 +26,24 @@
 
 | Module | Description |
 |--------|-------------|
-| `plugins/ruoyi/` | 16 RuoYi POCs (file read, SQL injection, RCE, SSTI, unauthorized access, etc.) |
+| `plugins/ruoyi/` | 16 RuoYi POCs (file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
 | `plugins/spring/` | 14 Spring Boot POCs (Actuator, Gateway, Jolokia, Spring4Shell, etc.) |
 | `plugins/common/` | Common vulnerability package (.git/.env leakage, backup files, CORS, Swagger, etc.) |
-| Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven |
+| Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven + RuoYi variant subdivision |
+| Component version detection | fastjson/SpringBoot/Shiro/Nacos/Log4j version → CVE mapping (`--components`) |
 | Three-state verdict | CONFIRMED (confirmed present) / SAFE (confirmed absent) / UNKNOWN (cannot be determined) |
 | WAF bypass | 11 bypass strategies + three-state verdict protection matrix + success-rate tracking |
 | Exploit chains | DAG topological orchestration + conditional branches + 3 built-in chains |
+| nuclei template compatible | Run nuclei-templates YAML directly (`--nuclei`, HTTP protocol subset + safety whitelist) |
+| Plugin template repo | Export/manifest/Ed25519 signing/`--plugin-update` community distribution |
+| AI POC generation | `--ai` natural-language plugin generation (LLM self-verify loop, rule fallback without key) |
+| AI report analysis | `--ai-report zh\|en` auto vulnerability analysis & fix priority |
 | Batch scanning | `-f targets.txt` multi-target + aggregated summary report |
-| Report output | HTML (SVG charts) / JSON / CSV / PDF / Word / Excel / SARIF |
-| Web API | FastAPI REST + WebSocket real-time push + Web console |
+| Report output | HTML (SVG charts) / JSON / CSV / PDF / Word / Excel / SARIF + version matrix |
+| Web API | FastAPI REST + WebSocket real-time push + Web console + role-based keys (read/scan/admin) + scheduled scans |
 | Concurrency & rate limiting | ThreadPoolExecutor + token bucket (sleep outside lock, no concurrency degradation) |
 | CAPTCHA handling | Auto-detect / OCR recognition / skip — three modes |
-| Multi-version adaptation | RuoYi 4.2 / 4.7 / v5 version-aware POC filtering |
+| Multi-version adaptation | RuoYi 4.2 / 4.7 / v5 / v3.9.x version-aware POC filtering |
 | Port scanning | TCP port scan + service identification + banner grabbing |
 | Passive proxy | HTTP/HTTPS proxy, captures traffic for automatic scanning |
 | OAST out-of-band detection | Self-hosted callback server + 6 payload templates (SSRF/XXE/blind SQLi/blind RCE/LDAP/command injection) |
@@ -52,7 +57,7 @@
 | Authenticated scanning | Cookie / Token / Bearer / auto-login — 4 auth injection types |
 | Internationalization | Chinese/English report switching (`--lang zh|en`) |
 | Plugin SDK | Template generation + validation + enumeration (`--plugin-init` / `--plugin-check`) |
-| CI/CD integration | Severity-threshold exit + GitHub/GitLab/Jenkins template generation |
+| CI/CD integration | Severity-threshold exit + GitHub Code Scanning (SARIF) + GitLab/Jenkins templates |
 | Vulnerability knowledge base | Offline HTML Wiki + JSON API |
 
 ---

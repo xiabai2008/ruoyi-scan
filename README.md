@@ -38,19 +38,24 @@
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 16 个 POC（文件读取、SQL 注入、RCE、SSTI、未授权等） |
+| `plugins/ruoyi/` | 若依 16 个 POC（文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
 | `plugins/common/` | 通用漏洞包（.git/.env 泄露、备份文件、CORS、Swagger 等） |
-| 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 |
+| 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
+| 组件版本检测 | fastjson/SpringBoot/Shiro/Nacos/Log4j 版本比对 CVE 映射（`--components`） |
 | 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
 | WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 成功率追踪 |
 | 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |
+| nuclei 模板兼容 | 直接执行 nuclei-templates YAML 模板（`--nuclei`，http 协议子集 + 安全白名单） |
+| 插件模板仓库 | 导出/manifest/Ed25519 签名/`--plugin-update` 社区分发闭环 |
+| AI POC 生成 | `--ai` 自然语言生成插件（LLM 自验证回灌，无 Key 降级规则模板） |
+| AI 报告解读 | `--ai-report zh\|en` 自动生成漏洞分析与修复优先级 |
 | 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
-| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF |
-| Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 |
+| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF + 版本对照表 |
+| Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 + 权限分级（read/scan/admin）+ 定时扫描 |
 | 并发限速 | ThreadPoolExecutor + 令牌桶（锁外 sleep，无并发退化） |
 | 验证码处理 | 自动探测 / OCR 识别 / 跳过 三模式 |
-| 多版本适配 | RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤 |
+| 多版本适配 | RuoYi 4.2 / 4.7 / v5 / v3.9.x 版本感知 POC 过滤 |
 | 端口扫描 | TCP 端口扫描 + 服务识别 + Banner 抓取 |
 | 被动代理 | HTTP/HTTPS 代理，捕获流量自动扫描 |
 | OAST 带外检测 | 自建回调服务器 + 6 种 payload 模板（SSRF/XXE/SQL盲注/RCE盲注/LDAP/命令注入） |
@@ -64,7 +69,7 @@
 | 认证扫描 | Cookie / Token / Bearer / 自动登录 4 种认证注入 |
 | 国际化 | 中英文报告切换（`--lang zh|en`） |
 | 插件 SDK | 模板生成 + 验证 + 枚举（`--plugin-init` / `--plugin-check`） |
-| CI/CD 集成 | 严重度阈值退出 + GitHub/GitLab/Jenkins 模板生成 |
+| CI/CD 集成 | 严重度阈值退出 + GitHub Code Scanning（SARIF）+ GitLab/Jenkins 模板 |
 | 漏洞知识库 | 离线 HTML Wiki + JSON API |
 
 ---
@@ -116,6 +121,21 @@ python main.py -p http://target:8080/ --bypass-waf auto
 # 执行漏洞利用链
 python main.py --chain ruoyi_sql_to_rce -u http://target:8080/
 python main.py --chain list  # 列出可用链
+
+# 组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j → CVE 比对）
+python main.py -p http://target:8080/ --components
+
+# 执行 nuclei 模板（nuclei-templates 生态直接复用）
+python main.py -p http://target:8080/ --nuclei examples/nuclei/
+python main.py --nuclei-validate examples/nuclei/  # 模板校验（不扫描）
+
+# AI 生成插件（LLM 自验证回灌；无 Key 时降级规则模板）
+python main.py --ai "检测若依任意文件读取漏洞" --category ruoyi
+
+# 插件模板仓库（社区分发）
+python main.py --plugin-export ./ruoyi-scan-templates
+python main.py --plugin-manifest ./ruoyi-scan-templates  # 生成/校验 manifest（Ed25519 签名）
+python main.py --plugin-update  # 从官方仓库更新插件
 
 # Web API 服务
 python main.py --serve
