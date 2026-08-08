@@ -23,8 +23,10 @@ jobs:
         run: ruff check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
       - name: Ruff format check
         run: ruff format --check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
-      - name: Mypy type check（common/ + core/，strict 模式）
-        run: mypy common/ core/ --strict --ignore-missing-imports || true
+      - name: Mypy type check（common/ 硬门禁 + core/ 软门禁，strict 模式）
+        run: |
+          mypy common/ --strict --ignore-missing-imports
+          mypy core/ --strict --ignore-missing-imports || true
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   unit:

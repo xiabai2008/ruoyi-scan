@@ -1,7 +1,7 @@
-# Release workflow：打 tag 自动构建 wheel + sdist 并上传到 GitHub Release
+# Release workflow：打 tag 自动构建 wheel + sdist + 校验和并上传到 GitHub Release
 #
 # 触发条件：推送 v* 格式的 tag（如 v1.1.0）
-# 产物：ruoyi_scan-<version>-py3-none-any.whl + ruoyi_scan-<version>.tar.gz
+# 产物：ruoyi_scan-<version>-py3-none-any.whl + ruoyi_scan-<version>.tar.gz + checksums.txt
 # 用户从 Release 页面下载后执行 pip install <file> 即可安装
 name: Release
 
@@ -29,6 +29,12 @@ jobs:
           pip install build
           python -m build
 
+      # F8：生成 SHA256 校验文件（供应链完整性）
+      - name: Generate checksums
+        run: |
+          sha256sum dist/*.whl dist/*.tar.gz > dist/checksums.txt
+          cat dist/checksums.txt
+
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -37,3 +43,4 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
+            dist/checksums.txt

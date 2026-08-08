@@ -44,11 +44,11 @@ class ScanResult:
     compliance: Dict[str, str] = field(default_factory=dict)  # 合规映射 {'等保2.0': '8.1.3', 'OWASP': 'A03:2021'}
 
     @property
-    def is_vuln(self):
+    def is_vuln(self) -> bool:
         """是否确认存在漏洞"""
         return self.status == STATUS_CONFIRMED
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """转为字典（报告渲染用）"""
         return {
             "kind": self.kind,
@@ -100,7 +100,7 @@ class ComponentVersionResult:
     cvss_score: float = 0.0
     compliance: Dict[str, str] = field(default_factory=dict)  # 合规映射
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """转为字典（报告渲染用）"""
         return {
             "component": self.component,
