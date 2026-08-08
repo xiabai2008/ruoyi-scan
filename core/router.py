@@ -12,6 +12,7 @@ class Router:
     # 注：thinkphp / weaver / shiro / struts2 已迁移至 cms-scan-extras/，本项目专注若依做深
     # P0：ruoyi-cloud 也路由到 plugins.ruoyi（共享若依插件包）
     # E1：若依全部变体（vue3/app/plus/cloud-plus/magic）共享 plugins.ruoyi 插件包
+    # F5：JeecgBoot 独立插件包（第一个拓展框架，证明基建通用）
     mapping = {
         "ruoyi": "plugins.ruoyi",
         "ruoyi-cloud": "plugins.ruoyi",
@@ -21,6 +22,7 @@ class Router:
         "ruoyi-cloud-plus": "plugins.ruoyi",
         "ruoyi-magic": "plugins.ruoyi",
         "spring": "plugins.spring",
+        "jeecgboot": "plugins.jeecgboot",
     }
 
     def resolve(self, fingerprint_result: FingerprintResult) -> List[type]:

@@ -84,7 +84,7 @@ def mock_network(mock_router):
 
     with patch("core.orchestrator.detect_cms") as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
         "core.orchestrator.load_plugins"
-    ) as mock_load:
+    ) as mock_load, patch("lib.plugin_repo.load_user_installed_plugins", return_value=[]):
         mock_cms.return_value = FingerprintResult(cms="", version="", confidence=0, matched=[])
         mock_waf.return_value = {"waf": "", "display": "", "bypass_hint": ""}
         mock_load.return_value = []

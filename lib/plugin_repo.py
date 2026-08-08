@@ -335,8 +335,21 @@ def load_user_installed_plugins() -> List[type]:
 
     递归发现 .py 单文件插件（模板仓库结构：plugins/ruoyi/xxx.py），
     复用 core.loader._load_external_file 机制；校验失败跳过不阻断。
+
+    去重策略：与内置插件包（plugins.ruoyi/spring/common/jeecgboot）同名的
+    插件类跳过——内置优先，用户副本不重复执行（模板仓库会安装内置包的副本，
+    避免同一插件跑两遍 / 版本漂移）。
     """
-    from core.loader import _load_external_file
+    from core.loader import _load_external_file, discover_plugin_packages, load_plugins
+
+    # 内置插件类名集合（去重基准）
+    builtin_names = set()
+    try:
+        for pkg in discover_plugin_packages():
+            for cls in load_plugins(pkg):
+                builtin_names.add(getattr(cls, "name", cls.__name__))
+    except Exception:
+        pass
 
     base = user_plugin_dir()
     results = []
@@ -349,5 +362,10 @@ def load_user_installed_plugins() -> List[type]:
             if p in seen:
                 continue
             seen.add(p)
-            results.extend(_load_external_file(p, logger))
+            for cls in _load_external_file(p, logger):
+                cls_name = getattr(cls, "name", cls.__name__)
+                if cls_name in builtin_names:
+                    logger.debug("跳过与内置重名的用户插件: %s", cls_name)
+                    continue
+                results.append(cls)
     return results
