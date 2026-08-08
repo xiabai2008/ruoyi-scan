@@ -67,7 +67,5 @@ jobs:
             --label "acceptance" \
             --body "Nightly 真实靶场验收未通过，详见 acceptance.json artifact.
 
-```
-$(cat acceptance.json)
-```
-"
+          $(cat acceptance.json)
+          "
