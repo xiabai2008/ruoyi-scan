@@ -44,9 +44,14 @@ class PlusJobUnauthPlugin(PluginBase):
         ):
             print(ok("存在 RuoYi-Plus 定时任务未授权"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="未携带 token 返回任务列表 JSON",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "plus_job_unauth"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="未携带 token 返回任务列表 JSON",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "plus_job_unauth"},
             )
         print(no("不存在 RuoYi-Plus 定时任务未授权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

@@ -51,9 +51,14 @@ class MinioUnauthPlugin(PluginBase):
         if match_positive(text2, ["bucket", "storage-class", "minio"]):
             print(ok("存在 MinIO 未授权访问"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=root_url, evidence="无凭证返回 bucket 列表",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=root_url,
+                evidence="无凭证返回 bucket 列表",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
             )
         print(no("不存在 MinIO 未授权访问"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=root_url)

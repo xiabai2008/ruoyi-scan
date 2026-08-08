@@ -42,7 +42,9 @@ class RedisUnauthPlugin(PluginBase):
         parsed = urlparse(target)
         host = parsed.hostname or ""
         if not host:
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=target, evidence="无法解析目标主机")
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=target, evidence="无法解析目标主机"
+            )
         port = 6379
         url = "%s:%d" % (host, port)
         try:
@@ -67,9 +69,14 @@ class RedisUnauthPlugin(PluginBase):
         # 未授权判定：INFO 返回 redis 版本信息（有 auth 时返回 -NOAUTH）
         if "redis_version" in text and "-NOAUTH" not in text and "DENIED" not in text:
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="无认证执行 INFO（响应含 redis_version）",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "redis_unauth"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="无认证执行 INFO（响应含 redis_version）",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "redis_unauth"},
             )
         if "-NOAUTH" in text or "DENIED" in text:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="Redis 已启用认证")

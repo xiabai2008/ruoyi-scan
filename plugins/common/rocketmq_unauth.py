@@ -20,10 +20,7 @@ class RocketmqUnauthPlugin(PluginBase):
         "【升级方案】升级 RocketMQ 至 4.9.4+/5.1.1+（修复 CVE-2023-33246）\n"
         "【合规】OWASP A01:2021 失效的访问控制；等保 2.0 8.1.4"
     )
-    reproduce = (
-        'curl "http://target/rocketmq/"\n'
-        "# 预期响应：返回 RocketMQ Dashboard HTML（含 rocketmq 标题/图表资源）"
-    )
+    reproduce = 'curl "http://target/rocketmq/"\n# 预期响应：返回 RocketMQ Dashboard HTML（含 rocketmq 标题/图表资源）'
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     vuln_type = "unauth"
@@ -50,9 +47,14 @@ class RocketmqUnauthPlugin(PluginBase):
         if evidence_url:
             print(ok("存在 RocketMQ Dashboard 未授权"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=evidence_url, evidence="未授权返回 Dashboard 页面",
-                fix=self.fix, extra={"vuln_type": "unauth", "plugin_name": "rocketmq_unauth"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=evidence_url,
+                evidence="未授权返回 Dashboard 页面",
+                fix=self.fix,
+                extra={"vuln_type": "unauth", "plugin_name": "rocketmq_unauth"},
             )
         print(no("不存在 RocketMQ Dashboard 未授权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=target)

@@ -49,9 +49,14 @@ class PlusAuthLoginProbePlugin(PluginBase):
         if resp.status_code in (200, 400, 401, 500) and match_positive(text, ["code", "msg"]):
             print(ok("确认 RuoYi-Plus 认证服务（建议人工验证登录风控）"))
             return ScanResult(
-                kind="vuln", name=self.name, severity=self.severity, status=STATUS_CONFIRMED,
-                url=url, evidence="认证接口返回业务 JSON（Sa-Token 架构确认）",
-                fix=self.fix, extra={"vuln_type": "auth", "plugin_name": "plus_auth_probe"},
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="认证接口返回业务 JSON（Sa-Token 架构确认）",
+                fix=self.fix,
+                extra={"vuln_type": "auth", "plugin_name": "plus_auth_probe"},
             )
         print(no("未探测到 RuoYi-Plus 认证服务"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
