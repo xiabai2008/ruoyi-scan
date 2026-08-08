@@ -63,11 +63,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
-            --title "⚠️ Nightly 验收失败（$(date -u +%Y-%m-%d)）" \
+            --title "Nightly 验收失败（$(date -u +%Y-%m-%d)）" \
             --label "acceptance" \
-            --body "Nightly 真实靶场验收未通过，详见 acceptance.json artifact。
+            --body "Nightly 真实靶场验收未通过，详见 acceptance.json artifact.
 
-\`\`\`json
+```
 $(cat acceptance.json)
-\`\`\`
+```
 "
