@@ -456,6 +456,19 @@ python tests/regression_spring.py
 
 ---
 
+## 贡献
+
+欢迎贡献 POC 与改进：
+
+- **报告 Bug / 请求 POC**：使用 [Issue 模板](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose)（Bug / POC 请求 / 功能请求）
+- **提交 POC**：`python main.py --plugin-init <name>` 生成骨架 → 实现 `verify()`（三态判定）→ `--plugin-check` 验证 → PR（模板含完整 checklist）
+- **插件分发**：合入后自动进入 [ruoyi-scan-templates](https://github.com/xiabai2008/ruoyi-scan-templates) 官方仓库（Ed25519 签名）
+- **开发指南**：[docs/PLUGIN_DEV.md](docs/PLUGIN_DEV.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
+
+> 贡献 POC 前请先在自建靶场（`lab/`）或授权目标上复现，确保判定特征真实可靠。
+
+---
+
 ## 安全与合规
 
 本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。
