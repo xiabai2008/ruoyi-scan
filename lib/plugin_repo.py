@@ -23,6 +23,7 @@ from common.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 # 用户插件安装目录（~/.ruoyi-scan/plugins/）
 def user_plugin_dir() -> str:
     """返回用户插件安装目录（不存在时创建）"""
@@ -62,7 +63,6 @@ def export_plugins(out_dir: str) -> Dict[str, str]:
         {相对路径: sha256} 摘要表（用于 manifest）
     """
     import importlib
-    import pkgutil
 
     hashes: Dict[str, str] = {}
     os.makedirs(out_dir, exist_ok=True)
@@ -219,7 +219,6 @@ def verify_manifest(manifest: dict, repo_dir: str, pubkey_path: str = "") -> Lis
         if os.path.isfile(pubkey_path):
             try:
                 from cryptography.hazmat.primitives import serialization
-                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
                 with open(pubkey_path, "rb") as f:
                     pub = serialization.load_pem_public_key(f.read())
@@ -248,6 +247,7 @@ def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int 
         ValueError: 下载/校验/安装失败
     """
     import io
+
     import requests
 
     dest = dest_dir or user_plugin_dir()

@@ -12,7 +12,7 @@
 import json
 import os
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ComponentVersionResult, ScanResult
@@ -94,6 +94,7 @@ def _infer_from_ruoyi_version(component: str, ruoyi_version: str) -> str:
 
 # ── 各组件探测器 ──
 
+
 def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentVersionResult:
     """fastjson 探测：错误页关键字 + 若依版本推断（零侵入）"""
     url = ""
@@ -117,17 +118,27 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
             m = match_cve("fastjson", inferred)
             if m:
                 return ComponentVersionResult(
-                    component="fastjson", detected_version=inferred, status=STATUS_CONFIRMED,
-                    cve=m.get("cve", ""), fix_version=m.get("fix", ""), evidence="%s（由若依版本推断）" % evidence, url=url,
+                    component="fastjson",
+                    detected_version=inferred,
+                    status=STATUS_CONFIRMED,
+                    cve=m.get("cve", ""),
+                    fix_version=m.get("fix", ""),
+                    evidence="%s（由若依版本推断）" % evidence,
+                    url=url,
                     cvss_score=float(m.get("cvss", 0)),
                 )
             return ComponentVersionResult(
-                component="fastjson", detected_version=inferred, status=STATUS_SAFE,
-                evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, inferred), url=url,
+                component="fastjson",
+                detected_version=inferred,
+                status=STATUS_SAFE,
+                evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, inferred),
+                url=url,
             )
         return ComponentVersionResult(
-            component="fastjson", status=STATUS_UNKNOWN,
-            evidence="%s，版本无法识别（建议人工确认 pom.xml）" % evidence, url=url,
+            component="fastjson",
+            status=STATUS_UNKNOWN,
+            evidence="%s，版本无法识别（建议人工确认 pom.xml）" % evidence,
+            url=url,
             fix_version=fallback_note("fastjson") and None,
         )
     # 2. 若依版本推断（无关键字泄漏时）
@@ -136,17 +147,24 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
         m = match_cve("fastjson", inferred)
         if m:
             return ComponentVersionResult(
-                component="fastjson", detected_version=inferred, status=STATUS_CONFIRMED,
-                cve=m.get("cve", ""), fix_version=m.get("fix", ""),
-                evidence="由若依版本 %s 推断" % ruoyi_version, cvss_score=float(m.get("cvss", 0)),
+                component="fastjson",
+                detected_version=inferred,
+                status=STATUS_CONFIRMED,
+                cve=m.get("cve", ""),
+                fix_version=m.get("fix", ""),
+                evidence="由若依版本 %s 推断" % ruoyi_version,
+                cvss_score=float(m.get("cvss", 0)),
             )
         return ComponentVersionResult(
-            component="fastjson", detected_version=inferred, status=STATUS_SAFE,
+            component="fastjson",
+            detected_version=inferred,
+            status=STATUS_SAFE,
             evidence="由若依版本推断，版本 %s 不在已知 CVE 区间" % inferred,
         )
     # 3. 无法判定（fastjson 为后端库，无特征时无法确认不存在）
     return ComponentVersionResult(
-        component="fastjson", status=STATUS_UNKNOWN,
+        component="fastjson",
+        status=STATUS_UNKNOWN,
         evidence="未探测到 fastjson 特征且无法推断版本（默认 UNKNOWN，不判 SAFE）",
     )
 
@@ -193,7 +211,6 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
             # 2. 根路径 Whitelabel / 错误 JSON 特征
             resp = session.get(target)
             text = resp.text or ""
-            headers = str(resp.headers)
             if "Whitelabel Error Page" in text:
                 url = target
                 evidence = "Whitelabel Error Page"
@@ -208,8 +225,9 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
                     url = join_url(target, "/nonexistent-e2e-probe-404")
                     evidence = "404 触发 Whitelabel Error Page"
                 else:
-                    return ComponentVersionResult(component="spring-boot", status=STATUS_UNKNOWN,
-                                                  evidence="未探测到 Spring Boot 特征")
+                    return ComponentVersionResult(
+                        component="spring-boot", status=STATUS_UNKNOWN, evidence="未探测到 Spring Boot 特征"
+                    )
             version = _extract_spring_version(text)
     except Exception:
         return ComponentVersionResult(component="spring-boot", status=STATUS_UNKNOWN, evidence="网络异常")
@@ -223,17 +241,28 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
         m = match_cve("spring-boot", version)
         if m:
             return ComponentVersionResult(
-                component="spring-boot", detected_version=version, status=STATUS_CONFIRMED,
-                cve=m.get("cve", ""), fix_version=m.get("fix", ""), evidence=evidence, url=url,
+                component="spring-boot",
+                detected_version=version,
+                status=STATUS_CONFIRMED,
+                cve=m.get("cve", ""),
+                fix_version=m.get("fix", ""),
+                evidence=evidence,
+                url=url,
                 cvss_score=float(m.get("cvss", 0)),
             )
         return ComponentVersionResult(
-            component="spring-boot", detected_version=version, status=STATUS_SAFE,
-            evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, version), url=url,
+            component="spring-boot",
+            detected_version=version,
+            status=STATUS_SAFE,
+            evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, version),
+            url=url,
         )
     return ComponentVersionResult(
-        component="spring-boot", status=STATUS_UNKNOWN,
-        evidence="%s，版本无法识别" % evidence, url=url, fix_version=fallback_note("spring-boot") and None,
+        component="spring-boot",
+        status=STATUS_UNKNOWN,
+        evidence="%s，版本无法识别" % evidence,
+        url=url,
+        fix_version=fallback_note("spring-boot") and None,
     )
 
 
@@ -248,7 +277,9 @@ def detect_shiro(target: str, session, ruoyi_version: str = "") -> ComponentVers
         set_cookie = resp.headers.get("Set-Cookie", "")
         if "rememberMe=deleteMe" in set_cookie or "rememberMe=deleteMe" in str(resp.headers):
             return ComponentVersionResult(
-                component="shiro", status=STATUS_UNKNOWN, url=url,
+                component="shiro",
+                status=STATUS_UNKNOWN,
+                url=url,
                 evidence="检测到 Shiro rememberMe 特征（rememberMe=deleteMe），版本无法从响应识别",
                 fix_version="1.13.0+",
             )
@@ -281,17 +312,28 @@ def detect_nacos(target: str, session, ruoyi_version: str = "") -> ComponentVers
                 m = match_cve("nacos", version)
                 if m:
                     return ComponentVersionResult(
-                        component="nacos", detected_version=version, status=STATUS_CONFIRMED,
-                        cve=m.get("cve", ""), fix_version=m.get("fix", ""), url=state_url,
-                        evidence="Nacos %s" % version, cvss_score=float(m.get("cvss", 0)),
+                        component="nacos",
+                        detected_version=version,
+                        status=STATUS_CONFIRMED,
+                        cve=m.get("cve", ""),
+                        fix_version=m.get("fix", ""),
+                        url=state_url,
+                        evidence="Nacos %s" % version,
+                        cvss_score=float(m.get("cvss", 0)),
                     )
                 return ComponentVersionResult(
-                    component="nacos", detected_version=version, status=STATUS_SAFE, url=state_url,
+                    component="nacos",
+                    detected_version=version,
+                    status=STATUS_SAFE,
+                    url=state_url,
                     evidence="Nacos %s 不在已知 CVE 区间" % version,
                 )
             return ComponentVersionResult(
-                component="nacos", status=STATUS_UNKNOWN, url=state_url,
-                evidence="Nacos 存在但版本无法识别", fix_version=fallback_note("nacos") and None,
+                component="nacos",
+                status=STATUS_UNKNOWN,
+                url=state_url,
+                evidence="Nacos 存在但版本无法识别",
+                fix_version=fallback_note("nacos") and None,
             )
         # 2. /nacos/ 控制台页面
         console_url = join_url(target, "/nacos/")
@@ -305,7 +347,9 @@ def detect_nacos(target: str, session, ruoyi_version: str = "") -> ComponentVers
                     version = m.group(1)
                     break
             return ComponentVersionResult(
-                component="nacos", detected_version=version, status=STATUS_UNKNOWN if not version else STATUS_SAFE,
+                component="nacos",
+                detected_version=version,
+                status=STATUS_UNKNOWN if not version else STATUS_SAFE,
                 url=console_url,
                 evidence="Nacos 控制台存在%s" % ("，版本 %s" % version if version else "，版本无法识别"),
                 fix_version=fallback_note("nacos") and None,
@@ -322,7 +366,8 @@ def detect_log4j(target: str, session, oast_client=None) -> ComponentVersionResu
     """
     if oast_client is None:
         return ComponentVersionResult(
-            component="log4j", status=STATUS_UNKNOWN,
+            component="log4j",
+            status=STATUS_UNKNOWN,
             evidence="需 --oast 启用带外检测（JNDI 回调），当前未探测",
         )
     try:
@@ -332,9 +377,13 @@ def detect_log4j(target: str, session, oast_client=None) -> ComponentVersionResu
         session.get(url)
         if oast_client.wait_callback(interaction_id=payload_url, timeout=8):
             return ComponentVersionResult(
-                component="log4j", status=STATUS_UNKNOWN, url=url,
+                component="log4j",
+                status=STATUS_UNKNOWN,
+                url=url,
                 evidence="OAST 回调命中：疑似存在 Log4j JNDI 注入（需人工复核，不自动确认）",
-                cve="CVE-2021-44228", fix_version="2.17.1+", cvss_score=10.0,
+                cve="CVE-2021-44228",
+                fix_version="2.17.1+",
+                cvss_score=10.0,
             )
         return ComponentVersionResult(component="log4j", status=STATUS_UNKNOWN, evidence="OAST 未收到回调")
     except Exception as e:

@@ -9,10 +9,7 @@
 # 无 API Key 降级：规则模板模式（描述关键词 → PLUGIN_TEMPLATE 变体 → 生成带 TODO 骨架）
 #
 # 安全提示：AI 生成代码必须人工复核后再用于生产；生成物不自动加入 plugin_list。
-import json
 import os
-import re
-import time
 from typing import Dict, List, Optional, Tuple
 
 from common.logger import get_logger
@@ -169,7 +166,8 @@ def _rule_fallback(description: str, name: str, category: str) -> str:
     # 在 verify 方法中注入 TODO 提示
     source = source.replace(
         "        # TODO: 实现检测逻辑",
-        "        # TODO: 实现检测逻辑（探测建议：%s）\n        # TODO: 三态判定：CONFIRMED/SAFE/UNKNOWN，网络异常绝不判 SAFE" % matched["probe_hint"],
+        "        # TODO: 实现检测逻辑（探测建议：%s）\n        # TODO: 三态判定：CONFIRMED/SAFE/UNKNOWN，网络异常绝不判 SAFE"
+        % matched["probe_hint"],
     )
     return source
 
@@ -207,6 +205,7 @@ def generate_ai_plugin(
     api_key = api_key or AI_API_KEY
     source = None
     used_llm = bool(api_key)
+    errors = []
 
     if used_llm:
         # LLM 主路径 + 自验证回灌循环
@@ -219,7 +218,12 @@ def generate_ai_plugin(
                 },
             ]
             if attempt > 0 and errors:
-                messages.append({"role": "user", "content": "上次生成的代码验证失败：\n%s\n请修复后重新生成完整代码。" % "\n".join(errors)})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "上次生成的代码验证失败：\n%s\n请修复后重新生成完整代码。" % "\n".join(errors),
+                    }
+                )
             try:
                 source = _llm_complete(messages, model=model, api_key=api_key, base_url=base_url)
             except ValueError as e:
@@ -267,7 +271,9 @@ def _clean_code(source: str) -> str:
     return source
 
 
-def _write_source(name: str, category: str, source: str, output_dir: Optional[str] = None, overwrite: bool = False) -> str:
+def _write_source(
+    name: str, category: str, source: str, output_dir: Optional[str] = None, overwrite: bool = False
+) -> str:
     """直接写入 LLM 源码到插件文件
 
     Args:
@@ -300,7 +306,7 @@ def run_ai_generate_mode(args) -> None:
     Args:
         args: argparse Namespace（含 ai/ai_name/ai_api_key/ai_model/ai_category 等）
     """
-    from lib.colors import GREEN, RED, YELLOW
+    from lib.colors import GREEN, RED, RESET, YELLOW
 
     description = args.ai
     name = getattr(args, "ai_name", "") or description
@@ -315,7 +321,10 @@ def run_ai_generate_mode(args) -> None:
 
     try:
         filepath, ok, errors = generate_ai_plugin(
-            description, name, category=category, api_key=api_key,
+            description,
+            name,
+            category=category,
+            api_key=api_key,
             max_retries=getattr(args, "ai_retries", 3),
         )
     except FileExistsError as e:

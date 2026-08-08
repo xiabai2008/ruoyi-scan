@@ -209,8 +209,16 @@ def parse_nuclei_template(filepath: str) -> NucleiTemplate:
             tpl.metadata = meta
 
     # 协议白名单校验（不支持的协议 → 返回空 requests）
-    if data.get("tcp") or data.get("dns") or data.get("ssl") or data.get("file") or data.get("code") \
-            or data.get("javascript") or data.get("websocket") or data.get("headless"):
+    if (
+        data.get("tcp")
+        or data.get("dns")
+        or data.get("ssl")
+        or data.get("file")
+        or data.get("code")
+        or data.get("javascript")
+        or data.get("websocket")
+        or data.get("headless")
+    ):
         logger.debug("模板 %s 含不支持协议，跳过: %s", filepath, list(data.keys()))
         return tpl
 
@@ -290,10 +298,16 @@ def _resolve_vars(tpl: NucleiTemplate, target: str, session=None) -> NucleiTempl
     oast_client = getattr(session, "_oast_client", None)
 
     resolved = NucleiTemplate(
-        id=tpl.id, name=tpl.name, severity=tpl.severity, tags=list(tpl.tags),
-        description=tpl.description, metadata=dict(tpl.metadata),
-        matchers=list(tpl.matchers), extractors=list(tpl.extractors),
-        matchers_condition=tpl.matchers_condition, raw=tpl.raw,
+        id=tpl.id,
+        name=tpl.name,
+        severity=tpl.severity,
+        tags=list(tpl.tags),
+        description=tpl.description,
+        metadata=dict(tpl.metadata),
+        matchers=list(tpl.matchers),
+        extractors=list(tpl.extractors),
+        matchers_condition=tpl.matchers_condition,
+        raw=tpl.raw,
     )
 
     def _sub(value: str) -> str:
@@ -308,6 +322,7 @@ def _resolve_vars(tpl: NucleiTemplate, target: str, session=None) -> NucleiTempl
                     raise ValueError("模板含 {{interactsh-url}} 但未启用 OAST")
                 return oast_client.get_payload("oob")
             raise ValueError("不支持模板变量 {{%s}}" % var)
+
         return _VAR_PATTERN.sub(repl, value)
 
     for req in tpl.requests:
@@ -419,13 +434,19 @@ class NucleiTemplatePlugin:
             tpl = _resolve_vars(self.tpl, target, session=session)
         except ValueError as e:
             return ScanResult(
-                kind="info", name=self.name, status=STATUS_UNKNOWN,
-                url=target, evidence="模板变量解析失败: %s" % e,
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="模板变量解析失败: %s" % e,
             )
         if not tpl.requests:
             return ScanResult(
-                kind="info", name=self.name, status=STATUS_UNKNOWN,
-                url=target, evidence="模板协议不支持（仅支持 http）",
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="模板协议不支持（仅支持 http）",
             )
 
         last_exc = ""
@@ -437,7 +458,8 @@ class NucleiTemplatePlugin:
                 else:
                     req_url = join_url(target, req.path.lstrip("/"))
                 resp = session.request(
-                    req.method, req_url,
+                    req.method,
+                    req_url,
                     headers=req.headers or None,
                     data=req.body or None,
                 )
@@ -475,12 +497,18 @@ class NucleiTemplatePlugin:
                 )
         if last_exc:
             return ScanResult(
-                kind="info", name=self.name, status=STATUS_UNKNOWN,
-                url=target, evidence="请求异常: %s" % last_exc,
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="请求异常: %s" % last_exc,
             )
         return ScanResult(
-            kind="info", name=self.name, status=STATUS_SAFE,
-            url=target, evidence="nuclei 模板未匹配（%s）" % tpl.id,
+            kind="info",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=target,
+            evidence="nuclei 模板未匹配（%s）" % tpl.id,
         )
 
 

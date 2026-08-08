@@ -41,7 +41,9 @@ async def lifespan(app: FastAPI):
     app.state.orchestrator.shutdown()
 
 
-def create_app(api_key: str = "", cors_origins: list = None, db_path: str = "", schedule_expr: str = "", schedule_target: str = "") -> FastAPI:
+def create_app(
+    api_key: str = "", cors_origins: list = None, db_path: str = "", schedule_expr: str = "", schedule_target: str = ""
+) -> FastAPI:
     """创建 FastAPI 应用实例
 
     Args:

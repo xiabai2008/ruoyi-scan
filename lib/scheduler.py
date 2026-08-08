@@ -7,8 +7,7 @@
 #   4. 触发执行：调用 orchestrator.submit 异步扫描（不阻塞调度线程）
 import re
 import threading
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from common.logger import get_logger
 
@@ -75,7 +74,6 @@ class ScanScheduler:
             return self._apscheduler
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
-            from apscheduler.triggers.cron import CronTrigger
         except ImportError:
             return None
         try:
@@ -88,7 +86,9 @@ class ScanScheduler:
 
     # ── 任务管理 ──
 
-    def add_job(self, cron_expr: str, target: str, mode: str = "u", payload: Dict[str, Any] = None, job_id: str = "") -> str:
+    def add_job(
+        self, cron_expr: str, target: str, mode: str = "u", payload: Dict[str, Any] = None, job_id: str = ""
+    ) -> str:
         """添加定时扫描任务
 
         Args:
@@ -102,7 +102,9 @@ class ScanScheduler:
             job_id
         """
         parsed = parse_schedule_expr(cron_expr)
-        job_id = job_id or ("job_" + re.sub(r"[\s:]", "_", cron_expr) + "_" + target.replace("://", "_").replace("/", "_")[:24])
+        job_id = job_id or (
+            "job_" + re.sub(r"[\s:]", "_", cron_expr) + "_" + target.replace("://", "_").replace("/", "_")[:24]
+        )
         job = {
             "cron": cron_expr,
             "target": target,

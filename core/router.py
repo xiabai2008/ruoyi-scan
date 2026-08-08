@@ -43,9 +43,7 @@ class Router:
         variant = getattr(fingerprint_result, "variant", "") or ""
         if variant:
             plugins = [
-                cls
-                for cls in plugins
-                if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
+                cls for cls in plugins if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
             ]
         # D2：按 affected_versions 过滤
         version = getattr(fingerprint_result, "version", "") or ""

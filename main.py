@@ -62,10 +62,14 @@ def build_parser():
     group.add_argument("--passive-host", default="127.0.0.1", help="代理监听地址")
     group.add_argument("--passive-port", type=int, default=8080, help="代理监听端口")
     # E2：组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）
-    group.add_argument("--components", action="store_true", default=False, help="组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）")
+    group.add_argument(
+        "--components", action="store_true", default=False, help="组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）"
+    )
     group.add_argument("--no-components", action="store_true", default=False, help="关闭组件版本检测")
     # E4：nuclei YAML 模板兼容层
-    group.add_argument("--nuclei", action="append", default=None, metavar="DIR/FILE", help="加载 nuclei YAML 模板（可多次指定）")
+    group.add_argument(
+        "--nuclei", action="append", default=None, metavar="DIR/FILE", help="加载 nuclei YAML 模板（可多次指定）"
+    )
     group.add_argument("--nuclei-tags", default=None, metavar="a,b", help="仅加载含指定 tag 的模板")
     group.add_argument("--nuclei-severity", default=None, metavar="high,medium", help="仅加载指定严重度模板")
     group.add_argument("--nuclei-exclude-tags", default=None, metavar="a,b", help="排除含指定 tag 的模板")
@@ -88,7 +92,9 @@ def build_parser():
     group.add_argument("--port", type=int, default=8000, help="API 监听端口")
 
     group = parser.add_argument_group("D11 API 鉴权")
-    group.add_argument("--api-key", default=None, help="API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）")
+    group.add_argument(
+        "--api-key", default=None, help="API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）"
+    )
     group.add_argument("--cors-origins", default=None, help="CORS 源（逗号分隔）")
     group.add_argument("--db-path", default=None, help="SQLite 数据库路径")
 
@@ -143,7 +149,14 @@ def build_parser():
     group = parser.add_argument_group("E5 插件模板仓库")
     group.add_argument("--plugin-export", default=None, metavar="DIR", help="导出插件源码与元信息到目录（模板仓库）")
     group.add_argument("--plugin-manifest", default=None, metavar="DIR", help="生成/校验 manifest.json（Ed25519 签名）")
-    group.add_argument("--plugin-update", default=None, nargs="?", const="default", metavar="URL", help="从模板仓库更新插件（默认官方仓库）")
+    group.add_argument(
+        "--plugin-update",
+        default=None,
+        nargs="?",
+        const="default",
+        metavar="URL",
+        help="从模板仓库更新插件（默认官方仓库）",
+    )
 
     group = parser.add_argument_group("E7 AI 插件生成")
     group.add_argument("--ai", default=None, metavar="DESC", help="AI 生成插件（漏洞描述）")
@@ -153,7 +166,9 @@ def build_parser():
     group.add_argument("--ai-retries", type=int, default=3, help="AI 自验证最大重试轮数")
 
     group = parser.add_argument_group("E8 AI 报告解读")
-    group.add_argument("--ai-report", default=None, nargs="?", const="zh", metavar="zh|en", help="AI 生成漏洞分析摘要（报告生成后）")
+    group.add_argument(
+        "--ai-report", default=None, nargs="?", const="zh", metavar="zh|en", help="AI 生成漏洞分析摘要（报告生成后）"
+    )
 
     group = parser.add_argument_group("D28 CI/CD 集成")
     group.add_argument("--ci", action="store_true", default=False, help="CI 模式")

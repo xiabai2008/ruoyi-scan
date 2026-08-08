@@ -313,13 +313,13 @@ class ReportBuilder:
                 mark = "适用" if ok else "跳过"
                 color = "#27ae60" if ok else "#d9534f"
                 rows_vm.append(
-                    f'<tr><td>{html_module.escape(str(item.get("name", "")))}</td>'
-                    f'<td>{html_module.escape(str(item.get("category", "")))}</td>'
-                    f'<td>{html_module.escape(str(item.get("affected_versions", "全版本")))}</td>'
+                    f"<tr><td>{html_module.escape(str(item.get('name', '')))}</td>"
+                    f"<td>{html_module.escape(str(item.get('category', '')))}</td>"
+                    f"<td>{html_module.escape(str(item.get('affected_versions', '全版本')))}</td>"
                     f'<td style="color:{color}">{mark}</td></tr>'
                 )
             version_html = (
-                f'<h2>版本对照（检测版本：{fp_version or "未识别"}）</h2>'
+                f"<h2>版本对照（检测版本：{fp_version or '未识别'}）</h2>"
                 "<table><thead><tr><th>插件</th><th>类别</th><th>适用版本</th><th>结论</th></tr></thead>"
                 f"<tbody>{''.join(rows_vm)}</tbody></table>"
             )

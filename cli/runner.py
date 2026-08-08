@@ -668,7 +668,9 @@ def run_plugin_manifest_mode(out_dir: str) -> None:
             if manifest.get("signature"):
                 print(f"{GREEN}[*]已签名（Ed25519）{RESET}")
             else:
-                print(f"{YELLOW}[*]未签名（仅摘要校验；生成私钥: cryptography 库 + --plugin-manifest 重复执行自动创建签名密钥）{RESET}")
+                print(
+                    f"{YELLOW}[*]未签名（仅摘要校验；生成私钥: cryptography 库 + --plugin-manifest 重复执行自动创建签名密钥）{RESET}"
+                )
     except Exception as e:
         print(f"{RED}[!]manifest 处理失败: {e}{RESET}")
 
