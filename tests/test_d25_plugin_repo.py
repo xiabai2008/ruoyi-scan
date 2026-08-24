@@ -1,4 +1,5 @@
 # E5 插件模板仓库测试：导出/manifest/摘要校验/签名（可选）/更新安装/用户目录发现
+import hashlib
 import json
 import os
 import shutil
@@ -7,6 +8,13 @@ import tempfile
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
 
 
 def test_export_plugins():
@@ -204,6 +212,187 @@ def test_load_user_installed_plugins():
     print("PASS test_load_user_installed_plugins")
 
 
+# === 供应链安全回归（fail-closed）===
+
+def test_verify_manifest_path_traversal_rejected():
+    """manifest files 含 .. 穿越 → 校验拒绝（防路径穿越）"""
+    from lib.plugin_repo import verify_manifest
+
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_traversal_")
+    try:
+        manifest = {"files": {"../evil.py": "0" * 64}, "signature": ""}
+        errors = verify_manifest(manifest, tmp)
+        assert any("非法路径" in e for e in errors), errors
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("PASS test_verify_manifest_path_traversal_rejected")
+
+
+def test_verify_manifest_requires_signature():
+    """require_signature=True：无签名 manifest → 校验失败（fail-closed，无需 cryptography）"""
+    from lib.plugin_repo import verify_manifest
+
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_sig_required_")
+    try:
+        os.makedirs(os.path.join(tmp, "plugins"), exist_ok=True)
+        demo = os.path.join(tmp, "plugins", "demo.py")
+        with open(demo, "w", encoding="utf-8") as f:
+            f.write("# demo\n")
+        manifest = {
+            "files": {"plugins/demo.py": _file_sha256(demo)},
+            "signature": "",
+        }
+        errors = verify_manifest(manifest, tmp, require_signature=True)
+        assert any("未签名" in e for e in errors), errors
+        # 向后兼容：require_signature=False 时仅摘要校验仍通过
+        errors2 = verify_manifest(manifest, tmp)
+        assert errors2 == [], errors2
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("PASS test_verify_manifest_requires_signature")
+
+
+def test_manifest_signature_required_passes():
+    """require_signature=True 且签名正确（独立密钥）→ 校验通过"""
+    try:
+        import cryptography  # noqa: F401
+    except ImportError:
+        print("SKIP test_manifest_signature_required_passes: cryptography 未安装")
+        return
+    from lib.plugin_repo import _load_or_create_key, _sign_manifest, verify_manifest
+
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_sig_ok_")
+    key_dir = tempfile.mkdtemp(prefix="ruoyi_scan_key_ok_")
+    try:
+        with open(os.path.join(tmp, "a.py"), "w", encoding="utf-8") as f:
+            f.write("x = 1\n")
+        key_path = os.path.join(key_dir, "signing.key")
+        _load_or_create_key(key_path)
+        manifest = {"files": {"a.py": _file_sha256(os.path.join(tmp, "a.py"))}, "signature": ""}
+        manifest["signature"] = _sign_manifest(manifest, key_path)
+        errors = verify_manifest(manifest, tmp, pubkey_path=key_path + ".pub", require_signature=True)
+        assert errors == [], errors
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(key_dir, ignore_errors=True)
+    print("PASS test_manifest_signature_required_passes")
+
+
+def test_manifest_signature_wrong_rejected():
+    """require_signature=True 且签名与公钥不匹配 → 校验失败"""
+    try:
+        import cryptography  # noqa: F401
+    except ImportError:
+        print("SKIP test_manifest_signature_wrong_rejected: cryptography 未安装")
+        return
+    from lib.plugin_repo import _load_or_create_key, _sign_manifest, verify_manifest
+
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_sig_wrong_")
+    key_a = tempfile.mkdtemp(prefix="ruoyi_scan_key_a_")
+    key_b = tempfile.mkdtemp(prefix="ruoyi_scan_key_b_")
+    try:
+        with open(os.path.join(tmp, "a.py"), "w", encoding="utf-8") as f:
+            f.write("x = 1\n")
+        key_path_a = os.path.join(key_a, "signing.key")
+        key_path_b = os.path.join(key_b, "signing.key")
+        _load_or_create_key(key_path_a)
+        _load_or_create_key(key_path_b)
+        manifest = {"files": {"a.py": _file_sha256(os.path.join(tmp, "a.py"))}, "signature": ""}
+        manifest["signature"] = _sign_manifest(manifest, key_path_a)
+        # 用 B 的公钥验 A 的签名 → 必须失败
+        errors = verify_manifest(manifest, tmp, pubkey_path=key_path_b + ".pub", require_signature=True)
+        assert any("签名验证失败" in e for e in errors), errors
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(key_a, ignore_errors=True)
+        shutil.rmtree(key_b, ignore_errors=True)
+    print("PASS test_manifest_signature_wrong_rejected")
+
+
+def _fake_requests_get_with_zip(zip_path):
+    """构造返回指定 zip 字节的 FakeResp 并 monkeypatch requests.get"""
+    import requests
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        content = open(zip_path, "rb").read()
+
+    orig = requests.get
+    requests.get = lambda url, timeout=30, **kwargs: FakeResp()
+    return orig
+
+
+def test_download_rejects_unsigned_manifest():
+    """远程安装强制验签：无签名 manifest → 拒绝（fail-closed，无需 cryptography）"""
+    from lib.plugin_repo import download_and_install
+
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_unsigned_")
+    zip_path = os.path.join(tempfile.mkdtemp(prefix="ruoyi_scan_zip_"), "repo.zip")
+    orig = None
+    try:
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(os.path.join(repo, "plugins"), exist_ok=True)
+        demo = os.path.join(repo, "plugins", "demo.py")
+        with open(demo, "w", encoding="utf-8") as f:
+            f.write("# demo\n")
+        manifest = {
+            "schema": "ruoyi-scan-plugin-repo",
+            "version": "1.0.0",
+            "files": {"plugins/demo.py": _file_sha256(demo)},
+            "signature": "",
+        }
+        with open(os.path.join(repo, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for root, _dirs, names in os.walk(tmp):
+                for n in names:
+                    p = os.path.join(root, n)
+                    zf.write(p, os.path.relpath(p, tmp))
+
+        orig = _fake_requests_get_with_zip(zip_path)
+        try:
+            download_and_install("http://example.com/repo.zip")
+            assert False, "应抛 ValueError（未签名拒绝安装）"
+        except ValueError as e:
+            assert "未签名" in str(e), str(e)
+    finally:
+        if orig is not None:
+            import requests
+
+            requests.get = orig
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(os.path.dirname(zip_path), ignore_errors=True)
+    print("PASS test_download_rejects_unsigned_manifest")
+
+
+def test_download_rejects_zip_slip():
+    """zip 成员名含 .. 穿越 → 解压前拒绝（zip-slip 防护）"""
+    from lib.plugin_repo import download_and_install
+
+    zip_path = os.path.join(tempfile.mkdtemp(prefix="ruoyi_scan_zip_"), "evil.zip")
+    orig = None
+    try:
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../../outside.py", "evil")
+            zf.writestr("plugins/ok.py", "ok")
+
+        orig = _fake_requests_get_with_zip(zip_path)
+        try:
+            download_and_install("http://example.com/evil.zip")
+            assert False, "应抛 ValueError（zip-slip 拒绝）"
+        except ValueError as e:
+            assert "非法路径" in str(e), str(e)
+    finally:
+        if orig is not None:
+            import requests
+
+            requests.get = orig
+        shutil.rmtree(os.path.dirname(zip_path), ignore_errors=True)
+    print("PASS test_download_rejects_zip_slip")
+
+
 if __name__ == "__main__":
     test_export_plugins()
     test_build_and_verify_manifest()
@@ -211,4 +400,10 @@ if __name__ == "__main__":
     test_download_and_install()
     test_download_rejects_bad_zip()
     test_load_user_installed_plugins()
+    test_verify_manifest_path_traversal_rejected()
+    test_verify_manifest_requires_signature()
+    test_manifest_signature_required_passes()
+    test_manifest_signature_wrong_rejected()
+    test_download_rejects_unsigned_manifest()
+    test_download_rejects_zip_slip()
     print("ALL_E5_TESTS_PASS")

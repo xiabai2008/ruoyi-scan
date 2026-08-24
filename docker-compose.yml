@@ -51,14 +51,17 @@ services:
       - monitor
 
   # 若依签名靶场（vuln 模式，端口 8080）
+  # 安全收口：容器内 LAB_HOST=0.0.0.0 保证 scanner/api 互通；宿主端口仅绑定 127.0.0.1，
+  # 避免带洞靶场暴露到局域网（Docker 端口映射在宿主侧的收口）
   lab-ruoyi:
     build: ./lab
     environment:
       - SERVER_FILE=server.py
       - LAB_MODE=vuln
       - LAB_PORT=8080
+      - LAB_HOST=0.0.0.0
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   # Spring Boot 签名靶场（vuln 模式，端口 8091）
   lab-spring:
@@ -67,15 +70,17 @@ services:
       - SERVER_FILE=spring_server.py
       - LAB_MODE=vuln
       - LAB_PORT=8091
+      - LAB_HOST=0.0.0.0
     ports:
-      - "8091:8091"
+      - "127.0.0.1:8091:8091"
 
   # D16 Prometheus 指标采集（仅 monitor profile 启用）
+  # 安全收口：宿主端口仅绑定 127.0.0.1，监控端点不暴露到局域网
   prometheus:
     image: prom/prometheus:latest
     profiles: ["monitor"]
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -91,11 +96,12 @@ services:
       - monitor
 
   # D16 Grafana 监控面板（仅 monitor profile 启用）
+  # 安全收口：默认密码 admin 且允许匿名查看，宿主端口仅绑定 127.0.0.1 限制为本地访问
   grafana:
     image: grafana/grafana:latest
     profiles: ["monitor"]
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     environment:

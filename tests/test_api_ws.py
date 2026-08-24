@@ -277,6 +277,59 @@ def test_ws_connection_task_not_found(ws_client):
         assert "不存在" in data["data"]["error"]
 
 
+def test_ws_rejects_without_key(client_factory):
+    """安全收口：有 Key 模式下，不带密钥的 WS 连接被拒绝（1008）"""
+    from starlette.websockets import WebSocketDisconnect
+
+    with client_factory(api_key="test-secret-key") as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/scan/nonexistent"):
+                pass
+        assert exc_info.value.code == 1008, exc_info.value.code
+    print("PASS test_ws_rejects_without_key")
+
+
+def test_ws_rejects_wrong_key(client_factory):
+    """安全收口：密钥错误 → 拒绝连接（1008）"""
+    from starlette.websockets import WebSocketDisconnect
+
+    with client_factory(api_key="test-secret-key") as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/ws/scan/nonexistent", subprotocols=["ruoyi-scan-api-key", "wrong-key"]
+            ):
+                pass
+        assert exc_info.value.code == 1008, exc_info.value.code
+    print("PASS test_ws_rejects_wrong_key")
+
+
+def test_ws_accepts_with_valid_key(client_factory):
+    """安全收口：子协议携带正确密钥 → 连接通过鉴权并进入业务逻辑"""
+    import api.ws.handler as handler
+
+    with client_factory(api_key="test-secret-key") as client:
+        with client.websocket_connect(
+            "/ws/scan/nonexistent", subprotocols=[handler.WS_SUBPROTOCOL, "test-secret-key"]
+        ) as ws:
+            # 通过鉴权后进入业务逻辑：任务不存在 → error 事件
+            data = ws.receive_json()
+            assert data["type"] == "error"
+            assert "不存在" in data["data"]["error"]
+    print("PASS test_ws_accepts_with_valid_key")
+
+
+def test_ws_rejects_query_param_key(client_factory):
+    """安全收口：禁止 ?api_key= URL 传输密钥（WS 忽略查询参数）"""
+    from starlette.websockets import WebSocketDisconnect
+
+    with client_factory(api_key="test-secret-key") as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/scan/nonexistent?api_key=test-secret-key"):
+                pass
+        assert exc_info.value.code == 1008, exc_info.value.code
+    print("PASS test_ws_rejects_query_param_key")
+
+
 def test_ws_receives_historical_events(ws_client):
     """WebSocket 连接后补播历史事件"""
     # 先提交任务

@@ -37,7 +37,7 @@ def test_required_scope():
 
 
 def test_auth_middleware_scopes(client_factory):
-    """中间件：read 不能发扫描（403），scan 可以；共享链接 ?api_key= 可下载报告元数据"""
+    """中间件：read 不能发扫描（403），scan 可以；密钥仅接受 X-API-Key 头"""
     with client_factory(api_key="k1:read,k2:scan,k3:admin") as client:
         # read：查询允许
         resp = client.get("/api/scan", headers={"X-API-Key": "k1"})
@@ -60,15 +60,19 @@ def test_auth_middleware_scopes(client_factory):
     print("PASS test_auth_middleware_scopes")
 
 
-def test_shared_link_query_key(client_factory):
-    """共享链接：?api_key= 查询参数（无头）访问只读端点"""
+def test_query_param_api_key_rejected(client_factory):
+    """安全收口：?api_key= URL 传输密钥被拒绝（仅接受 X-API-Key 头）"""
     with client_factory(api_key="k1:read,k2:admin") as client:
+        # URL 查询参数不再被接受 → 401（缺少 X-API-Key 头）
         resp = client.get("/api/scan?api_key=k1")
-        assert resp.status_code == 200, resp.status_code
-        # 共享链接不能越权发扫描
+        assert resp.status_code == 401, resp.status_code
+        # 同样拒绝 POST
         resp = client.post("/api/scan?api_key=k1", json={"target": "http://x.com/", "mode": "p"})
-        assert resp.status_code == 403, resp.status_code
-    print("PASS test_shared_link_query_key")
+        assert resp.status_code == 401, resp.status_code
+        # 正确方式：X-API-Key 头（read 查询允许）
+        resp = client.get("/api/scan", headers={"X-API-Key": "k1"})
+        assert resp.status_code == 200, resp.status_code
+    print("PASS test_query_param_api_key_rejected")
 
 
 # === 定时扫描调度器测试 ===

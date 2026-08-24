@@ -224,6 +224,10 @@ WS /ws/scan/{task_id}
 
 连接后自动补播历史事件，然后实时推送新事件。
 
+> **鉴权说明（第 2 周收口）**：启用 API Key 后，WebSocket 同样需要鉴权。
+> 浏览器无法为 WebSocket 设置自定义 Header，密钥通过 `Sec-WebSocket-Protocol` **子协议**传递
+> （禁止 `?api_key=` URL 传输）。未启用 API Key 时仅允许本机访问。
+
 **事件类型**：
 
 | 事件 | 说明 |
@@ -245,7 +249,8 @@ WS /ws/scan/{task_id}
 **JavaScript 示例**：
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/scan/a1b2c3d4e5f6');
+// 有 Key 模式：子协议数组第二项为密钥；无 Key 模式仅传 URL
+const ws = new WebSocket('ws://localhost:8000/ws/scan/a1b2c3d4e5f6', ['ruoyi-scan-api-key', 'your-secret-key']);
 ws.onmessage = (e) => {
     const event = JSON.parse(e.data);
     console.log(`[${event.type}]`, event.data);
@@ -268,8 +273,9 @@ import asyncio
 import json
 
 async def listen(task_id):
+    # 有 Key 模式：subprotocols 第二项为密钥；无 Key 模式可省略
     uri = f"ws://localhost:8000/ws/scan/{task_id}"
-    async with websockets.connect(uri) as ws:
+    async with websockets.connect(uri, subprotocols=["ruoyi-scan-api-key", "your-secret-key"]) as ws:
         async for message in ws:
             event = json.loads(message)
             print(f"[{event['type']}] {event.get('data', {})}")

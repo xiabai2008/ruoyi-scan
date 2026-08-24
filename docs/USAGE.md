@@ -1046,7 +1046,7 @@ docker run --rm -p 8000:8000 ruoyi-scan \
 | `http://localhost:8000/docs` | OpenAPI 3.0 交互式文档（Swagger UI） |
 | `http://localhost:8000/redoc` | ReDoc 文档 |
 | `http://localhost:8000/api/v1/...` | REST API 端点 |
-| `ws://localhost:8000/ws` | WebSocket 实时事件 |
+| `ws://localhost:8000/ws/scan/{task_id}` | WebSocket 实时事件 |
 
 ### API Key 鉴权
 
@@ -1066,13 +1066,23 @@ ruoyi-scan --serve
 
 未携带或携带错误 Key 的请求将返回 `401 Unauthorized`。
 
+> **安全说明（第 2 周收口）**：
+> - 密钥仅接受 `X-API-Key` 请求头传输，**禁止**通过 `?api_key=` URL 查询参数携带（会泄露到日志 / 浏览器历史 / Referer）。
+> - 密钥比较使用常量时间比较（`hmac.compare_digest`），防时序侧信道攻击。
+
 ### WebSocket 实时事件
 
-通过 WebSocket 实时接收扫描进度、漏洞发现等事件：
+通过 WebSocket 实时接收扫描进度、漏洞发现等事件。端点路径为 `/ws/scan/{task_id}`。
+
+启用 API Key 后，WebSocket 连接同样需要鉴权：浏览器无法为 WebSocket 设置自定义 Header，因此密钥通过
+`Sec-WebSocket-Protocol` **子协议**传递（禁止 `?api_key=` URL 传输）。未启用 API Key 时仅允许本机访问。
 
 ```javascript
-// JavaScript 示例
-const ws = new WebSocket("ws://localhost:8000/ws?api_key=your-secret-key");
+// JavaScript 示例（有 Key 模式：子协议数组第二项为密钥；无 Key 模式仅需第一个参数）
+const ws = new WebSocket(
+    "ws://localhost:8000/ws/scan/your-task-id",
+    ["ruoyi-scan-api-key", "your-secret-key"],
+);
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
@@ -1096,8 +1106,9 @@ import asyncio
 import json
 
 async def listen():
-    uri = "ws://localhost:8000/ws?api_key=your-secret-key"
-    async with websockets.connect(uri) as ws:
+    # 有 Key 模式：subprotocols 第二项为密钥；无 Key 模式可省略
+    uri = "ws://localhost:8000/ws/scan/your-task-id"
+    async with websockets.connect(uri, subprotocols=["ruoyi-scan-api-key", "your-secret-key"]) as ws:
         async for message in ws:
             event = json.loads(message)
             print(f"[{event['type']}] {event['payload']}")

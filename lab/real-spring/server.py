@@ -14,6 +14,8 @@ import os
 from flask import Flask, Response, request
 
 PORT = int(os.environ.get("LAB_PORT", "8086"))
+# 安全收口：默认仅绑定本机回环，避免带洞靶场暴露到局域网；Docker 内通过 LAB_HOST=0.0.0.0 覆盖
+HOST = os.environ.get("LAB_HOST", "127.0.0.1")
 
 app = Flask(__name__)
 
@@ -303,6 +305,7 @@ def _route(p):
 
 
 if __name__ == "__main__":
-    print(f"[*] Spring Boot 真实漏洞响应复现靶场启动：PORT={PORT}")
+    print(f"[*] Spring Boot 真实漏洞响应复现靶场启动：PORT={PORT} HOST={HOST}")
     print("[*] 仅用于阶段九交叉验证，返回真实 Spring Boot 漏洞响应特征（不含 marker）")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    print("[!] 安全提示：本靶场返回真实漏洞响应特征，仅限本机/授权测试环境使用，严禁部署到公网或未授权网络")
+    app.run(host=HOST, port=PORT, debug=False)

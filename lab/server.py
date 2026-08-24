@@ -13,6 +13,8 @@ from flask import Flask, Response, request
 # 运行模式：vuln（开启全部漏洞签名）/ safe（全部已修复）
 MODE = os.environ.get("LAB_MODE", "vuln")
 PORT = int(os.environ.get("LAB_PORT", "8080"))
+# 安全收口：默认仅绑定本机回环，避免带洞靶场暴露到局域网；Docker 内通过 LAB_HOST=0.0.0.0 覆盖
+HOST = os.environ.get("LAB_HOST", "127.0.0.1")
 
 app = Flask(__name__)
 
@@ -270,6 +272,7 @@ def _handle_404(_e):
 
 
 if __name__ == "__main__":
-    print(f"[*] Ruoyi 签名靶场启动：MODE={MODE} PORT={PORT}")
+    print(f"[*] Ruoyi 签名靶场启动：MODE={MODE} PORT={PORT} HOST={HOST}")
     print("[*] 合法授权测试 / 教学验证用途，仅返回插件判定签名，不含真实漏洞利用")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    print("[!] 安全提示：本靶场含漏洞响应签名，仅限本机/授权测试环境使用，严禁部署到公网或未授权网络")
+    app.run(host=HOST, port=PORT, debug=False)

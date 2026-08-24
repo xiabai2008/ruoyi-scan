@@ -676,7 +676,11 @@ def run_plugin_manifest_mode(out_dir: str) -> None:
 
 
 def run_plugin_update_mode(url: str) -> None:
-    """从模板仓库更新插件（下载 → 校验 → 安装到 ~/.ruoyi-scan/plugins/）"""
+    """从模板仓库更新插件（下载 → 强制验签 → 安装到 ~/.ruoyi-scan/plugins/）
+
+    供应链安全：远程安装强制 Ed25519 验签（fail-closed）。公钥默认取自
+    ~/.ruoyi-scan/signing.pub（首次可通过 --plugin-manifest 生成并人工确认指纹）。
+    """
     from config import settings
     from lib.plugin_repo import download_and_install
 
@@ -692,7 +696,12 @@ def run_plugin_update_mode(url: str) -> None:
         for rel in installed:
             print(f"{GREEN}  [*] {rel}{RESET}")
     except ValueError as e:
-        print(f"{RED}[!]更新失败: {e}{RESET}")
+        print(f"{RED}[!]更新失败（已拒绝安装）: {e}{RESET}")
+        print(f"{YELLOW}[*]安全提示：远程插件安装要求 Ed25519 签名 + cryptography 库{RESET}")
+        print(
+            f"{YELLOW}[*]请安装依赖并确认可信公钥：pip install cryptography；"
+            f"并用 --plugin-manifest 生成/校验 manifest 后人工确认 ~/.ruoyi-scan/signing.pub 指纹{RESET}"
+        )
 
 
 __all__ = [

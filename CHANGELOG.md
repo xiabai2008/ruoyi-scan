@@ -15,6 +15,17 @@
 - 方向 1-5: README 文档同步 + 依赖规范化 + pyproject.toml 现代打包 + PyPI 发布工作流 + CI 代码质量门禁
 - 方向 6: 社区治理文档（CONTRIBUTING / SECURITY / CHANGELOG + Issue/PR 模板）
 
+### Security
+
+- **W1 插件供应链**: 远程安装强制 Ed25519 验签（fail-closed）+ manifest 路径穿越 / zip-slip 防护 + cryptography 硬性依赖
+- **W1 签名发布**: manifest 由 CI 自动签名（私钥存 `$RUNNER_TEMP` 用后即删，禁止手工提交）
+- **W2 鉴权**: API Key 改为 `hmac.compare_digest` 常量时间比较；禁止 `?api_key=` URL 传输，仅接受 `X-API-Key` 头
+- **W2 WebSocket**: `/ws/scan/{task_id}` 增加与 REST 一致的鉴权（无 Key 仅本地；有 Key 走子协议头），修复 BaseHTTPMiddleware 不拦截 WS 的鉴权绕过
+- **W2 暴露面**: 带洞靶场（lab / spring / real-spring）默认绑定 127.0.0.1，Docker 内以 `LAB_HOST` 覆盖；Grafana / Prometheus 宿主端口收口 127.0.0.1；靶场启动增加安全横幅提示
+- **W2 权限**: 三级权限矩阵 read / scan / admin，权限不足返回 403
+- **测试**: 新增 5 个安全回归用例（WS 鉴权 4 + URL 传密钥拒绝 1），完整套件 1185 全绿
+- **文档**: 新增 `docs/SECURITY_REPORT.md` 最终安全报告，并归档至模板仓库 ruoyi-scan-templates
+
 ## [1.1.0] - 2026-08-07
 
 ### Added

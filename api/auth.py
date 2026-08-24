@@ -1,8 +1,11 @@
 # D11 API 鉴权中间件：API Key 模式
-# E9：权限分级（read/scan/admin）+ 多 Key + 共享链接（?api_key=）
+# E9：权限分级（read/scan/admin）+ 多 Key
+# 第2周安全收口：
+#   - 密钥比较一律使用 hmac.compare_digest（常量时间，防时序侧信道攻击）
+#   - 禁止通过 URL 查询参数（?api_key=）传输密钥（会泄露到日志/历史/Referer），仅接受 X-API-Key 头
 #
 # 设计：
-#   1. 最简鉴权：X-API-Key 头；共享链接可用 ?api_key= 查询参数（只读用途）
+#   1. 最简鉴权：X-API-Key 头
 #   2. 多 Key 格式：--api-key "key1:read,key2:scan,key3:admin"
 #      （单个 key 无 scope = admin，向后兼容）
 #   3. 权限矩阵：
@@ -11,6 +14,7 @@
 #      admin = scan + 插件管理 + 定时任务管理
 #   4. 无外部依赖；未设置 Key 时默认仅允许 127.0.0.1（开发模式）
 #   5. /docs /openapi.json /api/system/health 不需要鉴权
+import hmac
 import os
 
 from fastapi import Request
@@ -99,7 +103,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
 
     规则：
         - api_key 未设置（空）：仅允许 127.0.0.1 / localhost（开发模式）
-        - api_key 已设置：X-API-Key 头或 ?api_key= 查询参数校验
+        - api_key 已设置：仅接受 X-API-Key 头校验（禁止 ?api_key= URL 传输）
+        - 密钥比较使用 hmac.compare_digest（常量时间，防时序侧信道）
         - 权限不足返回 403（read 不能发起扫描等）
         - 公共路径（/docs, /api/system/health 等）免鉴权
     """
@@ -108,6 +113,22 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.api_key = api_key
         self.key_scopes = parse_api_keys(api_key)
+
+    def _lookup_scope(self, provided_key: str) -> str | None:
+        """常量时间查找 provided_key 的 scope（遍历全部 key，不提前返回，防时序泄露）
+
+        单 Key 模式：命中返回 "admin"；多 Key 模式：命中返回对应 scope。
+        """
+        if not self.key_scopes:
+            if hmac.compare_digest(provided_key, self.api_key):
+                return "admin"
+            return None
+        matched = None
+        for stored_key, scope in self.key_scopes.items():
+            if hmac.compare_digest(provided_key, stored_key):
+                matched = scope
+                # 不 break：即使已匹配也继续遍历，保持恒定时间
+        return matched
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -126,23 +147,17 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
                 content={"detail": "API Key 未配置，仅允许本地访问。启动时设置 --api-key 以开放远程访问。"},
             )
 
-        # 3. 校验 Key（头优先，共享链接可用 ?api_key=）
+        # 3. 校验 Key（仅接受 X-API-Key 头；禁止 ?api_key= URL 传输）
         provided_key = request.headers.get("X-API-Key", "")
-        if not provided_key:
-            provided_key = request.query_params.get("api_key", "")
         if not provided_key:
             return JSONResponse(status_code=401, content={"detail": "缺少 API Key（X-API-Key 头）"})
 
-        # 3.1 单 Key 模式（无 scope 配置）：完全匹配即放行（向后兼容 D11 行为）
-        if not self.key_scopes:
-            if provided_key == self.api_key:
-                return await call_next(request)
-            return JSONResponse(status_code=401, content={"detail": "无效的 API Key"})
-
-        # 3.2 多 Key 模式：scope 分级校验
-        scope = self.key_scopes.get(provided_key)
+        # 3.1 常量时间查找（单 Key / 多 Key 统一）
+        scope = self._lookup_scope(provided_key)
         if scope is None:
             return JSONResponse(status_code=401, content={"detail": "无效的 API Key"})
+
+        # 3.2 权限分级校验
         required = _required_scope(request.method, path)
         if _SCOPE_LEVEL.get(scope, 0) < _SCOPE_LEVEL.get(required, 1):
             return JSONResponse(

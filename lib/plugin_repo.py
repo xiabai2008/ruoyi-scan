@@ -6,10 +6,12 @@
 #   3. --plugin-update [url]   从远程仓库下载 zip → 校验 → 安装到用户插件目录
 #   4. 用户插件目录自动发现（~/.ruoyi-scan/plugins/）
 #
-# 供应链安全：
+# 供应链安全（fail-closed，禁止降级放行）：
 #   - 安装前强制校验 manifest SHA256 摘要（防篡改）
-#   - 有公钥时强制验签（Ed25519），失败拒绝安装
-#   - 无 cryptography 时降级为摘要校验 + 黄色提示（不阻断主流程）
+#   - 远程安装强制 Ed25519 验签（公钥来自本地可信存储 ~/.ruoyi-scan/signing.pub，
+#     而非 manifest 自证）；无签名 / 无公钥 / 验签失败一律拒绝安装
+#   - 无 cryptography 时远程安装直接拒绝（不降级为纯摘要校验），并提示安装指引
+#   - 所有 manifest 相对路径与 zip 成员名做路径穿越（zip-slip）防护
 import hashlib
 import json
 import os
@@ -49,6 +51,39 @@ def _sha256(path: str) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _is_safe_rel(rel: str) -> bool:
+    """判断 manifest 相对路径 / zip 成员名是否安全（防路径穿越与 zip-slip）
+
+    规则：非空时拒绝绝对路径（/ 或 \\ 开头）、拒绝含 \\ 的路径（Windows 盘符/
+    反斜杠穿越）、拒绝任一路径段为 .. 或 .。
+    """
+    if not rel:
+        return True
+    if rel.startswith("/") or rel.startswith("\\") or os.path.isabs(rel):
+        return False
+    if "\\" in rel:
+        return False
+    for part in rel.split("/"):
+        if part in ("..", "."):
+            return False
+    return True
+
+
+def _safe_join(base: str, rel: str):
+    """安全拼接 base 与 manifest 相对路径，返回 (path, None) 或 (None, 错误串)
+
+    在 _is_safe_rel 基础上用 normpath/abspath 二次确认，防止拼接后越出 base。
+    """
+    if not _is_safe_rel(rel):
+        return None, "非法路径（绝对路径或 .. 穿越）: %s" % rel
+    p = os.path.normpath(os.path.join(base, rel))
+    base_abs = os.path.abspath(base)
+    p_abs = os.path.abspath(p)
+    if p_abs != base_abs and not p_abs.startswith(base_abs + os.sep):
+        return None, "非法路径（越出仓库目录）: %s" % rel
+    return p, None
 
 
 # === 导出 ===
@@ -148,7 +183,12 @@ def build_manifest(out_dir: str, version: str = "1.0.0", sign_key_path: str = ""
 
 
 def _load_or_create_key(path: str):
-    """加载或生成 Ed25519 私钥（cryptography 缺失返回 None）"""
+    """加载或生成 Ed25519 私钥（cryptography 缺失返回 None）
+
+    私钥写入 path，公钥写入 path + ".pub"；当 path 是默认密钥
+    （~/.ruoyi-scan/signing.key）时，公钥同步到 signing_dir()/signing.pub，
+    与 verify_manifest / download_and_install 的默认公钥路径保持一致。
+    """
     try:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -156,7 +196,9 @@ def _load_or_create_key(path: str):
         return None
     if os.path.isfile(path):
         with open(path, "rb") as f:
-            return serialization.load_pem_private_key(f.read(), password=None)
+            key = serialization.load_pem_private_key(f.read(), password=None)
+        _sync_default_pub(path, key)
+        return key
     key = Ed25519PrivateKey.generate()
     with open(path, "wb") as f:
         f.write(
@@ -175,7 +217,31 @@ def _load_or_create_key(path: str):
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
             )
         )
+    _sync_default_pub(path, key)
     return key
+
+
+def _sync_default_pub(key_path: str, key) -> None:
+    """默认密钥场景下，把公钥同步到 signing_dir()/signing.pub
+
+    保证自动生成的公钥与 verify_manifest 默认查找路径一致，
+    避免消费者因缺少 signing.pub 而拒绝验签。
+    """
+    default_key = os.path.join(signing_dir(), "signing.key")
+    if os.path.abspath(key_path) == os.path.abspath(default_key):
+        try:
+            from cryptography.hazmat.primitives import serialization
+        except ImportError:
+            return
+        pub = key.public_key()
+        pub_path = os.path.join(signing_dir(), "signing.pub")
+        with open(pub_path, "wb") as f:
+            f.write(
+                pub.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+            )
 
 
 def _sign_manifest(manifest: dict, sign_key_path: str = "") -> str:
@@ -196,39 +262,60 @@ def _sign_manifest(manifest: dict, sign_key_path: str = "") -> str:
     return key.sign(payload).hex()
 
 
-def verify_manifest(manifest: dict, repo_dir: str, pubkey_path: str = "") -> List[str]:
-    """校验 manifest：摘要 + 签名（可选）
+def verify_manifest(
+    manifest: dict,
+    repo_dir: str,
+    pubkey_path: str = "",
+    require_signature: bool = False,
+) -> List[str]:
+    """校验 manifest：摘要 + 签名
 
     Args:
         manifest: manifest 字典
         repo_dir: 仓库解压根目录
-        pubkey_path: 公钥路径（缺省自动找 ~/.ruoyi-scan/signing.pub；无公钥只验摘要）
+        pubkey_path: 公钥路径（缺省自动找 ~/.ruoyi-scan/signing.pub）
+        require_signature: 强制要求签名且验签通过（fail-closed）。
+            远程安装必须为 True；本地仓库自校验可保持 False 向后兼容。
 
     Returns:
         错误列表（空 = 校验通过）
     """
     errors = []
+    # 1. 摘要校验（防篡改；路径经 _safe_join 防穿越）
     for rel, expect in (manifest.get("files") or {}).items():
-        p = os.path.join(repo_dir, rel)
+        p, err = _safe_join(repo_dir, rel)
+        if err:
+            errors.append("文件路径不合法: %s (%s)" % (rel, err))
+            continue
         if not os.path.isfile(p):
             errors.append("缺少文件: %s" % rel)
             continue
         if _sha256(p) != expect:
             errors.append("摘要不匹配: %s" % rel)
-    # 签名验证
-    if manifest.get("signature"):
-        if not pubkey_path:
-            pubkey_path = os.path.join(signing_dir(), "signing.pub")
-        if os.path.isfile(pubkey_path):
-            try:
-                from cryptography.hazmat.primitives import serialization
 
-                with open(pubkey_path, "rb") as f:
-                    pub = serialization.load_pem_public_key(f.read())
-                payload = json.dumps(manifest["files"], sort_keys=True, ensure_ascii=False).encode("utf-8")
-                pub.verify(bytes.fromhex(manifest["signature"]), payload)
-            except Exception as e:
-                errors.append("签名验证失败: %s" % e)
+    # 2. 签名验证
+    has_sig = bool(manifest.get("signature"))
+    if not pubkey_path:
+        pubkey_path = os.path.join(signing_dir(), "signing.pub")
+    pubkey_exists = os.path.isfile(pubkey_path)
+    if require_signature:
+        if not has_sig:
+            errors.append("manifest 未签名：远程安装要求 Ed25519 签名，拒绝安装")
+        if has_sig and not pubkey_exists:
+            errors.append("缺少可信公钥（%s），无法验签，拒绝安装" % pubkey_path)
+    if has_sig and pubkey_exists:
+        try:
+            from cryptography.hazmat.primitives import serialization
+        except ImportError:
+            errors.append("无法验签：未安装 cryptography 库（pip install cryptography）")
+            return errors
+        try:
+            with open(pubkey_path, "rb") as f:
+                pub = serialization.load_pem_public_key(f.read())
+            payload = json.dumps(manifest["files"], sort_keys=True, ensure_ascii=False).encode("utf-8")
+            pub.verify(bytes.fromhex(manifest["signature"]), payload)
+        except Exception as e:
+            errors.append("签名验证失败: %s" % e)
     return errors
 
 
@@ -247,13 +334,22 @@ def _github_api_fallback(url: str) -> str:
     return ""
 
 
-def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int = 30) -> List[str]:
-    """从远程仓库下载 zip → 校验 → 安装到用户插件目录
+def download_and_install(
+    url: str,
+    dest_dir: Optional[str] = None,
+    timeout: int = 30,
+    trusted_pubkey_path: str = "",
+    require_signature: bool = True,
+) -> List[str]:
+    """从远程仓库下载 zip → 强制验签 → 安装到用户插件目录
 
     Args:
         url: 仓库 zip 下载地址（如 https://github.com/xxx/repo/archive/refs/heads/main.zip）
         dest_dir: 安装目录（缺省用户插件目录）
         timeout: 下载超时
+        trusted_pubkey_path: 可信公钥路径（缺省 ~/.ruoyi-scan/signing.pub）
+        require_signature: 强制 Ed25519 验签（默认 True，fail-closed）。
+            无签名 / 无公钥 / 验签失败 / 未装 cryptography 一律拒绝安装。
 
     Returns:
         安装的文件相对路径列表；校验失败抛 ValueError
@@ -291,9 +387,12 @@ def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int 
 
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_repo_")
     try:
-        # 解压（支持 zip；单个 manifest.json 直接安装）
+        # 解压（zip-slip 防护：先校验所有成员名，拒绝绝对路径 / .. 穿越）
         try:
             with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+                for name in zf.namelist():
+                    if not _is_safe_rel(name):
+                        raise ValueError("仓库包包含非法路径成员: %s" % name)
                 zf.extractall(tmp)
         except zipfile.BadZipFile:
             raise ValueError("仓库包不是有效的 zip 文件")
@@ -301,8 +400,7 @@ def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int 
         # 定位 manifest.json（可能嵌套一层目录）
         repo_root = tmp
         if not os.path.isfile(os.path.join(repo_root, "manifest.json")):
-            candidates = [d for d in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, d))]
-            for c in candidates:
+            for c in os.listdir(tmp):
                 if os.path.isfile(os.path.join(tmp, c, "manifest.json")):
                     repo_root = os.path.join(tmp, c)
                     break
@@ -311,14 +409,23 @@ def download_and_install(url: str, dest_dir: Optional[str] = None, timeout: int 
 
         with open(os.path.join(repo_root, "manifest.json"), "r", encoding="utf-8") as f:
             manifest = json.load(f)
-        errors = verify_manifest(manifest, repo_root)
+        errors = verify_manifest(
+            manifest,
+            repo_root,
+            pubkey_path=trusted_pubkey_path,
+            require_signature=require_signature,
+        )
         if errors:
-            raise ValueError("仓库校验失败:\n" + "\n".join("  - " + e for e in errors))
+            raise ValueError("仓库校验失败（已拒绝安装）:\n" + "\n".join("  - " + e for e in errors))
 
         installed = []
         for rel in (manifest.get("files") or {}).keys():
-            src = os.path.join(repo_root, rel)
-            dst = os.path.join(dest, rel)
+            src, err = _safe_join(repo_root, rel)
+            if err:
+                raise ValueError("安装路径不合法，拒绝安装: %s (%s)" % (rel, err))
+            dst, err = _safe_join(dest, rel)
+            if err:
+                raise ValueError("安装路径不合法，拒绝安装: %s (%s)" % (rel, err))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(src, dst)
             installed.append(rel)

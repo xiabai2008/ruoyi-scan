@@ -155,7 +155,7 @@ def build_parser():
         nargs="?",
         const="default",
         metavar="URL",
-        help="从模板仓库更新插件（默认官方仓库）",
+        help="从模板仓库更新插件（默认官方仓库；强制 Ed25519 验签，需 cryptography + 可信公钥）",
     )
 
     group = parser.add_argument_group("E7 AI 插件生成")
@@ -298,7 +298,7 @@ def print_help():
         ("--plugin-list", "列出所有已加载插件"),
         ("--plugin-export <dir>", "导出插件源码与元信息到目录（模板仓库）"),
         ("--plugin-manifest <dir>", "生成/校验 manifest.json（Ed25519 签名）"),
-        ("--plugin-update [url]", "从模板仓库更新插件（默认官方仓库）"),
+        ("--plugin-update [url]", "从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥）"),
         ("--ai <desc>", "AI 生成插件（LLM 优先，无 Key 降级规则模板）"),
         ("--ai-name <name>", "AI 插件名称（默认取描述）"),
         ("--ai-api-key <key>", "LLM API Key（环境变量 RUOYI_AI_API_KEY）"),
