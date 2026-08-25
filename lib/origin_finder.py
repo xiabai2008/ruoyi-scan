@@ -50,6 +50,11 @@ class OriginIPFinder:
     ]
 
     def __init__(self, timeout=5):
+        """初始化源站 IP 探测器
+
+        Args:
+            timeout: 单次网络操作超时秒数（默认 5）
+        """
         self.timeout = timeout
 
     def find_origin_ip(self, domain: str, session=None) -> List[str]:
@@ -161,6 +166,7 @@ class OriginIPFinder:
             # 解析 JSON
             data = json.loads(text)
             for entry in data:
+                # SAN 字段可能含多个名称（逗号分隔），统一用正则提取其中出现的 IP
                 name_value = entry.get("name_value", "")
                 # 从 SAN 中提取 IP
                 found = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", name_value)

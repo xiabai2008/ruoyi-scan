@@ -112,6 +112,7 @@ def dispatch(args: Namespace) -> None:
     if args.serve:
         run_serve_mode(args)
         return
+    # --chain-list 与 --chain list 两种写法等价，均进入链列表模式
     if args.chain_list or (args.chain == "list"):
         run_chain_mode("list", args)
         return
@@ -126,6 +127,7 @@ def dispatch(args: Namespace) -> None:
     def _mode_flag(val):
         return val is not None and val != "__flag__"
 
+    # 分别收集"真实目标值"与"纯开关标记"：值为 __flag__ 时仅标记模式，无实际目标
     target_for = {}
     flag_for = {}
     for k in ("u", "m", "p", "l"):
@@ -136,6 +138,7 @@ def dispatch(args: Namespace) -> None:
             else:
                 target_for[k] = val
 
+    # 批量模式：-f 需配合 -u/-m/-p/-l 开关指定扫描类型，开关位的值本身无意义
     if args.file:
         mode = None
         for k in ("u", "m", "p", "l"):
@@ -146,6 +149,7 @@ def dispatch(args: Namespace) -> None:
             print(f"{RED}[!]-f 批量扫描需配合 -u/-m/-p/-l 指定扫描模式，如：main.py -f targets.txt -p{RESET}")
             return
         run_mode_batch(args.file, mode, args)
+    # 单目标模式按 u→m→p→l 顺序取第一个有效目标执行（优先级隐含在元组顺序中）
     elif target_for:
         for k in ("u", "m", "p", "l"):
             if k in target_for:

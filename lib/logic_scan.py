@@ -44,6 +44,7 @@ class LogicVuln:
     compliance: str = "等保2.0:8.1.4;OWASP:A01:2021"
 
     def to_dict(self) -> Dict[str, Any]:
+        """转为字典（供报告/JSON 输出）"""
         return {
             "vuln_type": self.vuln_type,
             "name": self.name,
@@ -277,6 +278,12 @@ class PrivilegeEscalationDetector:
     """
 
     def __init__(self, session=None, auth_info: Optional[Dict] = None):
+        """初始化权限提升检测器
+
+        Args:
+            session: SessionManager 实例（已认证）
+            auth_info: 认证信息（用户身份/角色等）
+        """
         self.session = session
         self.auth_info = auth_info or {}
         self.results: List[LogicVuln] = []
@@ -399,6 +406,12 @@ class ParameterTamperingDetector:
     QUANTITY_PARAMS = ["quantity", "count", "num", "qty"]
 
     def __init__(self, session=None, auth_info: Optional[Dict] = None):
+        """初始化参数篡改检测器
+
+        Args:
+            session: SessionManager 实例（已认证）
+            auth_info: 认证信息（用户身份/角色等）
+        """
         self.session = session
         self.auth_info = auth_info or {}
         self.results: List[LogicVuln] = []
@@ -505,6 +518,13 @@ class RaceConditionDetector:
     """
 
     def __init__(self, session=None, auth_info: Optional[Dict] = None, concurrency: int = 10):
+        """初始化竞争条件检测器（并发重放同一请求）
+
+        Args:
+            session: SessionManager 实例（已认证）
+            auth_info: 认证信息（用户身份/角色等）
+            concurrency: 并发请求线程数（默认 10）
+        """
         self.session = session
         self.auth_info = auth_info or {}
         self.concurrency = concurrency
@@ -597,6 +617,12 @@ class LogicScanner:
     """业务逻辑漏洞扫描器（聚合所有检测器）"""
 
     def __init__(self, session=None, auth_info: Optional[Dict] = None):
+        """初始化聚合扫描器（组合各业务逻辑检测器）
+
+        Args:
+            session: SessionManager 实例（已认证）
+            auth_info: 认证信息（用户身份/角色等）
+        """
         self.session = session
         self.auth_info = auth_info or {}
         self.idor_detector = IDORDetector(session, auth_info)

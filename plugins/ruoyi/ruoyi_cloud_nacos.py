@@ -1,3 +1,4 @@
+"""RuoYi-Cloud 微服务版 Nacos 配置中心未授权访问检测（涉及 CVE-2021-29441 默认 token 绕过）。"""
 # RuoYi-Cloud Nacos 配置泄露检测
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -53,9 +54,17 @@ class RuoyiCloudNacosPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
+        """以空 dataId/group 的最小化查询探测 Nacos 配置接口是否免鉴权可达。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 响应含配置结构特征或命中签名头则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        """
+        # dataId/group 留空 + pageSize=1：仅用最小查询确认接口是否无鉴权可达，不放大泄露面
         url = join_url(target, "/nacos/v1/cs/configs?dataId=&group=&pageSize=1")
         try:
             resp = session.get(url)
+            # pageItems（分页结构）与 configs（非分页结构）是 Nacos 两种合法响应形态，任一出现即配置可读
             if resp.status_code == 200 and ("pageItems" in (resp.text or "") or "configs" in (resp.text or "")):
                 return ScanResult(
                     kind=self.category,
@@ -66,6 +75,7 @@ class RuoyiCloudNacosPlugin(PluginBase):
                     evidence="Nacos 配置接口可未授权访问",
                     fix=self.fix,
                 )
+            # X-Ruoyi-Vuln 为本地靶场注入的签名响应头（离线验证场景），命中即作为检测证据
             if resp.headers.get("X-Ruoyi-Vuln") == "nacos-leak":
                 return ScanResult(
                     kind=self.category,

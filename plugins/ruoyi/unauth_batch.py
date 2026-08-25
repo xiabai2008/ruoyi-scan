@@ -1,3 +1,4 @@
+"""未授权访问批量检测——Actuator / Druid / Swagger / 后台用户列表端点。"""
 # 未授权访问批量检测：Actuator / Druid / Swagger / 后台 列表接口
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -88,6 +89,12 @@ class UnauthBatchPlugin(PluginBase):
     AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源", "signin", "login"]
 
     def verify(self, target, session):
+        """批量探测多个常见未授权端点，对每个端点单独评定（已鉴权 / 未授权 / 网络异常）。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 任一端点未授权暴露则 CONFIRMED；全部已保护则 SAFE；全部网络异常则 UNKNOWN
+        """
         hit_endpoints = []  # 命中端点详情
         all_status = []  # 各端点状态（CONFIRMED/SAFE/UNKNOWN）
         got_response = False
@@ -101,6 +108,7 @@ class UnauthBatchPlugin(PluginBase):
                 continue
             got_response = True
             text = resp.text or ""
+            # getattr 兜底：兼容无 status_code 属性的响应对象（如测试桩），缺失时按 0 参与后续判定
             code = getattr(resp, "status_code", 0)
             ctype = resp.headers.get("Content-Type", "") if hasattr(resp, "headers") else ""
 
@@ -116,6 +124,7 @@ class UnauthBatchPlugin(PluginBase):
 
             # 3) 特征关键字命中（且 JSON 端点要求响应确实是 JSON）
             matched_kw = [kw for kw in ep["keywords"] if kw.lower() in text.lower()]
+            # 无 JSON Content-Type 时用响应体首字符（{ 或 [）推断 JSON，兼容未声明类型的自研接口
             is_json = "json" in ctype.lower() or text.lstrip().startswith("{") or text.lstrip().startswith("[")
             if ep.get("need_json") and not is_json:
                 all_status.append((ep["name"], "SAFE", "响应非 JSON"))

@@ -77,11 +77,13 @@ def create_app(
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=True,
+        # 仅开放 REST 实际用到的方法，收紧攻击面（无 PUT/PATCH）
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type", "Authorization"],
     )
 
     # D11：API Key 鉴权中间件
+    # 未显式指定时回退到环境变量 RUOYI_SCAN_API_KEY；两者皆空则中间件降级为仅本地可访问
     key = api_key or get_api_key_from_env()
     app.add_middleware(ApiKeyMiddleware, api_key=key)
 
@@ -93,6 +95,7 @@ def create_app(
     orchestrator = ScanOrchestrator(registry=registry)
     # E9：定时扫描调度器
     scheduler = None
+    # 调度器依赖可选（lib.scheduler 可能缺失）：加载失败时降级为无调度模式，不影响主功能
     try:
         from lib.scheduler import ScanScheduler
 

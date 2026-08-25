@@ -50,10 +50,19 @@ class GitLeakPlugin(PluginBase):
     )
 
     def verify(self, target, session) -> ScanResult:
+        """检测 /.git/HEAD 是否可访问（响应含 "ref:" 即 .git 目录泄露）
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（检测到 ref: 特征）或 STATUS_SAFE
+        @exception: 请求异常返回 STATUS_UNKNOWN
+        """
         url = join_url(target, "/.git/HEAD")
         try:
             resp = session.get(url)
+            # 响应体可能为空（空 200），统一转空串后再做关键字匹配
             text = resp.text or ""
+            # .git/HEAD 固定以 "ref: refs/heads/..." 开头，是 git 仓库最稳定的特征；状态码与内容双重校验
             if "ref:" in text and (resp.status_code == 200):
                 return ScanResult(
                     kind=self.category,
@@ -72,5 +81,6 @@ class GitLeakPlugin(PluginBase):
                 url=url,
                 evidence=f"状态码={resp.status_code}, 未检测到 .git 泄露特征",
             )
+        # 网络异常置 UNKNOWN，不把目标不可达误判为 SAFE
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"请求异常: {e}")

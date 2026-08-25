@@ -140,6 +140,7 @@ async def scan_ws(websocket: WebSocket, task_id: str):
                     await websocket.close(code=1000, reason="任务完成")
                     break
 
+                # 与上方 complete/error 独立的一条关闭路径：终态 status 事件（兼容事件顺序差异）
                 if event.get("type") == "status" and event.get("data", {}).get("status") in (
                     "done",
                     "failed",

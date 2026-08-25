@@ -40,6 +40,7 @@ class ProxyStats:
 
     @property
     def fail_rate(self) -> float:
+        # total 为 0 时直接返回 0，避免除零异常
         return self.fail_count / self.total if self.total > 0 else 0.0
 
 
@@ -132,6 +133,7 @@ class ProxyPool:
                 # 优先用失败率最低的
                 return min(available, key=lambda s: s.fail_rate).url
             else:  # round-robin（默认）
+                # 取模保证轮询索引不越界（可用代理数会因剔除/重试而动态变化）
                 idx = self._round_robin_idx % len(available)
                 self._round_robin_idx += 1
                 proxy = available[idx]
@@ -189,6 +191,7 @@ class ProxyPool:
     def remove_disabled(self):
         """清除所有被剔除的代理"""
         with self._lock:
+            # 先收集再删除，避免在遍历字典的过程中修改字典
             disabled = [url for url, s in self._stats.items() if s.disabled]
             for url in disabled:
                 del self._stats[url]

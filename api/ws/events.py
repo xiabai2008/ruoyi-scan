@@ -19,6 +19,7 @@ EVENT_REPORT = "report"  # 报告生成完成
 EVENT_ERROR = "error"  # 任务异常
 
 # 所有合法事件类型
+# 新增事件类型时需同步登记到此集合（用于校验/文档）
 ALL_EVENTS = {
     EVENT_STATUS,
     EVENT_COMPLETE,

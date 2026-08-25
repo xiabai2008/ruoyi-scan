@@ -118,6 +118,7 @@ class DiffReport:
         import html as html_module
 
         def render_entries(entries: List[DiffEntry], color: str, icon: str) -> str:
+            """渲染某分类（new/fixed/persisted/changed）的差异表格行；名称/URL 经 HTML 转义防注入"""
             if not entries:
                 return '<tr><td colspan="5" class="empty">无</td></tr>'
             rows = []
@@ -206,6 +207,7 @@ def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     results = report_data.get("results", [])
     for r in results:
         if r.get("status") != STATUS_CONFIRMED:
+            # SAFE/UNKNOWN 多为探测过程态、复现波动大，计入差异会制造大量假新增/假修复
             continue
         fp = VulnFingerprint(name=r.get("name", ""), url=r.get("url", ""))
         vulns[fp.key()] = {
@@ -244,6 +246,7 @@ def diff_reports(old_report: Dict[str, Any], new_report: Dict[str, Any]) -> Diff
         new_total=len(new_vulns),
     )
 
+    # 先转成集合再求差集/交集，把三类对比从嵌套循环降为线性扫描
     old_keys = set(old_vulns.keys())
     new_keys = set(new_vulns.keys())
 

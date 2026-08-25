@@ -76,6 +76,12 @@ class SwaggerLeakPlugin(PluginBase):
     _POSITIVE = ["swagger", "Swagger", "openapi", "OpenAPI", "api-docs", "Knife4j", "swagger-ui", '"swagger"']
 
     def verify(self, target, session) -> ScanResult:
+        """探测常见 Swagger/OpenAPI/Knife4j/Druid 文档端点是否可匿名访问
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（发现公开文档端点）或 STATUS_SAFE
+        """
         found = []
         for path in self._SWAGGER_PATHS:
             url = join_url(target, path)
@@ -83,9 +89,11 @@ class SwaggerLeakPlugin(PluginBase):
                 resp = session.get(url)
                 if resp.status_code != 200:
                     continue
+                # 只取响应前 500 字符判读：文档页面头部已含框架特征，避免大 JSON 拖慢扫描
                 text = (resp.text or "")[:500]
                 ct = (resp.headers.get("Content-Type") or "").lower()
                 # JSON API 文档 或 HTML Swagger 界面
+                # 细分为两路判定：JSON 定义（Content-Type=json 且含 swagger/openapi 键）或 HTML 界面（关键字命中）
                 if ("json" in ct and ('"swagger"' in text or '"openapi"' in text or '"paths"' in text)) or any(
                     kw in text for kw in self._POSITIVE
                 ):

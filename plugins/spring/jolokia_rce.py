@@ -51,7 +51,13 @@ class SpringJolokiaRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 Jolokia reloadByURL 滥用前提：POST EXEC 探针并判定 JMX MBean 响应特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——Jolokia 端点可达返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/jolokia")
+        # 远程 URL 使用不可解析的 .test 域名：即使服务端尝试加载也不会产生外部回调
         # reloadByURL 探针（仅触发签名，不加载远程配置）
         payload = {
             "type": "EXEC",

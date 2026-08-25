@@ -56,8 +56,14 @@ class Spring4shellPlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 Spring4Shell 利用条件：POST class.module.classLoader 探针并判定参数绑定可否触达 ClassLoader。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——返回 200 且无错误标识返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/")
         # Spring4Shell 探针参数（仅触发签名，不执行真实 ClassLoader 利用）
+        # pattern/suffix/directory 三参数配套使用：AccessLogValve 写入 getshell 需同时改写三者
         data = {
             "class.module.classLoader.resources.context.parent.pipeline.first.pattern": "%{prefix}c2s65 SPRING4SHELL_PROBE",
             "class.module.classLoader.resources.context.parent.pipeline.first.suffix": ".jsp",

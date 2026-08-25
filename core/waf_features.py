@@ -154,13 +154,16 @@ def is_waf_blocked(waf_type: str, response_text: str = "", status_code: int = 0)
     Returns:
         True 表示被 WAF 拦截，False 表示真 SAFE
     """
+    # 未注册的 WAF 类型拿到空特征：任何判定都不命中，最终落为"未被拦截"（不误报）
     waf = WAF_FEATURES.get(waf_type, {})
     signatures = waf.get("block_signatures", [])
     # 状态码命中拦截码
+    # status_code 为 0（未提供）时跳过该维度判定，只依赖响应体特征
     if status_code and status_code in waf.get("status", []):
         return True
     # 响应体含拦截特征
     if response_text:
+        # 双方统一转小写比对，避免响应中大小写变体导致特征漏判
         text_lower = response_text.lower()
         for sig in signatures:
             if sig.lower() in text_lower:

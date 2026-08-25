@@ -16,6 +16,12 @@ class ScanEngine:
     """插件执行引擎：同步或并发运行插件，可选限速"""
 
     def __init__(self, threads: int = 1, rate: int = 0) -> None:
+        """初始化扫描引擎
+
+        Args:
+            threads: 并发执行插件的线程数（<=1 退化为串行）
+            rate: 每秒请求数上限（0=不限速，令牌桶实现见 _rate_limit）
+        """
         self.threads = max(1, threads)
         self.rate = rate  # 每秒请求数，0 表示不限速
         self._timestamps = []  # 令牌桶：最近 1 秒内的请求时间戳
@@ -71,6 +77,7 @@ class ScanEngine:
                     evidence=f"执行异常: {e}",
                 )
 
+        # 单线程模式：按插件定义顺序串行执行，结果顺序稳定（多线程用 as_completed 无序）
         if self.threads <= 1:
             for cls in plugin_classes:
                 res = _exec(cls)

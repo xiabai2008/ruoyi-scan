@@ -28,13 +28,22 @@ class JeecgDictUnauthPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """检测 /sys/dict/list 是否未授权返回字典配置。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
+        # 携带分页参数确保命中列表查询分支：放行鉴权时才可能返回 records 结构
         url = join_url(target, "/jeecg-boot/sys/dict/list?current=1&size=10")
         try:
             resp = session.get(url)
             text = resp.text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot 字典越权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # records+code 双特征：未授权返回分页业务 JSON，避开 401 拦截页与统一错误页
         if resp.status_code == 200 and match_all(text, ["records", "code"]):
             print(ok("存在 JeecgBoot 字典越权"))
             return ScanResult(

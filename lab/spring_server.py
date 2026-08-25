@@ -31,18 +31,40 @@ MARKER_TRACE = "spring-trace-leak-confirmed"
 
 
 def is_vuln():
+    """判断当前运行模式是否为漏洞签名模式
+
+    @return True=vuln（返回带洞签名）/ False=safe（全部已修复）
+    """
     return MODE == "vuln"
 
 
 def json_body(d, code=200):
+    """构造 JSON 响应：字典序列化为 UTF-8 JSON（ensure_ascii=False 保留中文）
+
+    @param d: 响应字典
+    @param code: HTTP 状态码，默认 200
+    @return Flask Response（application/json; charset=utf-8）
+    """
     return Response(json.dumps(d, ensure_ascii=False), status=code, mimetype="application/json; charset=utf-8")
 
 
 def html_body(body, code=200):
+    """构造 HTML 文本响应（UTF-8 编码）
+
+    @param body: HTML 字符串
+    @param code: HTTP 状态码，默认 200
+    @return Flask Response（text/html; charset=utf-8）
+    """
     return Response(body, status=code, mimetype="text/html; charset=utf-8")
 
 
 def binary_body(data, code=200):
+    """构造二进制响应（application/octet-stream），用于 heapdump 等非文本签名
+
+    @param data: 原始字节数据
+    @param code: HTTP 状态码，默认 200
+    @return Flask Response（application/octet-stream）
+    """
     return Response(data, status=code, mimetype="application/octet-stream")
 
 
@@ -76,12 +98,15 @@ def actuator_env_json():
 
 
 def dispatch(path, method):
+    """统一分发：按 (路径, 方法) 返回与 plugins/spring 各插件判定规则匹配的响应签名"""
     vuln = is_vuln()
 
     # 根路径：来自 Spring4Shell 插件 POST + fingerprint 探测（返回简单 JSON 或无特征响应）
     if path == "/":
         if method == "POST":
             # Spring4Shell 探针：POST 表单含 class.module.classLoader
+            # any() 遍历全部表单键：探针属性名带随机后缀（class.module.classLoader.<attr>），
+            # 无法精确枚举，按前缀子串判断即可覆盖探测
             if any("class.module.classLoader" in k for k in request.form.keys()):
                 if vuln:
                     return json_body({"status": 200, "_marker": MARKER_S4S})
@@ -100,6 +125,7 @@ def dispatch(path, method):
 
     # GET /actuator/env → actuator_unauth 第二关（vuln 返回 JSON / safe 404）
     if path == "/actuator/env":
+        # 方法分流：GET = actuator_unauth 读取探测；POST = actuator_env_rce 写入探测（两插件共用此路径）
         if method == "POST":
             # actuator_env_rce 探针
             if vuln:
@@ -267,6 +293,7 @@ def dispatch(path, method):
 @app.route("/", defaults={"p": ""}, methods=["GET", "POST"])
 @app.route("/<path:p>", methods=["GET", "POST"])
 def _route(p):
+    """Flask 统一入口：把任意路径/方法转交 dispatch，按 (路径, 方法) 分发签名"""
     return dispatch(request.path, request.method)
 
 

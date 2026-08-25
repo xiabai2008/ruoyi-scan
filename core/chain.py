@@ -161,6 +161,7 @@ class ChainDef:
             color[node] = GRAY
             path.append(node)
             for neighbor in adj.get(node, []):
+                # 三色标记法：GRAY=节点在递归栈中，再次遇 GRAY 说明沿当前路径回到了祖先
                 if color.get(neighbor, WHITE) == GRAY:
                     # 找到环
                     idx = path.index(neighbor)

@@ -57,6 +57,12 @@ class JobRcePlugin(PluginBase):
     AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源", "signin", "login"]
 
     def verify(self, target, session):
+        """探测 /monitor/job/edit 是否未授权可访问（仅存在性判定，不修改任务、不触发 RCE）
+
+        @param target: 目标主机，用于拼接接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——未鉴权进入业务层（JSON code 200/500）或渲染出编辑页为 CONFIRMED
+        """
         url = join_url(target, "monitor/job/edit")
         # 用不存在的 jobId 探测：若未鉴权，服务端会进入业务校验返回「任务不存在」类响应
         # 若已鉴权，服务端在拦截器层即返回登录重定向/401（不会进入业务逻辑）

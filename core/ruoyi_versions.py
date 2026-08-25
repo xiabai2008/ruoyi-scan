@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 
 # 若依版本指纹正则（匹配 X.Y.Z 格式，X/Y/Z 为数字）
 # 真实若依 /login 页面含 "4.7.8" 两次（footer + JS 变量）
+# 主版本限定 4/5：避免误命中页面中其他形如 x.y.z 的无关版本号（JS 库、构建号等）
 VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
 
 
@@ -138,6 +139,7 @@ def version_in_range(version, range_spec):
 
     # 解析范围表达式（逗号分隔的多个条件）
     conditions = range_spec.split(",")
+    # 逗号分隔的多个条件为 AND 关系：任一条件不满足即整体不适用（如 ">=4.2,<4.6"）
     for cond in conditions:
         cond = cond.strip()
         if not cond:

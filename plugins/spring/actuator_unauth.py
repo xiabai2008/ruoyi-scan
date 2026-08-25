@@ -50,6 +50,11 @@ class SpringActuatorUnauthPlugin(PluginBase):
     affected_versions = ""
 
     def verify(self, target, session):
+        """验证 Actuator 未授权访问：先 /actuator 后 /actuator/env 两关探测是否均可匿名访问。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——两关均通过返回 CONFIRMED，任一失败返回 SAFE，网络异常返回 UNKNOWN
+        """
         # 第一关：/actuator 是否可访问（返回 HAL JSON）
         url_root = join_url(target, "/actuator")
         try:
@@ -58,6 +63,7 @@ class SpringActuatorUnauthPlugin(PluginBase):
             print(no("Spring Boot Actuator 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_root, evidence=str(e))
 
+        # /actuator 根端点必须返回 JSON HAL 响应：纯 200 无效（HTML 错误页也可能是 200）
         if r1.status_code != 200 or "application/json" not in (r1.headers.get("Content-Type", "") or ""):
             print(no("不存在 Spring Boot Actuator 未授权（/actuator 不可达）"))
             return ScanResult(
@@ -75,6 +81,7 @@ class SpringActuatorUnauthPlugin(PluginBase):
         except Exception as e:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_env, evidence=str(e))
 
+        # 第二关通过才确认：/actuator 可达但 env 需认证时属“已保护”场景，不算未授权漏洞
         if r2.status_code == 200 and "application/json" in (r2.headers.get("Content-Type", "") or ""):
             print(ok("存在 Spring Boot Actuator 未授权访问"))
             return ScanResult(

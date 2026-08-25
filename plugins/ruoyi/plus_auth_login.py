@@ -1,3 +1,4 @@
+"""RuoYi-Plus 认证服务 /auth/login 接口存在性探测（Sa-Token 架构确认，无破坏性 payload）。"""
 # RuoYi-Plus 登录接口未授权探测（variant='ruoyi-plus' 专项）
 # Plus 版使用 Sa-Token 认证，登录接口为 /auth/login（独立认证服务）
 # 存在性验证：POST 空凭据探测接口存在性 + 是否返回业务 JSON（未配置登录限制时）
@@ -34,8 +35,15 @@ class PlusAuthLoginProbePlugin(PluginBase):
     variant = "ruoyi-plus"
 
     def verify(self, target, session):
+        """探测 /auth/login 认证接口是否存在，确认 RuoYi-Plus 的 Sa-Token 认证服务架构。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 响应含 code/msg 业务 JSON 特征则 CONFIRMED，无特征则 SAFE，网络异常则 UNKNOWN
+        """
         url = join_url(target, "/auth/login")
         try:
+            # 固定假凭据（admin/x）：仅触发服务端返回业务响应，不做真实账号登录尝试
             resp = session.post(
                 url,
                 data='{"username":"admin","password":"x"}',
@@ -46,6 +54,7 @@ class PlusAuthLoginProbePlugin(PluginBase):
             print(no("RuoYi-Plus 认证接口探测（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 认证服务存在：返回业务 JSON（code/msg）而非 404/405
+        # 200/400/401/500 均视为服务存在（登录失败、参数错误、未授权也是认证服务的响应）；404/405 才代表接口不存在
         if resp.status_code in (200, 400, 401, 500) and match_positive(text, ["code", "msg"]):
             print(ok("确认 RuoYi-Plus 认证服务（建议人工验证登录风控）"))
             return ScanResult(

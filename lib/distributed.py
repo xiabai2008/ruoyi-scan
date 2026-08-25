@@ -78,6 +78,7 @@ class ScanTask:
     """扫描任务"""
 
     def __init__(self, task_id: str = "", target: str = "", mode: str = "full", config: Dict = None, priority: int = 0):
+        """初始化扫描任务；task_id 缺省自动生成（uuid 前 12 位），config 缺省为空字典"""
         self.task_id = task_id or uuid.uuid4().hex[:12]
         self.target = target
         self.mode = mode  # full/vuln/dir/brute
@@ -87,6 +88,7 @@ class ScanTask:
         self.status = "pending"  # pending/running/completed/failed
 
     def to_dict(self) -> Dict[str, Any]:
+        """序列化为字典（Redis 存储 / JSON 传输用）"""
         return {
             "task_id": self.task_id,
             "target": self.target,
@@ -98,10 +100,12 @@ class ScanTask:
         }
 
     def to_json(self) -> str:
+        """序列化为 JSON 字符串（任务队列入队载荷）"""
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ScanTask":
+        """从字典还原任务；缺失字段沿用构造默认值"""
         task = cls(
             task_id=d.get("task_id", ""),
             target=d.get("target", ""),
@@ -115,6 +119,7 @@ class ScanTask:
 
     @classmethod
     def from_json(cls, json_str: str) -> "ScanTask":
+        """从 JSON 字符串还原任务"""
         return cls.from_dict(json.loads(json_str))
 
 
@@ -124,6 +129,7 @@ class TaskResult:
     def __init__(
         self, task_id: str = "", worker_id: str = "", results: List[Dict] = None, error: str = "", duration: float = 0.0
     ):
+        """初始化任务结果；error 非空表示该任务执行失败"""
         self.task_id = task_id
         self.worker_id = worker_id
         self.results = results or []
@@ -132,6 +138,7 @@ class TaskResult:
         self.completed_at = datetime.datetime.now().isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
+        """序列化为字典（duration 保留 3 位小数）"""
         return {
             "task_id": self.task_id,
             "worker_id": self.worker_id,
@@ -142,10 +149,12 @@ class TaskResult:
         }
 
     def to_json(self) -> str:
+        """序列化为 JSON 字符串（结果队列入队载荷）"""
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "TaskResult":
+        """从字典还原结果；字段缺失时取默认值"""
         r = cls(
             task_id=d.get("task_id", ""),
             worker_id=d.get("worker_id", ""),
@@ -270,6 +279,7 @@ class DistributedRateLimiter:
 
     def _acquire_redis(self) -> None:
         """Redis 全局令牌桶获取（增强版：burst + 防碰撞 + 统计）"""
+        # Lua 返回约定：1=放行，负数=需等待的秒数；循环重试直至放行
         while True:
             now = time.time()
             result = self.redis.eval(
@@ -294,6 +304,7 @@ class DistributedRateLimiter:
                 if len(self._local_timestamps) < max_allowed:
                     self._local_timestamps.append(now)
                     return
+                # 在锁外休眠：持锁等待会阻塞其它线程；醒来后重新加锁按最新时间戳重试
                 sleep = 1.0 - (now - self._local_timestamps[0]) if self._local_timestamps else 0.05
             if sleep > 0:
                 time.sleep(max(0.001, sleep))
@@ -451,6 +462,7 @@ class DistributedTaskQueue:
         now = datetime.datetime.now()
         active = []
         for wid, heartbeat in all_workers.items():
+            # 心跳时间格式异常（旧版本/脏数据）的 Worker 视为离线，跳过不影响整体统计
             try:
                 hb_time = datetime.datetime.fromisoformat(heartbeat)
                 if (now - hb_time).total_seconds() < max_age:
@@ -568,6 +580,7 @@ class MasterNode:
             total_duration += r.duration
 
         # 按严重度统计
+        # 未知严重度（critical/info 等）只累加 total，不进分项计数，保证分布表列固定
         severity_count = {"high": 0, "medium": 0, "low": 0, "total": 0}
         for v in all_vulns:
             sev = v.get("severity", "low")
@@ -765,6 +778,7 @@ def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = No
         0 表示成功
     """
     redis_url = getattr(args, "redis_url", None) or "redis://127.0.0.1:6379"
+    # 该表达式恒为 "full"（保留原写法，便于未来按 -u 目标类型扩展不同模式）
     mode = getattr(args, "u", None) and "full" or "full"
 
     try:

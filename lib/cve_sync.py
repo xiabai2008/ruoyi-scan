@@ -58,6 +58,19 @@ class CVEInfo:
         references: List[str] = None,
         cwe: List[str] = None,
     ):
+        """初始化 CVE 信息对象
+
+        Args:
+            cve_id: CVE 编号
+            description: 漏洞描述
+            cvss_vector: CVSS 向量字符串
+            cvss_score: CVSS 基础评分
+            severity: 严重度（LOW/MEDIUM/HIGH/CRITICAL）
+            published: 发布时间
+            last_modified: 最后修改时间
+            references: 参考链接列表
+            cwe: CWE 编号列表
+        """
         self.cve_id = cve_id
         self.description = description
         self.cvss_vector = cvss_vector
@@ -145,6 +158,7 @@ class CVEInfo:
                 tags.append(f"OWASP:{owasp};等保2.0:{dengbao}")
                 break
 
+        # 全部 CWE 未命中映射时给默认标签（A06），保证总有合规输出
         if not tags:
             tags.append("OWASP:A06:2021;等保2.0:8.1.3")
 
@@ -152,6 +166,7 @@ class CVEInfo:
 
     def to_severity_lower(self) -> str:
         """NVD 严重度转小写"""
+        # NVD 缺严重度时默认 medium，下游排序/过滤不受空值影响
         return self.severity.lower() if self.severity else "medium"
 
 
@@ -283,6 +298,7 @@ def parse_nvd_response(data: Dict[str, Any]) -> Optional[CVEInfo]:
     cvss_score = 0.0
     severity = ""
     metrics = cve_data.get("metrics", {})
+    # 优先 v3.1 评分，旧记录可能只有 v3.0/v2 指标，依次回退
     cvss_data = metrics.get("cvssMetricV31", []) or metrics.get("cvssMetricV30", [])
     if cvss_data:
         first = cvss_data[0]
@@ -303,6 +319,7 @@ def parse_nvd_response(data: Dict[str, Any]) -> Optional[CVEInfo]:
     for weakness in cve_data.get("weaknesses", []):
         for desc in weakness.get("description", []):
             cwe_id = desc.get("value", "")
+            # 去重 + 剔除 NVD 无信息占位 CWE（NVD-CWE-noinfo）
             if cwe_id and cwe_id not in cwe and cwe_id != "NVD-CWE-noinfo":
                 cwe.append(cwe_id)
 
@@ -497,6 +514,7 @@ def run_cve_sync_mode(args) -> int:
         print("[!]未发现需要同步的 CVE")
         return 0
 
+    # 集合去重后再查询：多个插件引用同一 CVE 只请求一次 NVD
     cve_ids = list({cve for _, cve in plugins_cves})
     print(f"[*]开始同步 {len(cve_ids)} 个唯一 CVE...")
 

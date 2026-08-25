@@ -52,6 +52,7 @@ def parse_auth_arg(auth_args: List[str]) -> Dict[str, Any]:
     }
 
     for arg in auth_args:
+        # 跳过不含 "=" 的无效项（空值/描述文本），避免误解析
         if "=" not in arg:
             continue
         auth_type, _, value = arg.partition("=")
@@ -140,6 +141,7 @@ def load_auth_file(filepath: str) -> Dict[str, Any]:
                 config["cookies"][key] = val
         if config["type"] == "bearer" and "Authorization" not in config["headers"]:
             # bearer 类型但无 Authorization 头，从 cookies 中取 token
+            # pop：取出后即从 cookies 移除，避免 token 又当作 Cookie 重复发送
             token = config["cookies"].pop("token", "")
             if token:
                 config["headers"]["Authorization"] = f"Bearer {token}"
@@ -211,6 +213,7 @@ def auto_login(
         # 尝试从响应中提取 token
         try:
             data = resp.json()
+            # RuoYi 响应结构：token 可能在顶层也可能在 data 子对象中，双路径提取
             token = data.get("token") or data.get("data", {}).get("token", "")
             if token:
                 config["headers"]["Authorization"] = f"Bearer {token}"
@@ -273,5 +276,6 @@ def parse_login_arg(login_arg: str) -> Tuple[str, str]:
     """
     if ":" not in login_arg:
         raise ValueError(f"--auth-login 格式应为 username:password，实际: {login_arg}")
+    # partition 按首个冒号切分：密码本身含冒号时也能正确解析
     username, _, password = login_arg.partition(":")
     return username.strip(), password.strip()

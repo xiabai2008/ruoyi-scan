@@ -424,6 +424,12 @@ class NucleiTemplatePlugin:
     compliance = ""
 
     def __init__(self, tpl: NucleiTemplate, source: str = ""):
+        """初始化模板插件实例
+
+        Args:
+            tpl: 解析后的 nuclei 模板对象
+            source: 模板来源文件路径（调试/溯源用）
+        """
         self.tpl = tpl
         self.source = source
 
@@ -522,6 +528,7 @@ def build_template_plugin(tpl: NucleiTemplate, source: str = "") -> type:
 
     class _Tpl(NucleiTemplatePlugin):
         def meta(self):
+            """返回插件元信息（含 CVSS 评分，匹配 PluginBase.meta 契约）"""
             from plugins.base import cvss_score
 
             return {

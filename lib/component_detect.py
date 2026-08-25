@@ -87,6 +87,7 @@ def _infer_from_ruoyi_version(component: str, ruoyi_version: str) -> str:
     if not ruoyi_version:
         return ""
     for prefix, mapping in RUOYI_COMPONENT_MAP.items():
+        # 若依 3.x 分支组件依赖与 5.x 一致，前缀特判补全推断覆盖
         if ruoyi_version.startswith(prefix) or (prefix == "5" and ruoyi_version.startswith("3.")):
             return mapping.get(component, "")
     return ""
@@ -105,6 +106,7 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
             u = join_url(target, probe_path)
             resp = session.get(u)
             text = (resp.text or "") + str(resp.headers)
+            # and not url：只保留首个命中路径，避免后续探测覆盖已得证据
             if "fastjson" in text.lower() and not url:
                 url = u
                 evidence = "响应泄漏 fastjson 关键字"
@@ -139,6 +141,7 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
             status=STATUS_UNKNOWN,
             evidence="%s，版本无法识别（建议人工确认 pom.xml）" % evidence,
             url=url,
+        # 语义：无论有无兜底提示，fix_version 都是假值（None/""），to_scan_result 不会输出修复建议
             fix_version=fallback_note("fastjson") and None,
         )
     # 2. 若依版本推断（无关键字泄漏时）
@@ -219,6 +222,7 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
                 evidence = "Spring Boot 默认错误 JSON"
             else:
                 # 3. 触发 404 错误页（非破坏性）
+                # 请求不存在的路径触发框架错误页，让 Spring 特征暴露出来（非破坏性）
                 resp404 = session.get(join_url(target, "/nonexistent-e2e-probe-404"))
                 text404 = resp404.text or ""
                 if "Whitelabel Error Page" in text404:
@@ -273,6 +277,7 @@ def detect_shiro(target: str, session, ruoyi_version: str = "") -> ComponentVers
     """
     url = join_url(target, "/login")
     try:
+        # 携带 rememberMe 值触发 Shiro 特征（Set-Cookie: rememberMe=deleteMe）
         resp = session.get(url, headers={"Cookie": "rememberMe=test"})
         set_cookie = resp.headers.get("Set-Cookie", "")
         if "rememberMe=deleteMe" in set_cookie or "rememberMe=deleteMe" in str(resp.headers):

@@ -91,6 +91,7 @@ class LinkExtractor(HTMLParser):
         self.links: List[str] = []
 
     def handle_starttag(self, tag: str, attrs):
+        """解析开始标签，收集标签属性中的链接（如 <a href>、<script src>）"""
         tag_lower = tag.lower()
         attr_name = self.LINK_ATTRS.get(tag_lower)
         if not attr_name:
@@ -124,6 +125,7 @@ def normalize_link(base: str, link: str) -> Optional[str]:
     if not link or link.startswith("#"):
         return None
     # javascript: / mailto: / data: 等非 HTTP 协议跳过
+    # 含 ":" 视为带协议：协议相对 URL（//host）单独补 scheme，其余伪协议直接丢弃
     if ":" in link and not link.startswith(("http://", "https://")):
         # 处理 protocol-relative URL（//host/path）
         if link.startswith("//"):
@@ -246,6 +248,7 @@ class Crawler:
                     logger.debug("执行页面回调失败", exc_info=True)
 
             # 达到最大深度则不再扩展
+            # 达到深度上限或页面非 HTML（无可解析链接）则停止扩展本节点
             if depth >= self.max_depth or not html_text:
                 if self.delay:
                     import time as _t
@@ -302,6 +305,7 @@ class Crawler:
             self.excluded_ext = {ext for ext in original_excluded if ext != ".js"}
             all_urls = self.crawl(start_url, session)
         finally:
+            # finally 恢复原排除集合，即使 crawl 抛异常也不污染实例状态
             self.excluded_ext = original_excluded
 
         pages = [u for u in all_urls if not u.lower().endswith(".js")]

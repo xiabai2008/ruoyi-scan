@@ -50,11 +50,13 @@ def should_fail_ci(results: List, severity_threshold: str = "high") -> bool:
     """
     from common.models import STATUS_CONFIRMED
 
+    # 未知阈值默认按 high(3) 从严：宁可让 CI 失败，不放过漏洞
     threshold_level = SEVERITY_LEVELS.get(severity_threshold, 3)
 
     for r in results:
         if r.status != STATUS_CONFIRMED:
             continue
+        # 未注册严重度取 0（低于任何阈值），避免误判触发 CI 失败
         sev_level = SEVERITY_LEVELS.get(r.severity, 0)
         if sev_level >= threshold_level:
             return True
@@ -130,6 +132,7 @@ def format_ci_vulns(results: List, max_display: int = 50) -> str:
 
     lines = [f"Confirmed vulnerabilities ({len(confirmed)}):"]
     for i, r in enumerate(confirmed[:max_display], 1):
+        # getattr 兜底：部分结果对象（如组件探测结果）可能没有 cve 属性
         cve_str = f" [{r.cve}]" if getattr(r, "cve", "") else ""
         lines.append(f"  {i}. [{r.severity.upper()}] {r.name}{cve_str}")
         lines.append(f"     URL: {r.url}")
@@ -274,6 +277,7 @@ def generate_ci_config(platform: str, output_path: str = None) -> str:
     content = templates[platform]
 
     if output_path:
+        # or "." 兜底：输出文件无目录前缀（纯文件名）时落在当前目录
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)

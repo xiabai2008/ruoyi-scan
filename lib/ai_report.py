@@ -34,6 +34,7 @@ _ANALYSIS_PROMPT = """你是资深安全分析师。根据 Ruoyi-Scan 的扫描 
 
 def _build_prompt(report_dict: dict, lang: str) -> str:
     """从 JSON 报告字典构建 LLM 提示词"""
+    # 只把已确认漏洞喂给 LLM，避免误报/未确认项污染分析结论
     vulns = [r for r in report_dict.get("results", []) if r.get("status") == STATUS_CONFIRMED]
     summary = {
         "target": report_dict.get("target", ""),
@@ -49,6 +50,7 @@ def _build_prompt(report_dict: dict, lang: str) -> str:
                 "cve": v.get("cve"),
                 "cvss_score": v.get("cvss_score"),
                 "compliance": v.get("compliance"),
+                # 截断长字段：控制 prompt token 消耗，首段即含关键信息
                 "fix_detail": (v.get("fix_detail") or "")[:500],
                 "reproduce": (v.get("reproduce") or "")[:300],
             }
@@ -92,6 +94,7 @@ def _template_summary(report_dict: dict, lang: str) -> str:
     confirmed = [r for r in report_dict.get("results", []) if r.get("status") == STATUS_CONFIRMED]
     confirmed_sorted = sorted(
         confirmed,
+        # 排序：中文严重度升序优先，cvss_score 取负实现同级别内降序
         key=lambda r: (SEVERITY_CN.get(r.get("severity", ""), ""), -float(r.get("cvss_score", 0) or 0)),
     )
     if confirmed_sorted:
@@ -102,6 +105,7 @@ def _template_summary(report_dict: dict, lang: str) -> str:
             lines.append("- **[%s]** %s（%s）" % (sev, v.get("name", ""), v.get("url", "")))
             fix = v.get("fix") or v.get("fix_detail", "")
             if fix:
+                # 多行修复建议只取首行，控制报告行宽并聚焦核心动作
                 lines.append("  - %s: %s" % ("修复" if zh else "Fix", fix.splitlines()[0][:120]))
             repro = v.get("reproduce", "")
             if repro:

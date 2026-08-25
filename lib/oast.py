@@ -163,9 +163,11 @@ class CallbackHTTPHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
+        """处理 GET 回调请求"""
         self._handle()
 
     def do_POST(self):
+        """处理 POST 回调请求"""
         self._handle()
 
     def log_message(self, format, *args):
@@ -183,6 +185,12 @@ class OASTServer:
     allow_reuse_address = True
 
     def __init__(self, host: str = "127.0.0.1", port: int = 5555):
+        """初始化本地回调服务器
+
+        Args:
+            host: 监听地址（默认仅绑定回环 127.0.0.1）
+            port: 监听端口
+        """
         self.host = host
         self.port = port
         self._server: Optional[HTTPServer] = None
@@ -225,6 +233,7 @@ class OASTServer:
             self._thread = None
 
     def is_running(self) -> bool:
+        """服务器是否在运行"""
         return self._running
 
     def url(self, interaction_id: str, path: str = "/") -> str:
@@ -317,6 +326,7 @@ class OASTClient:
 
     @property
     def interaction_id(self) -> Optional[str]:
+        """当前交互 ID（未生成时为 None）"""
         return self._interaction_id
 
 

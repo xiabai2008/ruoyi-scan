@@ -57,11 +57,17 @@ class SpringGatewayRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 Gateway Actuator 路由创建端点：POST 无害路由探针，凭创建成功响应判定暴露。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——路由可匿名创建返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/gateway/routes/test")
         # 路由创建探针（仅触发接口签名，不执行真实 SPEL）
         payload = {
             "id": "test-route-probe",
             "filters": [{"name": "AddResponseHeader", "args": {"name": "X-Probe", "value": "c22947"}}],
+            # uri 指向本地不可达端口：探针路由不会被真实转发流量，避免副作用
             "uri": "http://localhost:1",
             "order": 0,
         }
@@ -83,6 +89,7 @@ class SpringGatewayRcePlugin(PluginBase):
                 evidence=f"响应含 Gateway RCE 特征：{GW_MARKER}",
                 fix=self.fix,
             )
+        # 关键前提：真实利用还需 refresh 与访问触发才执行 SPEL，本插件仅验证“匿名可创建路由”这一暴露前提
         # 真实漏洞响应：路由创建成功（201 Created + 路由信息）
         if resp.status_code in (200, 201) and match_gateway_route_created(text):
             print(ok("存在 CVE-2022-22947 Spring Cloud Gateway 远程代码执行漏洞（真实漏洞响应）"))

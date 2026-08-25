@@ -56,6 +56,14 @@ class FileReadTimePlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """登录链会话下触发定时任务写文件后读取 2.txt，验证定时任务任意文件读取
+
+        链路：RuoYiAuthChain 登录 → edit 将 invokeTarget 改为 ruoYiConfig.setProfile('/etc/passwd')
+        → run 触发 → 读取落地文件 2.txt
+        @param target: 目标主机，用于拼接各环节接口地址
+        @param session: 复用的 HTTP 会话对象（登录成功后携带会话凭证）
+        @return: ScanResult——登录失败/需验证码为 UNKNOWN；落地文件含 root 与 :/ 特征为 CONFIRMED，否则 SAFE
+        """
         # D1 登录链：先登录拿会话，再走 edit → run → read 流程
         auth = RuoYiAuthChain(
             target,

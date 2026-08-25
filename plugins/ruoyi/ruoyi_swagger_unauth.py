@@ -1,3 +1,4 @@
+"""RuoYi Swagger/Knife4j API 文档未授权访问检测（信息泄露类）。"""
 # RuoYi Swagger 未授权 API 文档泄露
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -45,14 +46,22 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
+        """批量探测 Swagger/Knife4j 常见文档路径是否未授权公开。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 任一路径命中文档特征则 CONFIRMED，全部无特征则 SAFE，全部请求失败则 UNKNOWN（不误判 SAFE）
+        """
         # P3 三态补全：所有请求异常 → UNKNOWN，不误判为 SAFE
         any_success = False
+        # 依次覆盖三种文档形态：springfox（swagger-ui.html）、knife4j（doc.html）、OpenAPI JSON（v2/api-docs）
         for path in ["/swagger-ui.html", "/doc.html", "/v2/api-docs"]:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
                 any_success = True
                 if resp.status_code == 200:
+                    # 只匹配响应前 500 字符，避免对大型文档做全量匹配；关键词同时覆盖中/英文文档标题
                     if any(kw in (resp.text or "")[:500] for kw in ["swagger", "Knife4j", "接口文档", '"swagger"']):
                         return ScanResult(
                             kind=self.category,

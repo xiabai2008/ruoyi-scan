@@ -218,6 +218,7 @@ class PortScanner:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.timeout)
         try:
+            # connect_ex 不抛异常而是返回 errno（0=连接成功），比 connect 省一层 try/except
             if sock.connect_ex((host, port)) != 0:
                 return PortResult(port=port, state="closed")
             # 端口开放，识别服务名
@@ -241,6 +242,7 @@ class PortScanner:
                 logger.debug("Banner 探测失败", exc_info=True)
         # 无特定探测包，尝试直接 recv
         try:
+            # ssh/ftp 等服务会主动下发 banner，这里等最先到达的 1s 窗口即可
             sock.settimeout(1)
             data = sock.recv(1024)
             return self._clean_banner(data)
@@ -253,6 +255,7 @@ class PortScanner:
         try:
             text = data.decode("utf-8", errors="replace")
         except Exception:
+            # latin-1 逐字节映射永不失败，非 UTF-8 编码的 banner 也能完整保留文本
             text = data.decode("latin-1", errors="replace")
         # 取第一行，移除 \r\n
         line = text.split("\n")[0].replace("\r", "").strip()

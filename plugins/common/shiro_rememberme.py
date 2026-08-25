@@ -5,6 +5,8 @@ from plugins.base import PluginBase
 
 
 class ShiroRemembermePlugin(PluginBase):
+    """检测 Shiro rememberMe 反序列化 RCE（CVE-2016-4437）：以 rememberMe Cookie 特征作框架指纹"""
+
     name = "shiro_rememberme"
     cve = "CVE-2016-4437"
     severity = "high"
@@ -63,12 +65,15 @@ class ShiroRemembermePlugin(PluginBase):
         2. 检查响应 Set-Cookie 是否含 rememberMe=deleteMe（Shiro 特征）
         3. 若存在 Shiro 特征，判定为 UNKNOWN（需进一步验证密钥）
         """
+        # 探测点选登录页：Shiro 只处理受保护 URL，登录请求必然经过 rememberMe 解密链
         url = join_url(target, "/login")
         try:
             # 发送带有 rememberMe Cookie 的请求触发 Shiro 处理
+            # Cookie 值随意（test 即可）：Shiro 解密失败会回 Set-Cookie: rememberMe=deleteMe，这正是框架指纹
             resp = session.get(url, headers={"Cookie": f"{self.SHIRO_COOKIE}=test"})
 
             # 检查响应头是否包含 Shiro rememberMe 特征
+            # 双重检查：Set-Cookie 可能出现在多值响应头中，get() 只取首值，故再对完整头字符串匹配
             set_cookie = resp.headers.get("Set-Cookie", "")
             resp_headers = str(resp.headers)
 

@@ -89,6 +89,11 @@ class CacheStorage:
     """
 
     def __init__(self, db_path: str = "data/scan_cache.db"):
+        """初始化缓存存储
+
+        Args:
+            db_path: SQLite 数据库路径（默认 data/scan_cache.db）
+        """
         self.db_path = db_path
         self._lock = threading.Lock()
         # P2: WAL 模式 + 持久连接（消除每次操作新建连接的开销）
@@ -260,6 +265,7 @@ class CacheStorage:
                 "expired_entries": expired,
                 "active_entries": total - expired,
                 "total_hits": total_hits,
+                # 空库时 total=0，防除零按 0 处理
                 "hit_rate": round(total_hits / total, 2) if total > 0 else 0,
                 "top_hit": [dict(r) for r in top],
                 "by_target": [dict(r) for r in by_target],
@@ -473,6 +479,7 @@ def cached_scan(cache: ScanCache, target_arg: str = "target", plugin_name: str =
 
     def decorator(fn):
         def wrapper(*args, **kwargs):
+            # 目标参数可能在 kwargs 也可能在位置参数，兼容两种调用约定
             target = kwargs.get(target_arg) or (args[0] if args else "")
             if not target:
                 return fn(*args, **kwargs)
@@ -486,6 +493,7 @@ def cached_scan(cache: ScanCache, target_arg: str = "target", plugin_name: str =
             result = fn(*args, **kwargs)
 
             # 存储缓存
+            # None 结果不缓存：避免把失败/无结论的扫描"冻结"在缓存里
             if result is not None:
                 cache.set_plugin_result(target, plugin_name or fn.__name__, result, ttl=ttl)
             return result

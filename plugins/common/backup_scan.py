@@ -66,17 +66,26 @@ class BackupScanPlugin(PluginBase):
     ]
 
     def verify(self, target, session) -> ScanResult:
+        """探测常见备份/交换/系统残留文件后缀是否可被外网访问
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（发现可访问的备份文件）或 STATUS_SAFE
+        """
         found = []
         # 探测根路径的几个常见配置文件名组合
         base_names = ["index", "config", ".env", "web", "app"]
         for base in base_names:
             for suf in self._BACKUP_SUFFIXES:
+                # 后缀直接衔接文件名（/index.bak、/.env.bak 形态），点号开头与否不影响拼接结果
                 path = f"/{base}{suf}" if suf.startswith(".") or base.startswith(".") else f"/{base}{suf}"
                 url = join_url(target, path)
                 try:
                     resp = session.get(url)
+                    # 要求响应体非空：部分框架对未知路径统一返回空 200（SPA 回退），避免此类响应误报为备份文件
                     if resp.status_code == 200 and len(resp.content or b"") > 0:
                         found.append(path)
+                # 单路径请求异常（超时/连接拒绝）直接跳过，不影响其余组合的探测
                 except Exception:
                     continue
         if found:

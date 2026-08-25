@@ -56,6 +56,7 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
         print(f"{RED}[!]JSON 解析失败: {e}{RESET}")
         return
 
+    # 结构化差异对比：按漏洞条目匹配出新增/修复/变化/未变四类，非整文本比对
     diff = diff_reports(old_report, new_report)
     print(f"{SEPARATOR}")
     print(f"{YELLOW}[*]差异结果{RESET}")
@@ -66,6 +67,7 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
     print(f"    {YELLOW}⚠️ 状态变化: {diff.total_changed} 个{RESET}")
     print(f"    {YELLOW}⏳ 未变: {diff.total_persisted} 个{RESET}")
 
+    # diff 报告输出到新报告所在目录；新报告无目录名时回退到当前目录
     out_dir = os.path.dirname(new_path) or "."
     paths = render_diff_report(diff, os.path.join(out_dir, "diff"))
     print(f"{SEPARATOR}")
@@ -85,6 +87,7 @@ def run_ci_init_mode(args: Namespace) -> None:
         "gitlab": ".gitlab-ci-security.yml",
         "jenkins": "Jenkinsfile.security",
     }
+    # 已知平台映射到约定文件名，未知平台按通用命名 ci-<platform>.yml 兜底
     output_path = output_paths.get(platform, f"ci-{platform}.yml")
     print(f"{YELLOW}[*]生成 CI 配置: {platform}{RESET}")
     try:
@@ -106,6 +109,7 @@ def run_wiki_mode(args: Namespace) -> None:
 
     output_path = args.wiki_output or "vuln_wiki.html"
     print(f"{YELLOW}[*]生成漏洞知识库{RESET}")
+    # 同时产出 HTML（浏览器阅读）与 JSON（程序消费）两种形态的知识库
     paths = generate_wiki(output_path, formats=["html", "json"])
     print(f"{GREEN}[+]知识库已生成:{RESET}")
     for p in paths:

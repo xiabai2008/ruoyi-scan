@@ -104,6 +104,7 @@ async def get_scan(task_id: str, registry: TaskRegistry = Depends(get_registry))
         "target": "",
         "mode": "u",
     }
+    # 只取 DTO 声明的字段再构造，防止 task_dict 中的额外键导致校验失败
     return ScanTaskDTO(**{k: v for k, v in data.items() if k in ScanTaskDTO.model_fields})
 
 
@@ -113,6 +114,7 @@ async def cancel_scan(task_id: str, registry: TaskRegistry = Depends(get_registr
     record = registry.get(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+    # 软取消：只置内存状态标志并广播事件，执行中的插件线程在下一轮检查状态时自行退出
     record.status = "cancelled"
     registry.notify(task_id, "status", {"status": "cancelled", "task_id": task_id})
     return {"task_id": task_id, "status": "cancelled"}

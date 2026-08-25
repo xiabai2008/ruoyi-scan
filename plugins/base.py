@@ -73,6 +73,7 @@ def cvss_score(vector: str) -> float:
     c = _CVSS_WEIGHTS.get(f"C:{metrics['C']}", 0.0)
     i = _CVSS_WEIGHTS.get(f"I:{metrics['I']}", 0.0)
     a = _CVSS_WEIGHTS.get(f"A:{metrics['A']}", 0.0)
+    # ISS：三性影响按"至少一项受损"的概率合成（1 - 各项未受损概率之积）
     iss = 1 - ((1 - c) * (1 - i) * (1 - a))
 
     # Impact
@@ -85,14 +86,17 @@ def cvss_score(vector: str) -> float:
     av = _CVSS_WEIGHTS.get(f"AV:{metrics['AV']}", 0.0)
     ac = _CVSS_WEIGHTS.get(f"AC:{metrics['AC']}", 0.0)
     pr_key = f"PR:{metrics['PR']}"
+    # Scope Changed 时优先取专用 PR 权重表：影响跨安全边界，所需权限门槛更高
     pr = _CVSS_PR_SC.get(pr_key, _CVSS_WEIGHTS.get(pr_key, 0.0)) if scope_changed else _CVSS_WEIGHTS.get(pr_key, 0.0)
     ui = _CVSS_WEIGHTS.get(f"UI:{metrics['UI']}", 0.0)
     exploitability = 8.22 * av * ac * pr * ui
 
     # Base Score
+    # 规范边界：无任何影响子分时直接记 0，避免负分进入后续合成
     if impact <= 0:
         return 0.0
     if scope_changed:
+        # Scope Changed 时官方公式额外乘 1.08 修正因子，并封顶在 10.0
         base = min(1.08 * (impact + exploitability), 10.0)
     else:
         base = min(impact + exploitability, 10.0)
@@ -194,6 +198,7 @@ class PluginBase(ABC):
         D18/D24：自动填充 fix_detail/reproduce。
         """
         return ScanResult(
+            # 三态映射：仅 CONFIRMED 记为漏洞，UNKNOWN/SAFE 归入 info 交由引擎过滤
             kind="vuln" if status == STATUS_CONFIRMED else "info",
             name=self.name,
             severity=self.severity,

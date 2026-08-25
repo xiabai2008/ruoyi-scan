@@ -38,6 +38,7 @@ def run_plugin_check_mode(args: Namespace) -> None:
     filepath = args.plugin_check
     print(f"{YELLOW}[*]验证插件: {filepath}{RESET}")
 
+    # 静态检查：仅解析插件文件结构，不执行插件代码（捕获元数据/AST 级别问题）
     ok1, errors1, warnings1 = check_plugin(filepath)
     print(f"{SEPARATOR}")
     print("静态检查:")
@@ -50,6 +51,7 @@ def run_plugin_check_mode(args: Namespace) -> None:
     for w in warnings1:
         print(f"  {YELLOW}警告: {w}{RESET}")
 
+    # 导入检查：动态加载插件模块，捕获仅运行时才暴露的错误
     ok2, errors2, warnings2 = check_plugin_by_import(filepath)
     print("导入检查:")
     if ok2:
@@ -62,6 +64,7 @@ def run_plugin_check_mode(args: Namespace) -> None:
         print(f"  {YELLOW}警告: {w}{RESET}")
 
     print(f"{SEPARATOR}")
+    # 两层检查全部通过才算验证成功；任一失败即判定插件不合法
     if ok1 and ok2:
         print(f"{GREEN}[+]插件验证通过{RESET}")
     else:
@@ -79,6 +82,7 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
     print(f"{'#':<3} {'漏洞名称':<25} {'类别':<10} {'严重度':<8} {'CVE':<18} {'修复':<4} {'复现':<4}")
     print(f"{'-' * 80}")
     for i, p in enumerate(plugins, 1):
+        # 布尔字段映射为 [Y]/[N] 列展示；长名称/CVE 截断到列宽，避免表格错位
         has_fix = "[Y]" if p["has_fix_detail"] else "[N]"
         has_reproduce = "[Y]" if p["has_reproduce"] else "[N]"
         print(
@@ -98,6 +102,7 @@ def run_plugin_new_mode(args: Namespace) -> None:
     print(f"{YELLOW}[*]创建新插件脚手架{RESET}")
     print(f"    名称: {name}")
     print(f"    类别: {category}")
+    # FileExistsError 单独捕获：同名插件已存在属预期情况；其余异常统一归为创建失败
     try:
         filepath = generate_plugin_template(name, category=category)
         print(f"{GREEN}[+]插件已创建: {filepath}{RESET}")

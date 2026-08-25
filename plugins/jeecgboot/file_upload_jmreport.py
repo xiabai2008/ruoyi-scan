@@ -31,6 +31,12 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """检测 /jmreport/upload 是否可未授权上传文件（仅做可写性验证）。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 上传成功 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
         url = join_url(target, "/jeecg-boot/jmreport/upload")
         # multipart 探针（上传无害 txt，仅验证接口可写）
         boundary = "----ruoyi-scan-probe"
@@ -43,13 +49,16 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
         try:
             resp = session.post(
                 url,
+                # 手拼 multipart 体：除 file 外还须带 biz 业务字段，缺失会提前走参数校验分支导致测不出
                 data=body,
                 headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary},
             )
             text = resp.text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot jmreport 文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 上传成功响应特征：url（访问路径）+ fileName（落盘文件名），两者齐备才判接口可写
         if resp.status_code == 200 and match_all(text, ["url", "fileName"]):
             print(ok("存在 JeecgBoot jmreport 文件上传"))
             return ScanResult(

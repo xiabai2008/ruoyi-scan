@@ -14,6 +14,7 @@ from plugins.spring.spring_cloud_config import SpringCloudConfigPlugin
 from plugins.spring.spring_data_rest import SpringDataRestPlugin
 from plugins.spring.trace_leak import SpringTraceLeakPlugin
 
+# 注册顺序即扫描执行顺序：高危 RCE 优先、信息泄露次之、新增插件殿后
 plugin_list = [
     # vuln：RCE 类（high）
     Spring4shellPlugin,  # CVE-2022-22965 Spring4Shell

@@ -40,6 +40,7 @@ class Router:
         cms = fingerprint_result.cms
         if not cms:
             return []
+        # 取包后依次收窄：先按变体过滤，再按版本范围过滤，减少无效 POC 执行
         plugins = self.resolve_by_name(cms)
         # E1/F6：按 variant 过滤（无条件执行——插件 variant='' 全变体适用；
         # variant='X' 仅当指纹 variant=='X' 时执行；指纹无 variant 时专属插件不执行）
@@ -72,6 +73,7 @@ class Router:
         if not package:
             # 动态尝试 plugins.<cms>（特征库已注册的 CMS 自动可用）
             candidate = "plugins.%s" % cms
+            # 动态加载失败视为该 CMS 未注册，返回空列表（与显式映射缺失同语义）
             try:
                 load_plugins(candidate)
                 package = candidate

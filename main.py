@@ -30,6 +30,7 @@ def print_banner():
 
 def build_parser():
     """构建参数解析（-h/-u/-m/-p/-l 向后兼容，新增能力用长参数）"""
+    # 禁用 argparse 内置 -h：自建 dest="help" 参数，帮助输出对齐原脚本（print_help）
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group("核心参数（向后兼容）")
     group.add_argument("-h", dest="help", nargs="?", const="flag", default=None, help="帮助")
@@ -346,6 +347,11 @@ def print_help():
 
 # ── 主入口 ──
 def main(argv=None):
+    """CLI 入口：解析参数 → 加载 YAML 配置/扫描模板 → 校验模式 → 分发到 cli.dispatcher。
+
+    @param argv: 可选参数列表（默认取 sys.argv），便于单元测试直调。
+    未指定任何模式或显式 -h 时打印帮助并返回，不发起扫描。
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -370,6 +376,7 @@ def main(argv=None):
             print(f"{RED}[!]配置文件解析失败: {e}{RESET}")
             return
         cli_has_mode = any([args.u, args.m, args.p, args.l])
+        # 仅当命令行未显式指定模式时，才用 YAML 的 mode/target 回填，避免覆盖 -u/-m/-p/-l
         if not cli_has_mode:
             cfg_mode = config_data.get("mode", "u")
             cfg_target = config_data.get("target", config_data.get("u", ""))
@@ -420,6 +427,7 @@ def main(argv=None):
             args.nuclei_validate,
         ]
     )
+    # 显式 -h 或未指定任何可执行模式 → 打印帮助并退出
     if args.help is not None or not has_mode:
         print_help()
         return

@@ -60,6 +60,13 @@ class DefaultPasswordPlugin(PluginBase):
     CAPTCHA_KEYWORDS = ["验证码", "captcha", "code expired", "验证码已失效", "code is null"]
 
     def verify(self, target, session):
+        """用默认口令（admin/admin123）无验证码登录后台并判定是否命中
+
+        命中判定三通道：返回 token / code==200（排除 msg 含失败关键字）/ Set-Cookie 含 Admin-Token
+        @param target: 目标主机，用于拼接 /login 地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——命中为 CONFIRMED，明确失败为 SAFE，验证码拦截或特征不明为 UNKNOWN
+        """
         url = join_url(target, "login")
         # RuoYi /login 接收 JSON body（Content-Type: application/json）
         # 部分版本也接受 form 表单，这里用 JSON 兼容主流前后端分离版本
@@ -101,6 +108,7 @@ class DefaultPasswordPlugin(PluginBase):
             )
 
         # 2) 命中判定：JSON 含 token / code == 200 / Set-Cookie 含 session/Admin-Token
+        # body 可能是 JSON 数组/标量（非对象），isinstance 兜底避免对其调用 .get
         token = body.get("token") if isinstance(body, dict) else ""
         r_code = body.get("code") if isinstance(body, dict) else None
         msg = str(body.get("msg", "")) if isinstance(body, dict) else ""

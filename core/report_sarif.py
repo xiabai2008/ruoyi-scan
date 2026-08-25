@@ -31,6 +31,7 @@ GITHUB_SECURITY_SEVERITY = {
 }
 
 # CVSS → GitHub Security Level 映射
+# 表项必须按阈值降序排列：_cvss_to_level 从前向后取第一个满足的档位
 CVSS_TO_LEVEL = [
     (9.0, "error"),  # Critical
     (7.0, "error"),  # High
@@ -86,6 +87,7 @@ def _build_rules(results: List) -> Dict[str, Dict]:
                 )
             },
             "defaultConfiguration": {
+                # cvss=0 视为未录入，回落按严重度映射（GITHUB_SECURITY_SEVERITY）
                 "level": _cvss_to_level(cvss) if cvss > 0 else _severity_to_level(r.severity),
             },
             "properties": {
@@ -116,6 +118,7 @@ def _build_results(results: List, rules: Dict[str, Dict]) -> List[Dict]:
         # 构建结果条目
         result_entry = {
             "ruleId": rule_id,
+            # ruleIndex 必须与 rules 数组中该 rule 的下标一致（SARIF 规范），未知 rule 时兜底 0
             "ruleIndex": list(rules.keys()).index(rule_id) if rule_id in rules else 0,
             "level": level,
             "message": {
@@ -131,6 +134,7 @@ def _build_results(results: List, rules: Dict[str, Dict]) -> List[Dict]:
                 }
             ],
             "partialFingerprints": {
+                # 用 rule+url 组合哈希生成去重指纹；& 0xFFFFFFFF 截断为 8 位十六进制
                 "primaryLocationLineHash": f"{rule_id}:{hash(url) & 0xFFFFFFFF:08x}",
             },
             "properties": {
@@ -166,6 +170,7 @@ def to_sarif(report_builder) -> str:
     Returns:
         SARIF JSON 字符串
     """
+    # 复用报告构建器的去重结果，保证 SARIF 与 HTML/JSON 输出口径一致
     results = list(report_builder._effective_results())
     rules = _build_rules(results)
     sarif_results = _build_results(results, rules)

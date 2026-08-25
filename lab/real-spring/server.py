@@ -21,14 +21,17 @@ app = Flask(__name__)
 
 
 def json_body(d, code=200):
+    """构造 JSON 响应（模拟 Spring Boot 标准错误/成功格式）"""
     return Response(json.dumps(d, ensure_ascii=False), status=code, mimetype="application/json; charset=utf-8")
 
 
 def html_body(body, code=200):
+    """构造 HTML 响应（如 H2 Console 登录页）"""
     return Response(body, status=code, mimetype="text/html; charset=utf-8")
 
 
 def binary_body(data, code=200):
+    """构造二进制响应（如 heapdump 原始 hprof 字节流）"""
     return Response(data, status=code, mimetype="application/octet-stream")
 
 

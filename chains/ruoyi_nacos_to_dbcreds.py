@@ -10,6 +10,7 @@
 from core.chain import ChainDef, ChainStep
 from plugins.chain.nacos_to_dbcreds_steps import NacosConfigExtractPlugin, NacosUnauthPlugin
 
+# 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载
 CHAIN = ChainDef(
     name="ruoyi_nacos_to_dbcreds",
     display_name="Nacos 未授权 → 配置泄露 → 数据库凭证",
@@ -30,6 +31,7 @@ CHAIN = ChainDef(
             plugin_cls=NacosUnauthPlugin,
             on_fail="abort",
             description="检测 Nacos 未授权访问",
+            # 输出约定：secret: 前缀 → 凭证类（脱敏存储）；extra: 前缀 → 附加事实
             outputs={
                 "nacos_url": "extra:nacos_url",
             },

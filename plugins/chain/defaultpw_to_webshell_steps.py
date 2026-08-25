@@ -35,12 +35,22 @@ class DefaultPasswordLoginPlugin(PluginBase):
     fix = "强制修改默认口令，启用密码复杂度策略，限制登录失败次数"
 
     def verify(self, target, session):
+        """尝试常见默认口令登录，成功时提取 token 存入 extra.login_token
+
+        先探测验证码接口判断是否开启（开启则链路不可行），关闭后逐条
+        尝试 _DEFAULT_CREDS，响应含 token/code 字段即判定登录成功。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=默认口令可用，SAFE=不可用或验证码开启，UNKNOWN=网络异常
+        """
         login_url = join_url(target, "/login")
         captcha_url = join_url(target, "/captchaImage")
 
         # 尝试获取验证码（部分版本可能关闭验证码）
         try:
             captcha_resp = session.get(captcha_url)
+            # captchaImage 开启时响应带 uuid 字段，凭此识别验证码状态
             captcha_enabled = "uuid" in captcha_resp.text
         except Exception:
             captcha_enabled = False
@@ -67,6 +77,7 @@ class DefaultPasswordLoginPlugin(PluginBase):
                 )
                 text = resp.text
                 # Ruoyi 登录成功特征：返回 token
+                # 同时兼容新旧版本响应：新版返回 token，旧版仅返回 code 字段
                 if "token" in text.lower() or '"code":0' in text or '"code":200' in text:
                     token_match = re.search(r'"token"\s*:\s*"([^"]+)"', text)
                     token = token_match.group(1) if token_match else ""
@@ -100,8 +111,18 @@ class FileUploadVerifyPlugin(PluginBase):
     fix = "限制上传文件类型白名单，禁止 JSP/JSPX，上传目录禁止执行权限"
 
     def verify(self, target, session):
+        """验证 /common/upload 上传接口：先测 txt 可达性，再测 JSP 是否被拦截
+
+        仅发送无害探针（txt 文本 + JSP 注释），不实际上传可执行文件；
+        上传接口不可达或需鉴权时判定为 SAFE。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=接口可达（jsp_allowed 区分风险等级），SAFE=需鉴权或不可达，UNKNOWN=网络异常
+        """
         upload_url = join_url(target, "/common/upload")
         # 构造一个无害的探针文件（仅验证接口响应，不实际上传可执行文件）
+        # 探针内容绑定目标哈希：上传成功后可在回显 URL 中回溯校验，且互不串扰
         probe_content = "probe_" + str(hash(target))  # 无害内容
         try:
             # 发送一个合法后缀文件验证接口可达性
@@ -117,6 +138,7 @@ class FileUploadVerifyPlugin(PluginBase):
         if "fileName" in text or "url" in text:
             # 进一步检查是否允许 JSP（通过错误消息推断）
             try:
+                # JSP 注释探针：无任何执行副作用，仅用于判断 JSP 后缀是否被拦截
                 jsp_files = {"file": ("probe.jsp", "<%-- probe --%>", "application/octet-stream")}
                 jsp_resp = session.post(upload_url, files=jsp_files)
                 jsp_text = jsp_resp.text

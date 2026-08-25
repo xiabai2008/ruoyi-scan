@@ -54,10 +54,16 @@ class SpringActuatorEnvRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 /actuator/env 配置覆盖端点是否可达：POST 无害探针属性并据响应特征判定。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（requests.Session 兼容）
+        @return: ScanResult——CONFIRMED 表示 env 可写入，SAFE 表示不可达，UNKNOWN 表示网络异常
+        """
         url = join_url(target, "/actuator/env")
         # 配置覆盖探针（仅写入无害属性，不指向恶意 XML 服务）
         payload = {
             "name": "eureka.client.serviceUrl.defaultZone",
+            # 使用不可解析的 .test 域名：即使配置被真实加载也不会触发外部回调
             "value": "http://spring-probe.test/",
         }
         try:
@@ -93,6 +99,7 @@ class SpringActuatorEnvRcePlugin(PluginBase):
             )
         # 真实漏洞响应：POST 返回 200 但响应体简单（仅 timestamp/status），
         # 仍可判定 env POST 可达（无鉴权拦截）
+        # 兜底判定：200 且无明确报错即视为可写入——宽松分支，优先避免真实漏洞漏报
         if resp.status_code == 200 and "Method Not Allowed" not in text and "error" not in text.lower():
             print(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）"))
             return ScanResult(

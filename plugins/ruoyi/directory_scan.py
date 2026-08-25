@@ -51,6 +51,13 @@ class DirectoryScanPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """逐条读取 ruoyi.txt 字典并 GET 探测，输出 状态码/标题/长度/URL
+
+        输出格式与命中收集均严格保留原 path_scan 行为（兼容旧报告解析）
+        @param target: 目标主机，用于拼接探测路径
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——recon 类统一 UNKNOWN 语义，命中清单放 extra.hits 供报告收集
+        """
         # 原 path_scan 输出格式严格保留：
         #   [*]\033[33m响应:[{code}\033[33m] -> 标题:[{title}\033[33m] -> 长度:[\033[32m{len}\033[33m] -> {respnse.request.url}\033[0m
         # 状态码 '20' in code 为绿，否则红；标题为空显示红色 NULL，否则绿色
@@ -90,6 +97,7 @@ class DirectoryScanPlugin(PluginBase):
                 f"[*]{YELLOW}响应:[{code}{YELLOW}] -> 标题:[{title}{YELLOW}] -> 长度:[{GREEN}{len(text)}{YELLOW}] -> {respnse.request.url}{RESET}"
             )
             # 收集 2xx / 3xx / 有标题的条目供报告
+            # 收录条件：'20' in code（200/201/204 兼容）明确可用，或页面解析出真实标题（不代表状态码）
             if "20" in str(respnse.status_code) or "NULL" not in title:
                 hits.append(
                     {

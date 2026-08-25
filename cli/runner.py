@@ -22,6 +22,7 @@ from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 logger = get_logger(__name__)
 
 # ── 模式配置（对齐原脚本）──
+# 模式→类别映射：u=综合（侦察+漏洞+爆破）/ m=目录 / p=漏洞 / l=爆破
 MODE_CATEGORIES = {
     "u": ["recon", "vuln", "brute"],
     "m": ["recon"],
@@ -57,6 +58,7 @@ def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
     if not fmt_str:
         return None
     fmt_str = fmt_str.strip().lower()
+    # "all" 直接透传字符串（render_all 内部识别），与其余路径返回的列表形态不同
     if fmt_str == "all":
         return "all"
     valid = {"html", "json", "csv", "pdf", "docx", "xlsx", "sarif"}
@@ -79,6 +81,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     if getattr(args, "auth", None) or getattr(args, "auth_file", None) or getattr(args, "auth_login", None):
         from lib.auth_scan import auto_login, load_auth_file, parse_auth_arg, parse_login_arg
 
+        # 认证三来源（--auth 参数 / --auth-file 文件 / --auth-login 自动登录）合并进同一结构
         auth_config = {"cookies": {}, "headers": {}, "type": None}
         if args.auth:
             parsed = parse_auth_arg(args.auth)
@@ -107,6 +110,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
                         auth_config["type"] = login_config["type"]
             except ValueError as e:
                 print(f"{RED}[!]{e}{RESET}")
+        # 三来源均未产生可用凭据时整体回退为 None（无认证扫描）
         if not auth_config["cookies"] and not auth_config["headers"]:
             auth_config = None
 
@@ -263,6 +267,7 @@ def _cli_event_handler(event_type: str, payload):
     elif event_type == "category_start":
         print(SEPARATOR)
 
+    # 单插件结果事件：配色与 _print_scan_result 保持一致（存在/不存在/无法判定）
     elif event_type == "result":
         name = payload.get("name", "")
         status = payload.get("status", "")
@@ -408,6 +413,7 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
         logic_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
         scanner = LogicScanner(session=logic_session)
         logic_vulns = scanner.scan(target_normalized, endpoints)
+        # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
         for lv in logic_vulns:
             all_results.append(
                 ScanResult(
@@ -684,6 +690,7 @@ def run_plugin_update_mode(url: str) -> None:
     from config import settings
     from lib.plugin_repo import download_and_install
 
+    # "default" 关键字回退到配置的默认仓库地址；未配置时直接拒绝（fail-closed）
     if url == "default":
         url = settings.PLUGIN_REPO_URL
     if not url:
@@ -695,6 +702,7 @@ def run_plugin_update_mode(url: str) -> None:
         print(f"{GREEN}[*]更新完成：安装 {len(installed)} 个文件到 ~/.ruoyi-scan/plugins/{RESET}")
         for rel in installed:
             print(f"{GREEN}  [*] {rel}{RESET}")
+    # 验签/校验失败抛 ValueError 且不安装任何文件：远程插件更新默认失败关闭
     except ValueError as e:
         print(f"{RED}[!]更新失败（已拒绝安装）: {e}{RESET}")
         print(f"{YELLOW}[*]安全提示：远程插件安装要求 Ed25519 签名 + cryptography 库{RESET}")

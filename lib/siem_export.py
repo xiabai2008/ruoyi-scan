@@ -76,6 +76,7 @@ def to_ecs_event(result, target: str = "", scan_time: str = "") -> Dict[str, Any
 
     parsed = urlparse(result.url or "")
     host = parsed.hostname or ""
+    # URL 未显式带端口时按协议推断默认端口（https→443，http→80）
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
     # CVSS 评分
@@ -381,6 +382,7 @@ def export_to_files(results, formats: List[str], output_dir: str, target: str = 
 
     for fmt in formats:
         content = render_siem(results, fmt, target, scan_time)
+        # JSON 格式用 .jsonl 扩展名，与 ECS 等其他格式的 .json 文件区分，避免互相覆盖
         filename = f"scan_events.{fmt}" if fmt != "json" else "scan_events.jsonl"
         path = os.path.join(output_dir, filename)
         with open(path, "w", encoding="utf-8") as f:

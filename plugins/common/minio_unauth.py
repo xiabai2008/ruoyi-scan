@@ -8,6 +8,8 @@ from plugins.base import PluginBase
 
 
 class MinioUnauthPlugin(PluginBase):
+    """检测 MinIO 未授权访问（F7 中间件）：非破坏性确认服务存在并无凭证枚举 bucket"""
+
     name = "MinIO 未授权访问"
     cve = "CVE-2023-28432"
     severity = "medium"
@@ -31,6 +33,12 @@ class MinioUnauthPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """检测 MinIO 是否未授权访问（非破坏性）
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话（复用其超时/代理设置）
+        @return: ScanResult（CONFIRMED 表示无凭证即可列举 bucket）
+        """
         # 1. 确认 MinIO 服务存在
         health_url = join_url(target, "/minio/health/live")
         try:
@@ -38,6 +46,7 @@ class MinioUnauthPlugin(PluginBase):
         except Exception as e:
             print(no("MinIO 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=health_url, evidence=str(e))
+        # 200/3xx/400 均为服务存在的表现（含健康检查失败与部署重定向），其余状态即无 MinIO 服务
         if resp.status_code not in (200, 301, 302, 400):
             print(no("未检测到 MinIO 服务"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=health_url)
@@ -48,6 +57,7 @@ class MinioUnauthPlugin(PluginBase):
             text2 = resp2.text or ""
         except Exception as e:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=root_url, evidence=str(e))
+        # 匿名列举成功时 /minio/ 返回含 bucket/storage-class 的 XML/JSON 桶列表，命中即无鉴权
         if match_positive(text2, ["bucket", "storage-class", "minio"]):
             print(ok("存在 MinIO 未授权访问"))
             return ScanResult(

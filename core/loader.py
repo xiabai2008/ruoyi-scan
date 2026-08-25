@@ -94,6 +94,7 @@ def _load_external_file(file_path: str, logger) -> List[type]:
     """从单个 .py 文件加载插件"""
     from plugins.base import PluginBase
 
+    # 模块名加前缀隔离命名空间，避免不同文件同名导致 sys.modules 互相覆盖
     module_name = "_external_plugin_" + os.path.splitext(os.path.basename(file_path))[0]
 
     # 使用 importlib 加载
@@ -131,6 +132,7 @@ def _load_external_file(file_path: str, logger) -> List[type]:
             isinstance(attr, type)
             and issubclass(attr, PluginBase)
             and attr is not PluginBase
+            # __module__ 限定本文件定义的类，排除 import 进模块的第三方插件类
             and attr.__module__ == module_name
         ):
             result.append(attr)

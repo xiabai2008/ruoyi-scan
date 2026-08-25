@@ -33,6 +33,7 @@ def _find_report_file(task_id: str, fmt: str, registry: TaskRegistry = None) -> 
     注意：步骤 3 的 report.{ext} 回退仅在任务存在于 registry 时生效，
     避免对不存在的 task_id 误返回已有报告文件。
     """
+    # 未登记格式按 .<fmt> 兜底扩展名（未来新增格式无需改映射表）
     ext = _FORMAT_EXT.get(fmt, f".{fmt}")
 
     # 检查任务是否在 registry 中存在
@@ -124,6 +125,7 @@ async def download_pdf_report(task_id: str, registry: TaskRegistry = Depends(get
     """下载 PDF 格式报告（D8 依赖）"""
     filepath = _find_report_file(task_id, "pdf", registry)
     if not filepath:
+        # 501 区别于 404：表示该格式当前不可用（依赖未安装），而非任务不存在
         raise HTTPException(status_code=501, detail="PDF 报告未生成（需安装 reportlab）")
     return FileResponse(filepath, media_type="application/pdf", filename=f"{task_id}_report.pdf")
 

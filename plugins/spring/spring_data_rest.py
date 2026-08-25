@@ -47,10 +47,17 @@ class SpringDataRestPlugin(PluginBase):
     )
 
     def verify(self, target, session) -> ScanResult:
+        """验证 Spring Data REST 暴露：GET /api 根资源并判定 HAL 链接特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——根资源含 HAL 链接返回 CONFIRMED，否则 SAFE，异常返回 error UNKNOWN
+        """
         url = join_url(target, "/api")
         try:
             resp = session.get(url)
+            # 仅取前 500 字符即覆盖根资源 JSON 头部，避免大响应全量载入内存
             text = (resp.text or "")[:500]
+            # HAL 根资源签名：_links 是 Data REST 端点标志，profile/self 关联链接进一步排除普通 JSON 误报
             if resp.status_code == 200 and "_links" in text and ("profile" in text or "self" in text):
                 return ScanResult(
                     kind=self.category,

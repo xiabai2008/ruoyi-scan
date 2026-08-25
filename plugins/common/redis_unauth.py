@@ -7,6 +7,8 @@ from plugins.base import PluginBase
 
 
 class RedisUnauthPlugin(PluginBase):
+    """检测 Redis 未授权访问（F7 中间件）：直连 6379 发送 INFO，能读到版本信息即未授权"""
+
     name = "Redis 未授权访问"
     cve = "CVE-2021-32761"
     severity = "high"
@@ -36,6 +38,12 @@ class RedisUnauthPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """通过 TCP 直连 6379 发送 INFO 命令检测是否未授权（非破坏性）
+
+        @param target: 目标站点 URL（仅取其 host 部分）
+        @param session: HTTP 会话（本检测实际走 socket，参数仅为保持插件接口一致）
+        @return: ScanResult（CONFIRMED 表示无需认证即可执行 INFO）
+        """
         from urllib.parse import urlparse
 
         # 从目标 URL 提取 host（Redis 走独立端口，默认 6379）
@@ -54,6 +62,7 @@ class RedisUnauthPlugin(PluginBase):
                 sock.settimeout(5)
                 data = b""
                 try:
+                    # 只读 2048 字节：INFO 的 redis_version 字段位于响应头部，避免大响应拖慢/阻塞
                     while len(data) < 2048:
                         chunk = sock.recv(1024)
                         if not chunk:
@@ -65,6 +74,7 @@ class RedisUnauthPlugin(PluginBase):
                 sock.close()
         except Exception as e:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence="连接失败: %s" % e)
+        # 容错解码：INFO 响应可能含二进制字节，errors="ignore" 保证后续关键字匹配不中断
         text = data.decode("utf-8", errors="ignore")
         # 未授权判定：INFO 返回 redis 版本信息（有 auth 时返回 -NOAUTH）
         if "redis_version" in text and "-NOAUTH" not in text and "DENIED" not in text:

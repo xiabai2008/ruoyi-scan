@@ -122,6 +122,7 @@ class TaskRegistry:
                 if len(self._tasks[task_id].events) > self.max_events_per_task:
                     self._tasks[task_id].events = self._tasks[task_id].events[-self.max_events_per_task :]
                 # 更新状态
+                # 事件语义约定："status" 事件以 payload.status 为准；"error" 事件直接置为 failed
                 if event_type == "status" and isinstance(payload, dict):
                     self._tasks[task_id].status = payload.get("status", self._tasks[task_id].status)
                 elif event_type == "error":
@@ -151,6 +152,7 @@ class TaskRegistry:
 
         返回 asyncio.Queue，handler 通过 await queue.get() 等待事件。
         """
+        # 队列只承载订阅之后的新事件；历史事件由订阅方另行调用 get_history() 补播
         queue = asyncio.Queue()
         with self._lock:
             self._subscribers[task_id].add(queue)
@@ -192,12 +194,14 @@ class TaskRegistry:
 
         在 FastAPI startup 中调用，确保进程重启后历史任务可查询。
         """
+        # 只恢复最近 100 条（list_tasks 按创建时间倒序），避免启动时全量载入拖慢初始化
         try:
             tasks = storage.list_tasks(limit=100)
             for td in tasks:
                 task_id = td.get("task_id", "")
                 if not task_id:
                     continue
+                # 历史任务缺省按已完成恢复：重启后不再被当作待执行任务处理
                 status = td.get("status", "done")
                 # 恢复事件历史
                 events = storage.get_events(task_id, limit=self.max_events_per_task)

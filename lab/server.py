@@ -36,14 +36,30 @@ DRUID_OK_PASSWORDS = {"ruoyi", "123456", "admin123", "druid"}
 
 
 def is_vuln():
+    """判断当前运行模式是否为漏洞签名模式
+
+    @return True=vuln（返回带洞签名）/ False=safe（全部已修复）
+    """
     return MODE == "vuln"
 
 
 def json_body(d, code=200):
+    """构造 JSON 响应：字典序列化为 UTF-8 JSON（ensure_ascii=False 保留中文）
+
+    @param d: 响应字典
+    @param code: HTTP 状态码，默认 200
+    @return Flask Response（application/json; charset=utf-8）
+    """
     return Response(json.dumps(d, ensure_ascii=False), status=code, mimetype="application/json; charset=utf-8")
 
 
 def html_body(body, code=200):
+    """构造 HTML 文本响应（UTF-8 编码）
+
+    @param body: HTML 字符串
+    @param code: HTTP 状态码，默认 200
+    @return Flask Response（text/html; charset=utf-8）
+    """
     return Response(body, status=code, mimetype="text/html; charset=utf-8")
 
 
@@ -97,6 +113,7 @@ def dispatch(path, method):
     if path == "/druid/submitLogin":
         user = request.form.get("loginUsername", "")
         pwd = request.form.get("loginPassword", "")
+        # 口令必须命中弱口令子集才放行：避免把字典之外的随机口令误判为"登录成功"（safe 模式同理不漏判）
         if vuln and user in DRUID_USERS and pwd in DRUID_OK_PASSWORDS:
             return json_body({"success": True, "message": "登录成功"})
         # safe 模式：失败响应不含 'success' 关键字，避免子串误判
@@ -183,6 +200,8 @@ def dispatch(path, method):
         return json_body({"code": 401, "msg": "请先登录"}, 401)
 
     # Thymeleaf/SpEL 模板注入探针路径（含 __${7*7}__::.x）
+    # 探针 URL 常带 URL 编码变体（如 __$%7B7*7%7D__::.x），request.path 已做百分号解码，
+    # 用路径子串而非精确匹配，任何含 7*7 的变体都会落入本分支
     if "7*7" in path:
         if vuln:
             # 含求值结果 49 与模板引擎关键字（thymeleaf / org.thymeleaf），且不含原始 7*7
@@ -251,6 +270,7 @@ def dispatch(path, method):
 @app.route("/", defaults={"p": ""}, methods=["GET", "POST"])
 @app.route("/<path:p>", methods=["GET", "POST"])
 def _route(p):
+    """Flask 统一入口：把任意路径/方法转交 dispatch，按 (路径, 方法) 分发签名"""
     return dispatch(request.path, request.method)
 
 

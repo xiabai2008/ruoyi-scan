@@ -50,6 +50,7 @@ class ScanResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """转为字典（报告渲染用）"""
+        # 手写键序而非 dataclasses.asdict：注入 severity_cn 展示字段并显式控制序列化形状
         return {
             "kind": self.kind,
             "name": self.name,

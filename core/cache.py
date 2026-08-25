@@ -10,6 +10,11 @@ class FingerprintCache:
     """
 
     def __init__(self, session):
+        """初始化请求级缓存（绑定会话对象）
+
+        Args:
+            session: 用于发起请求的 SessionManager 实例
+        """
         self._cache = {}
         self._session = session
 
@@ -28,6 +33,7 @@ class FingerprintCache:
         return self._cache[url]
 
     def __len__(self):
+        """已缓存 URL 数量"""
         return len(self._cache)
 
     def keys(self):

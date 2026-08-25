@@ -112,6 +112,7 @@ class SubdomainEnumerator:
             timeout: HTTP 请求超时秒数
             on_found: 每发现一个子域的回调
         """
+        # 用 is not None 而非 or：空列表 [] 也视为自定义字典（可借此禁用内置字典）
         self.word_list = word_list if word_list is not None else DEFAULT_SUBDOMAIN_WORDS
         self.verify_dns = verify_dns
         self.use_crtsh = use_crtsh
@@ -206,9 +207,11 @@ class SubdomainEnumerator:
                 # name_value 可能是多行（一个证书可包含多个域名）
                 for line in name_value.split("\n"):
                     line = line.strip().lower()
+                    # 跳过空行与通配符条目（*.domain 无法确认具体子域，且会污染结果）
                     if not line or "*" in line:
                         continue
                     # 仅保留属于该主域的子域
+                    # 只保留主域本身或按 .主域 后缀归属的条目，杜绝收集到无关域名
                     if line == self._clean_domain(domain) or line.endswith("." + self._clean_domain(domain)):
                         self._add(line, "crt.sh")
         except Exception as e:

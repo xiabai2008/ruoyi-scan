@@ -51,6 +51,11 @@ class SpringCloudFunctionRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 Cloud Function SpEL 路由注入：POST SpEL 探针头并判定求值结果特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——响应含 SpEL 求值结果返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/functionRouter")
         # SpEL 探针头（仅触发签名，不执行真实命令）
         headers = {
@@ -75,6 +80,7 @@ class SpringCloudFunctionRcePlugin(PluginBase):
                 fix=self.fix,
             )
         # 真实漏洞响应：SpEL 求值结果（7*7=49 短数字 / 命令回显）
+        # 真实环境 SpEL 求值结果是很短的数字（如 49），matcher 用启发式识别，不依赖固定回显
         if resp.status_code == 200 and match_cloud_function_spel(text):
             print(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞（真实漏洞响应）"))
             return ScanResult(

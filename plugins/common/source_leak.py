@@ -75,11 +75,19 @@ class SourceLeakPlugin(PluginBase):
     ]
 
     def verify(self, target, session) -> ScanResult:
+        """探测 IDE/SCM 残留文件及依赖锁文件是否可被外网访问
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（发现残留文件）或 STATUS_SAFE
+        """
         found = []
+        # 每项 = 路径 + 判定关键字：须同时满足 200 与关键字命中，双条件避免仅凭状态码误报
         for path, keyword in self._TARGETS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
+                # (resp.text or "") 防御空响应体：无 body 的 200 一律视为未命中关键字
                 if resp.status_code == 200 and keyword in (resp.text or ""):
                     found.append(path)
             except Exception:

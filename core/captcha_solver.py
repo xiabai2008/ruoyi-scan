@@ -43,6 +43,13 @@ class CaptchaSolver:
     """
 
     def __init__(self, target, session, captcha_type="auto"):
+        """初始化验证码识别器
+
+        Args:
+            target: 目标站点根 URL
+            session: SessionManager 实例
+            captcha_type: auto / math / char（auto 先按算术求值，非算式回退原文）
+        """
         self.target = target
         self.session = session
         self.captcha_type = captcha_type  # auto / math / char
@@ -169,6 +176,7 @@ class CaptchaSolver:
             if op == "*":
                 return str(a * b)
             if op == "/":
+                # 验证码算式为整数除法；b==0 是 OCR 误识别，直接给 "0" 防御
                 return str(a // b) if b != 0 else "0"
         except Exception:
             logger.debug("算术验证码求值失败", exc_info=True)

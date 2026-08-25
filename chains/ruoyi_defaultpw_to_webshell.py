@@ -12,6 +12,7 @@
 from core.chain import ChainDef, ChainStep
 from plugins.chain.defaultpw_to_webshell_steps import DefaultPasswordLoginPlugin, FileUploadVerifyPlugin
 
+# 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载
 CHAIN = ChainDef(
     name="ruoyi_defaultpw_to_webshell",
     display_name="默认口令 → 登录链 → 任意文件上传 → webshell",
@@ -33,6 +34,7 @@ CHAIN = ChainDef(
             plugin_cls=DefaultPasswordLoginPlugin,
             on_fail="abort",
             description="尝试 Ruoyi 常见默认口令登录",
+            # 输出约定：secret: 前缀 → 凭证类（上下文 secrets 脱敏存储）；extra: 前缀 → 附加事实
             outputs={
                 "login_token": "secret:login_token",
                 "username": "extra:username",

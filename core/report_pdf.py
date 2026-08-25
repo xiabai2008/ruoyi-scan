@@ -73,6 +73,7 @@ def render_pdf(builder, out_path):
     )
 
     # === 样式定义 ===
+    # alignment=1 即水平居中（reportlab 常量 CENTER），封面标题/副标题均居中排版
     title_style = ParagraphStyle("ChTitle", fontName=F, fontSize=24, alignment=1, spaceAfter=10, leading=30)
     subtitle_style = ParagraphStyle(
         "ChSubtitle",
@@ -161,6 +162,7 @@ def render_pdf(builder, out_path):
                 ]
             )
 
+        # 列宽合计 170mm = A4(210mm) - 左右页边距(2×20mm)，正好占满正文区
         col_widths = [35 * mm, 18 * mm, 45 * mm, 40 * mm, 32 * mm]
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
@@ -207,6 +209,7 @@ def render_pdf(builder, out_path):
                     Paragraph(r.evidence or "", cell_style),
                 ]
             )
+        # 列宽同样合计 170mm 撑满正文区；repeatRows=1 使表头跨页重复
         other_table = Table(other_data, colWidths=[40 * mm, 20 * mm, 60 * mm, 50 * mm], repeatRows=1)
         other_table.setStyle(
             TableStyle(

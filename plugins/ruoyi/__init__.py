@@ -2,6 +2,7 @@
 # Step 2（无损迁移）：path_scan → poc_scan(file_read / file_read_time / sql_inject_role / sql_inject_dept) → web_login
 # Step 5（专项补齐）：vuln 类追加 file_upload / job_rce / thymeleaf_ssti / unauth_batch；brute 类追加 default_password
 # Step 8（阶段八扩充）：vuln 类追加 file_read_path（high）/ nacos_unauth（medium）
+# plugin_list：插件注册表，扫描器按声明顺序逐条执行——新增插件须在此登记，排序即执行优先级
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
 from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin

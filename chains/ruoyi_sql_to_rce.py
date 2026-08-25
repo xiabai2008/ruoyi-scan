@@ -12,6 +12,7 @@
 from core.chain import ChainDef, ChainStep
 from plugins.chain.sql_to_rce_steps import ConfigReadPlugin, JobRCEVerifyPlugin, SQLInjectExtractPlugin
 
+# 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载
 CHAIN = ChainDef(
     name="ruoyi_sql_to_rce",
     display_name="SQL注入 → 文件读取配置 → 定时任务 RCE",
@@ -33,6 +34,7 @@ CHAIN = ChainDef(
             plugin_cls=SQLInjectExtractPlugin,
             on_fail="abort",
             description="SQL 注入提取数据库名",
+            # 输出约定：secret: 前缀 → 凭证类（脱敏存储）；extra: 前缀 → 附加事实
             outputs={
                 "db_name": "extra:db_name",
             },
@@ -55,6 +57,7 @@ CHAIN = ChainDef(
             plugin_cls=JobRCEVerifyPlugin,
             depends_on=["sql_inject"],
             on_fail="continue",
+            # RCE 验证仅依赖 sql_inject（而非 config_read）：配置读取失败（continue）不阻塞该支线
             description="验证定时任务接口未授权访问和 RCE 风险",
             outputs={
                 "job_endpoint": "extra:job_endpoint",

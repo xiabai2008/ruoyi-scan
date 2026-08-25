@@ -50,6 +50,7 @@ async def prometheus_metrics(request: Request, registry: TaskRegistry = Depends(
     for status, count in task_stats.items():
         lines.append(f'ruoyi_scan_tasks_total{{status="{status}"}} {count}')
 
+    # 活跃任务数 = 运行中 + 排队中，其余状态均视为非活跃
     # 3. 活跃任务数
     active_count = task_stats.get("running", 0) + task_stats.get("pending", 0)
     lines.append("# HELP ruoyi_scan_tasks_active 当前活跃任务数")
@@ -77,6 +78,7 @@ async def prometheus_metrics(request: Request, registry: TaskRegistry = Depends(
 def _get_task_stats(registry: TaskRegistry) -> dict:
     """从 registry 获取任务统计"""
     stats = {"pending": 0, "running": 0, "done": 0, "failed": 0}
+    # 直接读 registry 内部任务表（无公开统计接口），加锁避免与写入线程竞争
     try:
         with registry._lock:
             for record in registry._tasks.values():
@@ -100,6 +102,7 @@ def _get_result_stats(registry: TaskRegistry) -> dict:
                 confirmed = td.get("confirmed_count", 0)
                 total = td.get("result_count", 0)
                 stats["confirmed"] += confirmed
+                # unknown 取 total - confirmed 的近似，max(0, ...) 防御数据不一致导致的负数
                 stats["unknown"] += max(0, total - confirmed)
     except Exception:
         logger.debug("结果统计采集异常", exc_info=True)

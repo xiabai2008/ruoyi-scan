@@ -1,3 +1,4 @@
+"""Thymeleaf/SpEL 视图名注入检测——__${7*7}__::.x 算术探针，按求值结果 49 保守判定（CVE-2023-38286）。"""
 # Thymeleaf/SpEL 模板注入：路径注入 __${7*7}__::.x 探针，按响应是否含 49 判定（保守判定）
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
@@ -72,6 +73,12 @@ class ThymeleafSstiPlugin(PluginBase):
     ]
 
     def verify(self, target, session):
+        """用 __${7*7}__::.x 算术探针逐候选路径探测 Thymeleaf/SpEL 视图名注入（仅验证，不执行命令）。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 求值结果 49 + 引擎关键字双重命中则 CONFIRMED；仅 49 则 UNKNOWN 待复核；无求值迹象则 SAFE；全部网络异常则 UNKNOWN
+        """
         # 候选路径任一命中即判存在；全部无响应判 UNKNOWN；命中特征但无 49 判 SAFE
         got_response = False
         for path in self.CANDIDATE_PATHS:

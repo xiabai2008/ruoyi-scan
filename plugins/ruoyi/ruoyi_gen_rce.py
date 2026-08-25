@@ -1,3 +1,4 @@
+"""RuoYi 代码生成模块（Velocity/Thymeleaf）SSTI 模板注入检测。"""
 # RuoYi 代码生成模块 SSTI 检测
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -49,9 +50,17 @@ class RuoyiGenRcePlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
+        """访问代码生成编辑页，检测该模块是否存在 SSTI 模板注入特征。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 命中 SSTI 签名则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        """
+        # GET 访问编辑页记录可达性与状态码：未命中特征时状态码写入 evidence 供人工研判
         url = join_url(target, "/tool/gen/edit")
         try:
             resp = session.get(url)
+            # 签名头为测试环境注入的判定桩；生产环境需人工复核模板渲染行为，不能仅凭状态码下结论
             if resp.headers.get("X-Ruoyi-Vuln") == "gen-ssti":
                 return ScanResult(
                     kind=self.category,

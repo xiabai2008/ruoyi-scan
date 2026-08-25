@@ -29,9 +29,11 @@ def setup_logging(debug: bool = False, level: int | None = None) -> None:
     """
     global _configured
     if level is None:
+        # 容器/CI 部署可用环境变量 RUOYI_SCAN_DEBUG=1 全局强制 DEBUG，与 --debug 等效
         env_level = os.environ.get("RUOYI_SCAN_DEBUG", "")
         level = logging.DEBUG if (debug or env_level in ("1", "true", "yes")) else logging.WARNING
     if not _configured:
+        # 日志走 stderr：避免污染 stdout（banner/报告等用户主输出）
         handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT))
         root = logging.getLogger()
@@ -44,6 +46,7 @@ def setup_logging(debug: bool = False, level: int | None = None) -> None:
         root.setLevel(level)
         _configured = True
     else:
+        # 已初始化过：仅动态切换级别，不重复挂载 handler
         logging.getLogger().setLevel(level)
 
 

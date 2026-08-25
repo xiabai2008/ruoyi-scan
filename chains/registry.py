@@ -39,6 +39,7 @@ def list_chains() -> List[Dict[str, str]]:
             "severity": "high",
         },
     }
+    # 依赖字典插入序：迭代顺序即链展示顺序（与注册表/报告顺序一致，排序稳定）
     result = []
     for name, meta in _META.items():
         result.append(
@@ -64,6 +65,7 @@ def get_chain(name: str) -> Optional[ChainDef]:
     if name not in _CHAIN_REGISTRY:
         return None
     module_path, var_name = _CHAIN_REGISTRY[name]
+    # import 置于函数体内：未命中注册表时零导入开销；importlib 由解释器缓存，重复调用无额外成本
     import importlib
 
     module = importlib.import_module(module_path)
@@ -78,4 +80,5 @@ def register_chain(name: str, module_path: str, var_name: str = "CHAIN"):
         module_path: 模块路径（如 'chains.ruoyi_sql_to_rce'）
         var_name: 链定义变量名（默认 'CHAIN'）
     """
+    # 同名注册直接覆盖：允许插件用新实现替换内置链（不报重复注册错误）
     _CHAIN_REGISTRY[name] = (module_path, var_name)

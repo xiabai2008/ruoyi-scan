@@ -69,10 +69,18 @@ class EnvLeakPlugin(PluginBase):
     ]
 
     def verify(self, target, session) -> ScanResult:
+        """检测 /.env 是否可访问且泄露环境变量键名（数据库/密钥关键字）
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（命中关键字）或 STATUS_SAFE
+        @exception: 请求异常返回 STATUS_UNKNOWN
+        """
         url = join_url(target, "/.env")
         try:
             resp = session.get(url)
             text = resp.text or ""
+            # 非 200 直接判 SAFE：.env 若可访问必然以明文 200 返回
             if resp.status_code != 200:
                 return ScanResult(
                     kind=self.category,
@@ -100,7 +108,9 @@ class EnvLeakPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_SAFE,
                 url=url,
+                # 仅 200 不足为证：SPA/框架可能对未知路径回退空 200，须命中键名风格关键字才坐实泄露
                 evidence="状态码=200 但未命中环境变量关键字",
             )
+        # 网络异常置 UNKNOWN，避免把目标不可达误判为安全
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"请求异常: {e}")

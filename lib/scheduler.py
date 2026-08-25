@@ -102,6 +102,7 @@ class ScanScheduler:
             job_id
         """
         parsed = parse_schedule_expr(cron_expr)
+        # 自动生成稳定 job_id：cron 表达式中的空白/冒号转下划线，目标截断防 ID 过长
         job_id = job_id or (
             "job_" + re.sub(r"[\s:]", "_", cron_expr) + "_" + target.replace("://", "_").replace("/", "_")[:24]
         )
@@ -171,6 +172,7 @@ class ScanScheduler:
             try:
                 for rec in self.storage.list_schedules():
                     jid = rec["job_id"]
+                    # 内存中已有的任务（启动前手动添加）不重复恢复，以内存为准
                     if jid in self._jobs:
                         continue
                     self._jobs[jid] = {
@@ -212,6 +214,7 @@ class ScanScheduler:
 
     def _schedule_interval(self, job_id: str, job: Dict[str, Any], seconds: int):
         """interval 模式：threading.Timer 自调度（零依赖）"""
+        # 强制最小间隔 5 秒，防止误配的高频触发打爆目标
         seconds = max(seconds, 5)  # 最小 5 秒，防误配
 
         def _tick():

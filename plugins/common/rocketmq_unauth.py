@@ -8,6 +8,8 @@ from plugins.base import PluginBase
 
 
 class RocketmqUnauthPlugin(PluginBase):
+    """检测 RocketMQ Dashboard 未授权访问（F7 中间件）：可无鉴权访问控制台即确认"""
+
     name = "RocketMQ Dashboard 未授权"
     cve = "CVE-2023-33246"
     severity = "medium"
@@ -27,9 +29,16 @@ class RocketmqUnauthPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """探测 RocketMQ Dashboard 常见路径，命中且无登录墙即确认未授权
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: ScanResult（CONFIRMED 表示可无凭证访问控制台）
+        """
         paths = ["/rocketmq/", "/dashboard/", "/rocketmq-console-ng/"]
         evidence_url = ""
         for p in paths:
+            # 统一去掉前导 /：与 join_url 的双斜杠归一化配合，保证各候选路径拼接结果一致
             url = join_url(target, p.lstrip("/"))
             try:
                 resp = session.get(url)
@@ -37,6 +46,7 @@ class RocketmqUnauthPlugin(PluginBase):
             except Exception as e:
                 print(no("RocketMQ Dashboard 未授权（网络异常）"))
                 return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+            # 控制台特征 + 排除登录页：命中 dashboard 关键字但含 login/sign in 说明有鉴权，不算未授权
             if resp.status_code == 200 and match_positive(
                 text.lower(),
                 ["rocketmq", "dashboard", "mqnamesrv", "topic"],

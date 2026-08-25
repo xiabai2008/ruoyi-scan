@@ -58,15 +58,24 @@ class TraceMethodPlugin(PluginBase):
     )
 
     def verify(self, target, session) -> ScanResult:
+        """探测服务器支持的 HTTP 方法，检测危险 TRACE 是否启用
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（TRACE 开启或 OPTIONS 有 Allow）或 STATUS_SAFE
+        @exception: 请求异常返回 STATUS_UNKNOWN
+        """
         try:
             # OPTIONS 请求：获取支持的 HTTP 方法
             resp = session.request("OPTIONS", target)
             allow = resp.headers.get("Allow", "")
+            # Allow 头逗号分隔且可能含空格/空段，逐项 strip 并过滤空串
             methods = [m.strip() for m in allow.split(",") if m.strip()] if allow else []
 
             # TRACE 探测：发送 TRACE 请求
             try:
                 trace_resp = session.request("TRACE", target)
+                # 以 <400 为启用阈值：多数服务器拒绝 TRACE 时返回 405/403，200/3xx 视为可用
                 trace_enabled = trace_resp.status_code < 400
             except Exception:
                 trace_enabled = False

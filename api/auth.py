@@ -110,6 +110,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
     """
 
     def __init__(self, app, api_key: str = ""):
+        """初始化中间件，并预解析多 Key 配置为 {key: scope} 权限表"""
         super().__init__(app)
         self.api_key = api_key
         self.key_scopes = parse_api_keys(api_key)
@@ -131,6 +132,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         return matched
 
     async def dispatch(self, request: Request, call_next):
+        """鉴权主流程：公共路径放行 → 本地访问放行 → X-API-Key 校验 → 权限分级校验"""
         path = request.url.path
 
         # 1. 公共路径放行
@@ -157,6 +159,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         if scope is None:
             return JSONResponse(status_code=401, content={"detail": "无效的 API Key"})
 
+        # 未知 scope 按数值 0 处理、未知路径所需权限按 read 兜底：整体 fail-closed
         # 3.2 权限分级校验
         required = _required_scope(request.method, path)
         if _SCOPE_LEVEL.get(scope, 0) < _SCOPE_LEVEL.get(required, 1):

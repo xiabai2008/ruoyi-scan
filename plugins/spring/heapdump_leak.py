@@ -55,6 +55,11 @@ class SpringHeapdumpLeakPlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 heapdump 端点泄露：流式读取响应头 64KB，检测 JVM 堆转储二进制特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——含堆转储特征返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/heapdump")
         try:
             resp = session.get(url, stream=True)
@@ -66,6 +71,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         content_type = resp.headers.get("Content-Type", "") or ""
+        # Boot 2.x 的 heapdump 默认 gzip 压缩，Content-Type 为 application/x-gzip，两种形态都算命中
         is_octet = "octet-stream" in content_type or "application/x-gzip" in content_type
 
         if resp.status_code == 200 and is_octet and HEAP_MARKER in text:

@@ -55,6 +55,11 @@ class SpringJolokiaMletRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 Jolokia 端点暴露：GET /actuator/jolokia/list 检测 JMX MBean 域列表特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——Jolokia 可达返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/jolokia/list")
         try:
             resp = session.get(url)
@@ -74,6 +79,7 @@ class SpringJolokiaMletRcePlugin(PluginBase):
                 evidence=f"响应含 Jolokia MLet 链特征：{JOLOKIA_MLET_MARKER}",
                 fix=self.fix,
             )
+        # list 是只读枚举端点，作为 MLet 滥用的暴露前提：真实 RCE 需对 type=MLet 调 getMBeansFromURL，属利用阶段
         # 真实漏洞响应：Jolokia LIST 响应含 JMX MBean 域列表（reloadByURL / JMXConfigurator 等）
         if resp.status_code == 200 and match_jolokia_response(text):
             print(ok("存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞（真实漏洞响应）"))

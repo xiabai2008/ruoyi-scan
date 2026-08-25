@@ -484,10 +484,12 @@ def generate_web_ui(output_path: str = None, api_base_url: str = "", title: str 
         os.makedirs(output_dir, exist_ok=True)
 
     # 替换标题
+    # replace 默认替换全部匹配：<title> 与页头 <h1> 两处标题会一并更新
     content = WEB_UI_TEMPLATE.replace("Ruoyi-Scan 控制台", html_module.escape(title))
 
     # 如果指定了 API 地址，修改 WebSocket 和 fetch 的基础 URL
     if api_base_url:
+        # 去掉尾部斜杠，拼接 /ws/scan 等路径时不产生 //
         api_base_url = api_base_url.rstrip("/")
         content = content.replace(
             "`${protocol}//${location.host}/ws/scan`",

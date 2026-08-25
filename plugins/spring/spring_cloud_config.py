@@ -40,9 +40,15 @@ class SpringCloudConfigPlugin(PluginBase):
     )
 
     def verify(self, target, session) -> ScanResult:
+        """验证 Spring Cloud Config 路径穿越：读取靶机签名响应头判定，不执行真实目录穿越。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——命中签名头返回 CONFIRMED，未命中返回 SAFE，异常返回 error UNKNOWN
+        """
         url = join_url(target, "/actuator/env")
         try:
             resp = session.get(url)
+            # 靶机对拍通道：真实目标应探测 /{name}/{profile}/{label} 的双重编码 ../ 目录穿越，此处仅读签名头
             if resp.headers.get("X-Spring-Vuln") == "cloud-config":
                 return ScanResult(
                     kind=self.category,

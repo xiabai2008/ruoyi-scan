@@ -47,10 +47,16 @@ class SpringBootAdminPlugin(PluginBase):
     )
 
     def verify(self, target, session) -> ScanResult:
+        """验证 SBA 未授权访问：依次探测 3 个管理端点，任一端点命中关键字即确认。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——命中任一端点返回 CONFIRMED，全部未命中返回 SAFE
+        """
         for path in ["/applications", "/wallboard", "/instances"]:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
+                # 只匹配响应前 500 字符：SBA 页面体积大，关键字头部即可命中，避免全量匹配开销
                 if resp.status_code == 200 and any(
                     kw in (resp.text or "")[:500] for kw in ["spring-boot-admin", "applications"]
                 ):
@@ -63,6 +69,7 @@ class SpringBootAdminPlugin(PluginBase):
                         evidence=f"{path} 可未授权访问",
                         fix=self.fix,
                     )
+            # 单一路径异常视为不可达，继续探测其余路径（容错而非整体失败）
             except Exception:
                 continue
         return ScanResult(

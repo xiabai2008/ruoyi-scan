@@ -92,6 +92,7 @@ class WafBypassStrategy(ABC):
 
     def is_applicable(self, waf_type: str, vuln_type: str) -> bool:
         """判断策略是否适用于当前 WAF 和漏洞类型"""
+        # waf_types / vuln_types 含 '*' 表示对该维度全匹配（通用兜底策略的关键）
         waf_ok = "*" in self.waf_types or waf_type in self.waf_types
         vuln_ok = "*" in self.vuln_types or vuln_type in self.vuln_types
         return waf_ok and vuln_ok
@@ -487,6 +488,7 @@ class BypassSession:
             url = self._replace_host(url, self._origin_url)
         # 合并自定义 headers
         headers = kwargs.get("headers") or {}
+        # 传输层注入的 headers 覆盖调用方同名字段（变换优先级更高）
         headers = {**headers, **self._extra_headers}
         if headers:
             kwargs["headers"] = headers
@@ -496,6 +498,7 @@ class BypassSession:
         """替换 URL 中的 host 部分为源站 IP"""
         from urllib.parse import urlparse, urlunparse
 
+        # 仅替换 netloc 为源站地址，保留原 path/query，避免换 Host 后路由丢失
         parsed = urlparse(url)
         origin_parsed = urlparse(origin_url)
         return urlunparse(
@@ -601,6 +604,7 @@ class WafBypassCoordinator:
 
         # 最大尝试次数
         max_attempts = getattr(plugin, "bypass_max_attempts", 3)
+        # 尝试次数取两者较小值：不超过插件上限，也不超过可用策略数
         attempts = min(max_attempts, len(strategies))
 
         # 尝试每个策略

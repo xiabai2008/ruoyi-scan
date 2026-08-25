@@ -29,9 +29,12 @@ def run_passive_mode(args: Namespace) -> None:
     print(f"{YELLOW}[*]按 Ctrl+C 停止被动扫描{RESET}")
     print(f"{SEPARATOR}")
 
+    # 已扫描 URL 去重集合：防止代理重放/浏览器重复请求导致同一目标被反复扫描
     scanned = set()
     try:
+        # 代理主循环：常驻轮询采集队列，直到用户 Ctrl+C 退出
         while True:
+            # 每 3 秒轮询一次队列：批量 drain 合并突发流量，避免逐请求即时扫描的开销
             time.sleep(3)
             urls = queue.drain()
             if not urls:
@@ -42,6 +45,7 @@ def run_passive_mode(args: Namespace) -> None:
                 scanned.add(url)
                 print(f"\n{SEPARATOR}")
                 print(f"{YELLOW}[*]被动捕获: {url}{RESET}")
+                # 单 URL 扫描隔离：个别目标异常仅提示，不中断代理与后续流量采集
                 try:
                     from cli.runner import run_mode
 

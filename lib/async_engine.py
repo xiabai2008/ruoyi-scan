@@ -104,6 +104,7 @@ class AsyncScanEngine:
             self.start()
 
         self._stats["submitted"] += 1
+        # 统一经 _wrap_task 包装，自动累计成功/失败/耗时统计
         future = self._executor.submit(self._wrap_task, fn, *args, **kwargs)
         return future
 
@@ -158,6 +159,7 @@ class AsyncScanEngine:
 
         loop = asyncio.get_event_loop()
         self._stats["submitted"] += 1
+        # lambda 闭包携带参数：run_in_executor 只调无参 callable，参数须经闭包传入
         return await loop.run_in_executor(self._executor, lambda: self._wrap_task(fn, *args, **kwargs))
 
     async def map_async(self, fn: Callable, iterable: List[Any]) -> List[Any]:
@@ -179,6 +181,7 @@ class AsyncScanEngine:
             task = self.submit_async(fn, item)
             tasks.append(task)
 
+        # return_exceptions=True：单个任务异常不中断整体，失败在下方循环统一计数
         results = await asyncio.gather(*tasks, return_exceptions=True)
         # 统计
         for r in results:
@@ -304,6 +307,7 @@ async def async_http_get(
     import ssl
 
     ssl_ctx = ssl.create_default_context()
+    # 默认不校验 SSL 证书：靶场/自签名证书场景可正常抓取
     if not verify_ssl:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -385,6 +389,7 @@ def benchmark_sync_vs_async(sync_fn: Callable, targets: List[str], max_workers: 
     async_results = scan_batch_targets(sync_fn, targets, max_workers=max_workers)
     async_duration = time.time() - start
 
+    # 防御 async_duration 为 0（空目标列表）导致的除零
     speedup = sync_duration / async_duration if async_duration > 0 else 0
 
     return {

@@ -35,6 +35,16 @@ class FeatureBasedFingerprint(Fingerprint):
         self.feature = get_feature(cms)
 
     def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
+        """按特征库做多特征交叉判定：主页关键字 + 强特征路径 + favicon hash
+
+        Args:
+            target: 目标 URL（以 / 结尾）
+            session: SessionManager 实例
+            cache: 可选 FingerprintCache（多 CMS 遍历时共享根/favicon 响应）
+
+        Returns:
+            FingerprintResult；特征不足时 cms 为空串（不误判），matched 给出命中依据
+        """
         if not self.feature:
             return FingerprintResult(cms="", version="", confidence=0.0, matched=[])
 
@@ -74,6 +84,7 @@ class FeatureBasedFingerprint(Fingerprint):
         for item in f.get("strong_paths", []):
             path = item["path"]
             expect = item.get("expect", "any")
+            # target 已归一化以 / 结尾，去特征路径前导斜杠避免拼出双斜杠
             url = target + path.lstrip("/")
             try:
                 r = _get(url)

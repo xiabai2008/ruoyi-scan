@@ -45,6 +45,7 @@ async def fingerprint_probe(target: str = Query(..., description="目标 URL")):
     """
     try:
         normalized = normalize_target(target)
+        # 每次请求独立会话，探测完成后主动关闭，避免连接泄漏
         session = SessionManager(timeout=10)
         fp = detect_cms(normalized, session)
         waf = detect_waf(normalized, session)

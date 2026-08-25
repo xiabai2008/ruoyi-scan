@@ -17,6 +17,7 @@ import os
 import sys
 import time
 
+# lab 脚本在子目录运行，需把项目根加入 sys.path 才能 import core / common 包
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.models import STATUS_CONFIRMED
@@ -47,6 +48,7 @@ def scan_target(url: str, scan_mode: str = "u") -> list:
     orch = ScanOrchestrator()
     results = orch.run_sync(req, on_event=None)
     orch.shutdown()
+    # 只取 CONFIRMED（确认存在）结果：suspected 视为未坐实，不进入对拍门禁
     return [r.name for r in results if r.status == STATUS_CONFIRMED]
 
 
@@ -110,6 +112,7 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
             print("[*] 对拍目标: %s (%s)" % (cfg["url"], cfg.get("mode", "")))
             actual = scan_target(cfg["url"], cfg.get("scan_mode", "u"))
             result = check_target(cfg, actual)
+            # 单个目标判定失败不中断循环：继续扫描剩余目标，一次报告呈现全部漏报/误报
             report["targets"].append(result)
             if result["passed"]:
                 print("    [OK] 通过（命中 %d 个确认项）" % len(actual))
@@ -124,6 +127,7 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
         if output_path:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(report, f, ensure_ascii=False, indent=2)
+        # 执行异常映射为退出码 2：与判定失败（1）区分，便于 CI 区分环境故障与门禁失败
         return 2
 
     if output_path:
@@ -134,6 +138,7 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
 
 
 def main():
+    """解析命令行参数并执行验收对拍，退出码原样透传（0=通过/1=门禁失败/2=执行错误）"""
     parser = argparse.ArgumentParser(description="lab 靶场验收对拍")
     parser.add_argument("--baseline", default=os.path.join("data", "acceptance_baseline.json"), help="基线 JSON 路径")
     parser.add_argument("--target", action="append", default=None, help="覆盖扫描目标 URL（可多次）")

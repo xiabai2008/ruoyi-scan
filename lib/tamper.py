@@ -54,6 +54,7 @@ def mysql_version_comment(payload, version=50000):
     ]
     result = payload
     for kw in keywords:
+        # \b 整词匹配 + 忽略大小写：避免误伤单词内部子串（如 SELECTED 中的 SELECT）
         result = re.sub(r"\b" + kw + r"\b", f"/*!{version}{kw}*/", result, flags=re.IGNORECASE)
     return result
 
@@ -177,6 +178,7 @@ def split_for_chunked(payload, keywords=None):
         keywords = ["UNION", "SELECT", "FROM", "WHERE", "AND", "OR"]
     result = payload
     for kw in keywords:
+        # 插入的是字面 \r\n 文本（非真实换行），配合分块传输使 WAF 与后端对 payload 的分行解析不一致
         result = re.sub(r"\b" + kw + r"\b", f"\\r\\n{kw}", result, flags=re.IGNORECASE)
     return result
 
@@ -224,6 +226,7 @@ def apply_chain(payload, *tampers):
     """
     result = payload
     for tamper in tampers:
+        # 变形后为空则停止链条，避免对空字符串继续做无意义变换
         if result:
             result = tamper(result)
     return result

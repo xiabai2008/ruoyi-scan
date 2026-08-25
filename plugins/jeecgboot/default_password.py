@@ -29,17 +29,26 @@ class JeecgDefaultPasswordPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """探测 JeecgBoot 后台默认口令 admin/123456 能否直接登录。
+
+        @param target: 目标站点根 URL，用于拼接登录接口路径
+        @param session: 复用的 HTTP 会话（带连接池与超时配置）
+        @return: ScanResult —— 登录成功 CONFIRMED；口令无效 SAFE；网络异常 UNKNOWN
+        """
         url = join_url(target, "/jeecg-boot/sys/login")
         try:
             resp = session.post(
                 url,
+                # 验证码字段 code/checkKey 留空：多数版本登录接口不强制校验验证码，可空值直达
                 data='{"username":"admin","password":"123456","code":"","checkKey":""}',
                 headers={"Content-Type": "application/json"},
             )
             text = resp.text or ""
         except Exception as e:
+            # 网络异常无法证明口令状态：归 UNKNOWN 而非 SAFE，避免把"测不到"误报成"安全"
             print(no("JeecgBoot 默认口令（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 以 token 字段为登录成功唯一 oracle：该接口成功响应必然携带 token，避免误判其他页面
         if resp.status_code == 200 and "token" in text:
             print(ok("存在 JeecgBoot 默认口令"))
             return ScanResult(

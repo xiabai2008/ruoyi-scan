@@ -1,4 +1,8 @@
 # 全局配置：线程 / 限速 / 代理 / 超时 / 字典路径
+"""settings 模块：线程/限速/代理/超时/字典路径等全局常量（模块导入时即求值）。
+
+供 core/lib/api/cli/plugins 共享；--threads/--rate 等 CLI 参数可覆盖部分默认值。
+"""
 import os
 
 # 项目根目录（config/ 的上一级）
@@ -38,6 +42,7 @@ PASSWORD_DICT = _dict_path("password.txt")
 PASSWORD_DICT_BY_LEVEL = {
     "top100": os.path.join(BASE_DIR, "data", "pass_top100.txt"),
     "top1000": os.path.join(BASE_DIR, "data", "pass_top1000.txt"),
+    # full 级复用 _dict_path（兼容老字典放项目根的情况）；分级词典固定 data/
     "full": _dict_path("password.txt"),
 }
 

@@ -67,6 +67,7 @@ def load_yaml_config(filepath: str) -> Dict[str, Any]:
             data = yaml.safe_load(content)
         except yaml.YAMLError as e:
             raise ValueError(f"YAML 解析失败: {e}")
+        # 空 YAML（仅注释/空白）safe_load 返回 None，按空配置处理
         if data is None:
             return {}
         if not isinstance(data, dict):
@@ -118,6 +119,7 @@ def _infer_type(value: str) -> Any:
     if not value:
         return ""
     lower = value.lower()
+    # 兼容 YAML 布尔语义：yes/no/on/off 均视为布尔值
     if lower in ("true", "yes", "on"):
         return True
     if lower in ("false", "no", "off"):
@@ -266,6 +268,7 @@ def _get_parser_defaults() -> Dict[str, Any]:
         import main as _main
 
         parser = _main.build_parser()
+        # 空参数解析得到各参数默认值，作为"CLI 是否显式指定"的参照
         _parser_defaults_cache = dict(vars(parser.parse_args([])))
     except Exception:
         _parser_defaults_cache = {}

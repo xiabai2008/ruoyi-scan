@@ -162,6 +162,7 @@ def _to_pascal_case(name: str) -> str:
     如 'my-plugin' → 'MyPluginPlugin'（始终追加 Plugin 后缀）
     """
     # 去除特殊字符
+    # 保留中文（\u4e00-\u9fff）与字母数字，其余字符转下划线再分词，避免生成非法类名
     cleaned = re.sub(r"[^\w\u4e00-\u9fff]", "_", name)
     # 按下划线分割并首字母大写
     parts = cleaned.split("_")
@@ -246,6 +247,7 @@ def check_plugin(filepath: str) -> Tuple[bool, List[str], List[str]]:
             errors.append(f"缺少必需属性: {attr}")
 
     # 检查 verify 方法
+    # 兼容带空格与不带空格两种 verify 签名写法，避免格式差异导致误判
     if "def verify(self, target, session):" not in source and "def verify(self,target,session):" not in source:
         errors.append("缺少 verify(self, target, session) 方法")
 
@@ -295,6 +297,7 @@ def check_plugin_by_import(filepath: str) -> Tuple[bool, List[str], List[str]]:
         from plugins.base import PluginBase
 
         plugin_classes = []
+        # 只统计定义在本文件内的 PluginBase 子类（排除基类与从其他模块导入的类）
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if (
@@ -454,6 +457,19 @@ def generate_plugin_docs(output_path: str) -> str:
 
 
 def generate_plugin_template(name, category="ruoyi"):
+    """生成简易插件模板文件（直接写入 plugins/<category>/ 目录）
+
+    Args:
+        name: 插件名称（下划线命名，用于文件名与类名）
+        category: 插件类别（ruoyi/spring/common）
+
+    Returns:
+        生成的插件文件路径
+
+    Raises:
+        ValueError: 不支持的类别
+        FileExistsError: 目标文件已存在
+    """
     import os as _os
 
     if category not in ("ruoyi", "spring", "common"):

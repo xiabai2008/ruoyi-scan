@@ -87,6 +87,7 @@ class Storage:
         """保存或更新任务（upsert）"""
         status = task_dict.get("status", "pending")
         target = task_dict.get("target", "")
+        # 任务字典中的 started_at 对应表的 created_at 列（记录首次创建时间）
         created_at = task_dict.get("started_at", time.time())
         finished_at = task_dict.get("finished_at")
         task_json = json.dumps(task_dict, ensure_ascii=False)
@@ -94,6 +95,7 @@ class Storage:
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
+                # 冲突时仅更新可变字段（状态/快照/结束时间），target 与 created_at 保持首次写入值
                 conn.execute(
                     """
                     INSERT INTO tasks (task_id, status, target, task_dict, created_at, finished_at)
@@ -200,6 +202,7 @@ class Storage:
                 """,
                     (cutoff,),
                 )
+                # 只清理已结束任务：进行中/待执行任务即使超龄也不删除，避免丢失半程状态
                 conn.execute('DELETE FROM tasks WHERE created_at < ? AND status IN ("done", "failed")', (cutoff,))
                 conn.commit()
             finally:

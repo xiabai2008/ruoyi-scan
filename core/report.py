@@ -62,17 +62,24 @@ class ReportBuilder:
 
     # 风险分布：仅统计 CONFIRMED 漏洞
     def risk_distribution(self):
+        """统计确认漏洞的严重度分布（UNKNOWN/SAFE 不计入）
+
+        Returns:
+            dict: {"high": n, "medium": n, "low": n, "total": n}
+        """
         dist = {"high": 0, "medium": 0, "low": 0, "total": 0}
         for r in self._effective_results():
             if r.status != STATUS_CONFIRMED:
                 continue
             dist["total"] += 1
+            # dist 的键名与严重度取值相同（high/medium/low），因此可直接用 r.severity 作下标
             if r.severity in dist:
                 dist[r.severity] += 1
         return dist
 
     # 仅保留确认存在的漏洞条目（UNKNOWN/SAFE 不计入漏洞数，见开发方案 §三 Step 4）
     def confirmed_results(self):
+        """返回全部 CONFIRMED 结果（HTML/PDF/Word 等各格式的漏洞明细均取自这里）"""
         return [r for r in self._effective_results() if r.status == STATUS_CONFIRMED]
 
     def sorted_results(self, confirmed_first=True):
@@ -83,6 +90,7 @@ class ReportBuilder:
         def key(r):
             s = status_order.get(r.status, 99)
             v = sev_order.get(r.severity, 99)
+            # confirmed_first=False 时状态键恒为 0，等价于按危害度+名称排序
             return (s if confirmed_first else 0, v, r.name)
 
         return sorted(self._effective_results(), key=key)
@@ -137,6 +145,7 @@ class ReportBuilder:
                     SEVERITY_CN.get(r.severity, r.severity),
                     r.status,
                     r.cve or "",
+                    # cvss_score<=0 视为未录入，留空避免输出 0.0 造成误导
                     f"{r.cvss_score:.1f}" if r.cvss_score > 0 else "",
                     compliance_str,
                     r.evidence,
@@ -247,6 +256,7 @@ class ReportBuilder:
                 elif waf_info.get("bypass_attempted"):
                     bypass_badge = ' <span class="bypass-failed-badge">WAF绕过失败</span>'
             # D12：CVE/CVSS/合规列
+            # 未录入的 CVE/CVSS 一律用 "—" 占位，保证各行单元格高度一致
             cve_text = html_module.escape(r.cve) if r.cve else "—"
             cvss_text = f"{r.cvss_score:.1f}" if r.cvss_score > 0 else "—"
             compliance_parts = []

@@ -59,6 +59,11 @@ class SpringH2ConsoleRcePlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 H2 Console 未授权可达：POST 连接表单探针并判定是否返回 H2 Console 页面特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——控制台页面可达返回 CONFIRMED，不可达返回 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/h2-console")
         # JNDI 连接探针（仅触发签名，不执行真实 JNDI 查找）
         data = {
@@ -66,6 +71,7 @@ class SpringH2ConsoleRcePlugin(PluginBase):
             "setting": "Generic+H2+(Embedded)",
             "name": "Generic+H2+(Embedded)",
             "driver": "javax.naming.InitialContext",
+            # 用内存库 URL 而非 JNDI 地址：探针仅验证控制台表单可达，不触发真实 LDAP 外连
             "url": "jdbc:h2:mem:probe",
         }
         try:

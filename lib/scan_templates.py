@@ -207,11 +207,13 @@ def filter_plugins(plugins: List, template: ScanTemplate) -> List:
 
         # 按合规映射过滤
         if template.compliance_filter:
+            # compliance 可能为 None，用 or '' 兜底，避免后续 std in compliance 抛 TypeError
             compliance = getattr(cls, "compliance", "") or ""
             # compliance 格式：'等保2.0:8.1.4;OWASP:A01:2021'
             # 检查是否包含目标合规标准
             matched = False
             for std in template.compliance_filter:
+                # 子串匹配而非全等：'OWASP' 可命中 'OWASP:A01:2021' 这类带编号的映射
                 if std in compliance:
                     matched = True
                     break

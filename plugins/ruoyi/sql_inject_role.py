@@ -1,3 +1,4 @@
+"""若依 /system/role/list 的 params[dataScope] 参数 SQL 报错注入检测（CNVD-2021-01931）。"""
 # SQL 报错注入（role）：/system/role/list 的 params[dataScope] 参数 extractvalue 报错注入
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
@@ -40,10 +41,17 @@ class SqlInjectRolePlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """对 /system/role/list 的 params[dataScope] 参数发起 extractvalue 报错注入探测。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 响应含 '运行时异常' 或 'database()' 报错特征则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        """
         host = host_of(target)
         # 原 headers 1:1 保留（含 Origin/Referer/Cookie 等）
         headers = {
             "Host": host,
+            # 浏览器指纹头的键名 "nt" 为原脚本 1:1 保留（非标准 User-Agent 键名），保持请求形态与原始注入脚本一致
             "nt": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "Accept-Language": "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2",
@@ -59,6 +67,8 @@ class SqlInjectRolePlugin(PluginBase):
             "Sec-Fetch-Site": "same-origin",
         }
         # 原 data 1:1 保留（含 extractvalue payload）
+        # extractvalue(1, concat(0x7e, ...)) 注入原理：0x7e（~）使第二参数成为非法 XPath，
+        # MySQL 报错时把 database() 子查询结果回显进错误信息，异常文案即判定特征
         data = {
             "pageSize": "",
             "pageNum": "",

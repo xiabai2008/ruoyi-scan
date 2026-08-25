@@ -24,6 +24,7 @@ def _load_all_plugins():
 async def list_plugins():
     """列出所有已加载的扫描插件"""
     result = []
+    # 按类名去重：多个插件包可能注册同一个插件类，避免重复列出
     seen = set()
     for cls in _load_all_plugins():
         key = cls.__name__
@@ -33,6 +34,7 @@ async def list_plugins():
         result.append(
             PluginDTO(
                 name=getattr(cls, "name", ""),
+                # 扫描器面向若依框架，CMS 固定标记为 ruoyi
                 cms="ruoyi",
                 category=getattr(cls, "category", ""),
                 severity=getattr(cls, "severity", "low"),
@@ -51,6 +53,7 @@ async def get_plugin(name: str):
     """查询单个插件的元数据"""
     for cls in _load_all_plugins():
         plugin_name = getattr(cls, "name", "")
+        # 支持按插件的 name 属性或类名两种方式精确查询
         if plugin_name == name or cls.__name__ == name:
             return PluginDTO(
                 name=plugin_name,

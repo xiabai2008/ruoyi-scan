@@ -65,16 +65,25 @@ class DirListingPlugin(PluginBase):
     _NEGATIVE = ["<title>404", "<title>Error", "Page Not Found"]
 
     def verify(self, target, session) -> ScanResult:
+        """探测常见静态资源目录是否开启目录列表（Directory Listing）
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（发现可列表目录）或 STATUS_SAFE
+        """
         found = []
         for path in self._DIR_PATHS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
+                # 目录列表页必然以 200 返回；404/403 等直接跳过，不做无谓的内容匹配
                 if resp.status_code != 200:
                     continue
+                # 统一转空串：部分服务器对未知目录返回空 body，避免 None 参与关键字匹配
                 text = resp.text or ""
                 # 正向命中 + 负向排除
                 pos = any(kw in text for kw in self._POSITIVE)
+                # 剔除负向特征：自定义 404 页常返回 200 且含 "Not Found"，不排除会误报为目录列表
                 neg = any(kw in text for kw in self._NEGATIVE)
                 if pos and not neg:
                     found.append(path)

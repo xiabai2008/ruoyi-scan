@@ -32,6 +32,7 @@ class ScanCreateResponse(BaseModel):
     status: str = "pending"
 
 
+# 字段与 orchestrator 写入 task_dict 的键名保持一致，是 DTO 与内部存储间的数据契约
 class ScanTaskDTO(BaseModel):
     """扫描任务详情 DTO"""
 
@@ -125,6 +126,7 @@ class FingerprintDTO(BaseModel):
 # === WebSocket 事件模型 ===
 
 
+# 事件 type 取值与 api/ws/events.py 的常量保持一致，新增事件需同步两处
 class WSEvent(BaseModel):
     """WebSocket 事件"""
 

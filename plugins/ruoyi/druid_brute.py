@@ -49,6 +49,12 @@ class DruidBrutePlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """用 6 个默认用户名 × password.txt 字典对 /druid/submitLogin 组合爆破
+
+        @param target: 目标主机，用于拼接 Druid 登录接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——任一组合命中 success 为 CONFIRMED；有响应但全失败为 SAFE；全网络异常为 UNKNOWN
+        """
         # 用户名清单严格保留（6 个）
         user_list = settings.DRUID_USERS
         # 原脚本：self.url + 'druid/submitLogin'（self.url 以 / 结尾，故仅一个斜杠）

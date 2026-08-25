@@ -58,6 +58,7 @@ def build_wiki_data(plugins: List[Dict[str, Any]]) -> Dict[str, Any]:
             by_compliance["等保"] += 1
 
         # CVE 统计
+        # 空值与 'N/A' 占位不计入 CVE 统计（插件模板默认 cve='N/A'）
         if p.get("cve", "") and p["cve"] != "N/A":
             with_cve += 1
 
@@ -109,6 +110,7 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
         cve_esc = html_module.escape(cve_display)
         compliance_esc = html_module.escape(compliance)
 
+        # data-* 属性统一存小写，配合前端 toLowerCase 搜索/筛选，避免大小写不一致漏匹配
         cards.append(f'''
         <div class="vuln-card" data-severity="{sev}" data-category="{category}"
              data-cve="{cve_esc}" data-name="{name.lower()}"
@@ -358,6 +360,7 @@ def generate_wiki(output_path: str, formats: List[str] = None) -> List[str]:
         json_content = render_wiki_json(plugins)
         import os
 
+        # 按 output_path 是文件还是目录推导 JSON 输出路径，兼容 HTML 文件/目录两种传参
         json_dir = os.path.dirname(output_path) or "."
         os.makedirs(json_dir, exist_ok=True)
         if output_path.endswith(".html"):

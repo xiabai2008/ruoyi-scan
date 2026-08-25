@@ -69,11 +69,13 @@ def _llm_complete(messages: List[Dict[str, str]], model: str, api_key: str, base
     """
     import requests
 
+    # rstrip("/") 容错：兼容用户配置 base_url 末尾带斜杠的情况
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Authorization": "Bearer %s" % api_key, "Content-Type": "application/json"}
     payload = {
         "model": model,
         "messages": messages,
+        # 低温采样：压低生成随机性，保证代码风格稳定可复现
         "temperature": 0.2,
     }
     try:
@@ -217,6 +219,7 @@ def generate_ai_plugin(
                     "content": "漏洞名称: %s\n漏洞描述: %s\n插件类别: %s" % (name, description, category),
                 },
             ]
+            # 非首轮且已有验证错误：把上次错误回灌给 LLM，引导针对性修复再生成
             if attempt > 0 and errors:
                 messages.append(
                     {
@@ -263,6 +266,7 @@ def _clean_code(source: str) -> str:
     source = source.strip()
     if source.startswith("```"):
         lines = source.splitlines()
+        # 首行可能是 ```python 这类带语言标识的代码块标记，一并剥除
         if lines and lines[0].startswith("```"):
             lines = lines[1:]
         if lines and lines[-1].strip().startswith("```"):

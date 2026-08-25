@@ -50,6 +50,12 @@ class FileUploadPlugin(PluginBase):
     PROBE_CONTENT = "ruoyi-scan-probe-benign-content"
 
     def verify(self, target, session):
+        """上传无害 .txt 探针验证 /common/upload 未授权可写
+
+        @param target: 目标主机，用于拼接上传接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——JSON 含 url/fileName 且未触发鉴权拦截为 CONFIRMED，否则 SAFE
+        """
         url = join_url(target, "common/upload")
         # multipart/form-data：RuoYi 默认字段名为 file
         files = {"file": (self.PROBE_NAME, self.PROBE_CONTENT, "text/plain")}
@@ -65,6 +71,7 @@ class FileUploadPlugin(PluginBase):
 
         # 控误报：必须是 JSON 响应 + 解析成功 + 含 url 或 fileName 字段
         # 不直接判定 200：RuoYi 部分版本上传成功 code=200 但 HTTP 状态可能仍是 200，统一以 JSON 内容为准
+        # 双通道判 JSON：兼容 Content-Type 缺失/错误（部分版本返回 text/html），再看响应体首字符
         is_json = "json" in ctype.lower() or text.lstrip().startswith("{")
         if not is_json:
             print(no("不存在任意文件上传漏洞"))

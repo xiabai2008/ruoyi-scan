@@ -120,6 +120,7 @@ def _add_heading(doc, text, level=1, size=None, color=None):
     if level == 0:
         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = para.add_run(text)
+    # 标题级别 0=封面/1=章/2=节/3=小节 对应不同字号，未知名级别默认 11
     default_size = {0: 22, 1: 16, 2: 13, 3: 11}.get(level, 11)
     default_color = RGBColor(0x1F, 0x23, 0x28)
     _set_run_font(run, size=size or default_size, bold=True, color=color or default_color)
@@ -149,6 +150,7 @@ def _set_table_borders(table):
     if borders is None:
         borders = tbl_pr.makeelement(qn("w:tblBorders"), {})
         tbl_pr.append(borders)
+    # 六条边缺一不可：insideH/insideV 是表格内部的横竖分隔线，少了内部就没有网格
     for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
         elem = borders.find(qn(f"w:{edge}"))
         if elem is None:
@@ -231,6 +233,7 @@ def render_docx(builder, out_path):
     dist_table = doc.add_table(rows=2, cols=5)
     dist_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     _set_table_borders(dist_table)
+    # 五行布局：前三列各一个严重度档位、第四列合计，末列留空占位
     headers = ["高危", "中危", "低危", "合计", ""]
     values = [str(dist["high"]), str(dist["medium"]), str(dist["low"]), str(dist["total"]), ""]
     fills = [_SEV_FILL[SEVERITY_HIGH], _SEV_FILL[SEVERITY_MEDIUM], _SEV_FILL[SEVERITY_LOW], "656D76", ""]

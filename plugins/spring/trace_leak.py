@@ -51,6 +51,11 @@ class SpringTraceLeakPlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 /trace 请求历史泄露：GET /actuator/trace 并判定 traces 数组特征。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——命中 trace 特征返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/trace")
         try:
             resp = session.get(url)
@@ -70,6 +75,7 @@ class SpringTraceLeakPlugin(PluginBase):
                 evidence=f"响应含 /trace 泄露特征：{TRACE_LEAK_MARKER}",
                 fix=self.fix,
             )
+        # 探测 Boot 1.x 的 /actuator/trace（2.x 为 /actuator/httptrace），matcher 对两种端点响应形态均兼容
         # 真实漏洞响应：/actuator/trace 返回 200 + traces 数组 / timeTaken 等特征
         if resp.status_code == 200 and match_trace_leak(text):
             print(ok("存在 Spring Boot Actuator /trace 请求历史泄露漏洞（真实漏洞响应）"))

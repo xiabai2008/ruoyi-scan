@@ -61,7 +61,15 @@ class CorsMisconfigPlugin(PluginBase):
     _TEST_ORIGIN = "https://evil.example.com"
 
     def verify(self, target, session) -> ScanResult:
+        """检测 CORS 跨域配置不当：构造恶意 Origin 探测服务端是否反射
+
+        @param target: 目标站点 URL
+        @param session: 已配置的 HTTP 会话
+        @return: STATUS_CONFIRMED（反射型/通配符 CORS）或 STATUS_SAFE
+        @exception: 请求异常返回 STATUS_UNKNOWN
+        """
         try:
+            # 构造与本站无关的恶意 Origin：若被原样反射，说明服务端未做可信域名白名单校验
             headers = {"Origin": self._TEST_ORIGIN}
             resp = session.get(target, headers=headers)
             acao = resp.headers.get("Access-Control-Allow-Origin", "")
@@ -70,6 +78,7 @@ class CorsMisconfigPlugin(PluginBase):
             # 反射型 CORS：服务器将请求中的 Origin 原样返回
             if acao == self._TEST_ORIGIN:
                 detail = "Origin 完全反射"
+                # 高危组合：Allow-Credentials=true 时跨域请求才可携带 Cookie，进而窃取已登录用户数据
                 if acac.lower() == "true":
                     detail += " + Allow-Credentials=true（高风险：可携带 Cookie）"
                 return ScanResult(
@@ -100,5 +109,6 @@ class CorsMisconfigPlugin(PluginBase):
                 url=target,
                 evidence=f"未反射 Origin, ACAO={acao or '(无)'}",
             )
+        # 网络异常置 UNKNOWN，不把请求失败误判为 CORS 安全
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"请求异常: {e}")

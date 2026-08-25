@@ -310,6 +310,8 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
     # 排序：CONFIRMED 优先，同状态按 severity high→medium→low，同 severity 按名称
     _sev_sort = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
     _status_sort = {STATUS_CONFIRMED: 0, STATUS_UNKNOWN: 1, STATUS_SAFE: 2}
+    # 注意：这两个排序键与模块级 _SEVERITY_ORDER/_STATUS_ORDER 方向相反——
+    # 模块级是"数值越大越严重"的权重，此处是"数值越小越靠前"的排序优先级
     aggregated.sort(
         key=lambda v: (
             _status_sort.get(v.status, 99),

@@ -102,6 +102,12 @@ class RuoyiNacosUnauthPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """GET /nacos/v1/auth/users 未授权用户列表接口，按真实响应特征判定
+
+        @param target: 目标主机（可含端口），用于拼接接口地址
+        @param session: 复用的 HTTP 会话对象
+        @return: ScanResult——200 且响应含真实 Nacos 用户列表特征为 CONFIRMED，否则 SAFE
+        """
         url = join_url(target, "/nacos/v1/auth/users?pageNo=1&pageSize=10")
         try:
             resp = session.get(url)
@@ -133,6 +139,7 @@ class RuoyiNacosUnauthPlugin(PluginBase):
         elif code == 404:
             reason = "HTTP 404 端点不存在"
         elif code == 200:
+            # 重复调用判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
             _, reason = _is_nacos_user_list(text)
             reason = f"200 但{reason}"
         else:

@@ -42,6 +42,7 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
     """
 
     def _adjust_thread_count(self) -> None:
+        """重写线程创建：daemon 线程且不注册 _threads_queues（规避 atexit join 挂起）"""
         if self._idle_semaphore.acquire(timeout=0):
             return
         num_threads = len(self._threads)
@@ -101,6 +102,8 @@ class ScanRequest:
     crawl_max_pages: int = 50  # 爬虫最大页面数
     subdomain: bool = False  # 是否启用子域名枚举
     js_extract: bool = False  # 是否启用 JS 端点提取
+    # 注：auth 字段在扫描请求参数区已声明过（历史遗留重复声明），功能不受影响，
+    # dataclass 重复字段以最后一次声明为准，此处仅为 D26 语义补充说明
     # D26：认证扫描增强（CLI args.auth / args.auth_file / args.auth_login 解析后传入）
     auth: Optional[dict] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
     # D19：扫描模板名称（quick / deep / compliance / dengbao）
@@ -733,6 +736,7 @@ class ScanOrchestrator:
                 logger.debug("源站 IP 探测失败", exc_info=True)
             return WafBypassCoordinator(waf_type=waf_type, origin_ip=origin_ip, stats_tracker=stats_tracker)
 
+        # 未识别出 WAF 但用户强制 on：仍构建协调器（对误报/新型 WAF 保留绕过尝试）
         if not waf_type and bypass_mode == "on":
             from lib.waf_bypass import BypassStatsTracker, WafBypassCoordinator
 

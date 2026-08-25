@@ -1,3 +1,4 @@
+"""RuoYi-Plus 定时任务管理接口（/monitor/job）未授权访问探测（存在性验证）。"""
 # RuoYi-Plus 定时任务未授权探测（variant='ruoyi-plus' 专项）
 # Plus 版 /monitor/job 定时任务管理接口：未登录可访问即存在越权（存在性验证）
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
@@ -31,8 +32,16 @@ class PlusJobUnauthPlugin(PluginBase):
     variant = "ruoyi-plus"
 
     def verify(self, target, session):
+        """不带认证凭证访问定时任务列表接口，验证未授权访问是否成立。
+
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @return: ScanResult — 返回 rows/total 任务列表 JSON 且无登录特征则 CONFIRMED，401/403 或无特征则 SAFE，网络异常则 UNKNOWN
+        """
+        # Plus 版对外请求统一经 /prod-api 网关前缀转发，探测路径须保留此前缀
         url = join_url(target, "/prod-api/monitor/job/list?pageNum=1&pageSize=10")
         try:
+            # 裸请求（不携带任何 Cookie/Token）：若仍返回业务数据即说明 Sa-Token 鉴权未生效
             resp = session.get(url)
             text = resp.text or ""
         except Exception as e:

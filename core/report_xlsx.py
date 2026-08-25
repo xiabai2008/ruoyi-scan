@@ -141,6 +141,7 @@ def _build_summary_sheet(ws, builder, gen_time):
         ws.cell(row=j, column=1, value=label)
         ws.cell(row=j, column=2, value=val)
         _style_data_cell(ws.cell(row=j, column=1), bold=True, fill=_LABEL_FILL)
+        # _PIE_COLORS 为 6 位 RGB，前缀 "FF" 补成 8 位 ARGB；行偏移即分段下标（0=高/1=中/2=低）
         _style_data_cell(
             ws.cell(row=j, column=2), align="center", bold=True, color="FF" + _PIE_COLORS[j - dist_start - 1]
         )
@@ -170,6 +171,7 @@ def _build_summary_sheet(ws, builder, gen_time):
     # 饼图
     pie = PieChart()
     pie.title = "风险分布"
+    # titles_from_data=True 时数据区首行作标题，故数据从 dist_start 起、分类标签从 dist_start+1 起
     labels_ref = Reference(ws, min_col=1, min_row=dist_start + 1, max_row=dist_start + len(dist_labels))
     data_ref = Reference(ws, min_col=2, min_row=dist_start, max_row=dist_start + len(dist_labels))
     pie.add_data(data_ref, titles_from_data=True)
@@ -213,6 +215,7 @@ def _build_vuln_sheet(ws, builder):
         row_fill = _SEV_FILL.get(r.severity)
         for j, val in enumerate(row_data, start=1):
             cell = ws.cell(row=i, column=j, value=val)
+            # 列格式映射：URL/证据等宽；序号/严重度/状态/命中次数居中；漏洞名称加粗
             mono = j in (5, 6)  # URL/证据列用等宽字体
             align = "center" if j in (1, 3, 4, 8) else "left"
             bold = j == 2  # 漏洞名称加粗
@@ -222,6 +225,7 @@ def _build_vuln_sheet(ws, builder):
     ws.freeze_panes = "A2"
     # 自动筛选
     if confirmed:
+        # 筛选范围仅覆盖确认区（含表头共 len(confirmed)+1 行），下方"其他结果"块不参与筛选
         last_col = get_column_letter(len(headers))
         ws.auto_filter.ref = f"A1:{last_col}{len(confirmed) + 1}"
 
@@ -229,6 +233,7 @@ def _build_vuln_sheet(ws, builder):
     all_results = builder._effective_results()
     others = [r for r in all_results if r.status != STATUS_CONFIRMED]
     if others:
+        # +3 = 表头 1 行 + 末尾空 1 行：分隔行与确认漏洞区之间留一条空隙，视觉分区
         sep_row = len(confirmed) + 3
         ws.merge_cells(start_row=sep_row, start_column=1, end_row=sep_row, end_column=len(headers))
         sep_cell = ws.cell(row=sep_row, column=1, value="其他结果（未确认/安全）")

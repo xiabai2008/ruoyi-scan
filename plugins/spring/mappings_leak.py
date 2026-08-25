@@ -45,6 +45,11 @@ class SpringMappingsLeakPlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """验证 /actuator/mappings 路由映射泄露：GET 探测并依据 JSON 与 dispatcherServlets 特征判定。
+        @param target: 目标站点根 URL
+        @param session: 共享 HTTP 会话
+        @return: ScanResult——命中映射特征返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
+        """
         url = join_url(target, "/actuator/mappings")
         try:
             resp = session.get(url)
@@ -55,6 +60,7 @@ class SpringMappingsLeakPlugin(PluginBase):
         ct = (resp.headers.get("Content-Type") or "").lower()
         text = resp.text or ""
 
+        # 三重校验防误判：HTML 错误页也可能返回 200，必须同时满足 JSON Content-Type 与响应体关键字
         # 判别：200 + JSON + 含 mappings/dispatcherServlets 特征
         if resp.status_code == 200 and "json" in ct and "dispatcherServlets" in text:
             print(ok("存在 Spring Boot Actuator /mappings 路由映射泄露"))

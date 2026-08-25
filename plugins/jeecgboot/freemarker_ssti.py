@@ -36,7 +36,14 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
     supports_waf_bypass = False
 
     def verify(self, target, session):
+        """检测 /jmreport/testConnection 是否存在 Freemarker 模板注入。
+
+        @param target: 目标站点根 URL
+        @param session: 复用的 HTTP 会话
+        @return: ScanResult —— 模板被求值 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        """
         url = join_url(target, "/jeecg-boot/jmreport/testConnection")
+        # 注入点藏在 JDBC 连接串 query 参数中：connUrl 会被整体交给 Freemarker 渲染
         body = (
             '{"dbType":"MYSQL","dbName":"test","url":"jdbc:mysql://127.0.0.1:3306/test",'
             '"userName":"root","password":"x","connUrl":"jdbc:mysql://127.0.0.1:3306/test?query='
@@ -46,8 +53,10 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
             resp = session.post(url, data=body, headers={"Content-Type": "application/json"})
             text = resp.text or ""
         except Exception as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             print(no("JeecgBoot 报表 SSTI（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 49 是 7*7 的唯一运算结果：命中即证明模板表达式被求值，纯算术探测无副作用
         if resp.status_code == 200 and "49" in text:
             print(ok("存在 JeecgBoot 报表 SSTI"))
             return ScanResult(
