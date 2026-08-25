@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruoyi-scan"
-version = "1.1.0"
+version = "1.2.0"
 description = "若依（RuoYi）专项漏洞扫描器 — 插件化架构 / 三态判定 / 38 POC / OAST / 业务逻辑 / 分布式 / SIEM"
 readme = "README.md"
 license = { text = "MIT" }

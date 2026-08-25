@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-25
+
 ### Added
 
 - **P0 版本矩阵**: 新增若依版本兼容性矩阵文档 `docs/version-matrix.md`
@@ -14,6 +16,13 @@
 
 - 方向 1-5: README 文档同步 + 依赖规范化 + pyproject.toml 现代打包 + PyPI 发布工作流 + CI 代码质量门禁
 - 方向 6: 社区治理文档（CONTRIBUTING / SECURITY / CHANGELOG + Issue/PR 模板）
+- **E1-E9 生态与 AI 升级**: 若依 5 变体识别（Vue3 / App / Plus / Cloud-Plus）+ 组件版本检测（fastjson / SpringBoot / Shiro / Nacos / Log4j → CVE 映射）+ nuclei 模板兼容 + 模板仓库分发 + AI POC 生成 + 团队版 API
+- **F2 模板仓库上线**: ruoyi-scan-templates 官方分发源 + GitHub API 回退
+- **F3 贡献者 SOP**: issue / PR 模板 + README 贡献区块
+- **F4 nightly 真实靶场验收**: 基线对拍 + 自动建 issue
+- **F5 拓展框架实证**: JeecgBoot 插件包（首个非若依框架）
+- **F6/F7 变体与中间件**: RuoYi-Plus 变体专项 + 中间件未授权包
+- **文档**: README 演示动图 + 扫描模式速览（-p vs -u）+ 双语 SEO 优化
 
 ### Security
 
@@ -25,6 +34,11 @@
 - **W2 权限**: 三级权限矩阵 read / scan / admin，权限不足返回 403
 - **测试**: 新增 5 个安全回归用例（WS 鉴权 4 + URL 传密钥拒绝 1），完整套件 1185 全绿
 - **文档**: 新增 `docs/SECURITY_REPORT.md` 最终安全报告，并归档至模板仓库 ruoyi-scan-templates
+
+### Changed
+
+- **F8/F9 Release 规范化**: checksums.txt 供应链完整性 + mypy 债务起步
+- **CI 全绿**: ruff lint/format 门禁（27 处修复）+ nightly 心跳超时修复
 
 ## [1.1.0] - 2026-08-07
 
