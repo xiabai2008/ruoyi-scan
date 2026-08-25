@@ -79,7 +79,7 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "-h"],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
         )
         assert result.returncode == 0
@@ -106,7 +106,7 @@ class TestE2E:
                         "json",
                     ],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     cwd=os.path.dirname(os.path.dirname(__file__)),
                     timeout=60,
                 )
@@ -135,7 +135,7 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "--chain-list"],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
             timeout=30,
         )
@@ -147,7 +147,7 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "--plugin-list"],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
             timeout=30,
         )

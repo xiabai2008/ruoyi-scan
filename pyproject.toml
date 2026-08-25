@@ -87,6 +87,7 @@ all = [
 # 开发/测试依赖
 dev = [
     "pytest>=7.4",
+    "httpx2",  # starlette.testclient 需要（test_metrics.py）
     "pytest-timeout>=2.2",
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.21",
