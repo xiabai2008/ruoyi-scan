@@ -12,6 +12,16 @@
 
 ---
 
+## 演示
+
+<p align="center">
+  <img src="assets/demo-scan.gif" alt="Ruoyi-Scan 演示" width="720" />
+</p>
+
+> 上图：对内置若依签名靶场执行综合扫描，实时展示风险分布与漏洞列表。
+
+---
+
 ## 文档
 
 | 文档 | 说明 |
@@ -47,7 +57,7 @@
 | WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 成功率追踪 |
 | 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |
 | nuclei 模板兼容 | 直接执行 nuclei-templates YAML 模板（`--nuclei`，http 协议子集 + 安全白名单） |
-| 插件模板仓库 | 导出/manifest/Ed25519 签名/`--plugin-update` 社区分发闭环 |
+| 插件模板仓库 | 导出/manifest/Ed25519 强制验签/`--plugin-update` 社区分发闭环 |
 | AI POC 生成 | `--ai` 自然语言生成插件（LLM 自验证回灌，无 Key 降级规则模板） |
 | AI 报告解读 | `--ai-report zh\|en` 自动生成漏洞分析与修复优先级 |
 | 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
