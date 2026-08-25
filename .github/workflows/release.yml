@@ -49,6 +49,8 @@ jobs:
           grep -q "Ruoyi-Scan" /tmp/smoke_h.txt
           echo "== 核心模块导入（common/cli/config/lib）=="
           /tmp/smoke-venv/bin/python -c "from common.logger import setup_logging; from common.models import ScanResult; from cli.runner import run_mode; from config import settings; from lib.colors import GREEN; print('IMPORT_OK')"
+          echo "== 数据文件随包分发（Druid 爆破字典）=="
+          /tmp/smoke-venv/bin/python -c "from config import settings; import os; assert os.path.isfile(settings.PASSWORD_DICT), 'PASSWORD_DICT missing: ' + settings.PASSWORD_DICT; assert os.path.isfile(settings.RUOYI_DICT), 'RUOYI_DICT missing'; print('DICT_OK')"
           echo "== 离线命令 --template-list =="
           /tmp/smoke-venv/bin/ruoyi-scan --template-list 2>&1 | tee /tmp/smoke_t.txt
           grep -q "quick" /tmp/smoke_t.txt

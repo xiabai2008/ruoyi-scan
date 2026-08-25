@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruoyi-scan"
-version = "1.2.1"
+version = "1.2.2"
 description = "若依（RuoYi）专项漏洞扫描器 — 插件化架构 / 三态判定 / 38 POC / OAST / 业务逻辑 / 分布式 / SIEM"
 readme = "README.md"
 license = "MIT"
@@ -119,6 +119,10 @@ py-modules = ["main"]
 [tool.setuptools.packages.find]
 include = ["common*", "cli*", "core*", "lib*", "api*", "plugins*", "config*", "chains*", "data*"]
 exclude = ["tests*", "lab*", "web*", "monitoring*", ".github*", ".reasonix*"]
+
+[tool.setuptools.package-data]
+# 字典文件必须随包分发（安装版 Druid 爆破/默认口令依赖 data/*.txt）
+data = ["*.txt"]
 
 # ── 开发工具配置 ──
 
