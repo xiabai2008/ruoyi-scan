@@ -39,7 +39,7 @@
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.2.0
+- **版本**：1.2.1
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
@@ -94,7 +94,7 @@
 
 ```bash
 # 安装（自动安装核心依赖）
-pip install ruoyi_scan-1.2.0-py3-none-any.whl
+pip install ruoyi_scan-1.2.1-py3-none-any.whl
 
 # 可选功能依赖（按需安装）
 pip install pyyaml          # --config YAML 配置文件

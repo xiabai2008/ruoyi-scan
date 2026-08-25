@@ -19,7 +19,7 @@
 ## Project Overview
 
 - **Author**: XIABAI
-- **Version**: 1.2.0
+- **Version**: 1.2.1
 - **Repository**: https://github.com/xiabai2008/Ruoyi-Scan
 - **Tech Stack**: Python 3.8+ / requests / FastAPI / Docker
 - **License**: MIT License
@@ -74,7 +74,7 @@ Go to the [Releases page](https://github.com/xiabai2008/Ruoyi-Scan/releases), do
 
 ```bash
 # Install (auto-installs core dependencies)
-pip install ruoyi_scan-1.2.0-py3-none-any.whl
+pip install ruoyi_scan-1.2.1-py3-none-any.whl
 
 # Optional feature dependencies (install on demand)
 pip install pyyaml          # --config YAML configuration file

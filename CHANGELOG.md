@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-25
+
+### Fixed
+
+- **Release 阻断修复（Critical）**: wheel 打包缺失 `common` / `cli` 包，安装后 CLI 无法启动（`ModuleNotFoundError: No module named 'common'`）— v1.1.0 / v1.2.0 安装包均受影响；本版补齐 `pyproject.toml` include 清单并重新发布
+- **构建警告清理**: `project.license` 改用 SPDX 表达式（`license = "MIT"`），消除 setuptools 弃用警告
+
 ## [1.2.0] - 2026-08-25
 
 ### Added
