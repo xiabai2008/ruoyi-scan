@@ -12,6 +12,16 @@
 
 ---
 
+## 演示
+
+<p align="center">
+  <img src="assets/demo-scan.gif" alt="Ruoyi-Scan 演示" width="720" />
+</p>
+
+> 上图：对内置若依签名靶场执行综合扫描，实时展示风险分布与漏洞列表。
+
+---
+
 ## 文档
 
 | 文档 | 说明 |
