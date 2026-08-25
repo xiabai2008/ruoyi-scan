@@ -30,6 +30,9 @@ reports/
 reports_p9_*/
 reports_phase6/
 
+# README 演示 GIF 制作中间产物（脚本与报告留本地，便于重新生成动图）
+demo_reports/
+
 # 本地虚拟环境
 venv/
 .venv/
