@@ -6,9 +6,13 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![Coverage](https://codecov.io/gh/xiabai2008/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/Ruoyi-Scan)
+[![Star History](https://api.star-history.com/svg?repos=xiabai2008/ruoyi-scan&type=Date)](https://star-history.com/#xiabai2008/ruoyi-scan&Date)
 
 > A legally authorized **RuoYi-dedicated vulnerability scanner** with a plugin-based architecture and three-state verdict (CONFIRMED / SAFE / UNKNOWN).
 > Supports enterprise-grade features such as batch scanning, multi-format reporting, WAF bypass, exploit chains, and a Web API.
+
+> **Why RuoYi?** RuoYi is one of the most widely used open-source Java admin frameworks in China — countless enterprise, outsourced, and even student projects are built on it, yet it had no dedicated scanner. This tool is purpose-built for its attack surface: version-aware POCs for the RuoYi family (Vue3 / App / Plus / Cloud-Plus) plus Spring Boot.
+> If this tool helps you, please give it a ⭐ — it helps other security folks discover it.
 
 ---
 
