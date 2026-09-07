@@ -76,6 +76,11 @@ jobs:
       #   Workflow name:    release.yml
       #   Environment name: （留空）
       # 若需 token 兜底：在本步 with 中加 password: ${{ secrets.PYPI_API_TOKEN }}
+      # checksums.txt 仅用于 GitHub Release 供应链校验，PyPI(twine) 不认该格式，
+      # 上传前删除（此时 GitHub Release 已上传完毕，不受影响）
+      - name: Remove checksums before PyPI upload
+        run: rm -f dist/checksums.txt
+
       - name: Publish to PyPI
         if: startsWith(github.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
