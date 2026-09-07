@@ -1,4 +1,5 @@
 # IDE / 工具缓存
+.idea/
 .workbuddy/
 .reasonix/
 

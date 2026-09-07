@@ -56,9 +56,10 @@ pip install ruoyi-scan
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 16 个 POC（文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
+| `plugins/ruoyi/` | 若依 18 个插件（文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
-| `plugins/common/` | 通用漏洞包（.git/.env 泄露、备份文件、CORS、Swagger 等） |
+| `plugins/common/` | 通用漏洞包 11 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权等） |
+| `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
 | 组件版本检测 | fastjson/SpringBoot/Shiro/Nacos/Log4j 版本比对 CVE 映射（`--components`） |
 | 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
@@ -452,7 +453,7 @@ python main.py -u http://target:8080/
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI 入口（~390 行，纯参数解析+分发）
+├── main.py                  # CLI 入口（~440 行，纯参数解析+分发）
 ├── config/settings.py       # 全局配置
 ├── core/                    # 核心引擎层
 │   ├── runner.py            # 扫描编排器（P0 拆分）
@@ -467,14 +468,15 @@ Ruoyi-Scan/
 │   └── ...                  # 更多核心模块
 ├── plugins/                 # 插件系统
 │   ├── base.py              # PluginBase 抽象基类
-│   ├── ruoyi/               # 若依 16 个 POC
+│   ├── ruoyi/               # 若依 18 个插件
 │   ├── spring/              # Spring 14 个 POC
-│   ├── common/              # 通用 8 个 POC
+│   ├── jeecgboot/           # JeecgBoot 8 个插件
+│   ├── common/              # 通用 11 个插件
 │   └── chain/               # 3 条利用链
-├── lib/                     # 工具库（31 个模块）
+├── lib/                     # 工具库（33 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
-├── tests/                   # 38 个测试文件 / 887 条用例
+├── tests/                   # 51 个测试文件 / 1000+ 条用例
 ├── lab/                     # 靶场环境
 ├── web/                     # Web 控制台前端
 ├── monitoring/              # Grafana + Prometheus

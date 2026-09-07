@@ -36,9 +36,10 @@ pip install ruoyi-scan
 
 | Module | Description |
 |--------|-------------|
-| `plugins/ruoyi/` | 16 RuoYi POCs (file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
+| `plugins/ruoyi/` | 18 RuoYi plugins (file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
 | `plugins/spring/` | 14 Spring Boot POCs (Actuator, Gateway, Jolokia, Spring4Shell, etc.) |
-| `plugins/common/` | Common vulnerability package (.git/.env leakage, backup files, CORS, Swagger, etc.) |
+| `plugins/common/` | Common vulnerability package, 11 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, etc.) |
+| `plugins/jeecgboot/` | JeecgBoot extension plugin package (8 plugins, first non-RuoYi framework extension) |
 | Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven + RuoYi variant subdivision |
 | Component version detection | fastjson/SpringBoot/Shiro/Nacos/Log4j version → CVE mapping (`--components`) |
 | Three-state verdict | CONFIRMED (confirmed present) / SAFE (confirmed absent) / UNKNOWN (cannot be determined) |
@@ -395,7 +396,7 @@ docker compose down
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI entry point (~390 lines, pure arg parsing + dispatch)
+├── main.py                  # CLI entry point (~440 lines, pure arg parsing + dispatch)
 ├── config/settings.py       # Global configuration
 ├── core/                    # Core engine layer
 │   ├── runner.py            # Scan orchestrator (P0 split)
@@ -410,14 +411,15 @@ Ruoyi-Scan/
 │   └── ...                  # More core modules
 ├── plugins/                 # Plugin system
 │   ├── base.py              # PluginBase abstract base class
-│   ├── ruoyi/               # 16 RuoYi POCs
+│   ├── ruoyi/               # 18 RuoYi plugins
 │   ├── spring/              # 14 Spring POCs
-│   ├── common/              # 8 common POCs
+│   ├── jeecgboot/           # 8 JeecgBoot plugins
+│   ├── common/              # 11 common plugins
 │   └── chain/               # 3 exploit chains
-├── lib/                     # Utility library (31 modules)
+├── lib/                     # Utility library (33 modules)
 ├── api/                     # Web API (FastAPI + WebSocket)
 ├── data/                    # Dictionary files
-├── tests/                   # 38 test files / 887 test cases
+├── tests/                   # 51 test files / 1000+ test cases
 ├── lab/                     # Lab environments
 ├── web/                     # Web console frontend
 ├── monitoring/              # Grafana + Prometheus

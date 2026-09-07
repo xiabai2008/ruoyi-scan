@@ -4,6 +4,17 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Fixed
+- **CI lint 转绿**: 修复 ruff format 漂移（10 个文件 docstring 后空行重排）；lint 工具版本固定（ruff==0.16.2 / mypy==2.1.0，CI 与 pyproject dev 依赖同步），杜绝格式化工具版本演进导致的漂移复发
+- **Nightly 验收修复**: 靶场容器 `docker run` 补传 `LAB_HOST=0.0.0.0`——v1.2.0 安全收口后靶场默认绑定 127.0.0.1，容器内绑定回环导致 Docker 端口映射不可达，自 8/25 起每晚启动超时；失败自动建 issue 覆盖靶场启动失败场景（旧条件在该场景下永不触发），并显式声明 `issues: write` 权限
+- mypy `python_version` 目标 3.8 → 3.10（mypy 2.x 最低支持 3.10，仅影响类型分析，运行时仍支持 3.8+）
+
+### Changed
+- **Release 发布门禁**: tag 推送先等待同一提交的 CI 全绿再构建上传（ci.yml 增加 `tags: v*` 触发），防止带病发布
+- 文档数字对齐实际状态：插件 51 个（ruoyi 18 / spring 14 / common 11 / jeecgboot 8）、测试 51 文件 1000+ 用例、lib 33 模块；`.idea/` 加入 .gitignore；CHANGELOG 版本对比链接补全
+
 ## [1.2.4] - 2026-09-07
 
 ### Added
@@ -132,6 +143,11 @@
 - 签名靶场（Flask lab）
 - 887 单元测试 + 回归测试
 
-[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.3...v1.2.4
+[1.2.3]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/xiabai2008/Ruoyi-Scan/releases/tag/v1.0.0
