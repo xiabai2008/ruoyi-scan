@@ -18,6 +18,7 @@ from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
+from lib.star_cta import print_star_cta
 
 logger = get_logger(__name__)
 
@@ -283,11 +284,18 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{RED}[!]扫描异常: {payload.get('error', '')}{RESET}")
 
 
-def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
+def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> List[ScanResult]:
     """分发到各扫描模式：指纹→路由→插件 主流程
 
     重构后：核心扫描流程委托 ScanOrchestrator.run_sync()，
     CLI 仅负责参数构造、事件输出、报告后处理（基线/差异/通知/逻辑扫描/SIEM/CI）。
+
+    Args:
+        mode: 扫描模式 u/m/p/l
+        target: 目标 URL
+        args: CLI 参数命名空间
+        show_cta: 是否在结尾输出仓库引导。批量扫描与被动代理会重复调用本函数，
+            需传 False 避免刷屏，改由上层在汇总后统一输出一次。
     """
     from core.orchestrator import ScanOrchestrator
 
@@ -447,6 +455,11 @@ def run_mode(mode: str, target: str, args: Namespace) -> List[ScanResult]:
         if exit_code != 0:
             sys.exit(exit_code)
 
+    # 收尾引导：仅单目标扫描在此输出；批量/被动由上层汇总后统一输出一次
+    # CI 模式需要干净的机器可读输出，故跳过
+    if show_cta and not getattr(args, "ci", False):
+        print_star_cta(explicit_off=getattr(args, "no_cta", False))
+
     return all_results
 
 
@@ -461,7 +474,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
         try:
-            return run_mode(mode, target, args)
+            return run_mode(mode, target, args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             return []
@@ -514,6 +527,9 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
             print(f"{GREEN}[*]批量报告：{p}{RESET}")
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
+    # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
+    if not getattr(args, "ci", False):
+        print_star_cta(explicit_off=getattr(args, "no_cta", False))
     return batch
 
 
@@ -553,7 +569,7 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
         print(f"\n{SEPARATOR}")
         print(f"{YELLOW}[*]进度 [{i}/{len(targets)}] 目标：{target}{RESET}")
         try:
-            results = run_mode(mode, target, args)
+            results = run_mode(mode, target, args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             continue
@@ -578,6 +594,9 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
         print(f"{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}")
         for p in bpaths:
             print(f"{GREEN}[*]批量报告：{p}{RESET}")
+        # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
+        if not getattr(args, "ci", False):
+            print_star_cta(explicit_off=getattr(args, "no_cta", False))
 
     return batch
 

@@ -55,6 +55,7 @@ def build_parser():
     )
     group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
+    group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
 
     group = parser.add_argument_group("扫描模式")
     group.add_argument("--portscan", action="store_true", default=False, help="端口扫描")
@@ -253,6 +254,7 @@ def print_help():
         ("--timeout <n>", "请求超时秒数（默认 10s）"),
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
+        ("--no-cta", "关闭扫描结尾的仓库引导提示"),
         ("--portscan", "扫描前执行端口扫描 + 服务识别"),
         ("--ports <p1,p2>", "自定义端口列表（逗号分隔）"),
         ("--passive", "启动被动代理模式（监听 HTTP/HTTPS 流量）"),

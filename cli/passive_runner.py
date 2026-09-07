@@ -49,7 +49,8 @@ def run_passive_mode(args: Namespace) -> None:
                 try:
                     from cli.runner import run_mode
 
-                    run_mode("p", url, args)
+                    # 被动代理每捕获一个 URL 就扫一次，此处必须关闭引导避免逐条刷屏
+                    run_mode("p", url, args, show_cta=False)
                 except Exception as e:
                     print(f"{RED}[!]扫描异常 ({url}): {e}{RESET}")
     except KeyboardInterrupt:

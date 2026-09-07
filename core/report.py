@@ -16,6 +16,7 @@ from common.models import (
     STATUS_UNKNOWN,
 )
 from config import settings
+from lib.star_cta import REPO_URL
 
 
 class ReportBuilder:
@@ -410,7 +411,7 @@ function toggleFilter() {{
 {rows}
   </tbody>
 </table>
-<div class="footer">由 Ruoyi-Scan 自动生成 · 仅用于授权范围内的安全测试</div>
+<div class="footer">由 Ruoyi-Scan 自动生成 · 仅用于授权范围内的安全测试 · 觉得有用？<a href="{REPO_URL}" target="_blank" rel="noopener">给个 Star ★</a></div>
 </body>
 </html>"""
 
@@ -663,7 +664,7 @@ class BatchReport:
 {rows_html}
   </tbody>
 </table>
-<div class="footer">由 Ruoyi-Scan 批量扫描自动生成 · 仅用于授权范围内的安全测试</div>
+<div class="footer">由 Ruoyi-Scan 批量扫描自动生成 · 仅用于授权范围内的安全测试 · 觉得有用？<a href="{REPO_URL}" target="_blank" rel="noopener">给个 Star ★</a></div>
 </body>
 </html>"""
 
