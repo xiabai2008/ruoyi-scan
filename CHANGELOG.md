@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [1.2.4] - 2026-09-07
 
 ### Added
 - Release 流水线接入 PyPI（OIDC 受信任发布，`pypa/gh-action-pypi-publish`），tag 推送自动双发 GitHub Release + PyPI
