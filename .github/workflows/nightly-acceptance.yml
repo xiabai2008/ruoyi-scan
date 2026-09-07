@@ -9,6 +9,10 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write  # 失败时自动建 issue
+
 jobs:
   acceptance:
     runs-on: ubuntu-latest
@@ -29,8 +33,11 @@ jobs:
       - name: Build & start lab targets (vuln + safe)
         run: |
           docker build -q -t ruoyi-scan-lab ./lab
-          docker run -d --name lab-vuln --rm -e LAB_MODE=vuln -e LAB_PORT=8080 -p 8080:8080 ruoyi-scan-lab
-          docker run -d --name lab-safe --rm -e LAB_MODE=safe -e LAB_PORT=8081 -p 8081:8081 ruoyi-scan-lab
+          # LAB_HOST=0.0.0.0 必须显式传入：v1.2.0 安全收口后靶场默认绑定 127.0.0.1，
+          # 容器内绑定回环会导致 Docker 端口映射无法到达（健康检查必超时）。
+          # docker-compose.yml 已覆盖此变量，裸 docker run 需自行传入。
+          docker run -d --name lab-vuln --rm -e LAB_MODE=vuln -e LAB_HOST=0.0.0.0 -e LAB_PORT=8080 -p 8080:8080 ruoyi-scan-lab
+          docker run -d --name lab-safe --rm -e LAB_MODE=safe -e LAB_HOST=0.0.0.0 -e LAB_PORT=8081 -p 8081:8081 ruoyi-scan-lab
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8080/ >/dev/null 2>&1 && curl -sf http://127.0.0.1:8081/ >/dev/null 2>&1; then
               exit 0
@@ -58,14 +65,17 @@ jobs:
           path: acceptance.json
 
       - name: Create issue on failure
-        if: steps.acceptance.outputs.exit != '0'
+        # 覆盖两类失败：靶场启动超时（build step 失败）与验收对拍不通过（exit != 0）。
+        # 旧条件仅依赖 acceptance 输出，启动失败时该 step 被跳过、永不建 issue。
+        if: failure() || steps.acceptance.outputs.exit != '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh label create acceptance --color D93F0B --description "Nightly 验收失败" --force
           gh issue create \
             --title "Nightly 验收失败（$(date -u +%Y-%m-%d)）" \
             --label "acceptance" \
-            --body "Nightly 真实靶场验收未通过，详见 acceptance.json artifact.
+            --body "Nightly 真实靶场验收未通过，运行日志见 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 
-          $(cat acceptance.json)
+          $(cat acceptance.json 2>/dev/null || echo 'acceptance.json 未生成（靶场启动阶段即失败）')
           "
