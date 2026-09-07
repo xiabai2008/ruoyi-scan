@@ -1,4 +1,5 @@
 """RuoYi-Cloud 微服务版 Nacos 配置中心未授权访问检测（涉及 CVE-2021-29441 默认 token 绕过）。"""
+
 # RuoYi-Cloud Nacos 配置泄露检测
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url

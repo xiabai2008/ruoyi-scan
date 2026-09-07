@@ -1,4 +1,5 @@
 """RuoYi 代码生成模块（Velocity/Thymeleaf）SSTI 模板注入检测。"""
+
 # RuoYi 代码生成模块 SSTI 检测
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url

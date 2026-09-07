@@ -85,9 +85,7 @@ async def scan_ws(websocket: WebSocket, task_id: str):
         return
 
     # 仅当客户端显式请求了子协议时才回选（否则不返回子协议）
-    requested = {
-        p.strip() for p in websocket.headers.get("sec-websocket-protocol", "").split(",") if p.strip()
-    }
+    requested = {p.strip() for p in websocket.headers.get("sec-websocket-protocol", "").split(",") if p.strip()}
     subprotocol = WS_SUBPROTOCOL if WS_SUBPROTOCOL in requested else None
     await websocket.accept(subprotocol=subprotocol)
 

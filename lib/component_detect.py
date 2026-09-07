@@ -141,7 +141,7 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
             status=STATUS_UNKNOWN,
             evidence="%s，版本无法识别（建议人工确认 pom.xml）" % evidence,
             url=url,
-        # 语义：无论有无兜底提示，fix_version 都是假值（None/""），to_scan_result 不会输出修复建议
+            # 语义：无论有无兜底提示，fix_version 都是假值（None/""），to_scan_result 不会输出修复建议
             fix_version=fallback_note("fastjson") and None,
         )
     # 2. 若依版本推断（无关键字泄漏时）

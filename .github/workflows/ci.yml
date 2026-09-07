@@ -1,10 +1,13 @@
 name: Ruoyi-Scan CI
 
 # 触发：push / PR 自动跑全部套件（含 real-ruoyi 真实 Java 靶场，D4 自动化验收）
+# tags 触发：tag 推送时对 tag 指向的提交跑 CI，供 release.yml 的发布门禁等待
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   # ── 代码质量门禁：ruff lint + format check + mypy 类型检查 ──────────
@@ -18,7 +21,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dev dependencies
-        run: pip install ruff mypy
+        # 版本固定：ruff format 的输出随版本演进（引号风格/空行规则），不固定会导致
+        # CI 与本地格式化结果漂移（v1.2.3/v1.2.4 期间 CI 连红的根因）。升级时需本地
+        # 重跑 ruff format 并同步此处与 pyproject dev 依赖。
+        run: pip install ruff==0.16.2 mypy==2.1.0
       - name: Ruff lint
         run: ruff check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
       - name: Ruff format check

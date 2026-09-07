@@ -1,4 +1,5 @@
 """RuoYi-Plus 认证服务 /auth/login 接口存在性探测（Sa-Token 架构确认，无破坏性 payload）。"""
+
 # RuoYi-Plus 登录接口未授权探测（variant='ruoyi-plus' 专项）
 # Plus 版使用 Sa-Token 认证，登录接口为 /auth/login（独立认证服务）
 # 存在性验证：POST 空凭据探测接口存在性 + 是否返回业务 JSON（未配置登录限制时）

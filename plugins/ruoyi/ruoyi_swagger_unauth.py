@@ -1,4 +1,5 @@
 """RuoYi Swagger/Knife4j API 文档未授权访问检测（信息泄露类）。"""
+
 # RuoYi Swagger 未授权 API 文档泄露
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url

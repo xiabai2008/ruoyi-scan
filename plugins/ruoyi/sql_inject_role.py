@@ -1,4 +1,5 @@
 """若依 /system/role/list 的 params[dataScope] 参数 SQL 报错注入检测（CNVD-2021-01931）。"""
+
 # SQL 报错注入（role）：/system/role/list 的 params[dataScope] 参数 extractvalue 报错注入
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
