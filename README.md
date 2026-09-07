@@ -39,6 +39,7 @@ pip install ruoyi-scan
 | [API 文档](docs/API.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
 | [贡献指南](CONTRIBUTING.md) | 开发流程、代码规范、提交约定 |
 | [变更日志](CHANGELOG.md) | 版本历史与变更记录 |
+| [发展路线图](ROADMAP.md) | G 系列版本规划、社区路线、度量指标 |
 
 ---
 

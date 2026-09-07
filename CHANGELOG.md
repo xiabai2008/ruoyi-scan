@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Added
+- 新增 `ROADMAP.md` 发展路线图（G1-G5 + v2.0 愿景）：检测深度 / 工程债清偿 / AI 闭环 v2 / 生态社区 / 合规交付五大方向，含三条底线、度量仪表盘与落地机制；README 文档表同步入口
+
 ### Fixed
 - **CI lint 转绿**: 修复 ruff format 漂移（10 个文件 docstring 后空行重排）；lint 工具版本固定（ruff==0.16.2 / mypy==2.1.0，CI 与 pyproject dev 依赖同步），杜绝格式化工具版本演进导致的漂移复发
 - **Nightly 验收修复**: 靶场容器 `docker run` 补传 `LAB_HOST=0.0.0.0`——v1.2.0 安全收口后靶场默认绑定 127.0.0.1，容器内绑定回环导致 Docker 端口映射不可达，自 8/25 起每晚启动超时；失败自动建 issue 覆盖靶场启动失败场景（旧条件在该场景下永不触发），并显式声明 `issues: write` 权限
