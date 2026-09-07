@@ -16,9 +16,51 @@ permissions:
   id-token: write  # PyPI OIDC Trusted Publisher（受信任发布）需要
 
 jobs:
+  # 发布门禁：等待同一提交上的 "Ruoyi-Scan CI" 全绿后才允许发布。
+  # CI 对 tag 提交的运行由 ci.yml 的 tags 触发保证存在（v1.2.3/v1.2.4 曾在 CI
+  # 连红的情况下完成发布，此门禁防止再次带病发布）。
+  wait-ci:
+    name: Gate on CI (tag commit must be green)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Await CI run result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          sha="${{ github.sha }}"
+          echo "等待提交 ${sha} 的 CI 运行结果..."
+          run_id=""
+          for i in $(seq 1 40); do  # 最多 10 分钟等待 CI 出现
+            run_id=$(gh api "repos/${repo}/actions/runs?head_sha=${sha}" \
+              --jq '.workflow_runs[] | select(.name == "Ruoyi-Scan CI") | .id' | head -n1)
+            [ -n "$run_id" ] && break
+            sleep 15
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::未找到提交 ${sha} 的 CI 运行（确认 ci.yml 仍包含 tags 触发）"
+            exit 1
+          fi
+          echo "CI run id: ${run_id}"
+          for i in $(seq 1 160); do  # 最多 40 分钟等待 CI 跑完
+            status=$(gh api "repos/${repo}/actions/runs/${run_id}" --jq '.status')
+            [ "$status" = "completed" ] && break
+            sleep 15
+          done
+          conclusion=$(gh api "repos/${repo}/actions/runs/${run_id}" --jq '.conclusion')
+          echo "CI conclusion: ${conclusion}"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI 未通过（${conclusion:-timeout}），终止发布"
+            exit 1
+          fi
+          echo "CI 绿灯，放行发布"
+
   release:
     name: Build & Publish to GitHub Release
     runs-on: ubuntu-latest
+    needs: wait-ci
     steps:
       - uses: actions/checkout@v4
 
