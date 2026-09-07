@@ -39,7 +39,7 @@
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.2.2
+- **版本**：1.2.3
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License

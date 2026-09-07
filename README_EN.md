@@ -19,7 +19,7 @@
 ## Project Overview
 
 - **Author**: XIABAI
-- **Version**: 1.2.2
+- **Version**: 1.2.3
 - **Repository**: https://github.com/xiabai2008/Ruoyi-Scan
 - **Tech Stack**: Python 3.8+ / requests / FastAPI / Docker
 - **License**: MIT License
