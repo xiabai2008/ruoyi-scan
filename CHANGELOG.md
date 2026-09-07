@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+- Release 流水线接入 PyPI（OIDC 受信任发布，`pypa/gh-action-pypi-publish`），tag 推送自动双发 GitHub Release + PyPI
+- README / README_EN 快速开始改为 `pip install ruoyi-scan` 优先（Release wheel 下载降级为离线方式）
+
 ## [1.2.3] - 2026-09-07
 
 ### Added

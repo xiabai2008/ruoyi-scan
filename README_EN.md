@@ -68,13 +68,11 @@
 
 ## Quick Start
 
-### Option 1: Install from Release (Recommended)
-
-Go to the [Releases page](https://github.com/xiabai2008/Ruoyi-Scan/releases), download the latest `.whl` file, then:
+### Option 1: Install via pip (Recommended)
 
 ```bash
 # Install (auto-installs core dependencies)
-pip install ruoyi_scan-1.2.2-py3-none-any.whl
+pip install ruoyi-scan
 
 # Optional feature dependencies (install on demand)
 pip install pyyaml          # --config YAML configuration file
@@ -85,7 +83,15 @@ pip install aiohttp         # --async async HTTP client
 ruoyi-scan -p http://target:8080/
 ```
 
-### Option 2: Install from Source
+### Option 2: Install from Release (Offline environments)
+
+Go to the [Releases page](https://github.com/xiabai2008/Ruoyi-Scan/releases), download the latest `.whl` file, then:
+
+```bash
+pip install ruoyi_scan-1.2.3-py3-none-any.whl
+```
+
+### Option 3: Install from Source
 
 ```bash
 git clone https://github.com/xiabai2008/Ruoyi-Scan.git

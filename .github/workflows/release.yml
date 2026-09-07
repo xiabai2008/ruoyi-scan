@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write  # 创建 Release 需要
+  id-token: write  # PyPI OIDC Trusted Publisher（受信任发布）需要
 
 jobs:
   release:
@@ -66,3 +67,17 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/checksums.txt
+
+      # PyPI 发布放最后：即使 OIDC 未配置导致本步失败，GitHub Release 产物也已上传。
+      # 前置条件：在 PyPI 项目页 → Publishing → 预登记 Trusted Publisher：
+      #   PyPI Project Name: ruoyi-scan
+      #   Owner:            xiabai2008
+      #   Repository:       xiabai2008/ruoyi-scan
+      #   Workflow name:    release.yml
+      #   Environment name: （留空）
+      # 若需 token 兜底：在本步 with 中加 password: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

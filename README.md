@@ -88,13 +88,11 @@
 
 ## 快速开始
 
-### 方式一：从 Release 下载安装（推荐）
-
-前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
+### 方式一：pip 安装（推荐）
 
 ```bash
 # 安装（自动安装核心依赖）
-pip install ruoyi_scan-1.2.2-py3-none-any.whl
+pip install ruoyi-scan
 
 # 可选功能依赖（按需安装）
 pip install pyyaml          # --config YAML 配置文件
@@ -105,7 +103,15 @@ pip install aiohttp         # --async 异步 HTTP 客户端
 ruoyi-scan -p http://target:8080/
 ```
 
-### 方式二：源码安装
+### 方式二：从 Release 下载安装（离线环境）
+
+前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
+
+```bash
+pip install ruoyi_scan-1.2.3-py3-none-any.whl
+```
+
+### 方式三：源码安装
 
 ```bash
 git clone https://github.com/xiabai2008/Ruoyi-Scan.git
