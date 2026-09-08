@@ -13,6 +13,7 @@
 #   '<=4.5'       表示 4.5 及以下
 #   ''            空串表示全版本适用（默认）
 import re
+from typing import Any, Dict, List, Tuple
 
 from common.logger import get_logger
 
@@ -24,7 +25,7 @@ logger = get_logger(__name__)
 VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
 
 
-def extract_version(text):
+def extract_version(text: str) -> str:
     """从响应文本中提取若依版本号
 
     Args:
@@ -41,7 +42,7 @@ def extract_version(text):
     return ""
 
 
-def detect_version(target, session, variant=""):
+def detect_version(target: str, session: Any, variant: str = "") -> str:
     """探测目标若依版本号（G1：支持变体感知的指纹来源优先级）
 
     按可靠性顺序尝试多个指纹来源：
@@ -60,7 +61,7 @@ def detect_version(target, session, variant=""):
     """
     from core.http import join_url
 
-    def _probe(url):
+    def _probe(url: str) -> str:
         """单 URL 探测，返回提取到的版本号或 ''"""
         try:
             resp = session.get(url)
@@ -101,7 +102,7 @@ def detect_version(target, session, variant=""):
     return ""
 
 
-def parse_version(version_str):
+def parse_version(version_str: str) -> Tuple[int, int, int]:
     """将版本号字符串解析为可比较的 3-tuple
 
     Args:
@@ -121,7 +122,7 @@ def parse_version(version_str):
     # 补零到 3 元素（'4.7' → [4, 7] → [4, 7, 0]）
     while len(nums) < 3:
         nums.append(0)
-    return tuple(nums)
+    return (nums[0], nums[1], nums[2])
 
 
 def version_in_range(version: str, range_spec: str) -> bool:
@@ -243,7 +244,7 @@ RUOYI_VARIANT_INFO = {
 }
 
 
-def get_variant_info(variant):
+def get_variant_info(variant: str) -> Dict[str, Any]:
     """获取变体元数据
 
     Args:
@@ -255,7 +256,7 @@ def get_variant_info(variant):
     return RUOYI_VARIANT_INFO.get(variant, {})
 
 
-def get_variant_api_prefixes(variant):
+def get_variant_api_prefixes(variant: str) -> List[str]:
     """获取变体的 API 路径前缀列表（POC 路径适配用）
 
     Args:
@@ -264,7 +265,7 @@ def get_variant_api_prefixes(variant):
     Returns:
         list: 前缀列表（如 ['/prod-api']），未知变体返回 ['']（裸路径）
     """
-    return RUOYI_VARIANT_INFO.get(variant, {}).get("api_prefixes", [""])
+    return list(RUOYI_VARIANT_INFO.get(variant, {}).get("api_prefixes", [""]))
 
 
 # RuoYi-Cloud 特征路径（用于 detect_version 识别 Cloud 版）

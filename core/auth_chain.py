@@ -17,6 +17,7 @@
 #   - 登录失败不抛异常，返回 (ok, reason)，调用方决定是否继续
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
+from typing import Any, Optional, Tuple
 
 from common.logger import get_logger
 from core.http import join_url
@@ -46,7 +47,15 @@ class RuoYiAuthChain:
             resp = session.get(join_url(target, '/monitor/job/edit'))
     """
 
-    def __init__(self, target, session, username="admin", password="admin123", remember_me=False, timeout=None):
+    def __init__(
+        self,
+        target: str,
+        session: Any,
+        username: str = "admin",
+        password: str = "admin123",
+        remember_me: bool = False,
+        timeout: Optional[float] = None,
+    ) -> None:
         """初始化登录链（默认尝试 admin/admin123 弱口令）
 
         Args:
@@ -61,9 +70,9 @@ class RuoYiAuthChain:
         self.password = password
         self.remember_me = remember_me
         self.timeout = timeout
-        self.auth_mode = None
+        self.auth_mode: Optional[str] = None
 
-    def detect_auth_mode(self):
+    def detect_auth_mode(self) -> str:
         """探测鉴权模式：v4 Session / v5 JWT / 无鉴权
 
         判定依据：
@@ -77,13 +86,13 @@ class RuoYiAuthChain:
             self.auth_mode = AUTH_NONE
             return AUTH_NONE
 
-        code = getattr(resp, "status_code", 0)
+        http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
         text = resp.text or ""
         ct = (resp.headers.get("Content-Type", "") or "").lower()
         text_lower = text.lower()
 
         # 404 / 无响应 → 无鉴权
-        if code == 404:
+        if http_code == 404:
             self.auth_mode = AUTH_NONE
             return AUTH_NONE
 
@@ -109,7 +118,7 @@ class RuoYiAuthChain:
         self.auth_mode = AUTH_V4_SESSION
         return AUTH_V4_SESSION
 
-    def login(self, captcha_code=None):
+    def login(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
         """按探测到的鉴权模式登录
 
         Args:
@@ -137,7 +146,7 @@ class RuoYiAuthChain:
 
         return False, LOGIN_ERROR
 
-    def _login_v4_session(self, captcha_code=None):
+    def _login_v4_session(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
         """RuoYi v4 Session 登录：POST /login 表单 → Cookie 自动复用
 
         表单字段：username / password / rememberMe / validateCode
@@ -177,7 +186,7 @@ class RuoYiAuthChain:
         except Exception as e:
             return False, f"{LOGIN_ERROR}: {e}"
 
-        code = getattr(resp, "status_code", 0)
+        http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
 
         # 解析 JSON 响应（RuoYi AjaxResult）
         body = {}
@@ -205,7 +214,7 @@ class RuoYiAuthChain:
             return False, f"{LOGIN_FAIL}: code={r_code} msg={msg}"
 
         # 非 JSON 响应但 HTTP 200（可能是重定向到首页，登录成功）
-        if code == 200 and not body:
+        if http_code == 200 and not body:
             # 检查是否有 Set-Cookie（登录成功会下发新 JSESSIONID）
             set_cookie = resp.headers.get("Set-Cookie", "") or ""
             # Shiro 认证失败会下发 deleteMe cookie 销毁会话，出现它说明登录并未成功
@@ -214,7 +223,7 @@ class RuoYiAuthChain:
 
         return False, f"{LOGIN_FAIL}: 未知响应 code={r_code} msg={msg}"
 
-    def _login_v5_jwt(self, captcha_code=None):
+    def _login_v5_jwt(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
         """RuoYi v5 JWT 登录：POST /login JSON → 提取 token → 加 Authorization 头
 
         请求体：{"username":"admin","password":"admin123","code":"验证码","uuid":"uuid"}

@@ -41,6 +41,8 @@ jobs:
           mypy core/http.py core/waf_features.py core/fingerprint_features.py
           core/cache.py core/dedup.py core/report_pdf.py core/engine.py
           core/router.py core/portscan.py
+          core/ruoyi_versions.py core/captcha_solver.py core/auth_chain.py
+          core/storage.py core/chain.py core/session.py core/report_sarif.py
           --strict --ignore-missing-imports --follow-imports=silent
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 import threading
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -55,9 +55,6 @@ class SessionManager:
         # 代理池优先：存在代理池时固定代理不生效，改为每请求从池中轮换
         if self.proxy and not self.proxy_pool:
             self.session.proxies.update({"http": self.proxy, "https": self.proxy})
-        # keep-alive 复用连接
-        self.session.keep_alive = True
-
         # P0: HTTPAdapter 连接池配置（随线程数动态调整，默认 pool_size=10）
         # 连接池容量下限 10：线程数较小时也保留余量，缓冲瞬时并发避免频繁建连
         _pool = max(pool_size or settings.THREADS or 10, 10)
@@ -84,31 +81,31 @@ class SessionManager:
         # 调试模式：打印每个请求的方法/URL/状态/响应大小到 stderr（不影响正常输出）
         self.debug = bool(debug)
 
-    def _get_proxy_for_request(self):
+    def _get_proxy_for_request(self) -> Optional[str]:
         """D13: 从代理池获取当前请求的代理"""
         if not self.proxy_pool:
             return self.proxy
         proxy = self.proxy_pool.get()
         return proxy
 
-    def _record_proxy_result(self, proxy_url, success):
+    def _record_proxy_result(self, proxy_url: Optional[str], success: bool) -> None:
         """D13: 记录代理使用结果"""
         if self.proxy_pool and proxy_url:
             self.proxy_pool.record_result(proxy_url, success)
 
-    def _log_debug(self, method, url, resp):
+    def _log_debug(self, method: str, url: str, resp: Any) -> None:
         """调试日志：方法 URL 状态码 响应字节，输出到 stderr"""
         if not self.debug:
             return
         try:
-            code = resp.status_code
-            size = len(resp.content or b"")
+            code: Any = resp.status_code
+            size: Any = len(resp.content or b"")
         except Exception:
             code = "?"
             size = "?"
         print(f"[debug] {method} {url} -> {code} ({size} bytes)", file=sys.stderr)
 
-    def get(self, url: str, headers: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
+    def get(self, url: str, headers: Optional[Dict[str, str]] = None, **kwargs: Any) -> requests.Response:
         """发送 GET 请求（自动附加超时，计数并入报告统计）
 
         Args:
@@ -125,7 +122,7 @@ class SessionManager:
         return resp
 
     def post(
-        self, url: str, headers: Optional[Dict[str, str]] = None, data: Optional[Dict[str, str]] = None, **kwargs
+        self, url: str, headers: Optional[Dict[str, str]] = None, data: Optional[Dict[str, str]] = None, **kwargs: Any
     ) -> requests.Response:
         """发送 POST 请求（自动附加超时，计数并入报告统计）
 
@@ -143,7 +140,9 @@ class SessionManager:
         self._log_debug("POST", url, resp)
         return resp
 
-    def request(self, method: str, url: str, headers: Optional[Dict[str, str]] = None, **kwargs) -> requests.Response:
+    def request(
+        self, method: str, url: str, headers: Optional[Dict[str, str]] = None, **kwargs: Any
+    ) -> requests.Response:
         """通用 HTTP 请求（支持 OPTIONS/TRACE 等非标准方法）"""
         kwargs.setdefault("timeout", self.timeout)
         with self._count_lock:

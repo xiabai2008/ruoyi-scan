@@ -19,7 +19,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
 from common.models import (
     SEVERITY_HIGH,
@@ -204,12 +204,12 @@ class ChainContext:
         self.facts: Dict[str, Any] = {}
         self.secrets: Dict[str, str] = {}
 
-    def set_result(self, step_id: str, result: ScanResult, status: str):
+    def set_result(self, step_id: str, result: ScanResult, status: str) -> None:
         """记录节点执行结果"""
         self.results[step_id] = result
         self.node_status[step_id] = status
 
-    def extract_outputs(self, step_id: str, step: ChainStep, result: ScanResult):
+    def extract_outputs(self, step_id: str, step: ChainStep, result: ScanResult) -> None:
         """根据 step.outputs 映射，从 ScanResult 提取值到 facts/secrets
 
         outputs 格式: {ctx_key: 'field:url' 或 'extra:vuln_type' 或 'evidence'}
@@ -373,7 +373,7 @@ class ChainEngine:
                         in_degree[neighbor] -= 1
         return result
 
-    def _evaluate_condition(self, condition: Optional[Callable], ctx: ChainContext) -> bool:
+    def _evaluate_condition(self, condition: Optional[Callable[..., bool]], ctx: ChainContext) -> bool:
         """评估条件函数，异常默认返回 False（不执行）"""
         if condition is None:
             return True
@@ -396,9 +396,9 @@ class ChainEngine:
         防止 verify() 中网络请求无限等待导致链永远不返回。
         """
 
-        def _do_verify():
+        def _do_verify() -> ScanResult:
             plugin = step.plugin_cls()
-            result = plugin.verify(ctx.target, ctx.session)
+            result = cast(ScanResult, plugin.verify(ctx.target, ctx.session))
             if step.severity_override:
                 result.severity = step.severity_override
             return result
@@ -455,7 +455,7 @@ class ChainEngine:
         chain_def: ChainDef,
         target: str,
         session: Any,
-        fp_result: FingerprintResult = None,
+        fp_result: Optional[FingerprintResult] = None,
         on_result: Optional[Callable[[ScanResult], None]] = None,
     ) -> ChainResult:
         """执行链定义
@@ -490,7 +490,7 @@ class ChainEngine:
         order = self._topological_sort(chain_def)
 
         # 记录被跳过的节点（上游 abort 传播）
-        aborted = set()
+        aborted: Set[str] = set()
 
         import logging
 
@@ -574,7 +574,7 @@ class ChainEngine:
         result.duration = time.time() - t0
         return result
 
-    def _propagate_abort(self, chain_def: ChainDef, failed_id: str, aborted: set):
+    def _propagate_abort(self, chain_def: ChainDef, failed_id: str, aborted: Set[str]) -> None:
         """将 abort 传播到失败节点的所有下游节点（递归）"""
         for s in chain_def.steps:
             if failed_id in s.depends_on and s.id not in aborted:

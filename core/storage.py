@@ -40,7 +40,7 @@ class Storage:
         # 初始化表结构
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         """初始化表结构 + WAL 模式"""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
@@ -83,7 +83,7 @@ class Storage:
             finally:
                 conn.close()
 
-    def save_task(self, task_id: str, task_dict: Dict[str, Any]):
+    def save_task(self, task_id: str, task_dict: Dict[str, Any]) -> None:
         """保存或更新任务（upsert）"""
         status = task_dict.get("status", "pending")
         target = task_dict.get("target", "")
@@ -111,7 +111,7 @@ class Storage:
             finally:
                 conn.close()
 
-    def save_event(self, task_id: str, event_type: str, payload: Any):
+    def save_event(self, task_id: str, event_type: str, payload: Any) -> None:
         """保存事件"""
         payload_json = json.dumps(payload, ensure_ascii=False) if payload else "{}"
         ts = time.time()
@@ -176,7 +176,7 @@ class Storage:
             finally:
                 conn.close()
 
-    def delete_task(self, task_id: str):
+    def delete_task(self, task_id: str) -> None:
         """删除任务 + 其事件"""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
@@ -187,7 +187,7 @@ class Storage:
             finally:
                 conn.close()
 
-    def cleanup_expired(self, max_age_seconds: int = 86400):
+    def cleanup_expired(self, max_age_seconds: int = 86400) -> None:
         """清理过期任务（默认 24 小时）"""
         cutoff = time.time() - max_age_seconds
         with self._lock:
@@ -220,7 +220,9 @@ class Storage:
 
     # ── E9：定时扫描任务 ──
 
-    def save_schedule(self, job_id: str, cron: str, target: str, mode: str = "u", payload: Dict[str, Any] = None):
+    def save_schedule(
+        self, job_id: str, cron: str, target: str, mode: str = "u", payload: Optional[Dict[str, Any]] = None
+    ) -> None:
         """保存/更新定时扫描任务（upsert）"""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
@@ -280,7 +282,7 @@ class Storage:
             finally:
                 conn.close()
 
-    def delete_schedule(self, job_id: str):
+    def delete_schedule(self, job_id: str) -> None:
         """删除定时任务"""
         with self._lock:
             conn = sqlite3.connect(self.db_path)

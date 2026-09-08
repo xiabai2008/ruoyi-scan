@@ -17,7 +17,7 @@
 #
 # SARIF 2.1.0 规范：https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 import json
-from typing import Dict, List
+from typing import Any, Dict, List
 
 # SARIF 规范版本
 SARIF_VERSION = "2.1.0"
@@ -54,7 +54,7 @@ def _severity_to_level(severity: str) -> str:
     return GITHUB_SECURITY_SEVERITY.get(severity, "note")
 
 
-def _build_rules(results: List) -> Dict[str, Dict]:
+def _build_rules(results: List[Any]) -> Dict[str, Dict[str, Any]]:
     """从扫描结果构建 SARIF rules 字典
 
     每个 POC 对应一条 rule，以 name 为 key
@@ -102,7 +102,7 @@ def _build_rules(results: List) -> Dict[str, Dict]:
     return rules
 
 
-def _build_results(results: List, rules: Dict[str, Dict]) -> List[Dict]:
+def _build_results(results: List[Any], rules: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """构建 SARIF results 数组"""
     sarif_results = []
     for r in results:
@@ -162,7 +162,7 @@ def _build_results(results: List, rules: Dict[str, Dict]) -> List[Dict]:
     return sarif_results
 
 
-def to_sarif(report_builder) -> str:
+def to_sarif(report_builder: Any) -> str:
     """将 ReportBuilder 转为 SARIF 2.1.0 JSON 字符串
 
     Args:
@@ -214,7 +214,7 @@ def to_sarif(report_builder) -> str:
     return json.dumps(sarif_doc, ensure_ascii=False, indent=2)
 
 
-def render_sarif(report_builder, filepath: str):
+def render_sarif(report_builder: Any, filepath: str) -> None:
     """渲染 SARIF 报告到文件
 
     Args:

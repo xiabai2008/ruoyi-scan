@@ -17,6 +17,7 @@
 import base64
 import io
 import re
+from typing import Any, Optional, Tuple
 
 from common.logger import get_logger
 from core.http import join_url
@@ -42,7 +43,7 @@ class CaptchaSolver:
             chain.login(captcha_code=code)
     """
 
-    def __init__(self, target, session, captcha_type="auto"):
+    def __init__(self, target: str, session: Any, captcha_type: str = "auto") -> None:
         """初始化验证码识别器
 
         Args:
@@ -53,10 +54,10 @@ class CaptchaSolver:
         self.target = target
         self.session = session
         self.captcha_type = captcha_type  # auto / math / char
-        self._ocr_backend = None
-        self._captcha_path = None
+        self._ocr_backend: Optional[str] = None
+        self._captcha_path: Optional[str] = None
 
-    def _init_ocr_backend(self):
+    def _init_ocr_backend(self) -> Optional[str]:
         """初始化 OCR 后端，返回后端名称或 None"""
         if self._ocr_backend is not None:
             return self._ocr_backend
@@ -82,7 +83,7 @@ class CaptchaSolver:
             logger.debug("pytesseract 后端加载失败", exc_info=True)
         return None
 
-    def detect_captcha(self):
+    def detect_captcha(self) -> Tuple[bool, str]:
         """探测验证码接口是否存在
 
         按候选路径顺序请求，找到第一个返回图片的路径。
@@ -114,14 +115,14 @@ class CaptchaSolver:
                 continue
         return False, ""
 
-    def _download_image(self):
+    def _download_image(self) -> Tuple[bytes, bool]:
         """下载验证码图片，返回 (image_bytes: bytes, is_base64_json: bool)"""
         if not self._captcha_path:
             has, path = self.detect_captcha()
             if not has:
                 return b"", False
         try:
-            resp = self.session.get(join_url(self.target, self._captcha_path))
+            resp = self.session.get(join_url(self.target, self._captcha_path or ""))
             ct = (resp.headers.get("Content-Type", "") or "").lower()
             if "json" in ct:
                 # RuoYi 5.x base64 JSON
@@ -138,28 +139,30 @@ class CaptchaSolver:
         except Exception:
             return b"", False
 
-    def _ocr_recognize(self, image_bytes):
+    def _ocr_recognize(self, image_bytes: bytes) -> str:
         """用 OCR 后端识别图片，返回识别文本"""
         backend = self._init_ocr_backend()
         if not backend:
             return ""
         if backend == "ddddocr":
             try:
-                return self._ocr.classification(image_bytes)
+                return str(self._ocr.classification(image_bytes))
             except Exception:
                 return ""
         if backend == "pytesseract":
             try:
                 img = self._PIL.open(io.BytesIO(image_bytes))
                 # 数字+字母模式（验证码常见）
-                return self._pytesseract.image_to_string(
-                    img, config="--psm 7 -c tessedit_char_whitelist=0123456789+-*=abcdefgABCDEFG"
+                return str(
+                    self._pytesseract.image_to_string(
+                        img, config="--psm 7 -c tessedit_char_whitelist=0123456789+-*=abcdefgABCDEFG"
+                    )
                 ).strip()
             except Exception:
                 return ""
         return ""
 
-    def _eval_math_captcha(self, text):
+    def _eval_math_captcha(self, text: str) -> str:
         """算术验证码求值（如 '3+5=?' → '8'）"""
         if not text:
             return ""
@@ -182,7 +185,7 @@ class CaptchaSolver:
             logger.debug("算术验证码求值失败", exc_info=True)
         return text
 
-    def solve(self):
+    def solve(self) -> Tuple[bool, str]:
         """探测并识别验证码
 
         Returns:
@@ -210,6 +213,6 @@ class CaptchaSolver:
         return True, text
 
     @property
-    def backend_name(self):
+    def backend_name(self) -> str:
         """当前 OCR 后端名称（供调试/证据用）"""
         return self._init_ocr_backend() or "none"
