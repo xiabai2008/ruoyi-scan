@@ -6,6 +6,7 @@
 #   Sheet 3 修复建议：3 列（漏洞名称/严重度/修复建议）
 import os
 from datetime import datetime
+from typing import Any, Optional
 
 from openpyxl import Workbook
 from openpyxl.chart import PieChart, Reference
@@ -56,17 +57,17 @@ _THIN_BORDER = Border(
 )
 
 
-def _font(size=10, bold=False, color="FF1F2328", mono=False):
+def _font(size: int = 10, bold: bool = False, color: str = "FF1F2328", mono: bool = False) -> Font:
     """构造 Font 对象"""
     return Font(name=_FONT_MONO if mono else _FONT, size=size, bold=bold, color=color)
 
 
-def _header_font(size=10, color="FFFFFFFF"):
+def _header_font(size: int = 10, color: str = "FFFFFFFF") -> Font:
     """表头字体（白字加粗）"""
     return Font(name=_FONT, size=size, bold=True, color=color)
 
 
-def _style_header_cell(cell, fill=None, font=None):
+def _style_header_cell(cell: Any, fill: Optional[Any] = None, font: Optional[Any] = None) -> None:
     """设置表头单元格样式"""
     if fill:
         cell.fill = fill
@@ -75,7 +76,14 @@ def _style_header_cell(cell, fill=None, font=None):
     cell.border = _THIN_BORDER
 
 
-def _style_data_cell(cell, mono=False, bold=False, color="FF1F2328", fill=None, align="left"):
+def _style_data_cell(
+    cell: Any,
+    mono: bool = False,
+    bold: bool = False,
+    color: str = "FF1F2328",
+    fill: Optional[Any] = None,
+    align: str = "left",
+) -> None:
     """设置数据单元格样式"""
     cell.font = _font(size=9, bold=bold, color=color, mono=mono)
     cell.alignment = Alignment(horizontal=align, vertical="top", wrap_text=True)
@@ -84,7 +92,7 @@ def _style_data_cell(cell, mono=False, bold=False, color="FF1F2328", fill=None, 
         cell.fill = fill
 
 
-def _build_summary_sheet(ws, builder, gen_time):
+def _build_summary_sheet(ws: Any, builder: Any, gen_time: str) -> None:
     """Sheet 1: 摘要（目标/CMS/模式/耗时/漏洞数 + 风险分布饼图）"""
     ws.title = "摘要"
     # 列宽
@@ -192,7 +200,7 @@ def _build_summary_sheet(ws, builder, gen_time):
     ws.add_chart(pie, f"D{dist_start}")
 
 
-def _build_vuln_sheet(ws, builder):
+def _build_vuln_sheet(ws: Any, builder: Any) -> None:
     """Sheet 2: 漏洞详情（8 列表头 + 自动筛选 + 严重度着色 + 冻结表头）"""
     ws.title = "漏洞详情"
     headers = ["#", "漏洞名称", "严重度", "状态", "URL", "证据", "修复建议", "命中次数"]
@@ -260,7 +268,7 @@ def _build_vuln_sheet(ws, builder):
                 _style_data_cell(cell, mono=mono, align=align)
 
 
-def _build_fix_sheet(ws, builder):
+def _build_fix_sheet(ws: Any, builder: Any) -> None:
     """Sheet 3: 修复建议（3 列：漏洞名称/严重度/修复建议）"""
     ws.title = "修复建议"
     headers = ["#", "漏洞名称", "严重度", "修复建议"]
@@ -287,7 +295,7 @@ def _build_fix_sheet(ws, builder):
     ws.freeze_panes = "A2"
 
 
-def render_xlsx(builder, out_path):
+def render_xlsx(builder: Any, out_path: str) -> str:
     """渲染 Excel 报告到 out_path
 
     Args:

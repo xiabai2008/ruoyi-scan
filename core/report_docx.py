@@ -4,6 +4,7 @@
 # 中文字体：通过 run.font.name + eastAsia 设置，Word/LibreOffice 会自动回退替换
 import os
 from datetime import datetime
+from typing import Any, Optional
 
 from docx import Document
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
@@ -45,7 +46,14 @@ _STATUS_CN = {
 }
 
 
-def _set_run_font(run, name=_FONT, size=None, color=None, bold=None, mono=False):
+def _set_run_font(
+    run: Any,
+    name: str = _FONT,
+    size: Optional[int] = None,
+    color: Optional[Any] = None,
+    bold: Optional[bool] = None,
+    mono: bool = False,
+) -> None:
     """设置 run 字体（中文需同时设 ascii 和 eastAsia）
 
     Args:
@@ -75,7 +83,7 @@ def _set_run_font(run, name=_FONT, size=None, color=None, bold=None, mono=False)
         run.font.bold = bold
 
 
-def _set_cell_bg(cell, hex_color):
+def _set_cell_bg(cell: Any, hex_color: str) -> None:
     """设置表格单元格背景色
 
     Args:
@@ -92,7 +100,15 @@ def _set_cell_bg(cell, hex_color):
     shd.set(qn("w:fill"), hex_color)
 
 
-def _add_cell_text(cell, text, size=9, bold=False, color=None, mono=False, align=None):
+def _add_cell_text(
+    cell: Any,
+    text: str,
+    size: int = 9,
+    bold: bool = False,
+    color: Optional[Any] = None,
+    mono: bool = False,
+    align: Optional[Any] = None,
+) -> None:
     """向单元格添加文本（清空默认空段落后写入）
 
     Args:
@@ -114,7 +130,7 @@ def _add_cell_text(cell, text, size=9, bold=False, color=None, mono=False, align
     cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
 
 
-def _add_heading(doc, text, level=1, size=None, color=None):
+def _add_heading(doc: Any, text: str, level: int = 1, size: Optional[int] = None, color: Optional[Any] = None) -> Any:
     """添加标题段落（自定义样式，避免依赖默认 Heading 样式的中文字体问题）"""
     para = doc.add_paragraph()
     if level == 0:
@@ -129,7 +145,7 @@ def _add_heading(doc, text, level=1, size=None, color=None):
     return para
 
 
-def _style_table_header(table, fill="0969DA"):
+def _style_table_header(table: Any, fill: str = "0969DA") -> None:
     """设置表格首行为表头样式（蓝底白字加粗）"""
     for cell in table.rows[0].cells:
         _set_cell_bg(cell, fill)
@@ -139,7 +155,7 @@ def _style_table_header(table, fill="0969DA"):
                 _set_run_font(run, size=9, bold=True, color=RGBColor(0xFF, 0xFF, 0xFF))
 
 
-def _set_table_borders(table):
+def _set_table_borders(table: Any) -> None:
     """为表格添加细边框（python-docx 默认无边框）"""
     tbl = table._tbl
     tbl_pr = tbl.find(qn("w:tblPr"))
@@ -161,7 +177,7 @@ def _set_table_borders(table):
         elem.set(qn("w:color"), "D0D7DE")
 
 
-def render_docx(builder, out_path):
+def render_docx(builder: Any, out_path: str) -> str:
     """渲染 Word 报告到 out_path
 
     Args:
@@ -309,7 +325,7 @@ def render_docx(builder, out_path):
     all_results = builder._effective_results()
     others = [r for r in all_results if r.status != STATUS_CONFIRMED]
     if others:
-        doc.add_page_break()
+        doc.add_page_break()  # type: ignore[no-untyped-call]
         _add_heading(doc, "其他结果（未确认/安全）", level=1)
         other_headers = ["名称", "状态", "URL", "证据"]
         other_table = doc.add_table(rows=len(others) + 1, cols=len(other_headers))
@@ -345,7 +361,7 @@ def render_docx(builder, out_path):
 
     # === 修复建议汇总 ===
     if confirmed:
-        doc.add_page_break()
+        doc.add_page_break()  # type: ignore[no-untyped-call]
         _add_heading(doc, "修复建议汇总", level=1)
         for i, r in enumerate(confirmed, 1):
             sev_cn = SEVERITY_CN.get(r.severity, r.severity)

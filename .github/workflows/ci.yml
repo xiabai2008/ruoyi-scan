@@ -43,6 +43,7 @@ jobs:
           core/router.py core/portscan.py
           core/ruoyi_versions.py core/captcha_solver.py core/auth_chain.py
           core/storage.py core/chain.py core/session.py core/report_sarif.py
+          core/report_xlsx.py core/report.py core/report_docx.py
           --strict --ignore-missing-imports --follow-imports=silent
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────

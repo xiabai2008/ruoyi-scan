@@ -5,6 +5,7 @@ import html as html_module
 import io
 import json
 import os
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from common.models import (
     SEVERITY_CN,
@@ -14,6 +15,7 @@ from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,
+    ScanResult,
 )
 from config import settings
 from lib.star_cta import REPO_URL
@@ -26,17 +28,23 @@ class ReportBuilder:
     摘要：目标、耗时、请求数、风险分布、扫描时间
     """
 
-    def __init__(self, results=None, target="", summary=None, dedup=True):
+    def __init__(
+        self,
+        results: Optional[List[ScanResult]] = None,
+        target: str = "",
+        summary: Optional[Dict[str, Any]] = None,
+        dedup: bool = True,
+    ) -> None:
         self.results = results or []
         self.target = target
         # summary: {duration, request_count, started_at, ended_at, mode, fingerprint}
         self.summary = summary or {}
         # D8: 结果去重聚合（渲染前合并同指纹漏洞，可 --no-dedup 关闭）
         self.dedup_enabled = dedup
-        self._cached_effective = None  # 缓存去重后结果
-        self._cached_dedup_report = None  # 缓存去重统计
+        self._cached_effective: Optional[List[Any]] = None  # 缓存去重后结果
+        self._cached_dedup_report: Optional[Any] = None  # 缓存去重统计
 
-    def _effective_results(self):
+    def _effective_results(self) -> List[ScanResult]:
         """返回渲染用结果：dedup=True 时返回去重聚合后结果，否则返回原始结果
 
         去重层位于 ReportBuilder 渲染前（不破坏 ScanEngine 契约），
@@ -48,9 +56,9 @@ class ReportBuilder:
             from core.dedup import aggregate
 
             self._cached_effective, self._cached_dedup_report = aggregate(self.results)
-        return self._cached_effective
+        return cast(List[ScanResult], self._cached_effective)
 
-    def dedup_report(self):
+    def dedup_report(self) -> Any:
         """返回去重统计报告（dedup 关闭时返回 None）"""
         if not self.dedup_enabled:
             return None
@@ -58,11 +66,11 @@ class ReportBuilder:
             self._effective_results()  # 触发计算
         return self._cached_dedup_report
 
-    def add(self, result):
+    def add(self, result: ScanResult) -> None:
         self.results.append(result)
 
     # 风险分布：仅统计 CONFIRMED 漏洞
-    def risk_distribution(self):
+    def risk_distribution(self) -> Dict[str, int]:
         """统计确认漏洞的严重度分布（UNKNOWN/SAFE 不计入）
 
         Returns:
@@ -79,16 +87,16 @@ class ReportBuilder:
         return dist
 
     # 仅保留确认存在的漏洞条目（UNKNOWN/SAFE 不计入漏洞数，见开发方案 §三 Step 4）
-    def confirmed_results(self):
+    def confirmed_results(self) -> List[ScanResult]:
         """返回全部 CONFIRMED 结果（HTML/PDF/Word 等各格式的漏洞明细均取自这里）"""
         return [r for r in self._effective_results() if r.status == STATUS_CONFIRMED]
 
-    def sorted_results(self, confirmed_first=True):
+    def sorted_results(self, confirmed_first: bool = True) -> List[ScanResult]:
         """排序结果：CONFIRMED 在前，同状态按危害度 high→medium→low→其他排序"""
         sev_order = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
         status_order = {STATUS_CONFIRMED: 0, STATUS_UNKNOWN: 1, STATUS_SAFE: 2}
 
-        def key(r):
+        def key(r: ScanResult) -> Tuple[int, int, str]:
             s = status_order.get(r.status, 99)
             v = sev_order.get(r.severity, 99)
             # confirmed_first=False 时状态键恒为 0，等价于按危害度+名称排序
@@ -96,7 +104,7 @@ class ReportBuilder:
 
         return sorted(self._effective_results(), key=key)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """整体报告字典（JSON 用）"""
         dist = self.risk_distribution()
         return {
@@ -113,11 +121,11 @@ class ReportBuilder:
             "results": [r.to_dict() for r in self._effective_results()],
         }
 
-    def to_json(self):
+    def to_json(self) -> str:
         """JSON 格式（供 CI 解析，UTF-8，缩进 2）"""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
-    def to_csv(self):
+    def to_csv(self) -> str:
         """CSV 格式（漏洞名称/URL/危害等级/状态/CVE/CVSS/合规/证据/修复建议/修复详情/复现命令）"""
         buf = io.StringIO()
         writer = csv.writer(buf)
@@ -157,7 +165,7 @@ class ReportBuilder:
             )
         return buf.getvalue()
 
-    def _render_risk_donut_svg(self, dist):
+    def _render_risk_donut_svg(self, dist: Dict[str, int]) -> str:
         """生成风险分布环形图 SVG（阶段六：纯 SVG，零外部依赖）
 
         三色弧（高=红/中=黄/低=绿）按占比拼接成环，中心显示总漏洞数。
@@ -223,7 +231,7 @@ class ReportBuilder:
             "</div>"
         )
 
-    def to_html(self, confirmed_only=False):
+    def to_html(self, confirmed_only: bool = False) -> str:
         """HTML 格式（风险着色 + 修复建议，标准库 string 模板，无 jinja2）
 
         Args:
@@ -415,7 +423,7 @@ function toggleFilter() {{
 </body>
 </html>"""
 
-    def render_all(self, out_dir, formats=None):
+    def render_all(self, out_dir: str, formats: Optional[Any] = None) -> List[str]:
         """渲染多格式到 out_dir，返回生成的文件路径列表
 
         formats: 默认 ['html','json','csv']；D8 起新增 'pdf','docx','xlsx'；'all'=全部 6 种
@@ -492,20 +500,20 @@ function toggleFilter() {{
 class BatchReport:
     """批量扫描汇总报告：聚合多个 ReportBuilder，输出 batch_report.html + batch_report.csv"""
 
-    def __init__(self, builders=None):
+    def __init__(self, builders: Optional[List[Any]] = None) -> None:
         self.builders = builders or []  # list of ReportBuilder
 
-    def add(self, builder):
+    def add(self, builder: Any) -> None:
         self.builders.append(builder)
 
     @property
-    def total_targets(self):
+    def total_targets(self) -> int:
         return len(self.builders)
 
-    def total_confirmed(self):
+    def total_confirmed(self) -> int:
         return sum(b.risk_distribution()["total"] for b in self.builders)
 
-    def to_csv(self):
+    def to_csv(self) -> str:
         """CSV：目标,CMS,高,中,低,合计,请求数,耗时(秒)"""
         buf = io.StringIO()
         writer = csv.writer(buf)
@@ -527,7 +535,7 @@ class BatchReport:
             )
         return buf.getvalue()
 
-    def _render_targets_bar_svg(self):
+    def _render_targets_bar_svg(self) -> str:
         """生成各目标确认漏洞数柱状图 SVG（阶段六：纯 SVG rect，堆叠三色）
 
         每个目标一根柱，从底部向上堆叠 高(红)/中(黄)/低(绿)，柱顶标注总数，
@@ -584,7 +592,7 @@ class BatchReport:
             f"{bars_str}\n    </svg>"
         )
 
-    def to_html(self):
+    def to_html(self) -> str:
         """HTML 批量汇总：概览表 + 各目标摘要"""
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         bar_svg = self._render_targets_bar_svg()
@@ -668,7 +676,7 @@ class BatchReport:
 </body>
 </html>"""
 
-    def render_all(self, out_dir):
+    def render_all(self, out_dir: str) -> List[str]:
         """输出 batch_report.html + batch_report.csv"""
         if not out_dir:
             out_dir = settings.REPORT_DIR
