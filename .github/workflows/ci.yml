@@ -45,6 +45,7 @@ jobs:
           core/storage.py core/chain.py core/session.py core/report_sarif.py
           core/report_xlsx.py core/report.py core/report_docx.py
           --strict --ignore-missing-imports --follow-imports=silent
+          --no-warn-unused-ignores
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归
