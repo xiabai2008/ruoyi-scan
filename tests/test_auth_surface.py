@@ -3,8 +3,8 @@
 import json
 import os
 import socket
-import subprocess
 import sys
+import threading
 import time
 import urllib.request
 
@@ -14,12 +14,10 @@ if PROJECT_ROOT not in sys.path:
 
 from lib.auth_surface import (
     AuthSurfaceScanner,
-    SurfaceAsset,
     _candidate_paths,
     _extract_paths_from_page,
     _looks_denied,
 )
-from lib.logic_scan import LogicVuln
 
 
 class FakeResp:
@@ -218,7 +216,7 @@ class TestAuthzMatrix:
 
 
 # ============================================================
-# lab 签名区集成测试（subprocess 起 lab/server.py，真实 HTTP）
+# lab 签名区集成测试（进程内 werkzeug server，真实 HTTP）
 # ============================================================
 
 
@@ -230,16 +228,34 @@ def _free_port():
     return port
 
 
-def _wait_healthy(port, timeout=15):
-    deadline = time.time() + timeout
+def _start_lab(mode):
+    """进程内启动 lab 签名靶场（werkzeug make_server 线程，跨 CI 稳定）
+
+    subprocess 方式在 GitHub windows runner 上启动不可靠（健康检查超时），
+    改为直接挂载 lab.server.app：MODE 通过模块全局量切换（dispatch 内 is_vuln() 读取）。
+
+    Returns:
+        (port, server)：调用方 finally 中 server.shutdown()
+    """
+    from werkzeug.serving import make_server
+
+    import lab.server as lab_mod
+
+    lab_mod.MODE = mode
+    port = _free_port()
+    server = make_server("127.0.0.1", port, lab_mod.app, threaded=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # 就绪等待（进程内启动无冷启动开销）
+    deadline = time.time() + 5
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as resp:
                 if resp.status == 200:
-                    return True
+                    return port, server
         except Exception:
-            time.sleep(0.3)
-    return False
+            time.sleep(0.1)
+    server.shutdown()
+    raise AssertionError("进程内 lab 启动失败")
 
 
 def _login_token(port, username, password):
@@ -256,7 +272,7 @@ def _login_token(port, username, password):
     return body["token"]
 
 
-def _lab_scanner(port, mode):
+def _lab_scanner(port):
     """构造对接 lab 签名区的扫描器（admin/user 会话各持 token）"""
     from core.session import SessionManager
 
@@ -272,18 +288,9 @@ def _lab_scanner(port, mode):
 
 def test_lab_auth_surface_vuln_mode():
     """lab vuln 模式：垂直越权 CONFIRMED + 未授权 SAFE（不误报）"""
-    port = _free_port()
-    env = dict(os.environ, LAB_MODE="vuln", LAB_PORT=str(port), LAB_HOST="127.0.0.1")
-    proc = subprocess.Popen(
-        [sys.executable, os.path.join(PROJECT_ROOT, "lab", "server.py")],
-        env=env,
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    port, server = _start_lab("vuln")
     try:
-        assert _wait_healthy(port), "lab 启动失败"
-        scanner = _lab_scanner(port, "vuln")
+        scanner = _lab_scanner(port)
         # 聚焦 /prod-api 签名区：旧签名区端点（unauth_batch 等）本就是匿名可达的洞，
         # 全字典扫描会产生预期内的 unauthorized_access 发现，与本测试断言无关
         candidates = [
@@ -309,38 +316,28 @@ def test_lab_auth_surface_vuln_mode():
         # vuln lab 的 user/list 匿名不可达（401），unauthorized_access 只可能来自其他资产
         assert all("/prod-api/system/user/list" not in v.url for v in unauthorized)
     finally:
-        proc.terminate()
-        proc.wait(timeout=10)
+        server.shutdown()
+        server.server_close()
 
 
 def test_lab_auth_surface_safe_mode():
     """lab safe 模式：越权矩阵零误报（全部 SAFE）"""
-    port = _free_port()
-    env = dict(os.environ, LAB_MODE="safe", LAB_PORT=str(port), LAB_HOST="127.0.0.1")
-    proc = subprocess.Popen(
-        [sys.executable, os.path.join(PROJECT_ROOT, "lab", "server.py")],
-        env=env,
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    port, server = _start_lab("safe")
     try:
-        assert _wait_healthy(port), "lab 启动失败"
-        scanner = _lab_scanner(port, "safe")
+        scanner = _lab_scanner(port)
         candidates = [
             ("/prod-api/system/user/list", "dict"),
             ("/prod-api/system/role/list", "dict"),
         ]
         assets = scanner.inventory(candidates)
         assets, vulns = scanner.authz_matrix(assets)
-        confirmed = [v for v in vulns]
         # safe 模式零误报：RBAC 正常（role/list 低权 403）、鉴权正常（无 token 401）
-        assert confirmed == [], [v.name for v in confirmed]
+        assert vulns == [], [v.name for v in vulns]
         role_asset = [a for a in assets if a.url.endswith("/prod-api/system/role/list")]
         assert role_asset and role_asset[0].verdict == "safe"
     finally:
-        proc.terminate()
-        proc.wait(timeout=10)
+        server.shutdown()
+        server.server_close()
 
 
 if __name__ == "__main__":
