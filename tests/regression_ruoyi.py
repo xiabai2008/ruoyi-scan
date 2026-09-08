@@ -673,5 +673,10 @@ def run_all():
     return 0 if result.wasSuccessful() else 1
 
 
+# Windows ANSI 代码页（cp1252/GBK）控制台下中文输出防崩溃（G2 可移植性）
+from common.console import force_utf8_stdio
+
+force_utf8_stdio()
+
 if __name__ == "__main__":
     sys.exit(run_all())
