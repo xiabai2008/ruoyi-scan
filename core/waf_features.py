@@ -9,8 +9,9 @@
 #   block_signatures: WAF 拦截响应的典型特征（用于区分"真 SAFE"和"被拦假 SAFE"）
 #   recommended_strategies: D7 推荐绕过策略 ID 列表（按优先级排序）
 # 命中任一特征即判定存在该 WAF。
+from typing import Any, Dict, List
 
-WAF_FEATURES = {
+WAF_FEATURES: Dict[str, Any] = {
     "cloudflare": {
         "display": "Cloudflare",
         "headers": ["cf-ray", "__cfduid", "CF-Cache-Status", "cf-request-id"],
@@ -138,7 +139,7 @@ WAF_FEATURES = {
 }
 
 
-def get_waf_names():
+def get_waf_names() -> List[str]:
     """返回所有已注册 WAF 标识列表"""
     return list(WAF_FEATURES.keys())
 

@@ -22,6 +22,7 @@
 - mypy `python_version` 目标 3.8 → 3.10（mypy 2.x 最低支持 3.10，仅影响类型分析，运行时仍支持 3.8+）
 
 ### Changed
+- **G2 mypy 债务清偿第一批（9 模块）**: core/ 的 http / waf_features / fingerprint_features / cache / dedup / report_pdf / engine / router / portscan 共 27 个类型错误清零（补函数签名注解、容器泛型参数、`cast` 消除 Any 传播）；CI 新增 **mypy 棘轮硬门禁**（已清零模块列表回归任何类型错误即失败，只增不减），core/ 整体错误 350 → 311
 - **Release 发布门禁**: tag 推送先等待同一提交的 CI 全绿再构建上传（ci.yml 增加 `tags: v*` 触发），防止带病发布
 - **G2 CI Windows matrix**: unit 作业矩阵增加 `windows-latest`（pytest-timeout Windows 侧自动切 thread 方法），防 GBK 编码 / 路径分隔符回归；Codecov 上传收敛至 ubuntu+py3.11 组合
 - 文档数字对齐实际状态：插件 51 个（ruoyi 18 / spring 14 / common 11 / jeecgboot 8）、测试 51 文件 1000+ 用例、lib 33 模块；`.idea/` 加入 .gitignore；CHANGELOG 版本对比链接补全

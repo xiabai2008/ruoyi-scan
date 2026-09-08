@@ -189,7 +189,7 @@ class PortScanner:
             print(f'{r.port}/tcp {r.service} {r.banner[:50]}')
     """
 
-    def __init__(self, timeout=3, threads=20):
+    def __init__(self, timeout: float = 3, threads: int = 20) -> None:
         self.timeout = timeout
         self.threads = threads
 

@@ -33,6 +33,15 @@ jobs:
         run: |
           mypy common/ --strict --ignore-missing-imports
           mypy core/ --strict --ignore-missing-imports || true
+      - name: Mypy ratchet（G2 已清零模块硬门禁，只增不减）
+        # 棘轮机制：新清零的模块加入列表；列表内模块回归任何类型错误即失败。
+        # 扩列步骤：本地 mypy <module> --strict --ignore-missing-imports --follow-imports=silent
+        # 清零后把文件加入此处并提交（勿删除已有条目）。
+        run: >
+          mypy core/http.py core/waf_features.py core/fingerprint_features.py
+          core/cache.py core/dedup.py core/report_pdf.py core/engine.py
+          core/router.py core/portscan.py
+          --strict --ignore-missing-imports --follow-imports=silent
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归

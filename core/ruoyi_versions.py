@@ -124,7 +124,7 @@ def parse_version(version_str):
     return tuple(nums)
 
 
-def version_in_range(version, range_spec):
+def version_in_range(version: str, range_spec: str) -> bool:
     """判断版本是否在指定范围内
 
     Args:

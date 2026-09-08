@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 
 from common.models import STATUS_UNKNOWN, ScanResult
 
@@ -24,7 +24,7 @@ class ScanEngine:
         """
         self.threads = max(1, threads)
         self.rate = rate  # 每秒请求数，0 表示不限速
-        self._timestamps = []  # 令牌桶：最近 1 秒内的请求时间戳
+        self._timestamps: List[float] = []  # 令牌桶：最近 1 秒内的请求时间戳
         self._rate_lock = threading.Lock()  # 保护 _rate_limit 的互斥锁（多线程安全）
 
     def run(
@@ -33,7 +33,7 @@ class ScanEngine:
         target: str,
         session: SessionManager,
         on_result: Optional[Callable[[ScanResult], None]] = None,
-        waf_bypass_coordinator: Optional[object] = None,
+        waf_bypass_coordinator: Optional[Any] = None,
     ) -> List[ScanResult]:
         """运行插件集合
 
@@ -48,12 +48,12 @@ class ScanEngine:
         """
         results = []
 
-        def _exec(cls):
+        def _exec(cls: type) -> ScanResult:
             # 执行前限速（单线程和多线程统一走此路径，线程安全）
             self._rate_limit()
             try:
                 inst = cls()
-                original = inst.verify(target, session)
+                original = cast(ScanResult, inst.verify(target, session))
                 # D7: WAF 绕过（仅当协调器存在且插件支持绕过且原结果非 CONFIRMED）
                 if (
                     waf_bypass_coordinator is not None
@@ -61,7 +61,9 @@ class ScanEngine:
                     and original.status != "CONFIRMED"
                 ):
                     try:
-                        original = waf_bypass_coordinator.maybe_bypass(inst, target, session, original)
+                        original = cast(
+                            ScanResult, waf_bypass_coordinator.maybe_bypass(inst, target, session, original)
+                        )
                     except Exception as e:
                         # 绕过异常不降级为 SAFE，保持原状态
                         if not original.extra:

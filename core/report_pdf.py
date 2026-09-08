@@ -3,6 +3,7 @@
 # 使用 Platypus 布局引擎 + STSong-Light CJK 字体（reportlab 内置，无需系统字体），
 # 生成 A4 纵向 PDF：封面 → 漏洞详情表 → 其他结果 → 修复建议汇总。
 from datetime import datetime
+from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -27,7 +28,7 @@ _FONT_REGISTERED = False
 _FONT_NAME = "STSong-Light"
 
 
-def _ensure_font():
+def _ensure_font() -> None:
     """注册中文字体（仅首次调用时注册）"""
     global _FONT_REGISTERED
     if not _FONT_REGISTERED:
@@ -50,7 +51,7 @@ _STATUS_CN = {
 }
 
 
-def render_pdf(builder, out_path):
+def render_pdf(builder: Any, out_path: str) -> str:
     """渲染 PDF 报告到 out_path
 
     Args:

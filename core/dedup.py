@@ -72,7 +72,7 @@ def _strip_parens(text: str) -> str:
     return text.strip()
 
 
-def fingerprint(result) -> str:
+def fingerprint(result: Any) -> str:
     """计算漏洞指纹：sha1(normalized_endpoint | vuln_type | payload_class)[:16]
 
     Args:
@@ -125,11 +125,11 @@ class AggregatedVuln:
     reproduce: str = ""
 
     @property
-    def is_vuln(self):
+    def is_vuln(self) -> bool:
         """是否确认存在漏洞（与 ScanResult.is_vuln 兼容）"""
         return self.status == STATUS_CONFIRMED
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """转为字典（与 ScanResult.to_dict() 字段对齐 + 聚合扩展字段）"""
         from common.models import SEVERITY_CN
 
@@ -251,8 +251,8 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
         return [], DedupReport(0, 0, 0)
 
     # 按指纹分组（保持插入顺序）
-    groups = {}
-    order = []
+    groups: Dict[str, List[Any]] = {}
+    order: List[Any] = []
     for r in results:
         fp = fingerprint(r)
         if fp not in groups:

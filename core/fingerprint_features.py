@@ -13,9 +13,12 @@
 #         至少命中一个强特征 → 高置信；仅弱特征 → 低置信（供人工复核）；无特征 → 未识别。
 
 # 真实采集的 RuoYi 4.7.8 favicon md5（2026-07-17 从运行实例 127.0.0.1:8080/favicon.ico 采集，size=16958）
+from typing import Any, Dict, List, Optional
+
 RUOYI_FAVICON_MD5 = "e49fd30ea870c7a820464ca56a113e6e"
 
 # CMS 特征库：cms 标识 -> 特征 dict
+
 CMS_FEATURES = {
     "ruoyi": {
         "display": "RuoYi",
@@ -144,21 +147,21 @@ VARIANT_FEATURES = {
 }
 
 
-def get_feature(cms):
+def get_feature(cms: str) -> Optional[Dict[str, Any]]:
     """返回某 CMS 的特征 dict，未注册返回 None"""
     return CMS_FEATURES.get(cms)
 
 
-def list_cms():
+def list_cms() -> List[str]:
     """返回所有已注册 CMS 标识列表"""
     return list(CMS_FEATURES.keys())
 
 
-def list_variants():
+def list_variants() -> List[str]:
     """返回所有已注册若依变体标识列表（E1）"""
     return list(VARIANT_FEATURES.keys())
 
 
-def get_variant_feature(variant):
+def get_variant_feature(variant: str) -> Optional[Dict[str, Any]]:
     """返回某变体的特征 dict，未注册返回 None（E1）"""
     return VARIANT_FEATURES.get(variant)

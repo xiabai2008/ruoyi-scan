@@ -2,6 +2,9 @@
 # 用于多 CMS 遍历时共享根响应与 favicon 响应，避免重复请求
 
 
+from typing import Any, Dict, List
+
+
 class FingerprintCache:
     """请求级缓存：缓存 session.get(url) 结果，避免重复请求
 
@@ -9,16 +12,16 @@ class FingerprintCache:
     异常时缓存 None，调用方需容忍 resp 为 None（detect 内部已有 try/except 保护）。
     """
 
-    def __init__(self, session):
+    def __init__(self, session: Any) -> None:
         """初始化请求级缓存（绑定会话对象）
 
         Args:
             session: 用于发起请求的 SessionManager 实例
         """
-        self._cache = {}
+        self._cache: Dict[str, Any] = {}
         self._session = session
 
-    def get(self, url):
+    def get(self, url: str) -> Any:
         """返回缓存响应或发起请求并缓存结果（异常缓存 None）
 
         命中缓存时不调用 session.get，因此 request_count 不会增加，
@@ -32,10 +35,10 @@ class FingerprintCache:
                 self._cache[url] = None
         return self._cache[url]
 
-    def __len__(self):
+    def __len__(self) -> int:
         """已缓存 URL 数量"""
         return len(self._cache)
 
-    def keys(self):
+    def keys(self) -> List[str]:
         """已缓存的 URL 列表（调试/测试用）"""
         return list(self._cache.keys())
