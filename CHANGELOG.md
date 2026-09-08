@@ -13,6 +13,7 @@
 - **G1 变体矩阵补全**：`core/ruoyi_versions.py` 新增 `RUOYI_VARIANT_INFO` 变体元数据表（7 变体的鉴权方式 / API 前缀 / 版本指纹来源）与 `get_variant_info` / `get_variant_api_prefixes` 接口；`detect_version` 支持变体感知的指纹来源优先级（向后兼容）
 
 ### Fixed
+- **G2 Windows 可移植性修复（CI matrix 首跑即暴露）**: `main.py` 未强制 stdout 编码，英文 Windows（cp1252 控制台）下 banner/帮助信息中的中文触发 `UnicodeEncodeError` 使 CLI 直接崩溃退出码 1（中文系统 GBK 碰巧能编所以此前未发现）——入口处 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`，任何终端最多乱码显示绝不中断；补 cp1252 环境回归测试
 - **G2 Windows 兼容修复**: `tests/test_report_xlsx.py` 8 处 `load_workbook` 未释放 workbook 句柄（openpyxl 内部循环引用 + close() 非 read_only 模式为 no-op），Linux 上删除打开中的文件无感、Windows 上 TemporaryDirectory 清理必报 WinError 32——断言后统一 `del` + `gc.collect()` 强制释放（5 轮稳定性验证通过）
 - **CI lint 转绿**: 修复 ruff format 漂移（10 个文件 docstring 后空行重排）；lint 工具版本固定（ruff==0.16.2 / mypy==2.1.0，CI 与 pyproject dev 依赖同步），杜绝格式化工具版本演进导致的漂移复发
 - **Nightly 验收修复**: 靶场容器 `docker run` 补传 `LAB_HOST=0.0.0.0`——v1.2.0 安全收口后靶场默认绑定 127.0.0.1，容器内绑定回环导致 Docker 端口映射不可达，自 8/25 起每晚启动超时；失败自动建 issue 覆盖靶场启动失败场景（旧条件在该场景下永不触发），并显式声明 `issues: write` 权限

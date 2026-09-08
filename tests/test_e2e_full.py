@@ -79,11 +79,33 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "-h"],
             capture_output=True,
-            text=True, encoding="utf-8", errors="replace",
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
         )
         assert result.returncode == 0
         assert "综合扫描" in result.stdout
+
+    def test_cli_help_cp1252_console(self):
+        """英文 Windows（cp1252 控制台编码）下 -h 不崩溃（G2 可移植性回归）
+
+        复现：GitHub windows runner 的 stdout 是 cp1252，banner 中文触发
+        UnicodeEncodeError 使 CLI 退出码 1。main.py 入口强制 UTF-8 后应正常。
+        PYTHONIOENCODING=cp1252 模拟该环境，跨平台可跑。
+        """
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        result = subprocess.run(
+            [sys.executable, "main.py", "-h"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=os.path.dirname(os.path.dirname(__file__)),
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr[-500:]
+        assert "Ruoyi-Scan" in result.stdout
 
     def test_vuln_scan_e2e(self):
         """全流程：启动靶场 → 漏洞扫描 → 验证报告"""
@@ -106,7 +128,9 @@ class TestE2E:
                         "json",
                     ],
                     capture_output=True,
-                    text=True, encoding="utf-8", errors="replace",
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     cwd=os.path.dirname(os.path.dirname(__file__)),
                     timeout=60,
                 )
@@ -135,7 +159,9 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "--chain-list"],
             capture_output=True,
-            text=True, encoding="utf-8", errors="replace",
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
             timeout=30,
         )
@@ -147,7 +173,9 @@ class TestE2E:
         result = subprocess.run(
             [sys.executable, "main.py", "--plugin-list"],
             capture_output=True,
-            text=True, encoding="utf-8", errors="replace",
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=os.path.dirname(os.path.dirname(__file__)),
             timeout=30,
         )

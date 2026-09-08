@@ -5,10 +5,27 @@ P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻�
 """
 
 import argparse
+import sys
 
 from common.logger import setup_logging
 from config import settings
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
+
+
+def _force_utf8_stdio():
+    """强制 stdout/stderr 为 UTF-8（Windows 可移植性修复，G2 CI matrix 首跑暴露）
+
+    Windows 控制台默认走 ANSI 代码页（英文系统 cp1252 / 中文系统 GBK），
+    banner/报告中的中文与框线字符会触发 UnicodeEncodeError 使 CLI 直接崩溃。
+    必须在 argparse 之前调用（-h 的输出同样经过 stdout）。
+    errors=replace 保证极旧终端上最多乱码显示，绝不中断程序。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass  # 已关闭/不可重配置的流（如测试捕获管道）静默跳过
 
 
 def print_banner():
@@ -354,6 +371,7 @@ def main(argv=None):
     @param argv: 可选参数列表（默认取 sys.argv），便于单元测试直调。
     未指定任何模式或显式 -h 时打印帮助并返回，不发起扫描。
     """
+    _force_utf8_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
 
