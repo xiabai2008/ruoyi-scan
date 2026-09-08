@@ -1,12 +1,14 @@
 # D32：CVE/NVD 自动同步
 #
-# 从 NVD（National Vulnerability Database）自动同步 CVE 信息，更新插件库的
-# cve/cvss_vector/compliance 字段，保持漏洞知识库常新。
+# 从公开漏洞库自动同步 CVE 信息，更新插件库的 cve/cvss_vector/compliance 字段，
+# 保持漏洞知识库常新。
 #
 # 数据源：
-#   1. NVD REST API（https://services.nvd.nist.gov/rest/json/cves/2.0）
-#   2. NVD JSON Feed（https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-2024.json.gz）
-#   3. 本地缓存（避免重复请求）
+#   1. NVD REST API（https://services.nvd.nist.gov/rest/json/cves/2.0）— 主源
+#   2. GHSA REST API（https://api.github.com/advisories）— G1 新增回退源：
+#      NVD 未收录/查询失败时按 CVE 编号查 GitHub Advisory Database，
+#      国内网络环境下 GHSA 可达性常优于 NVD
+#   3. 本地缓存（避免重复请求，24h TTL）
 #
 # 使用方式：
 #   # 同步所有插件的 CVE 信息
@@ -17,6 +19,8 @@
 #
 #   # 从 NVD 查询单个 CVE
 #   python main.py --cve-lookup CVE-2024-1234
+#
+# GHSA 提速（可选）：环境变量 RUOYI_SCAN_GHSA_TOKEN=<GitHub PAT>（60/h → 5000/h）
 import datetime
 import json
 import os
@@ -33,7 +37,8 @@ logger = get_logger(__name__)
 # ============================================================
 
 NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-NVD_FEED_BASE = "https://nvd.nist.gov/feeds/json/cve/1.1"
+GHSA_API_BASE = "https://api.github.com/advisories"
+GHSA_TOKEN_ENV = "RUOYI_SCAN_GHSA_TOKEN"  # 可选 GitHub PAT，提升速率限制
 CACHE_DIR = "data/cve_cache"
 CACHE_TTL_HOURS = 24  # 缓存有效期 24 小时
 
@@ -57,6 +62,7 @@ class CVEInfo:
         last_modified: str = "",
         references: List[str] = None,
         cwe: List[str] = None,
+        source: str = "nvd",
     ):
         """初始化 CVE 信息对象
 
@@ -70,6 +76,7 @@ class CVEInfo:
             last_modified: 最后修改时间
             references: 参考链接列表
             cwe: CWE 编号列表
+            source: 数据源标识（nvd/ghsa，仅展示用）
         """
         self.cve_id = cve_id
         self.description = description
@@ -80,6 +87,7 @@ class CVEInfo:
         self.last_modified = last_modified
         self.references = references or []
         self.cwe = cwe or []
+        self.source = source
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -92,6 +100,7 @@ class CVEInfo:
             "last_modified": self.last_modified,
             "references": self.references,
             "cwe": self.cwe,
+            "source": self.source,
         }
 
     @classmethod
@@ -106,6 +115,7 @@ class CVEInfo:
             last_modified=d.get("last_modified", ""),
             references=d.get("references", []),
             cwe=d.get("cwe", []),
+            source=d.get("source", "nvd"),
         )
 
     def to_compliance_tag(self) -> str:
@@ -337,12 +347,104 @@ def parse_nvd_response(data: Dict[str, Any]) -> Optional[CVEInfo]:
 
 
 # ============================================================
+# GHSA API 查询（G1：NVD 回退补充源）
+# ============================================================
+
+# GHSA severity 枚举（low/moderate/high/critical）→ NVD 词汇（LOW/MEDIUM/HIGH/CRITICAL）
+_GHSA_SEVERITY_MAP = {"low": "LOW", "moderate": "MEDIUM", "high": "HIGH", "critical": "CRITICAL"}
+
+
+def query_ghsa(cve_id: str, timeout: int = 10, token: str = None) -> Optional[CVEInfo]:
+    """从 GitHub Advisory Database（GHSA）按 CVE 编号查询
+
+    Args:
+        cve_id: CVE 编号（如 CVE-2024-1234）
+        timeout: 请求超时秒数
+        token: GitHub PAT（可选；缺省读环境变量 RUOYI_SCAN_GHSA_TOKEN）
+
+    Returns:
+        CVEInfo（source='ghsa'）或 None
+    """
+    if token is None:
+        token = os.environ.get(GHSA_TOKEN_ENV) or None
+    url = f"{GHSA_API_BASE}?cve_id={urllib.parse.quote(cve_id)}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Ruoyi-Scan/2.0",
+    }
+    if token:
+        headers["Authorization"] = "Bearer %s" % token
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+    # 按 cve_id 过滤返回列表（API 可能返回同编号相关的多条 advisory）
+    if not isinstance(data, list):
+        return None
+    for advisory in data:
+        if isinstance(advisory, dict) and advisory.get("cve_id", "").upper() == cve_id.upper():
+            return parse_ghsa_response(advisory)
+    return None
+
+
+def parse_ghsa_response(advisory: Dict[str, Any]) -> Optional[CVEInfo]:
+    """解析 GHSA advisory JSON → CVEInfo
+
+    Args:
+        advisory: GHSA REST API 单条 advisory（https://docs.github.com/en/rest/security-advisories）
+
+    Returns:
+        CVEInfo（source='ghsa'）或 None（缺 cve_id）
+    """
+    cve_id = advisory.get("cve_id", "")
+    if not cve_id:
+        return None
+
+    # 描述：优先完整 description，回退 summary
+    description = advisory.get("description", "") or advisory.get("summary", "")
+
+    # CVSS（GHSA cvss 对象含 score/vector_string）
+    cvss = advisory.get("cvss", {}) or {}
+    try:
+        cvss_score = float(cvss.get("score") or 0.0)
+    except (TypeError, ValueError):
+        cvss_score = 0.0
+    cvss_vector = cvss.get("vector_string", "") or ""
+
+    severity = _GHSA_SEVERITY_MAP.get((advisory.get("severity") or "").lower(), "")
+
+    references = [r.get("url", "") for r in advisory.get("references", []) if r.get("url")]
+
+    # GHSA 的 cwes 字段为 CWE 编号列表（如 ["CWE-79"]），元素可能是字符串或含 cwe_id 的对象
+    cwe = []
+    for item in advisory.get("cwes", []) or []:
+        cwe_id = item if isinstance(item, str) else item.get("cwe_id", "")
+        if cwe_id and cwe_id not in cwe:
+            cwe.append(cwe_id)
+
+    return CVEInfo(
+        cve_id=cve_id,
+        description=description,
+        cvss_vector=cvss_vector,
+        cvss_score=cvss_score,
+        severity=severity,
+        published=advisory.get("published_at", ""),
+        last_modified=advisory.get("updated_at", ""),
+        references=references,
+        cwe=cwe,
+        source="ghsa",
+    )
+
+
+# ============================================================
 # 高层接口
 # ============================================================
 
 
 def lookup_cve(cve_id: str, use_cache: bool = True, api_key: str = None) -> Optional[CVEInfo]:
-    """查询单个 CVE（缓存优先）
+    """查询单个 CVE（缓存优先，NVD 主源 + GHSA 回退）
 
     Args:
         cve_id: CVE 编号
@@ -358,8 +460,13 @@ def lookup_cve(cve_id: str, use_cache: bool = True, api_key: str = None) -> Opti
         if cached:
             return cached
 
-    # 查询 NVD API
+    # 查询 NVD API（主源）
     cve = query_nvd_api(cve_id, api_key=api_key)
+
+    # G1：NVD 未命中/不可达时回退 GHSA（国内网络环境可达性常更好）
+    if cve is None:
+        cve = query_ghsa(cve_id)
+
     if cve:
         save_to_cache(cve)
 
@@ -495,6 +602,7 @@ def run_cve_sync_mode(args) -> int:
         info = lookup_cve(cve_id, api_key=api_key)
         if info:
             print(f"[+]CVE-ID: {info.cve_id}")
+            print(f"    数据源: {info.source}")
             print(f"    严重度: {info.severity} (CVSS {info.cvss_score})")
             print(f"    向量: {info.cvss_vector}")
             print(f"    描述: {info.description[:200]}")

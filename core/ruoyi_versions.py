@@ -41,58 +41,62 @@ def extract_version(text):
     return ""
 
 
-def detect_version(target, session):
-    """探测目标若依版本号
+def detect_version(target, session, variant=""):
+    """探测目标若依版本号（G1：支持变体感知的指纹来源优先级）
 
     按可靠性顺序尝试多个指纹来源：
-    1. GET /login 页面 HTML（最可靠，含完整版本号）
-    2. GET 根路径 HTML（footer 版本号）
-    3. GET /actuator/info（微服务版）
+    1. 指定 variant 时优先探测该变体的特征来源（RUOYI_VARIANT_INFO.version_sources）
+    2. GET /login 页面 HTML（最可靠，含完整版本号）
+    3. GET 根路径 HTML（footer 版本号）
+    4. GET /actuator/info（微服务版）
 
     Args:
         target: 目标 URL
         session: SessionManager 实例
+        variant: 变体标识（可选，如 'ruoyi-plus'，影响探测顺序）
 
     Returns:
         str: 版本号字符串（如 '4.7.8'），未识别返回 ''
     """
     from core.http import join_url
 
-    # 1. /login 页面（最可靠）
-    try:
-        resp = session.get(join_url(target, "/login"))
-        text = resp.text or ""
-        version = extract_version(text)
+    def _probe(url):
+        """单 URL 探测，返回提取到的版本号或 ''"""
+        try:
+            resp = session.get(url)
+            version = extract_version(resp.text or "")
+            if not version:
+                # 粗粒度 ?v=4.7 静态资源参数
+                m = re.search(r"[?&]v=(4\.\d+)", resp.text or "")
+                if m:
+                    return m.group(1) + ".0"
+            return version
+        except Exception:
+            logger.debug("探测版本失败: %s", url, exc_info=True)
+            return ""
+
+    # 0. 变体特征来源优先（如 plus 的 /actuator/info、cloud 的 /nacos/）
+    for source in get_variant_info(variant).get("version_sources", []):
+        if source in ("/login", "/"):  # 与通用路径重合的来源留给下方统一探测
+            continue
+        version = _probe(join_url(target, source))
         if version:
             return version
-    except Exception:
-        logger.debug("探测 /login 页面版本失败", exc_info=True)
+
+    # 1. /login 页面（最可靠）
+    version = _probe(join_url(target, "/login"))
+    if version:
+        return version
 
     # 2. 根路径 HTML（footer 或静态资源 ?v=4.7）
-    try:
-        resp = session.get(target)
-        text = resp.text or ""
-        # 先找完整版本号 X.Y.Z
-        version = extract_version(text)
-        if version:
-            return version
-        # 再找粗粒度版本号 ?v=4.7（静态资源参数）
-        m = re.search(r"[?&]v=(4\.\d+)", text)
-        if m:
-            # 补全 patch 版本为 0（如 4.7 → 4.7.0）
-            return m.group(1) + ".0"
-    except Exception:
-        logger.debug("探测根路径页面版本失败", exc_info=True)
+    version = _probe(target)
+    if version:
+        return version
 
     # 3. /actuator/info（微服务版）
-    try:
-        resp = session.get(join_url(target, "/actuator/info"))
-        text = resp.text or ""
-        version = extract_version(text)
-        if version:
-            return version
-    except Exception:
-        logger.debug("探测 /actuator/info 版本失败", exc_info=True)
+    version = _probe(join_url(target, "/actuator/info"))
+    if version:
+        return version
 
     return ""
 
@@ -178,7 +182,90 @@ RUOYI_VERSION_MILESTONES = {
     "5.0.0": "RuoYi-Vue 前后端分离，JWT 鉴权，接口前缀 /prod-api/",
     # P0：RuoYi-Cloud 微服务版里程碑
     "Cloud-2.x": "RuoYi-Cloud 微服务版，Nacos + Gateway + Sentinel，Spring Boot 2.x",
+    # G1：变体分支里程碑（版本号语义参考官方 release notes）
+    "Vue3-3.8.x": "RuoYi-Vue3 前端（vite + element-plus），接口与 RuoYi-Vue 共用 /prod-api/",
+    "Plus-4.x": "RuoYi-Vue-Plus 4.x：Spring Boot 2.7 + Sa-Token + MyBatis-Plus",
+    "Plus-5.x": "RuoYi-Vue-Plus 5.x：JDK17 + Spring Boot 3 + Sa-Token（接口路径与 4.x 基本兼容）",
 }
+
+# G1：若依变体元数据（fingerprint_features.py 负责识别变体标识，此处提供
+# 接口前缀/鉴权方式/版本指纹来源等差异信息，供 POC 过滤与版本探测参考）
+RUOYI_VARIANT_INFO = {
+    "ruoyi": {
+        "name": "RuoYi 单体版（前后端一体）",
+        "auth": "Session + Shiro",
+        "api_prefixes": [""],
+        "version_sources": ["/login", "/"],
+        "notes": "服务端模板渲染，接口与页面同域（如 /system/user/list 直接可达）",
+    },
+    "ruoyi-vue": {
+        "name": "RuoYi-Vue（前后端分离）",
+        "auth": "JWT Token",
+        "api_prefixes": ["/prod-api"],
+        "version_sources": ["/login", "/"],
+        "notes": "后端接口统一挂 /prod-api 前缀，前端静态页不含后端版本号（版本多见于 /actuator/info）",
+    },
+    "ruoyi-vue3": {
+        "name": "RuoYi-Vue3",
+        "auth": "JWT Token",
+        "api_prefixes": ["/prod-api"],
+        "version_sources": ["/login", "/actuator/info"],
+        "notes": "vite 构建（静态资源 index-* 哈希命名），接口与 RuoYi-Vue 一致",
+    },
+    "ruoyi-app": {
+        "name": "RuoYi-App（uni-app 移动端）",
+        "auth": "JWT Token",
+        "api_prefixes": ["/prod-api"],
+        "version_sources": ["/actuator/info"],
+        "notes": "复用 RuoYi-Vue 后端接口，登录接口 /login（移动端 clientId 差异不影响 POC 路径）",
+    },
+    "ruoyi-plus": {
+        "name": "RuoYi-Vue-Plus",
+        "auth": "Sa-Token",
+        "api_prefixes": ["/prod-api"],
+        "version_sources": ["/login", "/actuator/info"],
+        "notes": "登录 /auth/login（Sa-Token 风格），定时任务/监控端点路径与原版有差异（plus_job_unauth 专项覆盖）",
+    },
+    "ruoyi-cloud": {
+        "name": "RuoYi-Cloud 微服务版",
+        "auth": "Gateway 统一鉴权（JWT）",
+        "api_prefixes": ["/prod-api", "/auth", "/system", "/gen"],
+        "version_sources": ["/actuator/info", "/nacos/"],
+        "notes": "Nacos + Gateway + Sentinel 三件套暴露面（ruoyi_cloud_nacos / nacos_unauth 专项覆盖）",
+    },
+    "ruoyi-cloud-plus": {
+        "name": "RuoYi-Cloud-Plus",
+        "auth": "Sa-Token + Gateway",
+        "api_prefixes": ["/auth", "/system", "/resource"],
+        "version_sources": ["/actuator/info"],
+        "notes": "Spring Cloud 2022 + Nacos 2.x，微服务组件暴露面与 Cloud 版类似",
+    },
+}
+
+
+def get_variant_info(variant):
+    """获取变体元数据
+
+    Args:
+        variant: 变体标识（如 'ruoyi-plus'，由 fingerprint.detect_variant 识别）
+
+    Returns:
+        dict: {'name', 'auth', 'api_prefixes', 'version_sources', 'notes'}，未知变体返回 {}
+    """
+    return RUOYI_VARIANT_INFO.get(variant, {})
+
+
+def get_variant_api_prefixes(variant):
+    """获取变体的 API 路径前缀列表（POC 路径适配用）
+
+    Args:
+        variant: 变体标识
+
+    Returns:
+        list: 前缀列表（如 ['/prod-api']），未知变体返回 ['']（裸路径）
+    """
+    return RUOYI_VARIANT_INFO.get(variant, {}).get("api_prefixes", [""])
+
 
 # RuoYi-Cloud 特征路径（用于 detect_version 识别 Cloud 版）
 RUOYI_CLOUD_PATHS = [

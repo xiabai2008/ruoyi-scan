@@ -186,5 +186,66 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertIn("Thymeleaf/SpEL 模板注入", plugin_names)
 
 
+class TestVariantInfo(unittest.TestCase):
+    """G1：变体元数据与变体感知版本探测"""
+
+    def test_variant_info_plus(self):
+        """plus 变体：Sa-Token 鉴权 + /prod-api 前缀"""
+        from core.ruoyi_versions import get_variant_info
+
+        info = get_variant_info("ruoyi-plus")
+        self.assertEqual(info["auth"], "Sa-Token")
+        self.assertIn("/prod-api", info["api_prefixes"])
+        self.assertIn("Sa-Token", info["notes"])
+
+    def test_variant_info_all_registered(self):
+        """7 个变体全部有元数据且字段完整"""
+        from core.ruoyi_versions import RUOYI_VARIANT_INFO, get_variant_info
+
+        self.assertEqual(len(RUOYI_VARIANT_INFO), 7)
+        for v in ("ruoyi", "ruoyi-vue", "ruoyi-vue3", "ruoyi-app", "ruoyi-plus", "ruoyi-cloud", "ruoyi-cloud-plus"):
+            info = get_variant_info(v)
+            for key in ("name", "auth", "api_prefixes", "version_sources", "notes"):
+                self.assertTrue(info.get(key), f"{v} 缺少 {key}")
+
+    def test_variant_unknown_returns_empty(self):
+        """未知变体：元数据空 dict、前缀回退裸路径"""
+        from core.ruoyi_versions import get_variant_api_prefixes, get_variant_info
+
+        self.assertEqual(get_variant_info("no-such-variant"), {})
+        self.assertEqual(get_variant_api_prefixes("no-such-variant"), [""])
+
+    def test_variant_api_prefixes(self):
+        """cloud 微服务版多前缀，单体版裸路径"""
+        from core.ruoyi_versions import get_variant_api_prefixes
+
+        self.assertEqual(get_variant_api_prefixes("ruoyi-cloud"), ["/prod-api", "/auth", "/system", "/gen"])
+        self.assertEqual(get_variant_api_prefixes("ruoyi"), [""])
+
+    @requests_mock.Mocker()
+    def test_detect_version_variant_source_priority(self, m):
+        """指定 plus 变体时优先探测 /actuator/info（变体特征来源）"""
+        m.get(MOCK_TARGET + "/login", text="<html>login</html>")
+        m.get(MOCK_TARGET, text="<html>index</html>")
+        m.get(MOCK_TARGET + "/actuator/info", text='{"version":"4.7.8"}')
+        version = detect_version(MOCK_TARGET, SessionManager(), variant="ruoyi-plus")
+        self.assertEqual(version, "4.7.8")
+
+    @requests_mock.Mocker()
+    def test_detect_version_without_variant_backward_compat(self, m):
+        """不指定 variant 时行为与旧版一致（login → 根路径 → actuator/info）"""
+        m.get(MOCK_TARGET + "/login", text="<html>RuoYi 4.2.0</html>")
+        version = detect_version(MOCK_TARGET, SessionManager())
+        self.assertEqual(version, "4.2.0")
+
+    @requests_mock.Mocker()
+    def test_detect_version_variant_skips_default_sources_when_hit(self, m):
+        """变体来源已命中时不重复探测默认路径（cloud + /nacos/ 指纹）"""
+        m.get(MOCK_TARGET + "/nacos/", text="Nacos console RuoYi 4.7.8")
+        m.get(MOCK_TARGET + "/login", status_code=500)  # 若被探测到则版本提取失败也不影响
+        version = detect_version(MOCK_TARGET, SessionManager(), variant="ruoyi-cloud")
+        self.assertEqual(version, "4.7.8")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

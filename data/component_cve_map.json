@@ -26,5 +26,61 @@
     {"range": ">=2.0,<2.16", "cve": "CVE-2021-45046", "fix": "2.16.0+（建议 2.17.1+）", "cvss": 9.0, "note": "Log4Shell 绕过修复的变种"},
     {"range": ">=2.0,<2.17.1", "cve": "CVE-2021-44832", "fix": "2.17.1+", "cvss": 6.6, "note": "JDBC Appender 反序列化"},
     {"range": "*", "cve": "", "fix": "2.17.1+", "cvss": 0.0, "note": "Log4j 1.x 无官方修复建议直接升级 2.17.1+"}
+  ],
+  "druid": [
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "Druid 监控台暴露风险：未授权访问/SQL 监控信息泄露（StatViewServlet 默认无鉴权），未授权与弱口令检测见插件扫描"}
+  ],
+  "xxl-job": [
+    {"range": "<2.4.1", "cve": "", "fix": "2.4.1+", "cvss": 9.8, "note": "XXL-JOB <2.4.1 执行器默认 accessToken 为空/硬编码，可被未授权调用任意任务（含 GLUE 模式 RCE 风险）；调度中心默认口令 admin/123456"},
+    {"range": "*", "cve": "", "fix": "2.4.1+", "cvss": 0.0, "note": "升级至 2.4.1+ 并配置非空 accessToken，修改调度中心默认口令"}
+  ],
+  "solr": [
+    {"range": ">=5.0.0,<=8.2.0", "cve": "CVE-2019-17558", "fix": "8.3.1+", "cvss": 9.8, "note": "VelocityResponseWriter 模板注入 RCE（需启用 Velocity 插件，建议人工复核）"},
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "Solr 管理台暴露：未授权 Core 管理/配置读取，历史多个 RCE（建议限制 8983 暴露面）"}
+  ],
+  "rabbitmq": [
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "RabbitMQ 管理控制台暴露（15672）：检查 guest/guest 默认口令（guest 仅本机默认，公网可达即高危）"}
+  ],
+  "elasticsearch": [
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "Elasticsearch 未授权访问风险（9200 直连可读全部索引数据）；历史 Groovy 沙箱 RCE（CVE-2015-1427）需人工复核版本"}
+  ],
+  "kibana": [
+    {"range": "<6.6.1", "cve": "CVE-2019-7600", "fix": "6.6.1+（建议 7.x）", "cvss": 9.8, "note": "Timelion 原型链污染 RCE"},
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "Kibana 暴露面：检查匿名访问与报告插件历史漏洞"}
+  ],
+  "tomcat": [
+    {"range": ">=9.0.0,<=9.0.30", "cve": "CVE-2020-1938", "fix": "9.0.31+", "cvss": 9.8, "note": "Ghostcat AJP 文件包含/读取（需 AJP 8009 端口可达，HTTP 探测仅版本比对，需人工确认 AJP 暴露）"},
+    {"range": ">=8.5.0,<=8.5.50", "cve": "CVE-2020-1938", "fix": "8.5.51+", "cvss": 9.8, "note": "Ghostcat AJP 文件包含/读取（需 AJP 8009 端口可达）"},
+    {"range": ">=7.0.0,<=7.0.99", "cve": "CVE-2020-1938", "fix": "7.0.100+", "cvss": 9.8, "note": "Ghostcat AJP 文件包含/读取（需 AJP 8009 端口可达）"},
+    {"range": ">=7.0.0,<=7.0.79", "cve": "CVE-2017-12615", "fix": "7.0.80+", "cvss": 8.1, "note": "Windows PUT 任意文件写入 RCE（需 readonly=false，建议人工复核）"},
+    {"range": "*", "cve": "", "fix": "最新补丁版", "cvss": 0.0, "note": "隐藏 Server 版本头并保持补丁版本"}
+  ],
+  "jetty": [
+    {"range": ">=9.0.0,<=9.4.42", "cve": "CVE-2021-34429", "fix": "9.4.43+ / 10.0.9+", "cvss": 7.5, "note": "URI 编码绕过读取 WEB-INF 敏感信息"},
+    {"range": "*", "cve": "", "fix": "最新补丁版", "cvss": 0.0, "note": "保持 Jetty 补丁版本（历史多个 DoS/信息泄露 CVE）"}
+  ],
+  "shenyu": [
+    {"range": "<2.4.1", "cve": "CVE-2021-37580", "fix": "2.4.1+", "cvss": 9.8, "note": "ShenYu Admin JWT 鉴权绕过未授权访问（需人工复核控制台暴露面）"},
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "ShenYu 管理台默认口令 admin/123456，检查暴露面"}
+  ],
+  "jenkins": [
+    {"range": "<=2.441", "cve": "CVE-2024-23897", "fix": "2.442+", "cvss": 9.8, "note": "CLI 任意文件读取（默认开启 CLI，可读取凭据/密钥，常被组合利用致 RCE）"},
+    {"range": "*", "cve": "", "fix": "最新 LTS", "cvss": 0.0, "note": "Jenkins 暴露面：插件链历史 RCE 多，建议限制 /login 与 CLI 暴露"}
+  ],
+  "eureka": [
+    {"range": "*", "cve": "", "fix": "开启鉴权", "cvss": 0.0, "note": "Eureka 注册中心未授权访问：/eureka/apps 枚举全部微服务实例地址（内网横向移动入口），建议开启 spring-security 鉴权"}
+  ],
+  "minio": [
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "MinIO 暴露面：控制台/未授权 API 风险（老版本 Console 未授权 CVE-2023-28432 需人工复核）"}
+  ],
+  "grafana": [
+    {"range": ">=8.0.0,<=8.3.0", "cve": "CVE-2021-43798", "fix": "8.3.1+", "cvss": 7.5, "note": "未授权目录穿越读取任意文件（/public/plugins/）"},
+    {"range": "*", "cve": "", "fix": "最新版", "cvss": 0.0, "note": "Grafana 暴露面：默认口令 admin/admin 与匿名访问"}
+  ],
+  "sentinel": [
+    {"range": "*", "cve": "", "fix": "配置鉴权", "cvss": 0.0, "note": "Sentinel 控制台默认口令 sentinel/sentinel，且流量控制规则未授权可被篡改"}
+  ],
+  "consul": [
+    {"range": "*", "cve": "", "fix": "配置 ACL", "cvss": 0.0, "note": "Consul API 未授权访问（/v1/agent/self 等）：KV 泄露/服务枚举/注册恶意服务，建议启用 ACL"}
   ]
 }

@@ -1,4 +1,4 @@
-﻿# E2 组件版本检测测试：fastjson/SpringBoot/Shiro/Nacos/Log4j 探测 + CVE 映射 + 转换
+# E2 组件版本检测测试：fastjson/SpringBoot/Shiro/Nacos/Log4j 探测 + CVE 映射 + 转换
 import os
 import sys
 
@@ -203,7 +203,9 @@ def test_detect_log4j_with_oast_hit():
 
 
 def test_detect_all_aggregates():
-    """ComponentDetector.detect_all 聚合全部组件"""
+    """ComponentDetector.detect_all 聚合全部组件（G1 扩展后 20 个，前 5 手写保持原顺序）"""
+    from lib.component_detect import DETECTORS
+
     sess = FakeSession(
         {
             "http://target/nacos/v1/console/server/state": FakeResp(
@@ -215,7 +217,8 @@ def test_detect_all_aggregates():
     detector = ComponentDetector()
     results = detector.detect_all("http://target/", sess, ruoyi_version="")
     names = [r.component for r in results]
-    assert names == ["fastjson", "spring-boot", "shiro", "nacos", "log4j"], names
+    assert len(names) == len(DETECTORS) == 20, names
+    assert names[:5] == ["fastjson", "spring-boot", "shiro", "nacos", "log4j"], names
     # nacos 命中 CVE
     nacos = [r for r in results if r.component == "nacos"][0]
     assert nacos.status == STATUS_CONFIRMED and nacos.cve == "CVE-2021-29441"
@@ -227,8 +230,12 @@ def test_to_scan_result():
     from common.models import ComponentVersionResult
 
     res = ComponentVersionResult(
-        component="nacos", detected_version="1.4.0", status=STATUS_CONFIRMED,
-        cve="CVE-2021-29441", fix_version="1.4.2+", cvss_score=10.0,
+        component="nacos",
+        detected_version="1.4.0",
+        status=STATUS_CONFIRMED,
+        cve="CVE-2021-29441",
+        fix_version="1.4.2+",
+        cvss_score=10.0,
     )
     sr = to_scan_result(res)
     assert sr.kind == "vuln", sr.kind
@@ -259,3 +266,141 @@ if __name__ == "__main__":
     test_detect_all_aggregates()
     test_to_scan_result()
     print("ALL_E2_TESTS_PASS")
+
+
+# ── G1 通用组件探测器（spec 驱动，15 个新组件）测试 ──────────────────────
+def test_spec_registry_covers_all_components():
+    """注册表覆盖 5 手写 + 15 spec 探测器，且 spec 表每个组件都已注册"""
+    from lib.component_detect import _COMPONENT_SPECS, DETECTORS
+
+    assert len(DETECTORS) == 20, len(DETECTORS)
+    for name in _COMPONENT_SPECS:
+        assert name in DETECTORS, name
+
+
+def test_cve_map_new_components():
+    """新增组件的 CVE 区间数据加载与匹配"""
+    m = match_cve("grafana", "8.3.0")
+    assert m and m["cve"] == "CVE-2021-43798", m
+    assert match_cve("grafana", "8.3.1") == {}
+    m2 = match_cve("tomcat", "9.0.30")
+    assert m2 and m2["cve"] == "CVE-2020-1938", m2
+    # 7.x 老版本命中 PUT RCE
+    m3 = match_cve("tomcat", "7.0.79")
+    assert m3 and m3["cve"] == "CVE-2020-1938", m3
+    # xxl-job 无 CVE 编号但有版本风险区间（accessToken）
+    m4 = match_cve("xxl-job", "2.3.1")
+    assert m4 and m4["cve"] == "" and "accessToken" in m4.get("note", ""), m4
+    assert match_cve("xxl-job", "2.4.1") == {}
+    print("PASS test_cve_map_new_components")
+
+
+def test_detect_jenkins_header_version_confirmed():
+    """Jenkins X-Jenkins 头命中 → 版本比对 CONFIRMED CVE-2024-23897"""
+    from lib.component_detect import detect_jenkins
+
+    sess = FakeSession(
+        {
+            "http://t/jenkins/login": FakeResp("", 200, headers={"X-Jenkins": "2.440.3"}),
+            "http://t/jenkins/": FakeResp("", 200, headers={"X-Jenkins": "2.440.3"}),
+        }
+    )
+    res = detect_jenkins("http://t/jenkins", sess)
+    assert res.status == STATUS_CONFIRMED, res
+    assert res.cve == "CVE-2024-23897", res
+    assert res.detected_version == "2.440.3"
+    print("PASS test_detect_jenkins_header_version_confirmed")
+
+
+def test_detect_tomcat_error_page_ghostcat():
+    """Tomcat 错误页版本命中 Ghostcat 区间 → CONFIRMED；已修复版本 → SAFE"""
+    from lib.component_detect import detect_tomcat
+
+    sess = FakeSession(
+        {
+            "http://t/tomcat/": FakeResp("<html>Apache Tomcat/9.0.30</html>", 200),
+        }
+    )
+    res = detect_tomcat("http://t/tomcat", sess)
+    assert res.status == STATUS_CONFIRMED and res.cve == "CVE-2020-1938", res
+
+    sess2 = FakeSession(
+        {
+            "http://t/tomcat/": FakeResp("<html>Apache Tomcat/9.0.58</html>", 200),
+        }
+    )
+    res2 = detect_tomcat("http://t/tomcat", sess2)
+    assert res2.status == STATUS_SAFE, res2
+    print("PASS test_detect_tomcat_error_page_ghostcat")
+
+
+def test_detect_kibana_grafana_version_confirmed():
+    """Kibana /api/status 与 Grafana /api/health 的 JSON 版本提取 → CONFIRMED"""
+    from lib.component_detect import detect_grafana, detect_kibana
+
+    sess = FakeSession(
+        {
+            "http://t/kb/api/status": FakeResp('{"version":{"number":"6.4.2"},"status":{"level":"available"}}', 200),
+        }
+    )
+    res = detect_kibana("http://t/kb", sess)
+    assert res.status == STATUS_CONFIRMED and res.cve == "CVE-2019-7600", res
+
+    sess2 = FakeSession(
+        {
+            "http://t/gf/api/health": FakeResp('{"commit":"abc","database":"ok","version":"8.2.0"}', 200),
+        }
+    )
+    res2 = detect_grafana("http://t/gf", sess2)
+    assert res2.status == STATUS_CONFIRMED and res2.cve == "CVE-2021-43798", res2
+    print("PASS test_detect_kibana_grafana_version_confirmed")
+
+
+def test_detect_minio_status_signal_unknown():
+    """MinIO 健康探测 200 无 body → 存在但版本未知 → UNKNOWN（不判 SAFE）"""
+    from lib.component_detect import detect_minio
+
+    sess = FakeSession(
+        {
+            "http://t/mio/minio/health/live": FakeResp("", 200),
+        }
+    )
+    res = detect_minio("http://t/mio", sess)
+    assert res.status == STATUS_UNKNOWN, res
+    assert "版本无法识别" in res.evidence, res
+    print("PASS test_detect_minio_status_signal_unknown")
+
+
+def test_detect_spec_absent_safe():
+    """全部探测路径未命中特征 → SAFE（与 shiro/nacos 判定惯例一致）"""
+    from lib.component_detect import detect_solr
+
+    sess = FakeSession({})  # 所有路径 404
+    res = detect_solr("http://t/x", sess)
+    assert res.status == STATUS_SAFE, res
+    print("PASS test_detect_spec_absent_safe")
+
+
+def test_detect_spec_network_error_unknown():
+    """网络异常 → UNKNOWN（三态纪律：异常绝不判 SAFE）"""
+    from lib.component_detect import detect_druid
+
+    class BoomSession:
+        def get(self, url, **kw):
+            raise ConnectionError("refused")
+
+    res = detect_druid("http://t/x", BoomSession())
+    assert res.status == STATUS_UNKNOWN, res
+    print("PASS test_detect_spec_network_error_unknown")
+
+
+def test_detector_aggregate_includes_new_components():
+    """聚合器 detect_all 输出 20 个组件结果"""
+    sess = FakeSession({})
+    detector = ComponentDetector()
+    results = detector.detect_all("http://t/x", sess)
+    names = {r.component for r in results}
+    assert len(results) == 20, len(results)
+    for expect in ("druid", "xxl-job", "jenkins", "tomcat", "grafana", "consul"):
+        assert expect in names, expect
+    print("PASS test_detector_aggregate_includes_new_components")

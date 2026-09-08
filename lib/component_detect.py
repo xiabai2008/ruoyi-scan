@@ -405,6 +405,228 @@ DETECTORS = {
 }
 
 
+# ── G1：数据驱动的通用组件探测器（Java 生态常见中间件/控制台，15 项）──
+#
+# 通用探测语义（与手写探测器一致的三态纪律）：
+#   存在性判定：status_signal（指定状态码）/ body_signals（响应体子串）/ header_signals（响应头子串）
+#   版本提取：version_headers（头值正则，优先）→ version_patterns（响应体正则）
+#   CONFIRMED  存在 + 版本命中 CVE 区间
+#   SAFE       存在但版本不在区间，或全部探测路径未命中特征（探测点层面可证不存在）
+#   UNKNOWN    存在但版本未泄漏（fallback_note 提示人工复核）/ 网络异常
+#
+# CVE 数据在 data/component_cve_map.json 中按组件名同步维护；
+# 版本区间不确定的组件只配 range='*' 兜底提示，不编造 CVE 精度。
+_COMPONENT_SPECS: Dict[str, dict] = {
+    "druid": {
+        "label": "Alibaba Druid 监控台",
+        "paths": ["/druid/index.html", "/druid/login.html"],
+        "body_signals": ["Druid", "druid"],
+        "version_patterns": [r"Druid\s+(?:Version\s*:?\s*)?v?([\d.]+)"],
+    },
+    "xxl-job": {
+        "label": "XXL-JOB 调度中心",
+        "paths": ["/xxl-job-admin/"],
+        "body_signals": ["XXL-JOB", "xxl-job"],
+        "version_patterns": [r"version['\"]?\s*[:=]\s*['\"]?([\d.]+)"],
+    },
+    "solr": {
+        "label": "Apache Solr",
+        "paths": ["/solr/admin/info/system", "/solr/"],
+        "body_signals": ["lucene", "solr"],
+        "version_patterns": [r'"solr-spec-version"\s*:\s*"([\d.]+)"', r'"solr_impl_version"\s*:\s*"([\d.]+)"'],
+    },
+    "rabbitmq": {
+        "label": "RabbitMQ 管理控制台",
+        "paths": ["/api/overview"],
+        "body_signals": ["rabbitmq_version", "RabbitMQ"],
+        "version_patterns": [r'"rabbitmq_version"\s*:\s*"([\d.]+)"', r'"management_version"\s*:\s*"([\d.]+)"'],
+    },
+    "elasticsearch": {
+        "label": "Elasticsearch",
+        "paths": ["/"],
+        "body_signals": ["cluster_name", "You Know, for Search"],
+        "version_patterns": [r'"version"\s*:\s*\{[^}]*"number"\s*:\s*"([\d.]+)"'],
+    },
+    "kibana": {
+        "label": "Kibana",
+        "paths": ["/api/status", "/app/kibana"],
+        # /api/status 的 JSON 不含 "kibana" 字样，用 '"version"' 兜底信号
+        "body_signals": ["kibana", "Kibana", '"version"'],
+        "version_patterns": [r'"number"\s*:\s*"([\d.]+)"', r'"version"\s*:\s*"([\d.]+)"'],
+    },
+    "tomcat": {
+        "label": "Apache Tomcat",
+        "paths": ["/", "/nonexistent-e2e-probe-404"],
+        "header_signals": {"Server": ["Apache-Coyote", "Apache Tomcat", "Tomcat/"]},
+        "body_signals": ["Apache Tomcat/"],
+        "version_headers": [("Server", r"Tomcat/([\d.]+)")],
+        "version_patterns": [r"Apache Tomcat/([\d.]+)"],
+    },
+    "jetty": {
+        "label": "Jetty",
+        "paths": ["/", "/nonexistent-e2e-probe-404"],
+        "header_signals": {"Server": ["Jetty"]},
+        "version_headers": [("Server", r"Jetty\(([\d.]+)")],
+    },
+    "shenyu": {
+        "label": "Apache ShenYu 网关管理台",
+        "paths": ["/shenyu/", "/"],
+        "body_signals": ["ShenYu", "shenyu"],
+        "version_patterns": [r'"version"\s*:\s*"([\d.]+)"'],
+    },
+    "jenkins": {
+        "label": "Jenkins CI",
+        "paths": ["/login", "/"],
+        # X-Jenkins 头存在即命中，且头值就是完整版本号
+        "header_signals": {"X-Jenkins": None},
+        "version_headers": [("X-Jenkins", r"([\d.]+)")],
+    },
+    "eureka": {
+        "label": "Eureka 注册中心",
+        "paths": ["/eureka/apps"],
+        "body_signals": ["<applications", "application"],
+        "version_patterns": [],
+    },
+    "minio": {
+        "label": "MinIO 对象存储",
+        # /minio/health/live 健康探测 200 即存在（无 body）
+        "paths": ["/minio/health/live", "/minio/"],
+        "status_signal": 200,
+        "body_signals": ["MinIO", "minio"],
+        "version_patterns": [],
+    },
+    "grafana": {
+        "label": "Grafana",
+        "paths": ["/api/health", "/login"],
+        "body_signals": ["database", "Grafana"],
+        "version_patterns": [r'"version"\s*:\s*"([\d.]+)"'],
+    },
+    "sentinel": {
+        "label": "Sentinel 控制台",
+        "paths": ["/", "/auth/login"],
+        "body_signals": ["sentinel", "Sentinel"],
+        "version_patterns": [],
+    },
+    "consul": {
+        "label": "Consul",
+        "paths": ["/v1/agent/self", "/ui/"],
+        "body_signals": ["Config", "Consul"],
+        "version_patterns": [r'"Version"\s*:\s*"([\d.]+)"', r'"version"\s*:\s*"([\d.]+)"'],
+    },
+}
+
+
+def _detect_by_spec(name: str, spec: dict, target: str, session) -> ComponentVersionResult:
+    """按探测规格执行单个组件探测（数据驱动通用探测器）
+
+    Args:
+        name: 组件名（与 component_cve_map.json 的 key 一致）
+        spec: 探测规格（paths / signals / version patterns）
+        target: 目标 URL
+        session: SessionManager 实例
+
+    Returns:
+        ComponentVersionResult（三态语义与手写探测器一致）
+    """
+    label = spec.get("label", name)
+    note = fallback_note(name)
+    for path in spec.get("paths") or ["/"]:
+        url = join_url(target, path)
+        try:
+            resp = session.get(url)
+        except Exception as e:
+            return ComponentVersionResult(component=name, status=STATUS_UNKNOWN, evidence="网络异常: %s" % e)
+        text = resp.text or ""
+        hit = False
+        evidence = ""
+        # 1. 状态码信号（如 MinIO 健康探测 200）
+        status_signal = spec.get("status_signal")
+        if status_signal is not None and resp.status_code == status_signal:
+            hit = True
+            evidence = "%s 探测点返回 %d" % (label, resp.status_code)
+        # 2. 响应体信号
+        if not hit:
+            for sig in spec.get("body_signals", []):
+                if sig and sig in text:
+                    hit = True
+                    evidence = "响应含 %s 特征" % label
+                    break
+        # 3. 响应头信号
+        if not hit:
+            for hname, subs in spec.get("header_signals", {}).items():
+                hval = resp.headers.get(hname, "") if hasattr(resp, "headers") else ""
+                if hval and (subs is None or any(s in hval for s in subs)):
+                    hit = True
+                    evidence = "%s 响应头 %s: %s" % (label, hname, hval)
+                    break
+        if not hit:
+            continue
+        # 版本提取：响应头正则优先，其次响应体
+        version = ""
+        for hname, vpat in spec.get("version_headers", []):
+            hval = resp.headers.get(hname, "") if hasattr(resp, "headers") else ""
+            if hval:
+                m = re.search(vpat, hval)
+                if m and re.match(r"^\d+\.\d+", m.group(1)):
+                    version = m.group(1)
+                    break
+        if not version:
+            for pat in spec.get("version_patterns", []):
+                m = re.search(pat, text)
+                if m and re.match(r"^\d+\.\d+", m.group(1)):
+                    version = m.group(1)
+                    break
+        if version:
+            m = match_cve(name, version)
+            if m:
+                note_hit = m.get("note", "")
+                return ComponentVersionResult(
+                    component=name,
+                    detected_version=version,
+                    status=STATUS_CONFIRMED,
+                    cve=m.get("cve", ""),
+                    fix_version=m.get("fix", ""),
+                    url=url,
+                    evidence="%s，版本 %s%s" % (evidence, version, "（%s）" % note_hit if note_hit else ""),
+                    cvss_score=float(m.get("cvss", 0)),
+                )
+            return ComponentVersionResult(
+                component=name,
+                detected_version=version,
+                status=STATUS_SAFE,
+                url=url,
+                evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, version),
+            )
+        # 存在但版本未泄漏 → UNKNOWN + 兜底提示（不判 SAFE）
+        return ComponentVersionResult(
+            component=name,
+            status=STATUS_UNKNOWN,
+            url=url,
+            evidence="%s，版本无法识别%s" % (evidence, "（%s）" % note if note else ""),
+        )
+    # 全部探测路径未命中 → 探测点层面可证不存在（与 shiro/nacos 判定惯例一致）
+    return ComponentVersionResult(component=name, status=STATUS_SAFE, evidence="未检测到 %s 特征" % label)
+
+
+def _make_spec_detector(name: str, spec: dict):
+    """为规格表生成探测器函数（签名与手写探测器一致，ruoyi_version 参数忽略）"""
+
+    def detector(target: str, session, ruoyi_version: str = "") -> ComponentVersionResult:
+        return _detect_by_spec(name, spec, target, session)
+
+    detector.__name__ = "detect_%s" % name.replace("-", "_")
+    detector.__doc__ = "%s 数据驱动探测（G1 通用组件探测器）" % spec.get("label", name)
+    return detector
+
+
+# 注册通用探测器（DETECTORS 顺序即 detect_all 输出顺序），
+# 并按手写探测器命名惯例（'-'→'_'）导出模块级名字（detect_druid / detect_xxl_job ...）
+for _name, _spec in _COMPONENT_SPECS.items():
+    _det = _make_spec_detector(_name, _spec)
+    DETECTORS[_name] = _det
+    globals()["detect_%s" % _name.replace("-", "_")] = _det
+
+
 class ComponentDetector:
     """组件检测聚合器：对目标执行全部探测器，输出 ComponentVersionResult 列表"""
 
