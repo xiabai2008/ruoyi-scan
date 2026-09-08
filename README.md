@@ -62,7 +62,7 @@ pip install ruoyi-scan
 | `plugins/common/` | 通用漏洞包 11 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
-| 组件版本检测 | fastjson/SpringBoot/Shiro/Nacos/Log4j 版本比对 CVE 映射（`--components`） |
+| 组件版本检测 | 20 个 Java 组件（fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana 等）版本比对 CVE 映射（`--components`） |
 | 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
 | WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 成功率追踪 |
 | 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |

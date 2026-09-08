@@ -37,8 +37,8 @@
 | 方向 | 现状 | 目标 |
 |------|------|------|
 | 认证后深度扫描 | 插件以未授权检测为主；`core/auth_chain.py` 已有 4 种认证注入 + 自动登录 | 登录态下结合 `lib/crawler.py` 遍历菜单 / API，输出**全接口资产盘点 + 越权矩阵**（`lib/logic_scan.py` 的 IDOR 检测向 authenticated 场景延伸） |
-| 组件版本检测 | 5 个组件（fastjson / SpringBoot / Shiro / Nacos / Log4j，`lib/component_detect.py`） | 扩展至主流 Java 组件 30+（SnakeYAML、Druid、xxl-job、Solr、ShenYu 等）；从报错页 / actuator / favicon 提取版本特征 |
-| CVE 数据源 | 仅 NVD（`lib/cve_sync.py`） | 增加 **CNVD / CNNVD + GHSA**；离线 CVE 库随 wheel 分发（国内安服刚需） |
+| 组件版本检测 | ~~5 个组件~~ **20 个组件（G1 已落地，`lib/component_detect.py`）** | 扩展至 30+ 并补 SnakeYAML 等库级组件；从报错页 / actuator / favicon 提取版本特征 |
+| CVE 数据源 | ~~仅 NVD~~ **NVD + GHSA 双源（G1 已落地，`lib/cve_sync.py`）** | 增加 **CNVD / CNNVD**；离线 CVE 库随 wheel 分发（国内安服刚需） |
 | 若依变体矩阵 | `core/ruoyi_versions.py` 覆盖 4.2 / 4.7 / v5 / 3.9 / Cloud 里程碑 | 补全 RuoYi-Vue-Plus、RuoYi-App、小程序端点的路由差异与 POC 过滤 |
 | nuclei 兼容升级 | http 协议子集 + 安全白名单（`lib/nuclei_loader.py`） | 扩展协议子集覆盖；向 nuclei-templates 上游贡献若依专项模板（借生态流量） |
 
@@ -53,8 +53,7 @@
 
 - **mypy 债务**：`core/` 350 错误（当前软门禁 `|| true`）按模块分批清零后转硬门禁；
   `lib/`、`api/` 结束 `ignore_errors`，逐步收紧
-- **CI Windows matrix**：GBK 编码问题已修但 CI 仅跑 ubuntu——增加 `windows-latest`
-  矩阵防复发（Windows 是国内使用主力环境之一）
+- ~~**CI Windows matrix**~~ **已落地（G2）**：unit 作业矩阵已含 `windows-latest`（pytest-timeout Windows 侧切 thread 方法）
 - **Python 基线评估提升至 3.10**：3.8 已 EOL 两年，mypy 2.x 已弃支持；以 PyPI
   安装量数据决策，`pyproject.toml` classifiers 同步
 - **引擎统一**：ThreadPool + aiohttp 双轨收敛为统一异步内核，保留同步插件 API
@@ -130,7 +129,7 @@ baseline diff 离真实痛点只差一步：
 | 指标 | 基线（2026-09） | 目标 |
 |------|----------------|------|
 | 检测插件数 | 51（ruoyi 18 / spring 14 / common 11 / jeecgboot 8） | 100+ |
-| 组件 CVE 覆盖 | 5 组件 | 30+ 组件 / CNVD+GHSA 双源 |
+| 组件 CVE 覆盖 | 20 组件 / NVD+GHSA 双源 | 30+ 组件 / CNVD 源 |
 | nightly 误报 / 漏报率 | acceptance 基线对拍 | 持续 ≤ 0（回归即阻断） |
 | 外部贡献者数 | 0 | 5+ |
 | GitHub star | 26 | 500 |

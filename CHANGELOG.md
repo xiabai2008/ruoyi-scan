@@ -8,14 +8,19 @@
 
 ### Added
 - 新增 `ROADMAP.md` 发展路线图（G1-G5 + v2.0 愿景）：检测深度 / 工程债清偿 / AI 闭环 v2 / 生态社区 / 合规交付五大方向，含三条底线、度量仪表盘与落地机制；README 文档表同步入口
+- **G1 组件检测扩展 5 → 20**：新增 druid / xxl-job / solr / rabbitmq / elasticsearch / kibana / tomcat / jetty / shenyu / jenkins / eureka / minio / grafana / sentinel / consul 数据驱动探测器（`_COMPONENT_SPECS` 规格表，存在性/版本提取/三态判定与手写探测器纪律一致）；`data/component_cve_map.json` 同步扩充（kibana CVE-2019-7600、grafana CVE-2021-43798、tomcat Ghostcat/PUT、jenkins CVE-2024-23897、shenyu CVE-2021-37580、jetty CVE-2021-34428 等）
+- **G1 CVE 双源**：`lib/cve_sync.py` 增加 GHSA（GitHub Advisory Database）回退源——NVD 未收录/不可达时按 CVE 编号查询，`RUOYI_SCAN_GHSA_TOKEN` 环境变量可提速；`CVEInfo` 增加 `source` 字段
+- **G1 变体矩阵补全**：`core/ruoyi_versions.py` 新增 `RUOYI_VARIANT_INFO` 变体元数据表（7 变体的鉴权方式 / API 前缀 / 版本指纹来源）与 `get_variant_info` / `get_variant_api_prefixes` 接口；`detect_version` 支持变体感知的指纹来源优先级（向后兼容）
 
 ### Fixed
+- **G2 Windows 兼容修复**: `tests/test_report_xlsx.py` 8 处 `load_workbook` 未释放 workbook 句柄（openpyxl 内部循环引用 + close() 非 read_only 模式为 no-op），Linux 上删除打开中的文件无感、Windows 上 TemporaryDirectory 清理必报 WinError 32——断言后统一 `del` + `gc.collect()` 强制释放（5 轮稳定性验证通过）
 - **CI lint 转绿**: 修复 ruff format 漂移（10 个文件 docstring 后空行重排）；lint 工具版本固定（ruff==0.16.2 / mypy==2.1.0，CI 与 pyproject dev 依赖同步），杜绝格式化工具版本演进导致的漂移复发
 - **Nightly 验收修复**: 靶场容器 `docker run` 补传 `LAB_HOST=0.0.0.0`——v1.2.0 安全收口后靶场默认绑定 127.0.0.1，容器内绑定回环导致 Docker 端口映射不可达，自 8/25 起每晚启动超时；失败自动建 issue 覆盖靶场启动失败场景（旧条件在该场景下永不触发），并显式声明 `issues: write` 权限
 - mypy `python_version` 目标 3.8 → 3.10（mypy 2.x 最低支持 3.10，仅影响类型分析，运行时仍支持 3.8+）
 
 ### Changed
 - **Release 发布门禁**: tag 推送先等待同一提交的 CI 全绿再构建上传（ci.yml 增加 `tags: v*` 触发），防止带病发布
+- **G2 CI Windows matrix**: unit 作业矩阵增加 `windows-latest`（pytest-timeout Windows 侧自动切 thread 方法），防 GBK 编码 / 路径分隔符回归；Codecov 上传收敛至 ubuntu+py3.11 组合
 - 文档数字对齐实际状态：插件 51 个（ruoyi 18 / spring 14 / common 11 / jeecgboot 8）、测试 51 文件 1000+ 用例、lib 33 模块；`.idea/` 加入 .gitignore；CHANGELOG 版本对比链接补全
 
 ## [1.2.4] - 2026-09-07

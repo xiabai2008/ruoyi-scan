@@ -41,7 +41,7 @@ pip install ruoyi-scan
 | `plugins/common/` | Common vulnerability package, 11 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, etc.) |
 | `plugins/jeecgboot/` | JeecgBoot extension plugin package (8 plugins, first non-RuoYi framework extension) |
 | Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven + RuoYi variant subdivision |
-| Component version detection | fastjson/SpringBoot/Shiro/Nacos/Log4j version → CVE mapping (`--components`) |
+| Component version detection | 20 Java components (fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana etc.) version → CVE mapping (`--components`) |
 | Three-state verdict | CONFIRMED (confirmed present) / SAFE (confirmed absent) / UNKNOWN (cannot be determined) |
 | WAF bypass | 11 bypass strategies + three-state verdict protection matrix + success-rate tracking |
 | Exploit chains | DAG topological orchestration + conditional branches + 3 built-in chains |
@@ -59,7 +59,7 @@ pip install ruoyi-scan
 | Passive proxy | HTTP/HTTPS proxy, captures traffic for automatic scanning |
 | OAST out-of-band detection | Self-hosted callback server + 6 payload templates (SSRF/XXE/blind SQLi/blind RCE/LDAP/command injection) |
 | Business logic detection | IDOR / privilege escalation / parameter tampering / race condition — 4 detector types |
-| CVE sync | NVD REST API + 24h TTL cache + CWE→OWASP/MLPS compliance mapping |
+| CVE sync | NVD + GHSA dual-source + 24h TTL cache + CWE→OWASP/MLPS compliance mapping |
 | SIEM integration | ECS / CEF / LEEF / JSON — 4 export formats + Syslog forwarding |
 | Async engine | ThreadPoolExecutor concurrent scanning + aiohttp optional async HTTP |
 | Distributed scanning | Redis Master-Worker queue + Standalone fallback mode |
