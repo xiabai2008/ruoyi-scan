@@ -22,6 +22,7 @@
 - mypy `python_version` 目标 3.8 → 3.10（mypy 2.x 最低支持 3.10，仅影响类型分析，运行时仍支持 3.8+）
 
 ### Changed
+- **G2 mypy 债务清偿第四批（收官）**: core/ 的 proxy_server / orchestrator / fingerprint / task_registry + 相邻 config/settings、core/loader、plugins/base 共 ~127 个 strict 错误清零（代理处理器/注册表/编排器全方法签名、dataclass 重复 auth 字段去重、asyncio.Queue 泛型、lib ComponentDetector/OriginIPFinder 公共类补签名）；**CI 软门禁转硬——`mypy core/ --strict` 回归任何类型错误即失败**（棘轮步骤完成历史使命移除），core/ 整体错误 106 → **0**（四批累计 350 → 0，100% 还债）
 - **G2 mypy 债务清偿第三批（report 系列 3 模块）**: core/ 的 report_xlsx / report / report_docx 共 ~120 个 strict 错误清零（全部渲染函数签名、ReportBuilder/MultiTargetReport 方法注解、缓存字段 Optional、`aggregate` 鸭子类型边界 `cast`、python-docx 未注解方法定向 ignore）；棘轮门禁扩至 **19 个文件**，core/ 整体错误 229 → **106**（三批累计 350 → 106，已还债 70%）
 - **G2 mypy 债务清偿第二批（7 模块）**: core/ 的 ruoyi_versions / captcha_solver / auth_chain / storage / chain / session / report_sarif 共 82 个 strict 错误清零（方法签名、Optional/容器注解、OCR 返回值 str 化、`http_code` 变量改名消除与验证码变量的类型冲突）；棘轮门禁列表同步扩列，core/ 整体错误 311 → **229**
 - **G2 mypy 债务清偿第一批（9 模块）**: core/ 的 http / waf_features / fingerprint_features / cache / dedup / report_pdf / engine / router / portscan 共 27 个类型错误清零（补函数签名注解、容器泛型参数、`cast` 消除 Any 传播）；CI 新增 **mypy 棘轮硬门禁**（已清零模块列表回归任何类型错误即失败，只增不减），core/ 整体错误 350 → 311

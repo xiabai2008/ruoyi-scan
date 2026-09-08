@@ -4,6 +4,7 @@ import socket
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, List, Optional, Set
 
 from common.logger import get_logger
 
@@ -13,12 +14,12 @@ logger = get_logger(__name__)
 class ScanQueue:
     """线程安全的 URL 去重队列（生产者：代理捕获 → 消费者：扫描引擎）"""
 
-    def __init__(self):
-        self._urls = []
-        self._seen = set()
+    def __init__(self) -> None:
+        self._urls: List[str] = []
+        self._seen: Set[str] = set()
         self._lock = threading.Lock()
 
-    def add(self, url):
+    def add(self, url: str) -> bool:
         """添加 URL 到队列（自动去重）"""
         # 去掉末尾斜杠再判重：同一 URL 带/不带尾部斜杠视为一条，避免重复扫描
         normalized = url.rstrip("/") if url.endswith("/") else url
@@ -29,14 +30,14 @@ class ScanQueue:
                 return True
         return False
 
-    def drain(self):
+    def drain(self) -> List[str]:
         """取出所有待扫描 URL 并清空队列"""
         with self._lock:
             urls = list(self._urls)
             self._urls.clear()
         return urls
 
-    def size(self):
+    def size(self) -> int:
         """返回队列中待扫描 URL 数量"""
         with self._lock:
             return len(self._urls)
@@ -46,18 +47,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
     """HTTP 代理请求处理器：转发请求并记录 URL 到收集队列"""
 
     # 类变量：由 ProxyServer 在启动时注入
-    queue = None
-    target_hosts = set()
+    queue: Optional["ScanQueue"] = None
+    target_hosts: Set[str] = set()
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         """GET 代理请求入口（委托通用处理逻辑）"""
         self._handle_request("GET")
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         """POST 代理请求入口（委托通用处理逻辑）"""
         self._handle_request("POST")
 
-    def do_CONNECT(self):
+    def do_CONNECT(self) -> None:
         """HTTPS CONNECT 隧道：建立隧道，记录域名"""
         host, port = self.path.split(":") if ":" in self.path else (self.path, "443")
         self._record_url(f"https://{host}:{port}/")
@@ -66,7 +67,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         except Exception:
             self.send_error(502)
 
-    def _handle_request(self, method):
+    def _handle_request(self, method: str) -> None:
         """处理 HTTP 代理请求（如 GET http://example.com/page HTTP/1.1）"""
         parsed = urllib.parse.urlparse(self.path)
         if parsed.scheme and parsed.netloc:
@@ -77,7 +78,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(400, "Bad proxy request")
 
-    def _record_url(self, url):
+    def _record_url(self, url: str) -> None:
         """记录 URL 到扫描队列"""
         if self.queue is not None:
             # 同步登记域名：URL 即使已被去重丢弃，该主机仍纳入后续扫描范围
@@ -86,7 +87,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             if self.queue.add(url):
                 self.log_message("Captured: %s", url)
 
-    def _tunnel(self, host, port):
+    def _tunnel(self, host: str, port: int) -> None:
         """建立 CONNECT 隧道"""
         try:
             remote = socket.create_connection((host, port), timeout=10)
@@ -99,7 +100,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._relay(self.connection, remote)
         remote.close()
 
-    def _relay(self, client, remote):
+    def _relay(self, client: socket.socket, remote: socket.socket) -> None:
         """双向数据转发"""
         import select
 
@@ -120,7 +121,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         except Exception:
             logger.debug("代理双向数据转发失败", exc_info=True)
 
-    def _forward(self, method, parsed):
+    def _forward(self, method: str, parsed: Any) -> None:
         """转发 HTTP 请求并返回响应"""
         try:
             import http.client
@@ -148,13 +149,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
         except Exception:
             self.send_error(502)
 
-    def _read_body(self):
+    def _read_body(self) -> Optional[bytes]:
         """读取请求体"""
         length = int(self.headers.get("Content-Length", 0))
         # 无请求体（length=0）时返回 None，避免对空体做无谓读取
         return self.rfile.read(length) if length > 0 else None
 
-    def log_message(self, fmt, *args):
+    def log_message(self, fmt: str, *args: Any) -> None:
         """抑制默认日志输出（用 stderr）"""
         pass
 
@@ -171,7 +172,7 @@ class ProxyServer:
         proxy.stop()
     """
 
-    def __init__(self, host="127.0.0.1", port=8080, queue=None):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8080, queue: Optional[ScanQueue] = None) -> None:
         """初始化被动扫描代理
 
         Args:
@@ -182,11 +183,11 @@ class ProxyServer:
         self.host = host
         self.port = port
         self.queue = queue or ScanQueue()
-        self._server = None
-        self._thread = None
+        self._server: Optional[HTTPServer] = None
+        self._thread: Optional[threading.Thread] = None
         self.running = False
 
-    def start(self):
+    def start(self) -> "ProxyServer":
         """启动代理服务器（后台线程）"""
         # 通过类变量注入队列：所有处理器实例共享同一队列与主机集合
         ProxyHandler.queue = self.queue
@@ -198,12 +199,13 @@ class ProxyServer:
         self._thread.start()
         return self
 
-    def _serve(self):
+    def _serve(self) -> None:
         """服务主循环：单请求轮询（timeout=1 使 stop() 能及时打断阻塞）"""
         while self.running:
-            self._server.handle_request()
+            if self._server is not None:
+                self._server.handle_request()
 
-    def stop(self):
+    def stop(self) -> None:
         """停止代理服务器"""
         self.running = False
         if self._server:
@@ -214,6 +216,6 @@ class ProxyServer:
         if self._thread:
             self._thread.join(timeout=2)
 
-    def captured_hosts(self):
+    def captured_hosts(self) -> List[str]:
         """返回代理会话中捕获到的主机列表（供后续定向扫描使用）"""
         return list(ProxyHandler.target_hosts)

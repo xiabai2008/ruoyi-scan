@@ -29,23 +29,12 @@ jobs:
         run: ruff check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
       - name: Ruff format check
         run: ruff format --check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
-      - name: Mypy type check（common/ 硬门禁 + core/ 软门禁，strict 模式）
+      - name: Mypy type check（common/ + core/ 全量硬门禁，strict 模式）
+        # G2 完成：core/ 25 文件全部 strict 清零（350 → 0），软门禁 `|| true` 移除。
+        # 新增 core 文件须保持类型完整，回归即 CI 失败。
         run: |
           mypy common/ --strict --ignore-missing-imports
-          mypy core/ --strict --ignore-missing-imports || true
-      - name: Mypy ratchet（G2 已清零模块硬门禁，只增不减）
-        # 棘轮机制：新清零的模块加入列表；列表内模块回归任何类型错误即失败。
-        # 扩列步骤：本地 mypy <module> --strict --ignore-missing-imports --follow-imports=silent
-        # 清零后把文件加入此处并提交（勿删除已有条目）。
-        run: >
-          mypy core/http.py core/waf_features.py core/fingerprint_features.py
-          core/cache.py core/dedup.py core/report_pdf.py core/engine.py
-          core/router.py core/portscan.py
-          core/ruoyi_versions.py core/captcha_solver.py core/auth_chain.py
-          core/storage.py core/chain.py core/session.py core/report_sarif.py
-          core/report_xlsx.py core/report.py core/report_docx.py
-          --strict --ignore-missing-imports --follow-imports=silent
-          --no-warn-unused-ignores
+          mypy core/ --strict --ignore-missing-imports
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归

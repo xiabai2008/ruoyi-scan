@@ -12,7 +12,7 @@ import re
 import socket
 import urllib.parse
 import urllib.request
-from typing import List
+from typing import Any, List
 
 from common.logger import get_logger
 
@@ -49,7 +49,7 @@ class OriginIPFinder:
         "vpn",
     ]
 
-    def __init__(self, timeout=5):
+    def __init__(self, timeout: float = 5) -> None:
         """初始化源站 IP 探测器
 
         Args:
@@ -57,7 +57,7 @@ class OriginIPFinder:
         """
         self.timeout = timeout
 
-    def find_origin_ip(self, domain: str, session=None) -> List[str]:
+    def find_origin_ip(self, domain: str, session: Any = None) -> List[str]:
         """主入口：综合 4 路探测源站 IP
 
         Args:

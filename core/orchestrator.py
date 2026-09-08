@@ -18,7 +18,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures.thread import _worker
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, FingerprintResult, ScanResult
@@ -52,7 +52,7 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
                 name=thread_name,
                 target=_worker,
                 args=(
-                    weakref.ref(self, lambda _: self._work_queue.put(None)),
+                    weakref.ref(self, lambda _: self._work_queue.put(None)),  # type: ignore[arg-type]
                     self._work_queue,
                     self._initializer,
                     self._initargs,
@@ -60,7 +60,7 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
                 daemon=True,
             )
             t.start()
-            self._threads.add(t)
+            self._threads.add(t)  # type: ignore[attr-defined]
             # 不注册到 _threads_queues，避免 _python_exit atexit handler join daemon 线程
 
 
@@ -94,8 +94,6 @@ class ScanRequest:
     bypass_waf: str = "auto"  # WAF 绕过模式 auto/on/off
     # 可选：指定插件列表（None=按 CMS 路由加载全部）
     plugins: Optional[List[str]] = None
-    # 可选：认证信息（登录链）
-    auth: Optional[dict] = None
     # D14：主动信息收集
     crawl: bool = False  # 是否启用主动爬虫
     crawl_depth: int = 2  # 爬虫深度
@@ -105,7 +103,7 @@ class ScanRequest:
     # 注：auth 字段在扫描请求参数区已声明过（历史遗留重复声明），功能不受影响，
     # dataclass 重复字段以最后一次声明为准，此处仅为 D26 语义补充说明
     # D26：认证扫描增强（CLI args.auth / args.auth_file / args.auth_login 解析后传入）
-    auth: Optional[dict] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
+    auth: Optional[Dict[str, Any]] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
     # D19：扫描模板名称（quick / deep / compliance / dengbao）
     template: str = ""
     # P0：外部插件路径列表（--plugin-path 可多次指定）
@@ -139,7 +137,7 @@ class ScanTask:
     error: str = ""
     report_paths: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """转为可序列化字典（API 响应用）"""
         return {
             "task_id": self.task_id,
@@ -189,17 +187,17 @@ class ScanOrchestrator:
         - submit(req): 异步提交，返回 task_id（API 用，需配合 TaskRegistry）
     """
 
-    def __init__(self, registry=None):
+    def __init__(self, registry: Optional[Any] = None) -> None:
         """初始化编排器
 
         Args:
             registry: TaskRegistry 实例（API 模式用，None 则 CLI 模式）
         """
         self.registry = registry
-        self._pool = None  # 懒加载线程池（API 模式）
+        self._pool: Optional[Any] = None  # 懒加载线程池（API 模式，_DaemonThreadPoolExecutor）
         self._pool_lock = threading.Lock()
 
-    def run_sync(self, req: ScanRequest, on_event: EventHandler = None) -> List[ScanResult]:
+    def run_sync(self, req: ScanRequest, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """同步执行扫描（CLI 模式）
 
         Args:
@@ -244,7 +242,7 @@ class ScanOrchestrator:
         self._pool.submit(self._run, task, self._api_event_handler)
         return task_id
 
-    def _api_event_handler(self, event_type: str, payload: Any):
+    def _api_event_handler(self, event_type: str, payload: Any) -> None:
         """API 模式事件回调：推送到 registry（线程安全）"""
         if self.registry:
             task_id = getattr(payload, "task_id", None) if hasattr(payload, "task_id") else None
@@ -254,7 +252,7 @@ class ScanOrchestrator:
             if task_id:
                 self.registry.notify(task_id, event_type, payload)
 
-    def _run(self, task: ScanTask, on_event: EventHandler = None) -> List[ScanResult]:
+    def _run(self, task: ScanTask, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """实际扫描逻辑（同步，从 main.py run_mode 抽取）
 
         Args:
@@ -267,9 +265,9 @@ class ScanOrchestrator:
         req = task.request
         target = normalize_target(req.target)
 
-        def _emit(event_type: str, payload: Any):
+        def _emit(event_type: str, payload: Any) -> None:
             """发送事件（同时调用回调 + 通知 registry）"""
-            if on_event:
+            if on_event is not None:
                 try:
                     on_event(event_type, payload)
                 except Exception:
@@ -575,7 +573,7 @@ class ScanOrchestrator:
                 "p": ["vuln"],
                 "l": ["brute"],
             }
-            plugins_by_cat = {}
+            plugins_by_cat: Dict[str, List[type]] = {}
             for cls in all_plugins:
                 cat = getattr(cls, "category", "")
                 plugins_by_cat.setdefault(cat, []).append(cls)
@@ -586,7 +584,7 @@ class ScanOrchestrator:
             total_plugins = sum(len(plugins_by_cat.get(c, [])) for c in categories)
             done_count = [0]  # 闭包可变
 
-            def _on_result(res: ScanResult):
+            def _on_result(res: ScanResult) -> None:
                 """引擎结果回调：推送事件 + 计数"""
                 all_results.append(res)
                 done_count[0] += 1
@@ -712,7 +710,9 @@ class ScanOrchestrator:
             _emit("status", {"status": "failed", "task_id": task.task_id})
             return task.results
 
-    def _build_waf_bypass(self, req: ScanRequest, waf_result: dict, target: str, session: SessionManager):
+    def _build_waf_bypass(
+        self, req: ScanRequest, waf_result: Dict[str, Any], target: str, session: SessionManager
+    ) -> Optional[Any]:
         """构建 WAF 绕过协调器（从 main.py 抽取）"""
         bypass_mode = req.bypass_waf or "auto"
         waf_type = waf_result.get("waf", "")
@@ -745,7 +745,7 @@ class ScanOrchestrator:
 
         return None
 
-    def _run_recon(self, req: ScanRequest, target: str, _emit, task_id: str) -> dict:
+    def _run_recon(self, req: ScanRequest, target: str, _emit: Callable[..., None], task_id: str) -> Dict[str, Any]:
         """D14：执行主动信息收集（爬虫 + 子域名 + JS 提取）
 
         Returns:
@@ -755,7 +755,7 @@ class ScanOrchestrator:
                 'js_endpoints': [...],     # JS 中提取的端点
             }
         """
-        result = {
+        result: Dict[str, Any] = {
             "crawled_urls": [],
             "subdomains": [],
             "js_endpoints": [],
@@ -864,13 +864,13 @@ class ScanOrchestrator:
 
         return urlparse(url).hostname or ""
 
-    def _parse_ports(self, ports_str: str, default: list) -> list:
+    def _parse_ports(self, ports_str: str, default: List[int]) -> List[int]:
         """解析端口字符串"""
         if not ports_str:
             return default
         return [int(p.strip()) for p in ports_str.split(",") if p.strip().isdigit()]
 
-    def _parse_formats(self, fmt_str: str):
+    def _parse_formats(self, fmt_str: Optional[str] = None) -> Union[str, List[str], None]:
         """解析报告格式字符串"""
         if not fmt_str:
             return None
@@ -882,7 +882,7 @@ class ScanOrchestrator:
         parts = [p for p in parts if p in valid]
         return parts or None
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """关闭线程池（API 模式停服 / 测试清理时调用）
 
         策略：

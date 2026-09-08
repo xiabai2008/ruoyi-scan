@@ -2,7 +2,7 @@
 import importlib
 import os
 import sys
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
 def load_plugins(package_name: str = "plugins.ruoyi") -> List[type]:
@@ -66,7 +66,7 @@ def load_external_plugins(plugin_paths: Optional[List[str]] = None) -> List[type
     return result
 
 
-def _load_external_dir(dir_path: str, logger) -> List[type]:
+def _load_external_dir(dir_path: str, logger: Any) -> List[type]:
     """从目录加载插件包"""
     init_file = os.path.join(dir_path, "__init__.py")
     if not os.path.isfile(init_file):
@@ -90,7 +90,7 @@ def _load_external_dir(dir_path: str, logger) -> List[type]:
         return []
 
 
-def _load_external_file(file_path: str, logger) -> List[type]:
+def _load_external_file(file_path: str, logger: Any) -> List[type]:
     """从单个 .py 文件加载插件"""
     from plugins.base import PluginBase
 
@@ -151,7 +151,7 @@ def discover_plugin_packages() -> List[str]:
     # chain 包是链专用步骤插件，不注册到主扫描引擎
     _EXCLUDED = {"chain"}
     plugins_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plugins")
-    packages = []
+    packages: List[str] = []
     if not os.path.isdir(plugins_dir):
         return packages
     for name in sorted(os.listdir(plugins_dir)):
@@ -185,13 +185,13 @@ def load_entry_point_plugins() -> List[type]:
         try:
             from importlib.metadata import entry_points
         except ImportError:
-            from importlib_metadata import entry_points
+            from importlib_metadata import entry_points  # type: ignore[no-redef]
 
         # Python 3.10+ entry_points 返回SelectableGroups，3.8/3.9 返回 dict
         try:
             eps = entry_points(group="ruoyi_scan.plugins")
         except TypeError:
-            eps = entry_points().get("ruoyi_scan.plugins", [])
+            eps = entry_points().get("ruoyi_scan.plugins", [])  # type: ignore[arg-type]
 
         for ep in eps:
             try:

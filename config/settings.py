@@ -3,13 +3,14 @@
 
 供 core/lib/api/cli/plugins 共享；--threads/--rate 等 CLI 参数可覆盖部分默认值。
 """
+
 import os
 
 # 项目根目录（config/ 的上一级）
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _dict_path(name):
+def _dict_path(name: str) -> str:
     """字典路径：优先 data/，回退根目录
 
     字典内容原样保留（ruoyi.txt 保留 %20 前缀；password.txt 保留空行口令，勿 strip）。

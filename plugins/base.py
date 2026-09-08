@@ -215,7 +215,7 @@ class PluginBase(ABC):
             compliance=parse_compliance(self.compliance) if self.compliance else {},
         )
 
-    def meta(self) -> Dict[str, str]:
+    def meta(self) -> Dict[str, Any]:
         """返回插件元信息字典"""
         return {
             "name": self.name,

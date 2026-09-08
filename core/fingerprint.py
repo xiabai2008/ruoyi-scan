@@ -1,6 +1,7 @@
 # 指纹识别接口 + 通用特征判定（数据驱动，支持多 CMS 自动识别与路由）
 import hashlib
 import re
+from typing import Any, Dict
 
 from common.logger import get_logger
 from common.models import FingerprintResult
@@ -13,7 +14,7 @@ logger = get_logger(__name__)
 class Fingerprint:
     """指纹识别抽象接口（新增 CMS 实现此接口即可，引擎零改动）"""
 
-    def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
+    def detect(self, target: str, session: SessionManager, cache: Any = None) -> FingerprintResult:
         """识别目标 CMS，返回 FingerprintResult（cms 空串表示未识别）
 
         cache（可选）：core.cache.FingerprintCache 实例，用于多 CMS 遍历时
@@ -30,11 +31,11 @@ class FeatureBasedFingerprint(Fingerprint):
     至少命中一个强特征 → 高置信；仅弱特征 → 低置信（供人工复核）；无特征 → 未识别。
     """
 
-    def __init__(self, cms):
+    def __init__(self, cms: str) -> None:
         self.cms = cms
         self.feature = get_feature(cms)
 
-    def detect(self, target: str, session: SessionManager, cache=None) -> FingerprintResult:
+    def detect(self, target: str, session: SessionManager, cache: Any = None) -> FingerprintResult:
         """按特征库做多特征交叉判定：主页关键字 + 强特征路径 + favicon hash
 
         Args:
@@ -56,7 +57,7 @@ class FeatureBasedFingerprint(Fingerprint):
         w_weak = f.get("weight_weak", 0.2)
 
         # 阶段五：cache 存在时走缓存（多 CMS 共享根/favicon 响应），否则直接 session.get
-        def _get(url):
+        def _get(url: str) -> Any:
             if cache is not None:
                 return cache.get(url)
             return session.get(url)
@@ -132,11 +133,11 @@ class FeatureBasedFingerprint(Fingerprint):
 class RuoyiFingerprint(FeatureBasedFingerprint):
     """若依指纹识别（薄封装，向后兼容 main.py / 旧测试）"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("ruoyi")
 
 
-def detect_variant(target: str, session: SessionManager, cache=None) -> str:
+def detect_variant(target: str, session: SessionManager, cache: Any = None) -> str:
     """E1：若依变体细分识别（仅在主 CMS=ruoyi 确认后调用）
 
     遍历 VARIANT_FEATURES 注册的变体：
@@ -153,12 +154,12 @@ def detect_variant(target: str, session: SessionManager, cache=None) -> str:
         变体标识字符串（如 'ruoyi-vue3'），未识别返回 ''
     """
 
-    def _get(url):
+    def _get(url: str) -> Any:
         if cache is not None:
             return cache.get(url)
         return session.get(url)
 
-    def _expect_ok(r, expect):
+    def _expect_ok(r: Any, expect: str) -> bool:
         """复用主指纹的 expect 语义：json/image/any"""
         if r.status_code != 200:
             return False
@@ -261,7 +262,7 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     return best
 
 
-def detect_waf(target: str, session: SessionManager) -> dict:
+def detect_waf(target: str, session: SessionManager) -> Dict[str, Any]:
     """WAF 指纹识别：检测目标是否部署了 Web 应用防火墙（P1-C）
 
     通过分析根路径响应头、响应体、Set-Cookie 特征判断 WAF 类型。

@@ -9,7 +9,7 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from common.logger import get_logger
 
@@ -23,8 +23,8 @@ class TaskRecord:
     task_id: str
     status: str = "pending"  # pending/running/done/failed
     created_at: float = field(default_factory=time.time)
-    events: List[dict] = field(default_factory=list)  # 历史事件（供后加入的订阅者补播）
-    task_dict: dict = field(default_factory=dict)  # ScanTask.to_dict() 的快照
+    events: List[Dict[str, Any]] = field(default_factory=list)  # 历史事件（供后加入的订阅者补播）
+    task_dict: Dict[str, Any] = field(default_factory=dict)  # ScanTask.to_dict() 的快照
 
 
 class TaskRegistry:
@@ -40,7 +40,9 @@ class TaskRegistry:
         - 任务完成后保留事件 1 小时（可配置）
     """
 
-    def __init__(self, max_events_per_task: int = 500, retention_seconds: int = 3600, storage=None):
+    def __init__(
+        self, max_events_per_task: int = 500, retention_seconds: int = 3600, storage: Optional[Any] = None
+    ) -> None:
         """初始化注册表
 
         Args:
@@ -49,22 +51,22 @@ class TaskRegistry:
             storage: Storage 实例（D11 持久化，None 则不落盘）
         """
         self._tasks: Dict[str, TaskRecord] = {}
-        self._subscribers: Dict[str, Set[asyncio.Queue]] = defaultdict(set)
+        self._subscribers: Dict[str, Set["asyncio.Queue[Dict[str, Any]]"]] = defaultdict(set)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._lock = threading.Lock()  # 保护 _tasks 和 _subscribers
         self.max_events_per_task = max_events_per_task
         self.retention_seconds = retention_seconds
         self.storage = storage  # D11：SQLite 持久层
 
-    def bind_loop(self, loop: asyncio.AbstractEventLoop):
+    def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """绑定主事件循环（在 FastAPI startup 中调用）"""
         self._loop = loop
 
-    def unbind_loop(self):
+    def unbind_loop(self) -> None:
         """解绑事件循环（在 FastAPI shutdown 中调用）"""
         self._loop = None
 
-    def register(self, task_id: str, task_dict: dict = None):
+    def register(self, task_id: str, task_dict: Optional[Dict[str, Any]] = None) -> None:
         """注册新任务"""
         td = task_dict or {}
         with self._lock:
@@ -80,7 +82,7 @@ class TaskRegistry:
             except Exception:
                 logger.debug("任务状态落盘失败", exc_info=True)
 
-    def update_task_dict(self, task_id: str, task_dict: dict):
+    def update_task_dict(self, task_id: str, task_dict: Dict[str, Any]) -> None:
         """更新任务快照"""
         with self._lock:
             if task_id in self._tasks:
@@ -102,7 +104,7 @@ class TaskRegistry:
         with self._lock:
             return list(self._tasks.values())
 
-    def notify(self, task_id: str, event_type: str, payload: any):
+    def notify(self, task_id: str, event_type: str, payload: Any) -> None:
         """工作线程调用：推送事件到所有订阅者
 
         通过 run_coroutine_threadsafe 跨线程安全投递到 asyncio loop。
@@ -147,29 +149,29 @@ class TaskRegistry:
                 except Exception:
                     logger.debug("事件投递到 asyncio loop 失败（loop 可能已关闭）", exc_info=True)
 
-    async def subscribe(self, task_id: str) -> asyncio.Queue:
+    async def subscribe(self, task_id: str) -> "asyncio.Queue[Dict[str, Any]]":
         """WS handler 调用：订阅任务事件
 
         返回 asyncio.Queue，handler 通过 await queue.get() 等待事件。
         """
         # 队列只承载订阅之后的新事件；历史事件由订阅方另行调用 get_history() 补播
-        queue = asyncio.Queue()
+        queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
         with self._lock:
             self._subscribers[task_id].add(queue)
         return queue
 
-    def unsubscribe(self, task_id: str, queue: asyncio.Queue):
+    def unsubscribe(self, task_id: str, queue: "asyncio.Queue[Dict[str, Any]]") -> None:
         """WS handler 断开时调用：取消订阅"""
         with self._lock:
             self._subscribers[task_id].discard(queue)
 
-    def get_history(self, task_id: str) -> List[dict]:
+    def get_history(self, task_id: str) -> List[Dict[str, Any]]:
         """获取任务历史事件（供新订阅者补播）"""
         with self._lock:
             record = self._tasks.get(task_id)
             return list(record.events) if record else []
 
-    def cleanup_expired(self):
+    def cleanup_expired(self) -> List[str]:
         """清理过期任务（超过 retention_seconds 的已完成任务）"""
         now = time.time()
         expired = []
@@ -189,7 +191,7 @@ class TaskRegistry:
 
     # === D11：SQLite 持久化恢复 ===
 
-    def restore_from_storage(self, storage):
+    def restore_from_storage(self, storage: Any) -> None:
         """从 SQLite 恢复历史任务到内存
 
         在 FastAPI startup 中调用，确保进程重启后历史任务可查询。

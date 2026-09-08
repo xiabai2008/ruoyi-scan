@@ -12,7 +12,7 @@
 import json
 import os
 import re
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ComponentVersionResult, ScanResult
@@ -630,7 +630,7 @@ for _name, _spec in _COMPONENT_SPECS.items():
 class ComponentDetector:
     """组件检测聚合器：对目标执行全部探测器，输出 ComponentVersionResult 列表"""
 
-    def __init__(self, oast_client=None):
+    def __init__(self, oast_client: Optional[Any] = None) -> None:
         """初始化聚合器
 
         Args:
@@ -638,7 +638,7 @@ class ComponentDetector:
         """
         self.oast_client = oast_client
 
-    def detect_all(self, target: str, session, ruoyi_version: str = "") -> List[ComponentVersionResult]:
+    def detect_all(self, target: str, session: Any, ruoyi_version: str = "") -> List[ComponentVersionResult]:
         """探测全部组件
 
         Args:
