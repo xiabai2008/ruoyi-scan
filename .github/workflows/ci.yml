@@ -35,14 +35,16 @@ jobs:
           mypy core/ --strict --ignore-missing-imports || true
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
+  # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归
   unit:
-    name: Unit & Regression
-    runs-on: ubuntu-latest
+    name: Unit & Regression (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     needs: lint
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
@@ -52,17 +54,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Pytest (core unit tests + coverage)
-        run: |
-          python -m pytest -q --timeout-method=signal \
-            --cov=core --cov=common --cov=lib --cov=api --cov=plugins --cov=chains \
-            --cov-report=xml:coverage.xml --cov-report=term-missing \
-            --cov-fail-under=70
+        # pytest-timeout 的 signal 方法仅 POSIX 可用，Windows 用 thread
+        run: >
+          python -m pytest -q ${{ matrix.os == 'windows-latest' && '--timeout-method=thread' || '--timeout-method=signal' }}
+          --cov=core --cov=common --cov=lib --cov=api --cov=plugins --cov=chains
+          --cov-report=xml:coverage.xml --cov-report=term-missing
+          --cov-fail-under=70
       - name: Regression ruoyi
         run: python tests/regression_ruoyi.py
       - name: Regression spring
         run: python tests/regression_spring.py
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
         with:
           file: coverage.xml

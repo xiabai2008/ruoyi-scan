@@ -1,4 +1,5 @@
 # D8.4 Excel 报告生成单元测试
+import gc
 import os
 import sys
 import tempfile
@@ -86,10 +87,15 @@ def test_xlsx_three_sheets():
         xlsx_path = os.path.join(tmpdir, "report.xlsx")
         render_xlsx(builder, xlsx_path)
         wb = load_workbook(xlsx_path)
-        assert "摘要" in wb.sheetnames, f"应含摘要 Sheet，实际 {wb.sheetnames}"
-        assert "漏洞详情" in wb.sheetnames, f"应含漏洞详情 Sheet，实际 {wb.sheetnames}"
-        assert "修复建议" in wb.sheetnames, f"应含修复建议 Sheet，实际 {wb.sheetnames}"
-        assert len(wb.sheetnames) == 3
+        try:
+            assert "摘要" in wb.sheetnames, f"应含摘要 Sheet，实际 {wb.sheetnames}"
+            assert "漏洞详情" in wb.sheetnames, f"应含漏洞详情 Sheet，实际 {wb.sheetnames}"
+            assert "修复建议" in wb.sheetnames, f"应含修复建议 Sheet，实际 {wb.sheetnames}"
+            assert len(wb.sheetnames) == 3
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_summary_contains_target():
@@ -99,14 +105,19 @@ def test_xlsx_summary_contains_target():
         xlsx_path = os.path.join(tmpdir, "report.xlsx")
         render_xlsx(builder, xlsx_path)
         wb = load_workbook(xlsx_path)
-        ws = wb["摘要"]
-        # 在前 10 行中查找目标
-        found = False
-        for row in ws.iter_rows(min_row=1, max_row=10, max_col=2, values_only=True):
-            if row[1] == "http://x.com":
-                found = True
-                break
-        assert found, "摘要 Sheet 应含目标 http://x.com"
+        try:
+            ws = wb["摘要"]
+            # 在前 10 行中查找目标
+            found = False
+            for row in ws.iter_rows(min_row=1, max_row=10, max_col=2, values_only=True):
+                if row[1] == "http://x.com":
+                    found = True
+                    break
+            assert found, "摘要 Sheet 应含目标 http://x.com"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_vuln_details_content():
@@ -116,17 +127,22 @@ def test_xlsx_vuln_details_content():
         xlsx_path = os.path.join(tmpdir, "report.xlsx")
         render_xlsx(builder, xlsx_path)
         wb = load_workbook(xlsx_path)
-        ws = wb["漏洞详情"]
-        # 收集所有单元格文本
-        all_text = []
-        for row in ws.iter_rows(values_only=True):
-            for cell in row:
-                if cell:
-                    all_text.append(str(cell))
-        all_content = " ".join(all_text)
-        assert "SQL注入" in all_content, "漏洞详情应含 SQL注入"
-        assert "XSS" in all_content, "漏洞详情应含 XSS"
-        assert "预编译语句" in all_content, "漏洞详情应含修复建议"
+        try:
+            ws = wb["漏洞详情"]
+            # 收集所有单元格文本
+            all_text = []
+            for row in ws.iter_rows(values_only=True):
+                for cell in row:
+                    if cell:
+                        all_text.append(str(cell))
+            all_content = " ".join(all_text)
+            assert "SQL注入" in all_content, "漏洞详情应含 SQL注入"
+            assert "XSS" in all_content, "漏洞详情应含 XSS"
+            assert "预编译语句" in all_content, "漏洞详情应含修复建议"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_no_confirmed():
@@ -156,7 +172,12 @@ def test_xlsx_empty_results():
         render_xlsx(builder, xlsx_path)
         assert os.path.exists(xlsx_path)
         wb = load_workbook(xlsx_path)
-        assert len(wb.sheetnames) == 3
+        try:
+            assert len(wb.sheetnames) == 3
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_with_dedup():
@@ -191,15 +212,20 @@ def test_xlsx_with_dedup():
         render_xlsx(builder, xlsx_path)
         assert os.path.getsize(xlsx_path) > 2000
         wb = load_workbook(xlsx_path)
-        ws = wb["摘要"]
-        # 验证去重统计信息
-        all_text = []
-        for row in ws.iter_rows(values_only=True):
-            for cell in row:
-                if cell:
-                    all_text.append(str(cell))
-        content = " ".join(all_text)
-        assert "去重统计" in content, "摘要 Sheet 应含去重统计"
+        try:
+            ws = wb["摘要"]
+            # 验证去重统计信息
+            all_text = []
+            for row in ws.iter_rows(values_only=True):
+                for cell in row:
+                    if cell:
+                        all_text.append(str(cell))
+            content = " ".join(all_text)
+            assert "去重统计" in content, "摘要 Sheet 应含去重统计"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_freeze_panes():
@@ -209,8 +235,13 @@ def test_xlsx_freeze_panes():
         xlsx_path = os.path.join(tmpdir, "report.xlsx")
         render_xlsx(builder, xlsx_path)
         wb = load_workbook(xlsx_path)
-        ws = wb["漏洞详情"]
-        assert ws.freeze_panes == "A2", f"应冻结 A2，实际 {ws.freeze_panes}"
+        try:
+            ws = wb["漏洞详情"]
+            assert ws.freeze_panes == "A2", f"应冻结 A2，实际 {ws.freeze_panes}"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_auto_filter():
@@ -220,8 +251,13 @@ def test_xlsx_auto_filter():
         xlsx_path = os.path.join(tmpdir, "report.xlsx")
         render_xlsx(builder, xlsx_path)
         wb = load_workbook(xlsx_path)
-        ws = wb["漏洞详情"]
-        assert ws.auto_filter.ref is not None, "应设置自动筛选"
+        try:
+            ws = wb["漏洞详情"]
+            assert ws.auto_filter.ref is not None, "应设置自动筛选"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 def test_xlsx_with_summary():
@@ -233,14 +269,19 @@ def test_xlsx_with_summary():
         render_xlsx(builder, xlsx_path)
         assert os.path.getsize(xlsx_path) > 0
         wb = load_workbook(xlsx_path)
-        ws = wb["摘要"]
-        all_text = []
-        for row in ws.iter_rows(values_only=True):
-            for cell in row:
-                if cell:
-                    all_text.append(str(cell))
-        content = " ".join(all_text)
-        assert "100" in content, "摘要应含请求数 100"
+        try:
+            ws = wb["摘要"]
+            all_text = []
+            for row in ws.iter_rows(values_only=True):
+                for cell in row:
+                    if cell:
+                        all_text.append(str(cell))
+            content = " ".join(all_text)
+            assert "100" in content, "摘要应含请求数 100"
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 
 if __name__ == "__main__":
