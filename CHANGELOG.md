@@ -8,6 +8,8 @@
 
 ### Added
 - 新增 `ROADMAP.md` 发展路线图（G1-G5 + v2.0 愿景）：检测深度 / 工程债清偿 / AI 闭环 v2 / 生态社区 / 合规交付五大方向，含三条底线、度量仪表盘与落地机制；README 文档表同步入口
+- **G1 认证后深度扫描（`--auth-surface`）**: 新增 `lib/auth_surface.py`——登录态接口资产盘点（若依管理端点字典 + /prod-api 前缀变体 + 登录态页面提取 + 可选浅层爬虫）+ 越权矩阵（匿名重放判未授权访问 / 低权重放判垂直越权，三态纪律与全局一致）；`--surface-account` 提供低权账号对比、`--surface-output` 输出资产清单 JSON；双路自动登录（token 型 `/prod-api/auth/login` 优先，回退标准 `/login` 链路）
+- **G1 lab 认证区签名靶场**: `lab/server.py` 新增 `/prod-api/auth/login`（按账号发 admin/user 权限 token）+ `/prod-api/system/user/list` + `/prod-api/system/role/list` 垂直越权签名（vuln 低权可读 / safe 403），配套 13 个测试（单测 + subprocess 真实 HTTP 集成，vuln/safe 双模式对拍）
 - **G1 组件检测扩展 5 → 20**：新增 druid / xxl-job / solr / rabbitmq / elasticsearch / kibana / tomcat / jetty / shenyu / jenkins / eureka / minio / grafana / sentinel / consul 数据驱动探测器（`_COMPONENT_SPECS` 规格表，存在性/版本提取/三态判定与手写探测器纪律一致）；`data/component_cve_map.json` 同步扩充（kibana CVE-2019-7600、grafana CVE-2021-43798、tomcat Ghostcat/PUT、jenkins CVE-2024-23897、shenyu CVE-2021-37580、jetty CVE-2021-34428 等）
 - **G1 CVE 双源**：`lib/cve_sync.py` 增加 GHSA（GitHub Advisory Database）回退源——NVD 未收录/不可达时按 CVE 编号查询，`RUOYI_SCAN_GHSA_TOKEN` 环境变量可提速；`CVEInfo` 增加 `source` 字段
 - **G1 变体矩阵补全**：`core/ruoyi_versions.py` 新增 `RUOYI_VARIANT_INFO` 变体元数据表（7 变体的鉴权方式 / API 前缀 / 版本指纹来源）与 `get_variant_info` / `get_variant_api_prefixes` 接口；`detect_version` 支持变体感知的指纹来源优先级（向后兼容）

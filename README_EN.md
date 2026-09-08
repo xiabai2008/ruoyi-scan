@@ -59,6 +59,7 @@ pip install ruoyi-scan
 | Passive proxy | HTTP/HTTPS proxy, captures traffic for automatic scanning |
 | OAST out-of-band detection | Self-hosted callback server + 6 payload templates (SSRF/XXE/blind SQLi/blind RCE/LDAP/command injection) |
 | Business logic detection | IDOR / privilege escalation / parameter tampering / race condition — 4 detector types |
+| Authenticated deep scan | `--auth-surface` login-state API surface inventory + authorization matrix (anonymous replay / low-privilege replay) |
 | CVE sync | NVD + GHSA dual-source + 24h TTL cache + CWE→OWASP/MLPS compliance mapping |
 | SIEM integration | ECS / CEF / LEEF / JSON — 4 export formats + Syslog forwarding |
 | Async engine | ThreadPoolExecutor concurrent scanning + aiohttp optional async HTTP |
@@ -306,6 +307,14 @@ docker compose down
 | `--logic-scan` | Business logic vulnerability detection (IDOR/privilege escalation/parameter tampering/race condition) |
 | `--logic-endpoints <file>` | Business scan endpoint list file |
 | `--logic-concurrency <n>` | Concurrency for race condition detection |
+
+#### Authenticated Deep Scan (G1)
+
+| Parameter | Description |
+|-----------|-------------|
+| `--auth-surface` | Login-state API surface inventory + authorization matrix (requires `--auth-login user:pass`) |
+| `--surface-account <user:pass>` | Low-privilege account (vertical privilege comparison, repeatable) |
+| `--surface-output <path>` | Surface asset inventory JSON output path |
 
 #### CVE Sync (D32)
 

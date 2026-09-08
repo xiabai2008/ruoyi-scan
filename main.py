@@ -195,6 +195,22 @@ def build_parser():
     group.add_argument("--logic-endpoints", default=None, metavar="FILE", help="端点列表文件")
     group.add_argument("--logic-concurrency", type=int, default=10, help="竞争条件并发数")
 
+    group = parser.add_argument_group("G1 认证后深度扫描")
+    group.add_argument(
+        "--auth-surface",
+        action="store_true",
+        default=False,
+        help="登录态接口资产盘点 + 越权矩阵（需 --auth-login 提供高权凭证）",
+    )
+    group.add_argument(
+        "--surface-account",
+        action="append",
+        default=None,
+        metavar="USER:PASS",
+        help="低权账号（垂直越权对比，可多次指定，取第一个登录成功者）",
+    )
+    group.add_argument("--surface-output", default=None, metavar="PATH", help="资产清单 JSON 输出路径")
+
     group = parser.add_argument_group("D32 CVE 同步")
     group.add_argument("--cve-sync", action="store_true", default=False, help="同步 NVD CVE")
     group.add_argument("--cve-id", default=None, metavar="CVE-ID", help="查询 CVE 信息")
@@ -321,6 +337,9 @@ def print_help():
         ("--logic-scan", "业务逻辑漏洞检测"),
         ("--logic-endpoints <file>", "业务扫描端点列表文件"),
         ("--logic-concurrency <n>", "竞争条件检测并发数"),
+        ("--auth-surface", "认证后深度扫描：登录态资产盘点 + 越权矩阵（需 --auth-login）"),
+        ("--surface-account <user:pass>", "低权账号（垂直越权对比，可多次）"),
+        ("--surface-output <path>", "资产清单 JSON 输出路径"),
         ("--cve-sync", "同步 NVD CVE 信息"),
         ("--cve-id <CVE-ID>", "查询单个 CVE 信息"),
         ("--nvd-api-key <key>", "NVD API Key"),

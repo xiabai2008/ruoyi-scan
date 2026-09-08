@@ -439,6 +439,34 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         print(f"{YELLOW}[*]业务逻辑扫描完成：发现 {len(logic_vulns)} 个漏洞{RESET}")
         logic_session.close()
 
+    # G1：认证后深度扫描（登录态接口资产盘点 + 越权矩阵）
+    if getattr(args, "auth_surface", False):
+        from lib.auth_surface import run_auth_surface_mode
+
+        print(f"{YELLOW}[*]认证后深度扫描：登录态资产盘点 + 越权矩阵...{RESET}")
+        surface_assets, surface_vulns = run_auth_surface_mode(args, target_normalized)
+        print(
+            f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
+            f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
+        )
+        if getattr(args, "surface_output", None) and surface_assets:
+            print(f"{GREEN}[*]资产清单已输出：{args.surface_output}{RESET}")
+        # 漏洞并入统一结果集（CONFIRMED 语义已在扫描器内保证，UNKNOWN 仅记录资产不产漏洞）
+        for lv in surface_vulns:
+            all_results.append(
+                ScanResult(
+                    kind="vuln",
+                    name=lv.name,
+                    severity=lv.severity,
+                    status=STATUS_CONFIRMED,
+                    url=lv.url,
+                    evidence=lv.evidence,
+                    fix=lv.fix,
+                    fix_detail=lv.fix_detail,
+                    reproduce=lv.reproduce,
+                )
+            )
+
     # D33：SIEM 导出
     if getattr(args, "siem_export", None):
         from lib.siem_export import run_siem_export_mode

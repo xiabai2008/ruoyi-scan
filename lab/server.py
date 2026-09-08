@@ -257,6 +257,89 @@ def dispatch(path, method):
             return Response("dir\nsvn://server/repo\n", mimetype="text/plain")
         return html_body("<html><body>404</body></html>", 404)
 
+    # ── G1 认证后深度扫描签名区（lib/auth_surface.py 专项，/prod-api 前缀与现有端点隔离）──
+    # 登录：POST /prod-api/auth/login（JSON）→ 按账号发不同权限 token
+    if path == "/prod-api/auth/login":
+        if method == "POST":
+            body = request.get_json(silent=True) or {}
+            user, pwd = body.get("username", ""), body.get("password", "")
+            if user == "admin" and pwd == "admin123":
+                return json_body({"code": 200, "msg": "操作成功", "token": "admin-token"})
+            if user == "user" and pwd == "user123":
+                return json_body({"code": 200, "msg": "操作成功", "token": "user-token"})
+            return json_body({"code": 500, "msg": "用户名或密码错误"})
+        return json_body({"code": 401, "msg": "请先登录"}, 401)
+
+    def _bearer_token():
+        """提取 Authorization: Bearer <token>（无则空串）"""
+        auth = request.headers.get("Authorization", "")
+        return auth[7:] if auth.startswith("Bearer ") else ""
+
+    # 用户列表：管理员专属接口（G1 越权矩阵签名点之一）
+    #   任意有效 token 均可读 → vuln 模式语义（RBAC 缺失）
+    #   safe 模式：低权 token → 403
+    if path == "/prod-api/system/user/list":
+        token = _bearer_token()
+        if token == "admin-token":
+            return json_body(
+                {
+                    "code": 200,
+                    "msg": "操作成功",
+                    "rows": [
+                        {"userId": 1, "userName": "admin", "role": "admin"},
+                        {"userId": 2, "userName": "user", "role": "common"},
+                    ],
+                    "total": 2,
+                }
+            )
+        if token == "user-token":
+            if vuln:
+                return json_body(
+                    {
+                        "code": 200,
+                        "msg": "操作成功",
+                        "rows": [
+                            {"userId": 1, "userName": "admin", "role": "admin"},
+                            {"userId": 2, "userName": "user", "role": "common"},
+                        ],
+                        "total": 2,
+                    }
+                )
+            return json_body({"code": 403, "msg": "权限不足"}, 403)
+        return json_body({"code": 401, "msg": "请先登录"}, 401)
+
+    # 角色列表：管理员专属接口——垂直越权签名点
+    #   vuln 模式：低权 user-token 也能访问（RBAC 缺失洞）
+    #   safe 模式：低权 token → 403 权限不足
+    if path == "/prod-api/system/role/list":
+        token = _bearer_token()
+        if token == "admin-token":
+            return json_body(
+                {
+                    "code": 200,
+                    "msg": "操作成功",
+                    "rows": [
+                        {"roleId": 1, "roleName": "超级管理员", "roleKey": "admin"},
+                    ],
+                    "total": 1,
+                }
+            )
+        if token == "user-token":
+            if vuln:
+                # 洞：RBAC 未校验，低权 token 读取角色管理数据
+                return json_body(
+                    {
+                        "code": 200,
+                        "msg": "操作成功",
+                        "rows": [
+                            {"roleId": 1, "roleName": "超级管理员", "roleKey": "admin"},
+                        ],
+                        "total": 1,
+                    }
+                )
+            return json_body({"code": 403, "msg": "权限不足"}, 403)
+        return json_body({"code": 401, "msg": "请先登录"}, 401)
+
     # 目录扫描常见路径（指纹强特征 + 目录展示）
     if path in ("/index", "/captcha/image", "/getInfo", "/prod-api/"):
         return html_body("<html><head><title>RuoYi管理系统</title></head><body>index</body></html>")

@@ -36,7 +36,7 @@
 
 | 方向 | 现状 | 目标 |
 |------|------|------|
-| 认证后深度扫描 | 插件以未授权检测为主；`core/auth_chain.py` 已有 4 种认证注入 + 自动登录 | 登录态下结合 `lib/crawler.py` 遍历菜单 / API，输出**全接口资产盘点 + 越权矩阵**（`lib/logic_scan.py` 的 IDOR 检测向 authenticated 场景延伸） |
+| 认证后深度扫描 | ~~插件以未授权检测为主~~ **已落地（`lib/auth_surface.py`，`--auth-surface`）**：登录态资产盘点 + 越权矩阵（匿名重放 / 低权重放）+ lab 认证区签名靶场 | 深化：爬虫端点发现增强、水平越权（IDOR）与盘点联动、微服务 API 资产图谱 |
 | 组件版本检测 | ~~5 个组件~~ **20 个组件（G1 已落地，`lib/component_detect.py`）** | 扩展至 30+ 并补 SnakeYAML 等库级组件；从报错页 / actuator / favicon 提取版本特征 |
 | CVE 数据源 | ~~仅 NVD~~ **NVD + GHSA 双源（G1 已落地，`lib/cve_sync.py`）** | 增加 **CNVD / CNNVD**；离线 CVE 库随 wheel 分发（国内安服刚需） |
 | 若依变体矩阵 | `core/ruoyi_versions.py` 覆盖 4.2 / 4.7 / v5 / 3.9 / Cloud 里程碑 | 补全 RuoYi-Vue-Plus、RuoYi-App、小程序端点的路由差异与 POC 过滤 |

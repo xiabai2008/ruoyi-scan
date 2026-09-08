@@ -80,6 +80,7 @@ pip install ruoyi-scan
 | 被动代理 | HTTP/HTTPS 代理，捕获流量自动扫描 |
 | OAST 带外检测 | 自建回调服务器 + 6 种 payload 模板（SSRF/XXE/SQL盲注/RCE盲注/LDAP/命令注入） |
 | 业务逻辑检测 | IDOR / 越权 / 参数篡改 / 竞争条件 4 类检测器 |
+| 认证后深度扫描 | `--auth-surface` 登录态接口资产盘点 + 越权矩阵（匿名重放判未授权 / 低权重放判垂直越权） |
 | CVE 同步 | NVD REST API + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
 | SIEM 集成 | ECS / CEF / LEEF / JSON 4 格式导出 + Syslog 转发 |
 | 异步引擎 | ThreadPoolExecutor 并发扫描 + aiohttp 可选异步 HTTP |
@@ -342,6 +343,14 @@ docker compose down
 | `--logic-scan` | 业务逻辑漏洞检测（IDOR/越权/参数篡改/竞争条件） |
 | `--logic-endpoints <file>` | 业务扫描端点列表文件 |
 | `--logic-concurrency <n>` | 竞争条件检测并发数 |
+
+#### 认证后深度扫描（G1）
+
+| 参数 | 说明 |
+|------|------|
+| `--auth-surface` | 登录态接口资产盘点 + 越权矩阵（需 `--auth-login user:pass` 高权凭证） |
+| `--surface-account <user:pass>` | 低权账号（垂直越权对比，可多次指定，取第一个登录成功者） |
+| `--surface-output <path>` | 资产清单 JSON 输出路径 |
 
 #### CVE 同步（D32）
 
