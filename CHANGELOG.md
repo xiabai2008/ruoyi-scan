@@ -4,30 +4,31 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [1.3.0] - 2026-09-08
 
 ### Added
 - 新增 `ROADMAP.md` 发展路线图（G1-G5 + v2.0 愿景）：检测深度 / 工程债清偿 / AI 闭环 v2 / 生态社区 / 合规交付五大方向，含三条底线、度量仪表盘与落地机制；README 文档表同步入口
 - **G1 认证后深度扫描（`--auth-surface`）**: 新增 `lib/auth_surface.py`——登录态接口资产盘点（若依管理端点字典 + /prod-api 前缀变体 + 登录态页面提取 + 可选浅层爬虫）+ 越权矩阵（匿名重放判未授权访问 / 低权重放判垂直越权，三态纪律与全局一致）；`--surface-account` 提供低权账号对比、`--surface-output` 输出资产清单 JSON；双路自动登录（token 型 `/prod-api/auth/login` 优先，回退标准 `/login` 链路）
-- **G1 lab 认证区签名靶场**: `lab/server.py` 新增 `/prod-api/auth/login`（按账号发 admin/user 权限 token）+ `/prod-api/system/user/list` + `/prod-api/system/role/list` 垂直越权签名（vuln 低权可读 / safe 403），配套 13 个测试（单测 + subprocess 真实 HTTP 集成，vuln/safe 双模式对拍）
+- **G1 lab 认证区签名靶场**: `lab/server.py` 新增 `/prod-api/auth/login`（按账号发 admin/user 权限 token）+ `/prod-api/system/user/list` + `/prod-api/system/role/list` 垂直越权签名（vuln 低权可读 / safe 403），配套 13 个测试（单测 + 进程内真实 HTTP 集成，vuln/safe 双模式对拍）
 - **G1 组件检测扩展 5 → 20**：新增 druid / xxl-job / solr / rabbitmq / elasticsearch / kibana / tomcat / jetty / shenyu / jenkins / eureka / minio / grafana / sentinel / consul 数据驱动探测器（`_COMPONENT_SPECS` 规格表，存在性/版本提取/三态判定与手写探测器纪律一致）；`data/component_cve_map.json` 同步扩充（kibana CVE-2019-7600、grafana CVE-2021-43798、tomcat Ghostcat/PUT、jenkins CVE-2024-23897、shenyu CVE-2021-37580、jetty CVE-2021-34428 等）
 - **G1 CVE 双源**：`lib/cve_sync.py` 增加 GHSA（GitHub Advisory Database）回退源——NVD 未收录/不可达时按 CVE 编号查询，`RUOYI_SCAN_GHSA_TOKEN` 环境变量可提速；`CVEInfo` 增加 `source` 字段
 - **G1 变体矩阵补全**：`core/ruoyi_versions.py` 新增 `RUOYI_VARIANT_INFO` 变体元数据表（7 变体的鉴权方式 / API 前缀 / 版本指纹来源）与 `get_variant_info` / `get_variant_api_prefixes` 接口；`detect_version` 支持变体感知的指纹来源优先级（向后兼容）
 
 ### Fixed
-- **G2 Windows 可移植性修复（CI matrix 首跑即暴露）**: `main.py` 未强制 stdout 编码，英文 Windows（cp1252 控制台）下 banner/帮助信息中的中文触发 `UnicodeEncodeError` 使 CLI 直接崩溃退出码 1（中文系统 GBK 碰巧能编所以此前未发现）——入口处 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`，任何终端最多乱码显示绝不中断；补 cp1252 环境回归测试
+- **G2 Windows 可移植性修复（CI matrix 首跑即暴露）**: `main.py` 未强制 stdout 编码，英文 Windows（cp1252 控制台）下 banner/帮助信息中的中文触发 `UnicodeEncodeError` 使 CLI 直接崩溃退出码 1（中文系统 GBK 碰巧能编所以此前未发现）——新增 `common/console.py` `force_utf8_stdio()`，main.py 与 regression 脚本统一接入（`errors=replace`，任何终端最多乱码显示绝不中断）；补 cp1252 环境回归测试
 - **G2 Windows 兼容修复**: `tests/test_report_xlsx.py` 8 处 `load_workbook` 未释放 workbook 句柄（openpyxl 内部循环引用 + close() 非 read_only 模式为 no-op），Linux 上删除打开中的文件无感、Windows 上 TemporaryDirectory 清理必报 WinError 32——断言后统一 `del` + `gc.collect()` 强制释放（5 轮稳定性验证通过）
 - **CI lint 转绿**: 修复 ruff format 漂移（10 个文件 docstring 后空行重排）；lint 工具版本固定（ruff==0.16.2 / mypy==2.1.0，CI 与 pyproject dev 依赖同步），杜绝格式化工具版本演进导致的漂移复发
 - **Nightly 验收修复**: 靶场容器 `docker run` 补传 `LAB_HOST=0.0.0.0`——v1.2.0 安全收口后靶场默认绑定 127.0.0.1，容器内绑定回环导致 Docker 端口映射不可达，自 8/25 起每晚启动超时；失败自动建 issue 覆盖靶场启动失败场景（旧条件在该场景下永不触发），并显式声明 `issues: write` 权限
 - mypy `python_version` 目标 3.8 → 3.10（mypy 2.x 最低支持 3.10，仅影响类型分析，运行时仍支持 3.8+）
+- **版本号同步修复**: `config/settings.py` VERSION 停留在 1.2.2（v1.2.3/v1.2.4 发版漏改，banner 显示旧版本号）——本次起 VERSION/pyproject/README/USAGE 四处一并对齐
 
 ### Changed
-- **G2 mypy 债务清偿第四批（收官）**: core/ 的 proxy_server / orchestrator / fingerprint / task_registry + 相邻 config/settings、core/loader、plugins/base 共 ~127 个 strict 错误清零（代理处理器/注册表/编排器全方法签名、dataclass 重复 auth 字段去重、asyncio.Queue 泛型、lib ComponentDetector/OriginIPFinder 公共类补签名）；**CI 软门禁转硬——`mypy core/ --strict` 回归任何类型错误即失败**（棘轮步骤完成历史使命移除），core/ 整体错误 106 → **0**（四批累计 350 → 0，100% 还债）
+- **G2 mypy 债务清偿四批完成（350 → 0）**: core/ 25 文件全部 strict 清零（函数签名、容器泛型、Optional 注解、`cast` 消除 Any 传播、dataclass 重复字段去重、`http_code` 变量改名消除类型冲突、lib ComponentDetector/OriginIPFinder 公共类补签名）；**CI 软门禁转硬——`mypy core/ --strict` 回归任何类型错误即失败**（棘轮步骤完成使命移除），common/ + core/ 全量 strict 硬门禁就位
+- **G2 CI Windows matrix**: unit 作业矩阵增加 `windows-latest`（pytest-timeout Windows 侧自动切 thread 方法），防 GBK 编码 / 路径分隔符回归；Codecov 上传收敛至 ubuntu+py3.11 组合
+- **Release 发布门禁**: tag 推送先等待同一提交的 CI 全绿再构建上传（ci.yml 增加 `tags: v*` 触发），防止带病发布
 - **G2 mypy 债务清偿第三批（report 系列 3 模块）**: core/ 的 report_xlsx / report / report_docx 共 ~120 个 strict 错误清零（全部渲染函数签名、ReportBuilder/MultiTargetReport 方法注解、缓存字段 Optional、`aggregate` 鸭子类型边界 `cast`、python-docx 未注解方法定向 ignore）；棘轮门禁扩至 **19 个文件**，core/ 整体错误 229 → **106**（三批累计 350 → 106，已还债 70%）
 - **G2 mypy 债务清偿第二批（7 模块）**: core/ 的 ruoyi_versions / captcha_solver / auth_chain / storage / chain / session / report_sarif 共 82 个 strict 错误清零（方法签名、Optional/容器注解、OCR 返回值 str 化、`http_code` 变量改名消除与验证码变量的类型冲突）；棘轮门禁列表同步扩列，core/ 整体错误 311 → **229**
-- **G2 mypy 债务清偿第一批（9 模块）**: core/ 的 http / waf_features / fingerprint_features / cache / dedup / report_pdf / engine / router / portscan 共 27 个类型错误清零（补函数签名注解、容器泛型参数、`cast` 消除 Any 传播）；CI 新增 **mypy 棘轮硬门禁**（已清零模块列表回归任何类型错误即失败，只增不减），core/ 整体错误 350 → 311
-- **Release 发布门禁**: tag 推送先等待同一提交的 CI 全绿再构建上传（ci.yml 增加 `tags: v*` 触发），防止带病发布
-- **G2 CI Windows matrix**: unit 作业矩阵增加 `windows-latest`（pytest-timeout Windows 侧自动切 thread 方法），防 GBK 编码 / 路径分隔符回归；Codecov 上传收敛至 ubuntu+py3.11 组合
+- **G2 mypy 债务清偿第一批（9 模块）**: core/ 的 http / waf_features / fingerprint_features / cache / dedup / report_pdf / engine / router / portscan 共 27 个类型错误清零（补函数签名注解、容器泛型参数、`cast` 消除 Any 传播）；CI 新增 mypy 棘轮硬门禁（已清零模块列表回归任何类型错误即失败，只增不减）
 - 文档数字对齐实际状态：插件 51 个（ruoyi 18 / spring 14 / common 11 / jeecgboot 8）、测试 51 文件 1000+ 用例、lib 33 模块；`.idea/` 加入 .gitignore；CHANGELOG 版本对比链接补全
 
 ## [1.2.4] - 2026-09-07
@@ -158,7 +159,8 @@
 - 签名靶场（Flask lab）
 - 887 单元测试 + 回归测试
 
-[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.1...v1.2.2
