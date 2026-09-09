@@ -25,7 +25,7 @@ pip install ruoyi-scan
 ## Project Overview
 
 - **Author**: XIABAI
-- **Version**: 1.3.0
+- **Version**: 1.4.0
 - **Repository**: https://github.com/xiabai2008/Ruoyi-Scan
 - **Tech Stack**: Python 3.8+ / requests / FastAPI / Docker
 - **License**: MIT License
@@ -96,7 +96,7 @@ ruoyi-scan -p http://target:8080/
 Go to the [Releases page](https://github.com/xiabai2008/Ruoyi-Scan/releases), download the latest `.whl` file, then:
 
 ```bash
-pip install ruoyi_scan-1.3.0-py3-none-any.whl
+pip install ruoyi_scan-1.4.0-py3-none-any.whl
 ```
 
 ### Option 3: Install from Source

@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [1.4.0] - 2026-09-09
 
 ### Added
 - **G1 CNVD 源 + 离线 CVE 库**: `lib/cve_sync.py` 查询链扩展为 NVD → GHSA → **CNVD（无官方 API，网页抓取 best-effort，反爬静默降级）→ 离线库（内网兜底）**；新增 `data/cve_offline.json` 随包分发（20 条精选组件 CVE，scripts/build_offline_cve.py 从 component_cve_map 自动生成，--merge 保留手工 CNVD 别名）；新增 `--cve-offline <component>` 内网排查命令；**修复 package-data 只分发 *.txt 导致 component_cve_map.json 未随 wheel 发布的 bug**（安装版组件检测 CVE 比对此前空转）
@@ -172,7 +172,8 @@
 - 签名靶场（Flask lab）
 - 887 单元测试 + 回归测试
 
-[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.2...v1.2.3
