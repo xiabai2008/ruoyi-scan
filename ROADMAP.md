@@ -67,11 +67,11 @@
 
 `lib/ai_generator.py`（生成）与 `lib/ai_report.py`（解读）是起点，下一步是**闭环与纪律**：
 
-- **生成即验证**：AI 生成的 POC 必须先在签名靶场跑出预期三态才允许入库——
-  lab 体系天然是验证器，这是多数「AI 生成 POC」项目不具备的差异化
-- **LLM 降噪 UNKNOWN**：UNKNOWN 案例证据聚类 + LLM 辅助归类；AI 结论仅标记
-  「建议复核」，**不得改写三态**——纪律优先
-- **本地模型支持**：Ollama / OpenAI 兼容 endpoint——内网渗透测试是离线场景，需求真实
+- ~~**生成即验证**~~ **已落地（`lib/ai_validate.py`，`--ai-validate`）**：AI 生成插件先在签名
+  靶场跑三态——pass 入库 / fail（safe 误报红线）拒绝 / unverified 隔离待人工复核
+- ~~**LLM 降噪 UNKNOWN**~~ **已落地（`lib/ai_triage.py`，`--ai-triage`）**：聚类分流固定标签
+  （WAF/网络/验证码/人工复核），AI 不得输出三态，非法标签一律降级规则
+- ~~**本地模型支持**~~ **已落地**：Ollama 等 OpenAI 兼容端点（自定义 base_url 无 Key 走 LLM）
 - **攻击面优先级排序**：报告修复优先级升级为资产上下文感知（组件暴露面 × 业务入口）
 
 ---

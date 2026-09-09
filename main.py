@@ -175,6 +175,20 @@ def build_parser():
 
     group = parser.add_argument_group("E7 AI 插件生成")
     group.add_argument("--ai", default=None, metavar="DESC", help="AI 生成插件（漏洞描述）")
+    group.add_argument(
+        "--ai-triage",
+        action="store_true",
+        default=False,
+        help="G3 UNKNOWN 智能降噪：扫描后对无法判定结果聚类分流（LLM 可选）",
+    )
+    group.add_argument(
+        "--ai-validate",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="PLUGIN.py",
+        help="G3 生成即验证：无参=生成后自动靶场验证；带路径=对已有插件独立验证",
+    )
     group.add_argument("--ai-name", default=None, metavar="NAME", help="AI 插件名称（默认取描述）")
     group.add_argument("--ai-api-key", default=None, metavar="KEY", help="LLM API Key（环境变量 RUOYI_AI_API_KEY）")
     group.add_argument("--ai-model", default=None, metavar="MODEL", help="LLM 模型名（默认 gpt-4o-mini）")
@@ -340,6 +354,8 @@ def print_help():
         ("--plugin-manifest <dir>", "生成/校验 manifest.json（Ed25519 签名）"),
         ("--plugin-update [url]", "从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥）"),
         ("--ai <desc>", "AI 生成插件（LLM 优先，无 Key 降级规则模板）"),
+        ("--ai-validate [path]", "G3 生成即验证（签名靶场三态；无参=生成后自动验证）"),
+        ("--ai-triage", "G3 UNKNOWN 智能降噪（聚类分流，LLM 可选）"),
         ("--ai-name <name>", "AI 插件名称（默认取描述）"),
         ("--ai-api-key <key>", "LLM API Key（环境变量 RUOYI_AI_API_KEY）"),
         ("--ai-model <model>", "LLM 模型名（默认 gpt-4o-mini）"),
@@ -459,6 +475,8 @@ def main(argv=None):
             args.plugin_manifest,
             args.plugin_update,
             args.ai,
+            args.ai_validate is not None,
+            args.ai_triage,
             args.ci_init,
             args.wiki,
             args.oast_server,

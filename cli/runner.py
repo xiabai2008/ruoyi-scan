@@ -375,6 +375,12 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
             for rp in rem_paths:
                 print(f"{GREEN}[*]整改验证报告已生成：{rp}{RESET}")
 
+        # G3：UNKNOWN 智能降噪（--ai-triage 聚类分流，三态纪律不受影响）
+        if getattr(args, "ai_triage", False):
+            from lib.ai_triage import run_ai_triage_mode
+
+            run_ai_triage_mode(args, builder=builder)
+
         # D20：保存基线 / 差异对比
         if getattr(args, "save_baseline", False):
             from lib.diff_scan import save_baseline

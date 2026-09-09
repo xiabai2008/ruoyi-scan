@@ -10,6 +10,10 @@
 - **G1 CNVD 源 + 离线 CVE 库**: `lib/cve_sync.py` 查询链扩展为 NVD → GHSA → **CNVD（无官方 API，网页抓取 best-effort，反爬静默降级）→ 离线库（内网兜底）**；新增 `data/cve_offline.json` 随包分发（20 条精选组件 CVE，scripts/build_offline_cve.py 从 component_cve_map 自动生成，--merge 保留手工 CNVD 别名）；新增 `--cve-offline <component>` 内网排查命令；**修复 package-data 只分发 *.txt 导致 component_cve_map.json 未随 wheel 发布的 bug**（安装版组件检测 CVE 比对此前空转）
 - **G1 深扫爬虫增强**: `lib/auth_surface.py` 爬虫分支升级为 `crawl_with_js_urls` + `JSExtractor`——RuoYi-Vue/Plus 为 SPA，管理 API 路径多藏于 JS 包，纯 HTML 爬取覆盖不足，现从 JS 包提取 API 路径（来源标记 js）并入盘点
 - **G5 合规报告模板引擎**: 新增 `lib/report_template.py`——安服公司用自己的 docx 报告模板（公司抬头/Logo/整改声明），扫描后一键出交付物；占位符 `{{target}}/{{scan_date}}/{{total}}/{{high}}` 等标量注入 + `{{vuln_table}}`（定点插入漏洞明细表，低层 XML）+ `{{vuln_details}}`（逐漏洞详述）；`--report-template <path>` 一键启用，`fail_on_unresolved` 模板校验模式
+- **G3 AI 闭环 v2**:
+  - **生成即验证（差异化核心）**: 新增 `lib/ai_validate.py`——AI 生成插件先在签名靶场跑三态：vuln 模式 CONFIRMED 且 safe 模式不误报才允许入库（pass）；safe 模式误报触发红线直接拒绝入库并删除（fail）；靶场未覆盖该签名的转入 `plugins/_quarantine/` 隔离目录待人工复核（unverified）。`--ai-validate`（无参=生成后自动验证；带路径=对已有插件独立验证）
+  - **UNKNOWN 智能降噪**: 新增 `lib/ai_triage.py`——`--ai-triage` 对无法判定结果按插件聚类分流（suspected_waf / network_error / captcha_or_auth / needs_manual_review 固定标签），LLM 可选（无 Key 规则降级）；**三态纪律红线：AI 只能输出分流标签，输出三态判定一律拒绝并降级**，输出必带免责声明
+  - **本地模型支持（Ollama）**: 自定义 `RUOYI_AI_BASE_URL`（如 http://127.0.0.1:11434/v1）时无 API Key 也走 LLM 主路径（OpenAI 兼容端点不校验 Key），内网离线场景可用
 - **G5 整改复测工作流**: 新增 `lib/remediation.py`——`--remediation <baseline.json>` 复测后与基线对比出**整改验证报告**（CLOSED 已闭环 / OPEN 未整改 / NEW 复测新发现 + 整改完成率 + 结论），复用 D20 指纹对比；JSON + docx 双交付物
 - **G5 等保映射报告级章节**: HTML 与 docx 报告新增「合规映射」章节（等保 2.0 条款命中表 + OWASP Top 10 类别命中表，条款以编号呈现便于对照 GB/T 22239-2019 核实）——从附表升级为报告级章节；数据源为 CONFIRMED 结果 compliance 字段的聚合（`ReportBuilder.compliance_summary()`）
 

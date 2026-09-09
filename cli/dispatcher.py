@@ -6,6 +6,7 @@ main.py 保留参数解析 + Banner，调用 dispatch() 执行。
 
 from __future__ import annotations
 
+import sys
 from argparse import Namespace
 
 from cli.runner import (
@@ -28,7 +29,6 @@ from cli.runner import (
     run_template_list_mode,
     run_wiki_mode,
 )
-from lib.colors import RED, RESET
 
 
 def dispatch(args: Namespace) -> None:
@@ -100,6 +100,17 @@ def dispatch(args: Namespace) -> None:
         return
     if args.plugin_update:
         run_plugin_update_mode(args.plugin_update)
+        return
+    # G3：生成即验证——对已有插件独立验证（--ai-validate <path>）
+    if args.ai_validate is not None and args.ai_validate is not True:
+        from lib.ai_validate import run_ai_validate_mode
+
+        sys.exit(run_ai_validate_mode(args))
+    # G3：--ai-triage 仅在扫描模式中联动处理（runner 内），独立调用无意义
+    if args.ai_triage and not (args.u or args.m or args.p or args.l or args.file):
+        from lib.colors import RED, RESET
+
+        print(f"{RED}[!]--ai-triage 需配合扫描模式使用（如 -u <url> --ai-triage）{RESET}")
         return
     # E7：AI POC 生成器（--ai）
     if args.ai:
