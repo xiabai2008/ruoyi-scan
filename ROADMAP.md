@@ -100,8 +100,10 @@ baseline diff 离真实痛点只差一步：
 
 - ~~**安服报告模板引擎**~~ **已落地（`lib/report_template.py`，`--report-template`）**：docx 模板占位符注入
   （标量 + `{{vuln_table}}` 定点插表 + `{{vuln_details}}` 详述），安服公司套用自己的模板一键出交付物
-- **整改复测工作流**：`--diff` 升级为「整改验证报告」——复测是安服第二高频交付物
-- **等保 2.0 / 关基映射深化**：CWE → OWASP / 等保映射从附表升级为报告级章节
+- ~~**整改复测工作流**~~ **已落地（`lib/remediation.py`，`--remediation`）**：复测与基线对比出整改验证报告
+  （CLOSED/OPEN/NEW + 完成率 + 结论，JSON + docx 交付物）
+- ~~**等保 2.0 / 关基映射深化**~~ **已落地**：HTML 与 docx 报告新增「合规映射」报告级章节
+  （等保条款命中表 + OWASP 类别命中表，`ReportBuilder.compliance_summary()` 聚合）
 - **整改复测工作流**：`--diff` 升级为「整改验证报告」——复测是安服第二高频交付物
 - **等保 2.0 / 关基映射深化**：CWE → OWASP / 等保映射从附表升级为报告级章节
 

@@ -321,6 +321,30 @@ def render_docx(builder: Any, out_path: str) -> str:
             for j, w in enumerate(col_widths):
                 row.cells[j].width = w
 
+    # === G5：合规映射章节（等保 2.0 / OWASP，报告级）===
+    comp_summary = builder.compliance_summary()
+    if comp_summary["dengbao"] or comp_summary["owasp"]:
+        doc.add_page_break()  # type: ignore[no-untyped-call]
+        _add_heading(doc, "合规映射（等保 2.0 / OWASP Top 10）", level=1)
+        doc.add_paragraph("按已确认漏洞的合规标签聚合，条款以编号呈现（便于对照 GB/T 22239-2019 核实）")
+        for title, label_key, rows in (
+            ("等级保护 2.0 条款命中", "clause", comp_summary["dengbao"]),
+            ("OWASP Top 10 类别命中", "category", comp_summary["owasp"]),
+        ):
+            if not rows:
+                continue
+            _add_heading(doc, title, level=2)
+            comp_table = doc.add_table(rows=1, cols=3)
+            _set_table_borders(comp_table)
+            for j, h in enumerate((label_key, "漏洞数", "涉及漏洞")):
+                _add_cell_text(comp_table.rows[0].cells[j], h, size=9, bold=True, color=RGBColor(0xFF, 0xFF, 0xFF))
+                _set_cell_bg(comp_table.rows[0].cells[j], "0969DA")
+            for item in rows:
+                cells = comp_table.add_row().cells
+                _add_cell_text(cells[0], str(item[label_key]), size=9, bold=True)
+                _add_cell_text(cells[1], str(item["count"]), size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
+                _add_cell_text(cells[2], "、".join(item["names"]), size=8)
+
     # === 其他结果（非 CONFIRMED）===
     all_results = builder._effective_results()
     others = [r for r in all_results if r.status != STATUS_CONFIRMED]

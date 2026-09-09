@@ -367,6 +367,14 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
             if tpl_path:
                 print(f"{GREEN}[*]模板报告已生成：{tpl_path}{RESET}")
 
+        # G5：整改复测工作流（--remediation 基线对比 → 整改验证报告）
+        if getattr(args, "remediation", None):
+            from lib.remediation import run_remediation
+
+            rem_paths = run_remediation(args, builder)
+            for rp in rem_paths:
+                print(f"{GREEN}[*]整改验证报告已生成：{rp}{RESET}")
+
         # D20：保存基线 / 差异对比
         if getattr(args, "save_baseline", False):
             from lib.diff_scan import save_baseline

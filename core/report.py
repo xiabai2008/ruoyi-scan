@@ -91,6 +91,67 @@ class ReportBuilder:
         """返回全部 CONFIRMED 结果（HTML/PDF/Word 等各格式的漏洞明细均取自这里）"""
         return [r for r in self._effective_results() if r.status == STATUS_CONFIRMED]
 
+    def compliance_summary(self) -> Dict[str, List[Dict[str, Any]]]:
+        """G5：合规映射聚合（等保 2.0 条款 / OWASP Top 10 两个维度）
+
+        从 CONFIRMED 结果的 compliance 字段（{'等保2.0': '8.1.4', 'OWASP': 'A03:2021'}）
+        聚合：哪个条款命中多少漏洞、涉及哪些漏洞名——报告级合规章节的数据源。
+
+        Returns:
+            {
+                'dengbao': [{'clause': '8.1.4', 'count': 3, 'names': [...]}, ...]（按 count 降序）,
+                'owasp':   [{'category': 'A01:2021', 'count': 2, 'names': [...]}, ...],
+            }
+        """
+        dengbao: Dict[str, List[str]] = {}
+        owasp: Dict[str, List[str]] = {}
+        for r in self.confirmed_results():
+            comp = getattr(r, "compliance", None) or {}
+            name = r.name
+            clause = comp.get("等保2.0", "")
+            if clause:
+                dengbao.setdefault(clause, []).append(name)
+            category = comp.get("OWASP", "")
+            if category:
+                owasp.setdefault(category, []).append(name)
+
+        def _sorted(mapping: Dict[str, List[str]], key_name: str) -> List[Dict[str, Any]]:
+            return [
+                {key_name: k, "count": len(v), "names": sorted(v)}
+                for k, v in sorted(mapping.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            ]
+
+        return {"dengbao": _sorted(dengbao, "clause"), "owasp": _sorted(owasp, "category")}
+
+    def render_compliance_html(self) -> str:
+        """G5：合规章节 HTML（等保 2.0 条款表 + OWASP 类别表）"""
+        summary = self.compliance_summary()
+        if not summary["dengbao"] and not summary["owasp"]:
+            return ""
+
+        def _table(title: str, headers: Tuple[str, str, str], rows: List[Dict[str, Any]], label_key: str) -> str:
+            if not rows:
+                return ""
+            body = "".join(
+                f"<tr><td>{html_module.escape(str(item[label_key]))}</td>"
+                f"<td>{item['count']}</td>"
+                f"<td>{html_module.escape('、'.join(item['names']))}</td></tr>"
+                for item in rows
+            )
+            return (
+                f"<h3>{title}</h3>"
+                f"<table><thead><tr><th>{headers[0]}</th><th>{headers[1]}</th><th>{headers[2]}</th></tr></thead>"
+                f"<tbody>{body}</tbody></table>"
+            )
+
+        parts = [
+            "<h2>合规映射（等保 2.0 / OWASP Top 10）</h2>",
+            "<p>按已确认漏洞的合规标签聚合；条款以编号呈现，便于对照 GB/T 22239-2019 与 OWASP 官方定义核实。</p>",
+            _table("等级保护 2.0 条款命中", ("条款", "漏洞数", "涉及漏洞"), summary["dengbao"], "clause"),
+            _table("OWASP Top 10 类别命中", ("类别", "漏洞数", "涉及漏洞"), summary["owasp"], "category"),
+        ]
+        return "".join(parts)
+
     def sorted_results(self, confirmed_first: bool = True) -> List[ScanResult]:
         """排序结果：CONFIRMED 在前，同状态按危害度 high→medium→low→其他排序"""
         sev_order = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
@@ -343,6 +404,9 @@ class ReportBuilder:
                 f"<tbody>{''.join(rows_vm)}</tbody></table>"
             )
 
+        # G5：合规映射章节（等保 2.0 / OWASP，报告级而非附表）
+        compliance_html = self.render_compliance_html()
+
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -408,6 +472,7 @@ function toggleFilter() {{
 {donut_svg}
 {filter_html}
 {version_html}
+{compliance_html}
 <h2>详细结果</h2>
 <table>
   <thead>

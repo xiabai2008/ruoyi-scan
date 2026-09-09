@@ -81,6 +81,12 @@ def build_parser():
     group = parser.add_argument_group("报告")
     group.add_argument("--report-format", default="all", help="报告格式 html/json/csv/pdf/docx/xlsx/sarif")
     group.add_argument(
+        "--remediation",
+        default=None,
+        metavar="BASELINE_JSON",
+        help="整改复测：与基线对比出整改验证报告（复测扫描后执行）",
+    )
+    group.add_argument(
         "--report-template",
         default=None,
         metavar="PATH",
@@ -298,6 +304,7 @@ def print_help():
         ("--nuclei-validate <path>", "校验 nuclei 模板（不扫描）"),
         ("--report-format <f>", "报告格式 html/json/csv/pdf/docx/xlsx/sarif"),
         ("--report-template <path>", "docx 合规报告模板（占位符注入，G5）"),
+        ("--remediation <baseline.json>", "整改复测：与基线对比出整改验证报告（G5）"),
         ("--no-dedup", "关闭结果去重聚合"),
         ("--chain <name>", "执行漏洞利用链"),
         ("--chain-list", "列出所有可用的漏洞利用链"),
@@ -458,6 +465,7 @@ def main(argv=None):
             args.cve_sync,
             args.cve_id,
             args.cve_offline is not None,
+            args.remediation,
             args.web_ui,
             args.distributed,
             args.cache_stats,
