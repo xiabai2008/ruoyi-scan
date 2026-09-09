@@ -358,6 +358,15 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         for p in paths:
             print(f"{GREEN}[*]报告已生成：{p}{RESET}")
 
+        # G5：合规报告模板渲染（安服交付物定制）
+        if getattr(args, "report_template", None):
+            from lib.report_template import render_docx_template
+
+            tpl_out = os.path.join(args.report, "report_custom.docx")
+            tpl_path = render_docx_template(args.report_template, builder, tpl_out)
+            if tpl_path:
+                print(f"{GREEN}[*]模板报告已生成：{tpl_path}{RESET}")
+
         # D20：保存基线 / 差异对比
         if getattr(args, "save_baseline", False):
             from lib.diff_scan import save_baseline

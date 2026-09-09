@@ -1,0 +1,187 @@
+{
+  "schema": "ruoyi-scan-offline-cve",
+  "updated": "2026-09-09",
+  "source": "auto-generated from data/component_cve_map.json by scripts/build_offline_cve.py",
+  "entries": [
+    {
+      "id": "CVE-2021-29441",
+      "aliases": [],
+      "component": "nacos",
+      "cvss": 10.0,
+      "severity": "CRITICAL",
+      "fix": "1.4.2+ / 2.0.0+",
+      "description": "AuthFilter 鉴权绕过，未授权访问管理接口"
+    },
+    {
+      "id": "CVE-2021-44228",
+      "aliases": [],
+      "component": "log4j",
+      "cvss": 10.0,
+      "severity": "CRITICAL",
+      "fix": "2.15.0+（建议 2.17.1+）",
+      "description": "Log4Shell JNDI 注入 RCE"
+    },
+    {
+      "id": "CVE-2016-4437",
+      "aliases": [],
+      "component": "shiro",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "1.2.5+（强烈建议 1.4.2+ 并更换默认密钥）",
+      "description": "rememberMe 默认密钥反序列化 RCE"
+    },
+    {
+      "id": "CVE-2019-17558",
+      "aliases": [],
+      "component": "solr",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "8.3.1+",
+      "description": "VelocityResponseWriter 模板注入 RCE（需启用 Velocity 插件，建议人工复核）"
+    },
+    {
+      "id": "CVE-2019-7600",
+      "aliases": [],
+      "component": "kibana",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "6.6.1+（建议 7.x）",
+      "description": "Timelion 原型链污染 RCE"
+    },
+    {
+      "id": "CVE-2020-1938",
+      "aliases": [],
+      "component": "tomcat",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "9.0.31+ / 8.5.51+ / 7.0.100+",
+      "description": "Ghostcat AJP 文件包含/读取（需 AJP 8009 端口可达，HTTP 探测仅版本比对，需人工确认 AJP 暴露）"
+    },
+    {
+      "id": "CVE-2021-37580",
+      "aliases": [],
+      "component": "shenyu",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "2.4.1+",
+      "description": "ShenYu Admin JWT 鉴权绕过未授权访问（需人工复核控制台暴露面）"
+    },
+    {
+      "id": "CVE-2022-22965",
+      "aliases": [],
+      "component": "spring-boot",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "2.6.15+ / 2.7.x",
+      "description": "Spring4Shell 远程代码执行（Spring Framework <5.3.18/<5.2.20，需确认 spring-webmvc 组件）"
+    },
+    {
+      "id": "CVE-2022-25845",
+      "aliases": [],
+      "component": "fastjson",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "1.2.83 / 2.0.64",
+      "description": "fastjson 反序列化绕过 autoType 限制，可致 RCE"
+    },
+    {
+      "id": "CVE-2023-25551",
+      "aliases": [],
+      "component": "nacos",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "2.2.3+",
+      "description": "Nacos 配置中心越权/权限绕过"
+    },
+    {
+      "id": "CVE-2023-34478",
+      "aliases": [],
+      "component": "shiro",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "1.12.0+",
+      "description": "默认密钥反序列化 RCE（需确认未更换密钥）"
+    },
+    {
+      "id": "CVE-2024-23897",
+      "aliases": [],
+      "component": "jenkins",
+      "cvss": 9.8,
+      "severity": "CRITICAL",
+      "fix": "2.442+",
+      "description": "CLI 任意文件读取（默认开启 CLI，可读取凭据/密钥，常被组合利用致 RCE）"
+    },
+    {
+      "id": "CVE-2021-45046",
+      "aliases": [],
+      "component": "log4j",
+      "cvss": 9.0,
+      "severity": "CRITICAL",
+      "fix": "2.16.0+（建议 2.17.1+）",
+      "description": "Log4Shell 绕过修复的变种"
+    },
+    {
+      "id": "CVE-2017-12615",
+      "aliases": [],
+      "component": "tomcat",
+      "cvss": 8.1,
+      "severity": "HIGH",
+      "fix": "7.0.80+",
+      "description": "Windows PUT 任意文件写入 RCE（需 readonly=false，建议人工复核）"
+    },
+    {
+      "id": "CVE-2018-1275",
+      "aliases": [],
+      "component": "spring-boot",
+      "cvss": 7.5,
+      "severity": "HIGH",
+      "fix": "2.0+",
+      "description": "Spring Framework 反射绕过漏洞"
+    },
+    {
+      "id": "CVE-2020-1957",
+      "aliases": [],
+      "component": "shiro",
+      "cvss": 7.5,
+      "severity": "HIGH",
+      "fix": "1.5.3+",
+      "description": "Spring 集成下路径绕过认证"
+    },
+    {
+      "id": "CVE-2021-34429",
+      "aliases": [],
+      "component": "jetty",
+      "cvss": 7.5,
+      "severity": "HIGH",
+      "fix": "9.4.43+ / 10.0.9+",
+      "description": "URI 编码绕过读取 WEB-INF 敏感信息"
+    },
+    {
+      "id": "CVE-2021-43798",
+      "aliases": [],
+      "component": "grafana",
+      "cvss": 7.5,
+      "severity": "HIGH",
+      "fix": "8.3.1+",
+      "description": "未授权目录穿越读取任意文件（/public/plugins/）"
+    },
+    {
+      "id": "CVE-2023-46749",
+      "aliases": [],
+      "component": "shiro",
+      "cvss": 7.5,
+      "severity": "HIGH",
+      "fix": "1.13.0+",
+      "description": "认证绕过漏洞"
+    },
+    {
+      "id": "CVE-2021-44832",
+      "aliases": [],
+      "component": "log4j",
+      "cvss": 6.6,
+      "severity": "MEDIUM",
+      "fix": "2.17.1+",
+      "description": "JDBC Appender 反序列化"
+    }
+  ]
+}

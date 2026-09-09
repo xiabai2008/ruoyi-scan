@@ -5,6 +5,7 @@ import os
 import socket
 import sys
 import threading
+from unittest import mock
 import time
 import urllib.request
 
@@ -344,3 +345,34 @@ if __name__ == "__main__":
     import pytest
 
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+def test_discover_js_endpoint_extraction():
+    """深扫爬虫增强：crawl_with_js_urls 的 JS 文件经 JSExtractor 提取 API 路径（来源 js）"""
+    admin = FakeSession(
+        {
+            "http://t/": FakeResp("<html><body>index</body></html>", 200),
+            "http://t/app.js": FakeResp(
+                'fetch("/system/operlog/detail");axios.get("/monitor/server/info")',
+                200,
+                headers={"Content-Type": "application/javascript"},
+            ),
+        }
+    )
+    scanner = AuthSurfaceScanner("http://t", admin, use_crawler=True)
+
+    fake_crawler = mock.MagicMock()
+    fake_crawler.crawl_with_js_urls.return_value = {
+        "pages": ["http://t/"],
+        "js": ["/app.js"],
+        "all": ["http://t/"],
+    }
+    with mock.patch("lib.crawler.Crawler", return_value=fake_crawler):
+        candidates = scanner.discover()
+
+    by_path = dict(candidates)
+    # 字典路径仍存在
+    assert "/system/user/list" in by_path and by_path["/system/user/list"] == "dict"
+    # JS 提取的两个 API 路径来源为 js（SPA 场景的核心增量）
+    assert by_path.get("/system/operlog/detail") == "js"
+    assert by_path.get("/monitor/server/info") == "js"

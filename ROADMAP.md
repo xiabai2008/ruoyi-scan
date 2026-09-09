@@ -36,9 +36,9 @@
 
 | 方向 | 现状 | 目标 |
 |------|------|------|
-| 认证后深度扫描 | ~~插件以未授权检测为主~~ **已落地（`lib/auth_surface.py`，`--auth-surface`）**：登录态资产盘点 + 越权矩阵（匿名重放 / 低权重放）+ lab 认证区签名靶场 | 深化：爬虫端点发现增强、水平越权（IDOR）与盘点联动、微服务 API 资产图谱 |
+| 认证后深度扫描 | ~~插件以未授权检测为主~~ **已落地（`lib/auth_surface.py`，`--auth-surface`）**：登录态资产盘点 + 越权矩阵 + lab 认证区签名靶场；**爬虫/JS 端点提取已接入（`crawl_with_js_urls` + JSExtractor）** | 深化：水平越权（IDOR）与盘点联动、微服务 API 资产图谱 |
 | 组件版本检测 | ~~5 个组件~~ **20 个组件（G1 已落地，`lib/component_detect.py`）** | 扩展至 30+ 并补 SnakeYAML 等库级组件；从报错页 / actuator / favicon 提取版本特征 |
-| CVE 数据源 | ~~仅 NVD~~ **NVD + GHSA 双源（G1 已落地，`lib/cve_sync.py`）** | 增加 **CNVD / CNNVD**；离线 CVE 库随 wheel 分发（国内安服刚需） |
+| CVE 数据源 | ~~仅 NVD~~ **NVD + GHSA + CNVD（best-effort）+ 离线库四源（已落地，`lib/cve_sync.py`）** | CNNVD 源评估；离线库 CNVD 别名人工扩充 |
 | 若依变体矩阵 | `core/ruoyi_versions.py` 覆盖 4.2 / 4.7 / v5 / 3.9 / Cloud 里程碑 | 补全 RuoYi-Vue-Plus、RuoYi-App、小程序端点的路由差异与 POC 过滤 |
 | nuclei 兼容升级 | http 协议子集 + 安全白名单（`lib/nuclei_loader.py`） | 扩展协议子集覆盖；向 nuclei-templates 上游贡献若依专项模板（借生态流量） |
 
@@ -98,8 +98,10 @@
 商业价值最高、竞争最少的差异化方向——现有 7 种报告格式 + 等保模板（`dengbao`）+
 baseline diff 离真实痛点只差一步：
 
-- **安服报告模板引擎**：docx 模板变量注入，安服公司套用自己的渗透测试报告模板
-  一键出交付物——国内安服高频痛点
+- ~~**安服报告模板引擎**~~ **已落地（`lib/report_template.py`，`--report-template`）**：docx 模板占位符注入
+  （标量 + `{{vuln_table}}` 定点插表 + `{{vuln_details}}` 详述），安服公司套用自己的模板一键出交付物
+- **整改复测工作流**：`--diff` 升级为「整改验证报告」——复测是安服第二高频交付物
+- **等保 2.0 / 关基映射深化**：CWE → OWASP / 等保映射从附表升级为报告级章节
 - **整改复测工作流**：`--diff` 升级为「整改验证报告」——复测是安服第二高频交付物
 - **等保 2.0 / 关基映射深化**：CWE → OWASP / 等保映射从附表升级为报告级章节
 

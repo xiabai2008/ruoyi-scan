@@ -124,8 +124,8 @@ include = ["common*", "cli*", "core*", "lib*", "api*", "plugins*", "config*", "c
 exclude = ["tests*", "lab*", "web*", "monitoring*", ".github*", ".reasonix*"]
 
 [tool.setuptools.package-data]
-# 字典文件必须随包分发（安装版 Druid 爆破/默认口令依赖 data/*.txt）
-data = ["*.txt"]
+# 字典与数据文件必须随包分发（Druid 爆破字典 + 组件 CVE 映射 + 离线 CVE 库）
+data = ["*.txt", "*.json"]
 
 # ── 开发工具配置 ──
 

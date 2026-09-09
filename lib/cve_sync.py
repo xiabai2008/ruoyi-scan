@@ -24,6 +24,7 @@
 import datetime
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
@@ -39,6 +40,9 @@ logger = get_logger(__name__)
 NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 GHSA_API_BASE = "https://api.github.com/advisories"
 GHSA_TOKEN_ENV = "RUOYI_SCAN_GHSA_TOKEN"  # 可选 GitHub PAT，提升速率限制
+CNVD_BASE = "https://www.cnvd.org.cn/flaw"  # G1：CNVD 漏洞库（无官方 API，网页抓取 best-effort）
+OFFLINE_CVE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "cve_offline.json")
+_OFFLINE_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
 CACHE_DIR = "data/cve_cache"
 CACHE_TTL_HOURS = 24  # 缓存有效期 24 小时
 
@@ -443,6 +447,127 @@ def parse_ghsa_response(advisory: Dict[str, Any]) -> Optional[CVEInfo]:
 # ============================================================
 
 
+# ============================================================
+# 离线 CVE 库 + CNVD 源（G1）
+# ============================================================
+
+
+def _load_offline() -> Dict[str, Dict[str, Any]]:
+    """加载离线 CVE 库（data/cve_offline.json，随包分发），按 id/别名建索引
+
+    Returns:
+        {编号大写: 条目}；文件缺失/损坏返回 {}（离线兜底静默降级）
+    """
+    global _OFFLINE_CACHE
+    if _OFFLINE_CACHE is not None:
+        return _OFFLINE_CACHE
+    index: Dict[str, Dict[str, Any]] = {}
+    try:
+        with open(OFFLINE_CVE_PATH, encoding="utf-8") as f:
+            doc = json.load(f)
+        for entry in doc.get("entries", []):
+            ids = [entry.get("id", "")] + list(entry.get("aliases", []))
+            for iid in ids:
+                if iid:
+                    index[iid.upper()] = entry
+    except (OSError, json.JSONDecodeError):
+        logger.debug("离线 CVE 库加载失败（%s）", OFFLINE_CVE_PATH, exc_info=True)
+    _OFFLINE_CACHE = index
+    return index
+
+
+def lookup_offline(cve_id: str) -> Optional[CVEInfo]:
+    """从离线库按 CVE/CNVD 编号查询（内网兜底，零网络依赖）
+
+    Returns:
+        CVEInfo（source='offline'）或 None
+    """
+    entry = _load_offline().get(cve_id.upper())
+    if not entry:
+        return None
+    return CVEInfo(
+        cve_id=entry.get("id", cve_id),
+        description=entry.get("description", ""),
+        cvss_score=float(entry.get("cvss", 0.0)),
+        severity=entry.get("severity", ""),
+        references=[],
+        cwe=[],
+        source="offline",
+    )
+
+
+def search_offline(component: str = "") -> List[CVEInfo]:
+    """按组件列出离线库条目（--cve-offline 内网排查用）
+
+    Args:
+        component: 组件名（空 = 全部）
+
+    Returns:
+        CVEInfo 列表（source='offline'，按 CVSS 降序）
+    """
+    seen = set()
+    results: List[CVEInfo] = []
+    for entry in _load_offline().values():
+        if component and entry.get("component", "") != component:
+            continue
+        info = lookup_offline(entry.get("id", ""))
+        if info and info.cve_id not in seen:
+            seen.add(info.cve_id)
+            results.append(info)
+    return sorted(results, key=lambda x: -x.cvss_score)
+
+
+def query_cnvd(keyword: str, timeout: int = 10) -> Optional[CVEInfo]:
+    """从 CNVD（国家信息安全漏洞共享平台）查询漏洞信息
+
+    注意：CNVD 无官方公开 REST API，本实现基于官网漏洞列表页抓取（best-effort），
+    反爬/网络不可达时静默返回 None（不阻断查询链）。
+
+    Args:
+        keyword: CVE/CNVD 编号或关键字
+        timeout: 请求超时秒数
+
+    Returns:
+        CVEInfo（source='cnvd'）或 None
+    """
+    url = f"{CNVD_BASE}/list?keyword={urllib.parse.quote(keyword)}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Ruoyi-Scan/1.3",
+        "Accept": "text/html",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    return parse_cnvd_response(html, keyword=keyword)
+
+
+def parse_cnvd_response(html: str, keyword: str = "") -> Optional[CVEInfo]:
+    """解析 CNVD 列表页 HTML → CVEInfo（best-effort，页面改版时静默失败）
+
+    Returns:
+        CVEInfo（source='cnvd'）或 None（未解析到结果）
+    """
+    # 列表页第一条结果的 CNVD 编号（/flaw/show/CNVD-YYYY-XXXXX）
+    m = re.search(r"/flaw/show/(CNVD-\d{4}-\d+)", html)
+    if not m:
+        return None
+    cnvd_id = m.group(1)
+    description = ""
+    if keyword.upper() in html.upper():
+        # 尽力提取结果行附近的标题文本（页面结构无稳定 id/class，正则兜底）
+        idx = html.upper().find(keyword.upper())
+        snippet = re.sub(r"<[^>]+>", " ", html[idx : idx + 400])
+        description = re.sub(r"\s+", " ", snippet).strip()
+    return CVEInfo(
+        cve_id=cnvd_id,
+        description=description[:300],
+        source="cnvd",
+    )
+
+
 def lookup_cve(cve_id: str, use_cache: bool = True, api_key: str = None) -> Optional[CVEInfo]:
     """查询单个 CVE（缓存优先，NVD 主源 + GHSA 回退）
 
@@ -463,9 +588,14 @@ def lookup_cve(cve_id: str, use_cache: bool = True, api_key: str = None) -> Opti
     # 查询 NVD API（主源）
     cve = query_nvd_api(cve_id, api_key=api_key)
 
-    # G1：NVD 未命中/不可达时回退 GHSA（国内网络环境可达性常更好）
+    # G1：NVD 未命中/不可达时逐级回退：
+    #   GHSA（国内可达性好）→ CNVD（无官方 API，网页抓取 best-effort）→ 离线库（内网兜底）
     if cve is None:
         cve = query_ghsa(cve_id)
+    if cve is None:
+        cve = query_cnvd(cve_id)
+    if cve is None:
+        cve = lookup_offline(cve_id)
 
     if cve:
         save_to_cache(cve)
@@ -612,6 +742,18 @@ def run_cve_sync_mode(args) -> int:
         else:
             print(f"[!]未找到 CVE: {cve_id}")
             return 1
+
+    # G1：按组件查离线 CVE 库（内网模式）
+    component = getattr(args, "cve_offline", None)
+    if component is not None:
+        results = search_offline(component=component)
+        if not results:
+            print(f"[!]离线库中未找到组件 {component or '(全部)'} 的 CVE（可运行 scripts/build_offline_cve.py 更新）")
+            return 1
+        print(f"[+]离线 CVE 库（{'组件 ' + component if component else '全部'}）: {len(results)} 条")
+        for info in results:
+            print(f"    {info.cve_id}  CVSS {info.cvss_score}  {info.severity}  {info.description[:60]}")
+        return 0
 
     # 同步所有插件
     print("[*]扫描插件库中的 CVE 编号...")

@@ -80,6 +80,12 @@ def build_parser():
 
     group = parser.add_argument_group("报告")
     group.add_argument("--report-format", default="all", help="报告格式 html/json/csv/pdf/docx/xlsx/sarif")
+    group.add_argument(
+        "--report-template",
+        default=None,
+        metavar="PATH",
+        help="docx 合规报告模板（{{target}}/{{total}}/{{vuln_table}} 等占位符，G5）",
+    )
     group.add_argument("--no-dedup", action="store_true", default=False, help="关闭结果去重")
 
     group = parser.add_argument_group("D6 利用链")
@@ -214,6 +220,12 @@ def build_parser():
     group = parser.add_argument_group("D32 CVE 同步")
     group.add_argument("--cve-sync", action="store_true", default=False, help="同步 NVD CVE")
     group.add_argument("--cve-id", default=None, metavar="CVE-ID", help="查询 CVE 信息")
+    group.add_argument(
+        "--cve-offline",
+        default=None,
+        metavar="COMPONENT",
+        help="按组件查离线 CVE 库（内网模式，空串=全部）",
+    )
     group.add_argument("--nvd-api-key", default=None, help="NVD API Key")
 
     group = parser.add_argument_group("D33 SIEM 集成")
@@ -285,6 +297,7 @@ def print_help():
         ("--nuclei-exclude-tags <a,b>", "排除含指定 tag 的模板"),
         ("--nuclei-validate <path>", "校验 nuclei 模板（不扫描）"),
         ("--report-format <f>", "报告格式 html/json/csv/pdf/docx/xlsx/sarif"),
+        ("--report-template <path>", "docx 合规报告模板（占位符注入，G5）"),
         ("--no-dedup", "关闭结果去重聚合"),
         ("--chain <name>", "执行漏洞利用链"),
         ("--chain-list", "列出所有可用的漏洞利用链"),
@@ -342,6 +355,7 @@ def print_help():
         ("--surface-output <path>", "资产清单 JSON 输出路径"),
         ("--cve-sync", "同步 NVD CVE 信息"),
         ("--cve-id <CVE-ID>", "查询单个 CVE 信息"),
+        ("--cve-offline <component>", "按组件查离线 CVE 库（内网模式）"),
         ("--nvd-api-key <key>", "NVD API Key"),
         ("--siem-export <fmt>", "导出 SIEM 格式"),
         ("--siem-output <path>", "SIEM 导出路径"),
@@ -443,6 +457,7 @@ def main(argv=None):
             args.oast_server,
             args.cve_sync,
             args.cve_id,
+            args.cve_offline is not None,
             args.web_ui,
             args.distributed,
             args.cache_stats,

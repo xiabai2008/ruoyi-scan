@@ -4,6 +4,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Added
+- **G1 CNVD 源 + 离线 CVE 库**: `lib/cve_sync.py` 查询链扩展为 NVD → GHSA → **CNVD（无官方 API，网页抓取 best-effort，反爬静默降级）→ 离线库（内网兜底）**；新增 `data/cve_offline.json` 随包分发（20 条精选组件 CVE，scripts/build_offline_cve.py 从 component_cve_map 自动生成，--merge 保留手工 CNVD 别名）；新增 `--cve-offline <component>` 内网排查命令；**修复 package-data 只分发 *.txt 导致 component_cve_map.json 未随 wheel 发布的 bug**（安装版组件检测 CVE 比对此前空转）
+- **G1 深扫爬虫增强**: `lib/auth_surface.py` 爬虫分支升级为 `crawl_with_js_urls` + `JSExtractor`——RuoYi-Vue/Plus 为 SPA，管理 API 路径多藏于 JS 包，纯 HTML 爬取覆盖不足，现从 JS 包提取 API 路径（来源标记 js）并入盘点
+- **G5 合规报告模板引擎**: 新增 `lib/report_template.py`——安服公司用自己的 docx 报告模板（公司抬头/Logo/整改声明），扫描后一键出交付物；占位符 `{{target}}/{{scan_date}}/{{total}}/{{high}}` 等标量注入 + `{{vuln_table}}`（定点插入漏洞明细表，低层 XML）+ `{{vuln_details}}`（逐漏洞详述）；`--report-template <path>` 一键启用，`fail_on_unresolved` 模板校验模式
+
 ## [1.3.0] - 2026-09-08
 
 ### Added

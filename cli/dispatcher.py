@@ -67,7 +67,7 @@ def dispatch(args: Namespace) -> None:
 
         run_oast_mode(args)
         return
-    if args.cve_sync or args.cve_id:
+    if args.cve_sync or args.cve_id or getattr(args, "cve_offline", None) is not None:
         from lib.cve_sync import run_cve_sync_mode
 
         run_cve_sync_mode(args)

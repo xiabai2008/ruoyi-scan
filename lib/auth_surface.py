@@ -237,18 +237,31 @@ class AuthSurfaceScanner:
             except Exception:
                 logger.debug("页面端点提取失败: %s", page, exc_info=True)
 
-        # 3. 可选浅层爬虫（登录态会话，同 host 链接）
+        # 3. 可选深扫爬虫（登录态会话）：HTML 链接 + JS 端点提取
+        #    RuoYi-Vue/Plus 为 SPA，管理 API 路径多藏于 JS 包中（/system/user/list 等），
+        #    纯 HTML 爬取覆盖不足——用 crawl_with_js_urls 抓 JS 文件后经 JSExtractor 提取。
         if self.use_crawler:
             try:
                 from lib.crawler import Crawler
+                from lib.js_extractor import JSExtractor
 
                 crawler = Crawler(max_depth=1, max_pages=self.max_crawl_pages)
-                for u in crawler.crawl(self.target + "/", self.admin_session):
+                crawled = crawler.crawl_with_js_urls(self.target + "/", self.admin_session)
+                for u in crawled.get("all", []):
                     path = u.split("://", 1)[-1].split("/", 1)
                     if len(path) == 2 and path[1]:
                         _add("/" + path[1].split("?")[0], "crawl")
+                # JS 端点提取（登录态会话下载 JS 包，SPA API 路径主要来源）
+                js_urls = [join_url(self.target, js) if js.startswith("/") else js for js in crawled.get("js", [])]
+                for ep in JSExtractor(min_path_segments=2).extract_from_urls(js_urls, self.admin_session):
+                    p = ep.url
+                    if p.startswith("http"):
+                        path_part = p.split("://", 1)[-1].split("/", 1)
+                        p = "/" + path_part[1] if len(path_part) == 2 and path_part[1] else ""
+                    if p and p.startswith("/"):
+                        _add(p.split("?")[0], "js")
             except Exception:
-                logger.debug("爬虫端点发现失败（忽略，不影响字典路径）", exc_info=True)
+                logger.debug("爬虫/JS 端点发现失败（忽略，不影响字典路径）", exc_info=True)
 
         return candidates
 
