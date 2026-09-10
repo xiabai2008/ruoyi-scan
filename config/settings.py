@@ -47,8 +47,9 @@ PASSWORD_DICT_BY_LEVEL = {
     "full": _dict_path("password.txt"),
 }
 
-# 报告输出目录
-REPORT_DIR = os.path.join(BASE_DIR, "reports")
+# 报告输出目录（RUOYI_SCAN_REPORT_DIR 可覆盖：PyInstaller 冻结环境重定向到用户目录，
+# 避免 Program Files 只读导致报告写入失败；源码运行保持默认 reports/）
+REPORT_DIR = os.environ.get("RUOYI_SCAN_REPORT_DIR") or os.path.join(BASE_DIR, "reports")
 
 # Druid 爆破用户名清单（沿用原 web_login，6 个）
 DRUID_USERS = ["ruoyi", "druid", "admin", "admin123", "auth", "123456"]

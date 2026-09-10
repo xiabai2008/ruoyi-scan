@@ -1,0 +1,419 @@
+{
+ "viewport": [
+  1440,
+  900
+ ],
+ "overflow": [
+  {
+   "label": "div.flex.items-center.gap-2",
+   "rect": [
+    241,
+    863,
+    1415,
+    907
+   ]
+  },
+  {
+   "label": "div.flex.items-center.gap-2",
+   "rect": [
+    241,
+    907,
+    1415,
+    950
+   ]
+  },
+  {
+   "label": "span.w-[84px]",
+   "rect": [
+    255,
+    916,
+    339,
+    940
+   ]
+  },
+  {
+   "label": "span.font-mono.text-[9.5px]",
+   "rect": [
+    255,
+    925,
+    272,
+    938
+   ]
+  },
+  {
+   "label": "span.flex-1.truncate.text-[11.5px]",
+   "rect": [
+    347,
+    920,
+    973,
+    937
+   ]
+  },
+  {
+   "label": "span.w-[200px].truncate.font-mono",
+   "rect": [
+    981,
+    921,
+    1181,
+    936
+   ]
+  },
+  {
+   "label": "span.w-[108px]",
+   "rect": [
+    1189,
+    915,
+    1297,
+    942
+   ]
+  },
+  {
+   "label": "span.inline-flex.h-[22px].w-[92px]",
+   "rect": [
+    1189,
+    920,
+    1281,
+    942
+   ]
+  },
+  {
+   "label": "span.w-[96px].font-mono.text-[10.5px]",
+   "rect": [
+    1305,
+    921,
+    1401,
+    936
+   ]
+  },
+  {
+   "label": "div.flex.items-center.gap-2",
+   "rect": [
+    241,
+    950,
+    1415,
+    994
+   ]
+  },
+  {
+   "label": "span.w-[84px]",
+   "rect": [
+    255,
+    960,
+    339,
+    984
+   ]
+  },
+  {
+   "label": "span.font-mono.text-[9.5px]",
+   "rect": [
+    255,
+    969,
+    272,
+    982
+   ]
+  },
+  {
+   "label": "span.flex-1.truncate.text-[11.5px]",
+   "rect": [
+    347,
+    964,
+    973,
+    981
+   ]
+  },
+  {
+   "label": "span.w-[200px].truncate.font-mono",
+   "rect": [
+    981,
+    964,
+    1181,
+    980
+   ]
+  },
+  {
+   "label": "span.w-[108px]",
+   "rect": [
+    1189,
+    958,
+    1297,
+    986
+   ]
+  },
+  {
+   "label": "span.inline-flex.h-[22px].w-[92px]",
+   "rect": [
+    1189,
+    964,
+    1281,
+    986
+   ]
+  },
+  {
+   "label": "span.w-[96px].font-mono.text-[10.5px]",
+   "rect": [
+    1305,
+    964,
+    1401,
+    980
+   ]
+  },
+  {
+   "label": "div.flex.items-center.gap-2",
+   "rect": [
+    241,
+    994,
+    1415,
+    1038
+   ]
+  },
+  {
+   "label": "span.w-[84px]",
+   "rect": [
+    255,
+    1004,
+    339,
+    1028
+   ]
+  },
+  {
+   "label": "span.font-mono.text-[9.5px]",
+   "rect": [
+    255,
+    1013,
+    272,
+    1026
+   ]
+  },
+  {
+   "label": "span.flex-1.truncate.text-[11.5px]",
+   "rect": [
+    347,
+    1007,
+    973,
+    1025
+   ]
+  },
+  {
+   "label": "span.w-[200px].truncate.font-mono",
+   "rect": [
+    981,
+    1008,
+    1181,
+    1024
+   ]
+  },
+  {
+   "label": "span.w-[108px]",
+   "rect": [
+    1189,
+    1002,
+    1297,
+    1030
+   ]
+  },
+  {
+   "label": "span.inline-flex.h-[22px].w-[92px]",
+   "rect": [
+    1189,
+    1008,
+    1281,
+    1030
+   ]
+  },
+  {
+   "label": "span.w-[96px].font-mono.text-[10.5px]",
+   "rect": [
+    1305,
+    1008,
+    1401,
+    1024
+   ]
+  },
+  {
+   "label": "div.flex.items-center.gap-2",
+   "rect": [
+    241,
+    1038,
+    1415,
+    1082
+   ]
+  },
+  {
+   "label": "span.w-[84px]",
+   "rect": [
+    255,
+    1048,
+    339,
+    1072
+   ]
+  },
+  {
+   "label": "span.font-mono.text-[9.5px]",
+   "rect": [
+    255,
+    1057,
+    272,
+    1070
+   ]
+  },
+  {
+   "label": "span.flex-1.truncate.text-[11.5px]",
+   "rect": [
+    347,
+    1051,
+    973,
+    1068
+   ]
+  },
+  {
+   "label": "span.w-[200px].truncate.font-mono",
+   "rect": [
+    981,
+    1052,
+    1181,
+    1068
+   ]
+  },
+  {
+   "label": "span.w-[108px]",
+   "rect": [
+    1189,
+    1046,
+    1297,
+    1074
+   ]
+  },
+  {
+   "label": "span.inline-flex.h-[22px].w-[92px]",
+   "rect": [
+    1189,
+    1052,
+    1281,
+    1074
+   ]
+  },
+  {
+   "label": "span.w-[96px].font-mono.text-[10.5px]",
+   "rect": [
+    1305,
+    1052,
+    1401,
+    1068
+   ]
+  }
+ ],
+ "edge": [
+  {
+   "label": "html",
+   "rect": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "body",
+   "rect": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "div#root",
+   "rect": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "div.theme-fade.relative.flex",
+   "rect": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "main.flex.min-w-0.flex-1",
+   "rect": [
+    216,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "div.flex.h-full.flex-col",
+   "rect": [
+    216,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "label": "div.flex.items-center.justify-between",
+   "rect": [
+    216,
+    0,
+    1440,
+    75
+   ]
+  },
+  {
+   "label": "div.flex.gap-3.5.px-6",
+   "rect": [
+    216,
+    75,
+    1440,
+    203
+   ]
+  },
+  {
+   "label": "div.flex.gap-3.5.px-6",
+   "rect": [
+    216,
+    203,
+    1440,
+    471
+   ]
+  },
+  {
+   "label": "div.flex.min-h-0.flex-1",
+   "rect": [
+    216,
+    471,
+    1440,
+    900
+   ]
+  }
+ ],
+ "canvases": [
+  {
+   "rect": [
+    255,
+    262,
+    1027,
+    456
+   ],
+   "w": 772,
+   "h": 194
+  },
+  {
+   "rect": [
+    1071,
+    262,
+    1241,
+    456
+   ],
+   "w": 170,
+   "h": 194
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default window capability",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-icon",
+    "dialog:default",
+    "notification:default"
+  ]
+}

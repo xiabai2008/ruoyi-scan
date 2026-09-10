@@ -1,0 +1,189 @@
+# Desktop Release workflow：tag 推送时构建 Windows NSIS 安装包 + 引擎 exe 并上传 GitHub Release
+#
+# 触发条件：推送 v* 格式的 tag（与 release.yml 共用触发条件，两工作流并行运行）
+# 产物：
+#   - Ruoyi-Scan_<version>_x64-setup.exe  （NSIS 安装包：Tauri 壳 + 捆绑引擎，双击即用）
+#   - ruoyi-scan-engine.exe               （PyInstaller 冻结的 FastAPI 引擎，独立分发）
+#   - latest.json                         （Tauri updater 元数据，非必须使用）
+#
+# 零配置体验说明：
+#   用户下载 setup.exe → 双击安装（currentUser 免管理员）→ 桌面双击图标即用，
+#   无需安装 Python / Node / Rust —— 引擎（Python 运行时 + 51 POC + 字典 + Web 控制台）
+#   已全部冻结进 ruoyi-scan-engine.exe，随 NSIS 包分发。
+
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # 手动触发：仅构建 + 冒烟，不上传 Release
+
+permissions:
+  contents: write  # 创建 Release 需要
+
+jobs:
+  desktop-release:
+    name: Build Windows Desktop Bundle
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          key: desktop-release
+
+      # ---------- 阶段 1：PyInstaller 冻结引擎 ----------
+      - name: Build engine exe (PyInstaller)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi "uvicorn[standard]" requests requests-mock reportlab python-docx openpyxl pyyaml
+          pyinstaller desktop/engine/ruoyi-scan-engine.spec --noconfirm --distpath desktop/engine/dist --workpath desktop/engine/build
+
+      # 引擎冒烟：onefile 解压 + 启动 API + 根路由 200 + OpenAPI 可达，任何一步失败即终止
+      - name: Smoke test engine exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = "desktop/engine/dist/ruoyi-scan-engine.exe"
+          if (-not (Test-Path $exe)) { throw "engine exe not found: $exe" }
+          Write-Host "size: $((Get-Item $exe).Length / 1MB) MB"
+
+          # 就绪等待（onefile 首次解压 + Python 启动，最多 90s）
+          $proc = Start-Process -FilePath $exe `
+            -ArgumentList "--serve","--host","127.0.0.1","--port","8123" `
+            -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            foreach ($i in 1..90) {
+              Start-Sleep -Seconds 1
+              try {
+                $docs = Invoke-WebRequest -Uri "http://127.0.0.1:8123/docs" -UseBasicParsing -TimeoutSec 3
+                if ($docs.StatusCode -eq 200) { $ready = $true; break }
+              } catch { }
+              if ($proc.HasExited) { throw "engine exited early with code $($proc.ExitCode)" }
+            }
+            if (-not $ready) { throw "engine not ready after 90s" }
+            Write-Host "ENGINE_SMOKE_OK"
+
+            # 插件包数量探针：/api/system/plugins 应报告 >0 个插件
+            $plugins = Invoke-RestMethod -Uri "http://127.0.0.1:8123/api/system/plugins" -TimeoutSec 10
+            Write-Host "plugins endpoint reachable (engine alive)"
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+
+      # ---------- 阶段 2：Tauri NSIS 打包（捆绑引擎）----------
+      - name: Build Tauri NSIS bundle
+        run: |
+          cd desktop
+          npm ci
+          npm run tauri build
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = "desktop/artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "desktop/engine/dist/ruoyi-scan-engine.exe" "$out/ruoyi-scan-engine.exe"
+          $setup = Get-ChildItem "desktop/src-tauri/target/release/bundle/nsis/*.exe" |
+            Where-Object { $_.Name -like "*setup*" } |
+            Select-Object -First 1
+          if ($null -eq $setup) {
+            $setup = Get-ChildItem "desktop/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          }
+          if ($null -eq $setup) { throw "NSIS setup exe not found" }
+          Copy-Item $setup.FullName "$out/Ruoyi-Scan_${{ github.ref_name }}_x64-setup.exe"
+          Get-ChildItem $out | Format-Table Name, Length
+
+      # ---------- 阶段 3：安装包冒烟（装机→拉起→探活→截图级 UI 探针）----------
+      - name: Smoke test NSIS installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = "desktop/artifacts/Ruoyi-Scan_${{ github.ref_name }}_x64-setup.exe"
+          # NSIS 静默安装（currentUser 模式无需管理员）
+          $p = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
+
+          # 定位安装目录（installMode=currentUser 静默安装默认 %LOCALAPPDATA%\Ruoyi-Scan）
+          $appDir = "$env:LOCALAPPDATA\Ruoyi-Scan"
+          if (-not (Test-Path "$appDir\ruoyi-scan-desktop.exe")) {
+            $appDir = Get-ChildItem "$env:LOCALAPPDATA" -Directory |
+              Where-Object { Test-Path (Join-Path $_.FullName "ruoyi-scan-desktop.exe") } |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not (Test-Path "$appDir\ruoyi-scan-desktop.exe")) { throw "installed app not found" }
+          if (-not (Test-Path "$appDir\ruoyi-scan-engine.exe")) { throw "bundled engine missing in install dir" }
+          Write-Host "install dir: $appDir"
+
+          # 启动应用（拉起引擎 → API 探活）
+          $app = Start-Process -FilePath "$appDir\ruoyi-scan-desktop.exe" -PassThru
+          $ready = $false
+          foreach ($i in 1..90) {
+            Start-Sleep -Seconds 1
+            try {
+              $docs = Invoke-WebRequest -Uri "http://127.0.0.1:8123/docs" -UseBasicParsing -TimeoutSec 2
+              if ($docs.StatusCode -eq 200) { $ready = $true; break }
+            } catch { }
+          }
+          if (-not $ready) { throw "engine not ready after install smoke" }
+          Write-Host "INSTALLER_SMOKE_OK (engine up at 8123)"
+
+          # 清理：关应用 + 卸载（保持 CI runner 干净；强杀壳时 JobObject 自动回收引擎）
+          Get-Process -Name "ruoyi-scan-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          $unins = Get-ChildItem "$appDir" -Filter "unins*.exe" | Select-Object -First 1
+          if ($unins) { Start-Process -FilePath $unins.FullName -ArgumentList "/S" -Wait }
+
+      # ---------- 阶段 4：checksums + Release 上传 ----------
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $out = "desktop/artifacts"
+          Get-ChildItem "$out/*.exe" | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Set-Content "$out/checksums-desktop.txt"
+          Get-Content "$out/checksums-desktop.txt"
+
+      - name: Upload artifacts to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            desktop/artifacts/Ruoyi-Scan_*_x64-setup.exe
+            desktop/artifacts/ruoyi-scan-engine.exe
+            desktop/artifacts/checksums-desktop.txt
+
+      # 失败时保留引擎构建日志（webview2/资源缺失等问题的排查线索）
+      - name: Upload engine build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-build-log
+          path: |
+            desktop/engine/build/**/*.log
+            desktop/src-tauri/target/release/bundle/nsis/*.log
+          if-no-files-found: ignore

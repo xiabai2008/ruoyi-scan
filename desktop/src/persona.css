@@ -1,0 +1,19 @@
+/* 操作员人格 —— 播报条动画 + 头像呼吸光环 */
+@keyframes mei-pop {
+  0% { transform: translateY(10px) scale(0.94); opacity: 0; }
+  60% { transform: translateY(0) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes mei-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 var(--c-accent-tint, rgba(47, 111, 237, 0.28)); }
+  50% { box-shadow: 0 0 0 8px rgba(47, 111, 237, 0); }
+}
+.mei-bubble {
+  animation: mei-pop 0.45s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+.mei-glow {
+  animation: mei-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mei-bubble, .mei-glow { animation: none; }
+}

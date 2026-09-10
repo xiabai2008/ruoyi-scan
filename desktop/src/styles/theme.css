@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ---- 设计 token → Tailwind 工具类映射（值随 data-theme 实时变化） ---- */
+@theme inline {
+  --color-page: var(--c-bg-page);
+  --color-sidebar: var(--c-bg-sidebar);
+  --color-card: var(--c-card);
+  --color-cardsoft: var(--c-card-soft);
+  --color-zebra: var(--c-zebra);
+  --color-deep: var(--c-deep);
+  --color-bubble: var(--c-bubble-bg);
+  --color-activetab: var(--c-active-nav);
+  --color-line: var(--c-divider);
+  --color-edge: var(--c-border);
+  --color-edge-soft: var(--c-border-soft);
+  --color-edge-ghost: var(--c-ghost-border);
+  --color-grid: var(--c-grid-line);
+  --color-ink: var(--c-text-primary);
+  --color-ink-2: var(--c-text-secondary);
+  --color-ink-3: var(--c-text-muted);
+  --color-legend: var(--c-legend-text);
+  --color-navnum: var(--c-nav-num);
+  --color-accent: var(--c-accent-primary);
+  --color-accent2: var(--c-accent-purple);
+  --color-pink: var(--c-accent-pink);
+  --color-btntext: var(--c-btn-text);
+  --color-red: var(--c-sem-red);
+  --color-redtint: var(--c-sem-red-tint);
+  --color-green: var(--c-sem-green);
+  --color-greentint: var(--c-sem-green-tint);
+  --color-amber: var(--c-sem-amber);
+  --color-ambertint: var(--c-sem-amber-tint);
+  --color-alertstroke: var(--c-alert-stroke);
+
+  --font-sans: "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --font-pixel: "JetBrains Mono", monospace;
+  --font-crt: "JetBrains Mono", monospace;
+  --font-chip: "JetBrains Mono", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--c-bg-page, #F2F7FD);
+  overflow: hidden;
+}
+
+/* ---- 终端区固定暗色（产品签名，主题无关） ---- */
+.crt {
+  --t-bg: #08080f;
+  --t-head: #12122a;
+  background: var(--t-bg);
+}
+
+/* ---- CRT 扫描线（视觉签名开关，data-crt="on" 生效） ---- */
+html[data-crt="on"] .crt {
+  position: relative;
+}
+html[data-crt="on"] .crt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(18, 230, 230, 0.05) 0px,
+    rgba(18, 230, 230, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 1;
+}
+html[data-crt="on"] .crt > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---- 滚动条 ---- */
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 3px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- 主题切换过渡 ---- */
+.theme-fade,
+.theme-fade * {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
