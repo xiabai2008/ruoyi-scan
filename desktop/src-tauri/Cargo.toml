@@ -1,6 +1,6 @@
 [package]
 name = "ruoyi-scan-desktop"
-version = "1.4.0"
+version = "1.4.1"
 description = "Ruoyi-Scan 桌面端 · 枚依控制台"
 authors = ["XIABAI"]
 edition = "2021"
