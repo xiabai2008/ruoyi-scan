@@ -2,6 +2,10 @@
  * 生成 GitHub 社交预览图（1280×640，符合 GitHub Social Preview 规范）
  * 用法：node desktop/scripts/make-social-preview.cjs
  * 产物：assets/social-preview.png（需在仓库 Settings → Social preview 手动上传，GitHub 无公开 API）
+ *
+ * 尺寸铁律：必须输出 1280×640。曾用 deviceScaleFactor:2 产出 2560×1280，
+ * GitHub 上传时直接报 "Something went really wrong and we can't process that picture."
+ * —— 超过 1280×640 的图它处理不了，且体积也没必要（GitHub 显示尺寸就是 1280×640）。
  */
 const path = require("path");
 const fs = require("fs");
@@ -20,7 +24,7 @@ const OUT = path.join(ROOT, "assets/social-preview.png");
   });
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 640, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1280, height: 640, deviceScaleFactor: 1 });
     await page.goto("file:///" + HTML.replace(/\\/g, "/"), { waitUntil: "networkidle0" });
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({
@@ -31,7 +35,7 @@ const OUT = path.join(ROOT, "assets/social-preview.png");
     });
     const size = fs.statSync(OUT).size;
     console.log(`OK  ${OUT}`);
-    console.log(`    ${(size / 1024).toFixed(0)} KB (2560x1280 @2x) — GitHub 上限 1MB`);
+    console.log(`    ${(size / 1024).toFixed(0)} KB (1280x640) — GitHub 上限 1MB`);
   } finally {
     await browser.close();
   }
