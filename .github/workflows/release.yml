@@ -128,3 +128,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          # tag 被强推重跑时（如修正桌面端后重发同版本 tag），同名产物已存在于 PyPI，
+          # 默认行为会 400 File already exists 导致整个 workflow 误报失败。
+          # skip-existing 让重跑幂等：已发布的文件跳过，未发布的照常上传。
+          skip-existing: true
