@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Ruoyi-Scan · Social Preview</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1280px;height:640px;overflow:hidden}
+  body{
+    display:flex;align-items:center;gap:48px;
+    padding:0 96px;
+    font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
+    background:#FFFFFF;
+    background-image:radial-gradient(circle at 10% 4%,#E8F1FF 0%,rgba(232,241,255,0) 46%);
+    color:#0F172A;
+  }
+  .left{flex:1 1 0;min-width:0}
+
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:30px}
+  .logo{width:36px;height:36px;border-radius:9px;background:#2563EB;
+        display:flex;align-items:center;justify-content:center;
+        color:#fff;font-size:13px;font-weight:700;letter-spacing:.5px}
+  .brand-name{font-size:20px;font-weight:700;letter-spacing:-.2px;color:#0F172A}
+  .brand-en{font-size:12px;color:#94A3B8;margin-left:2px;letter-spacing:.3px}
+
+  h1{font-size:43px;line-height:1.22;font-weight:700;letter-spacing:-1.2px;margin-bottom:13px}
+  h1 em{font-style:normal;color:#2563EB}
+  .sub{font-size:16px;color:#64748B;line-height:1.55;margin-bottom:29px}
+  .sub b{color:#334155;font-weight:700}
+
+  .states{display:flex;gap:11px;margin-bottom:28px}
+  .st{flex:1 1 0;border-radius:11px;padding:13px 15px 12px;border:1px solid #E2E8F0;background:#FCFDFF}
+  .st b{display:block;font-size:25px;font-weight:700;line-height:1.1;margin-bottom:3px}
+  .st span{font-size:11px;font-weight:700;letter-spacing:.7px;color:#94A3B8}
+  .st-c{border-color:#F6C9C9;background:#FEF7F7}
+  .st-c b{color:#D64545}
+  .st-s{border-color:#CDE3AE;background:#F9FCF4}
+  .st-s b{color:#5C9018}
+  .st-u{border-color:#F2DCB0;background:#FFFCF5}
+  .st-u b{color:#B87A14}
+
+  .tags{display:flex;flex-wrap:wrap;gap:7px}
+  .tags span{font-size:12px;color:#475569;background:#F1F5F9;
+             border:1px solid #E2E8F0;border-radius:6px;padding:5px 10px}
+
+  .term{flex:0 0 452px;border-radius:13px;overflow:hidden;
+        border:1px solid #DDE5EF;background:#FBFCFE;
+        box-shadow:0 10px 30px -12px rgba(15,23,42,.14)}
+  .term-bar{display:flex;align-items:center;gap:7px;
+            padding:11px 14px;background:#F4F7FB;border-bottom:1px solid #E5EBF3}
+  .dot{width:10px;height:10px;border-radius:50%;display:block}
+  .term-title{margin-left:8px;font-size:12px;color:#7A8899;
+              font-family:Consolas,"Courier New",monospace}
+  pre{padding:16px 18px 18px;font-family:Consolas,"Courier New",monospace;
+      font-size:12.5px;line-height:1.82;color:#334155;white-space:pre;letter-spacing:-.1px}
+  .pc{color:#D64545;font-weight:700}
+  .ps{color:#5C9018;font-weight:700}
+  .pu{color:#B87A14;font-weight:700}
+  .pk{color:#2563EB;font-weight:700}
+  .pg{color:#8A99AB}
+  .pd{color:#0F172A;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">
+      <div class="logo">RS</div>
+      <span class="brand-name">Ruoyi-Scan</span>
+      <span class="brand-en">v1.4</span>
+    </div>
+
+    <h1>若依<em>专项</em>漏洞扫描器</h1>
+    <div class="sub">
+      插件化架构 · <b>三态判定</b>（UNKNOWN 永不冒充 SAFE）<br>
+      RuoYi dedicated vulnerability scanner
+    </div>
+
+    <div class="states">
+      <div class="st st-c"><b>12</b><span>CONFIRMED</span></div>
+      <div class="st st-s"><b>38</b><span>SAFE</span></div>
+      <div class="st st-u"><b>1</b><span>UNKNOWN</span></div>
+    </div>
+
+    <div class="tags">
+      <span>55 POC</span><span>WAF 绕过</span><span>漏洞利用链</span>
+      <span>7 种报告格式</span><span>Web API</span><span>单 exe 免安装</span>
+    </div>
+  </div>
+
+  <div class="term">
+    <div class="term-bar">
+      <i class="dot" style="background:#FF5F57"></i>
+      <i class="dot" style="background:#FEBC2E"></i>
+      <i class="dot" style="background:#28C840"></i>
+      <span class="term-title">ruoyi-scan</span>
+    </div>
+<pre><span class="pk">$</span> ruoyi-scan -u http://target:8080/
+
+<span class="pg">[*]</span> 指纹识别   RuoYi v4.7 (Vue3)
+<span class="pg">[*]</span> 插件路由   <span class="pd">51</span> / 51 已加载
+
+<span class="pc">[CONFIRMED]</span> 任意文件读取 (路径穿越)
+<span class="pc">[CONFIRMED]</span> SQL 注入 (orderBy 注入)
+<span class="ps">[SAFE]</span>      Shiro 反序列化
+<span class="pu">[UNKNOWN]</span>   组件版本比对
+<span class="pg">            └ 网络超时，不判定为安全</span>
+
+<span class="pg">[*]</span> 报告已生成 <span class="pk">report.html</span>
+<span class="pg">    HTML / JSON / PDF / Word / SARIF</span></pre>
+  </div>
+</body>
+</html>
