@@ -83,7 +83,7 @@ pip install ruoyi-scan
 | 进程回收 | 引擎子进程挂 Windows JobObject（`KILL_ON_JOB_CLOSE`），壳被强杀 / 崩溃时引擎树自动回收，不留孤儿进程 |
 | 卸载清理 | NSIS `installerHooks` 在卸载后清除运行时自解压缓存，避免残留约 30 MB 引擎文件 |
 
-> 更多细节见[桌面端文档](docs/DESKTOP.md)。
+> 更多细节见[桌面端文档](docs/desktop.md)。
 
 ---
 
