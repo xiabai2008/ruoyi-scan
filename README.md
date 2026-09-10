@@ -12,11 +12,14 @@
 
 > 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定（CONFIRMED / SAFE / UNKNOWN）。
 > 支持批量扫描、多格式报告、WAF 绕过、漏洞利用链、Web API 等企业级特性。
+> **桌面端已上线** —— 单个 exe 双击即用，无需 Python / Docker / 任何环境配置。
 > ⭐ 如果这个工具对你有帮助，欢迎点个 Star 支持一下，让更多人看到它。
 
 ```bash
 pip install ruoyi-scan
 ```
+
+> 不想碰命令行？直接下载 [桌面端单文件版](https://github.com/xiabai2008/ruoyi-scan/releases)，双击运行。
 
 ---
 
@@ -30,9 +33,63 @@ pip install ruoyi-scan
 
 ---
 
+## 桌面端 · 单个 exe，双击即用
+
+> 引擎、51 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+
+<p align="center">
+  <img src="docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
+</p>
+
+**总览** —— 三态判定实时分布、任务趋势、最新发现。SAFE 与 UNKNOWN 在设计上就与 CONFIRMED 分开展示，不做「结果全红」的扫描器。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/desktop-02-livescan.png" alt="扫描现场：WebSocket 实时日志、插件进度与结果明细" width="900" />
+</p>
+
+**扫描现场** —— WebSocket 实时日志流、插件进度、结果明细（可按三态筛选）。下方三态统计卡与引擎在线状态一目了然。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/desktop-03-vulndb.png" alt="漏洞库：51 个 POC 插件与 CVE / CNVD 映射" width="900" />
+</p>
+
+**漏洞库** —— 51 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/desktop-06-settings.png" alt="设置：主题包、主题编辑器与操作员人格" width="900" />
+</p>
+
+**个性化** —— 4 套主题包、6 个核心色派生 30 个设计 token、操作员人格（11 个预设形象 + 自定义代号）、CRT 扫描线与字体模式。
+
+### 下载
+
+| 形态 | 文件 | 说明 |
+|------|------|------|
+| 单文件版 | [`ruoyi-scan-desktop.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe) | 约 46 MB，**免安装，双击即用** |
+| 安装包 | [`Ruoyi-Scan_*_x64-setup.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | NSIS 安装包，约 40 MB，含卸载清理 |
+| 命令行 | `pip install ruoyi-scan` | 适合 CI / 服务器环境 |
+
+### 实现要点
+
+| 要点 | 说明 |
+|------|------|
+| 单文件分发 | PyInstaller 引擎在 cargo 编译期由 `build.rs` 嵌入壳二进制；运行时自解压到 `%LOCALAPPDATA%\Ruoyi-Scan\engine\`，按校验和版本戳自动覆盖升级 |
+| 进程回收 | 引擎子进程挂 Windows JobObject（`KILL_ON_JOB_CLOSE`），壳被强杀 / 崩溃时引擎树自动回收，不留孤儿进程 |
+| 卸载清理 | NSIS `installerHooks` 在卸载后清除运行时自解压缓存，避免残留约 30 MB 引擎文件 |
+
+> 更多细节见[桌面端文档](docs/DESKTOP.md)。
+
+---
+
 ## 文档
 
-> 📖 **[在线文档站](https://xiabai2008.github.io/Ruoyi-Scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
+> 📖 **[在线文档站](https://xiabai2008.github.io/ruoyi-scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
 
 | 文档 | 说明 |
 |------|------|
