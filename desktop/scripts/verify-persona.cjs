@@ -19,6 +19,18 @@ const ok = (name, cond, extra = "") => {
 };
 
 (async () => {
+  // 前置预检：引擎必须在线且 CORS 放行 5173，否则后续 4/5/6 必挂，快速失败并给出原因
+  try {
+    const pre = await fetch("http://127.0.0.1:8123/api/system/health", {
+      headers: { Origin: "http://localhost:5173" },
+    });
+    if (!pre.ok) throw new Error("HTTP " + pre.status);
+  } catch (e) {
+    console.error("前置条件不满足：引擎 127.0.0.1:8123 不可达或 CORS 拦截（" + e.message + "）");
+    console.error("请先启动引擎并带上与 Tauri 壳一致的 --cors-origins 参数（见脚本头部说明）。");
+    process.exit(2);
+  }
+
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: "new",

@@ -236,21 +236,13 @@ class ScanOrchestrator:
             self.registry.notify(task_id, "status", {"status": "pending", "task_id": task_id})
 
         # 提交到线程池
+        # 注意：on_event 传 None —— 事件推送统一走 _run 内部 _emit 的 registry.notify 通道，
+        # 若再传 _api_event_handler 会造成每个事件被推送两次（历史/WS 全部翻倍）。
         with self._pool_lock:
             if self._pool is None:
                 self._pool = _DaemonThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
-        self._pool.submit(self._run, task, self._api_event_handler)
+        self._pool.submit(self._run, task, None)
         return task_id
-
-    def _api_event_handler(self, event_type: str, payload: Any) -> None:
-        """API 模式事件回调：推送到 registry（线程安全）"""
-        if self.registry:
-            task_id = getattr(payload, "task_id", None) if hasattr(payload, "task_id") else None
-            # _run 内部会传入带 task_id 的事件
-            if isinstance(payload, dict) and "task_id" in payload:
-                task_id = payload["task_id"]
-            if task_id:
-                self.registry.notify(task_id, event_type, payload)
 
     def _run(self, task: ScanTask, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """实际扫描逻辑（同步，从 main.py run_mode 抽取）

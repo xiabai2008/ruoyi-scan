@@ -191,6 +191,14 @@ jobs:
           Start-Sleep -Seconds 2
           $unins = Get-ChildItem "$appDir" -Filter "unins*.exe" | Select-Object -First 1
           if ($unins) { Start-Process -FilePath $unins.FullName -ArgumentList "/S" -Wait }
+          Start-Sleep -Seconds 3
+
+          # 卸载回归：installerHooks.nsh (NSIS_HOOK_POSTUNINSTALL) 必须清掉运行时自解压的
+          # 引擎缓存 %LOCALAPPDATA%\Ruoyi-Scan\engine\，否则卸载后残留 ~30MB
+          if (Test-Path "$env:LOCALAPPDATA\Ruoyi-Scan\engine") {
+            throw "uninstall left engine cache behind (installer-hooks.nsh not effective)"
+          }
+          Write-Host "UNINSTALL_CLEAN_OK (engine cache removed)"
 
       # ---------- 阶段 5：checksums + Release 上传 ----------
       - name: Generate checksums

@@ -77,3 +77,6 @@ desktop/artifacts/
 
 # mkdocs 文档站构建产物（CI 构建，不入库）
 site/
+
+# 桌面端 puppeteer 验证脚本的截图产物（每次运行像素微抖，不入库）
+desktop/scripts/*.png
