@@ -8,7 +8,7 @@
 site_name: Ruoyi-Scan
 site_description: 若依（RuoYi）专项漏洞扫描器 —— 插件化 / 三态判定 / 合规交付
 site_author: XIABAI
-site_url: https://xiabai2008.github.io/Ruoyi-Scan/
+site_url: https://xiabai2008.github.io/ruoyi-scan/
 repo_name: xiabai2008/Ruoyi-Scan
 repo_url: https://github.com/xiabai2008/Ruoyi-Scan
 edit_uri: edit/main/docs/
