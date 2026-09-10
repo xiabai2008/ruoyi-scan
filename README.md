@@ -87,6 +87,27 @@ pip install ruoyi-scan
 
 ---
 
+## 为什么不直接用通用扫描器
+
+> Ruoyi-Scan **不与 nuclei / xray 竞争，而是互补** —— 它们负责广度，我们负责若依生态的深度与判定纪律。
+
+| 维度 | nuclei | xray | **Ruoyi-Scan** |
+|------|--------|------|----------------|
+| 定位 | 通用 POC 引擎 | 通用 Web 扫描器 | **若依 / 国产 Java 框架专项** |
+| 若依变体识别 | — | — | **5 变体**（Vue3 / App / Plus / Cloud / Cloud-Plus） |
+| 版本感知 POC 过滤 | — | — | **4.2 / 4.7 / v5 / 3.9.x 版本矩阵** |
+| 未确认项的处理 | 无此概念 | 无此概念 | **三态判定**：CONFIRMED / SAFE / UNKNOWN |
+| 网络异常情形 | 报错或跳过 | — | **强制 UNKNOWN，绝不冒充 SAFE** |
+| 合规映射 | — | — | 等保 2.0 / OWASP **报告级章节** |
+| 安服交付物 | — | 部分 | 7 种格式 + **docx 模板引擎 + 整改复测** |
+| nuclei 模板 | 原生 | 不支持 | **兼容执行**（http 协议子集 + 安全白名单） |
+
+**一句话**：通用扫描器告诉你「这里可能有东西」；Ruoyi-Scan 告诉你「这个漏洞确实存在 / 确实不存在 / 无法判定」，并直接产出可交付的报告。
+
+> 若依是国内应用最广的开源 Java 后台框架之一，二次开发项目在政企与外包中大量存在。通用工具在它面前的问题是**不知道对面是什么** —— 指纹粗糙、变体不辨、版本无感，于是误报与漏报同时发生。我们把「扫得准」做在前面。
+
+---
+
 ## 文档
 
 > 📖 **[在线文档站](https://xiabai2008.github.io/ruoyi-scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
@@ -107,7 +128,7 @@ pip install ruoyi-scan
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.4.0
+- **版本**：1.4.1
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
@@ -178,7 +199,7 @@ ruoyi-scan -p http://target:8080/
 前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
 
 ```bash
-pip install ruoyi_scan-1.4.0-py3-none-any.whl
+pip install ruoyi_scan-1.4.1-py3-none-any.whl
 ```
 
 ### 方式三：源码安装
