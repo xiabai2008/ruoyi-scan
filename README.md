@@ -32,11 +32,15 @@ pip install ruoyi-scan
 
 ## 文档
 
+> 📖 **[在线文档站](https://xiabai2008.github.io/Ruoyi-Scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
+
 | 文档 | 说明 |
 |------|------|
+| [快速上手](docs/QUICKSTART.md) | 5 分钟从安装到出第一份报告 |
 | [用户指南](docs/USAGE.md) | 安装配置、扫描模式、CLI 参数详解 |
 | [插件开发教程](docs/PLUGIN_DEV.md) | PluginBase、三态判定、entry_points 注册 |
 | [API 文档](docs/API.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
+| [桌面端](docs/DESKTOP.md) | 单 exe 免安装双击即用（引擎内嵌） |
 | [贡献指南](CONTRIBUTING.md) | 开发流程、代码规范、提交约定 |
 | [变更日志](CHANGELOG.md) | 版本历史与变更记录 |
 | [发展路线图](ROADMAP.md) | G 系列版本规划、社区路线、度量指标 |

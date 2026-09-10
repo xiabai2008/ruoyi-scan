@@ -1,0 +1,118 @@
+# Ruoyi-Scan 文档站配置（mkdocs-material）
+#
+# 本地预览：pip install mkdocs-material mkdocs-minify-plugin && mkdocs serve
+# 线上部署：push main → .github/workflows/docs-site.yml 自动构建并发布 GitHub Pages
+#
+# 约定：docs/ 下原有文档保持原名（外链 README 已引用），仅在 nav 中编组。
+
+site_name: Ruoyi-Scan
+site_description: 若依（RuoYi）专项漏洞扫描器 —— 插件化 / 三态判定 / 合规交付
+site_author: XIABAI
+site_url: https://xiabai2008.github.io/Ruoyi-Scan/
+repo_name: xiabai2008/Ruoyi-Scan
+repo_url: https://github.com/xiabai2008/Ruoyi-Scan
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024-2026 XIABAI · MIT License
+
+theme:
+  name: material
+  language: zh
+  # 主色：绿（安全工具行业惯例）+ 强调青
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: 切换到暗色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到亮色
+  font:
+    text: Noto Sans SC
+    code: JetBrains Mono
+  icon:
+    logo: material/shield-search
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs            # 顶部一级导航
+    - navigation.tabs.sticky
+    - navigation.sections        # 侧栏分节
+    - navigation.expand          # 默认展开
+    - navigation.top             # 返回顶部
+    - navigation.footer
+    - navigation.indexes         # 分节落地页
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy          # 代码块复制按钮
+    - content.code.annotate
+    - content.tabs.link
+
+# 页脚 + 额外 social 链接
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/xiabai2008/Ruoyi-Scan
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/ruoyi-scan/
+  generator: false
+
+extra_css:
+  - stylesheets/custom.css
+
+# 扩展（material 内置 + 代码高亮）
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: "#"
+      toc_depth: "2-3"
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+nav:
+  - 首页: index.md
+  - 快速上手: QUICKSTART.md
+  - 用户指南:
+      - 用户手册: USAGE.md
+      - 版本矩阵: version-matrix.md
+      - 安全报告说明: SECURITY_REPORT.md
+  - 桌面端: DESKTOP.md
+  - 开发者:
+      - 插件开发教程: PLUGIN_DEV.md
+      - 插件模板仓库: TEMPLATE_REPO.md
+      - Web API 文档: API.md
+      - DevSecOps 集成: DEVSECOPS.md
+  - 社区:
+      - 社区总览: COMMUNITY.md
+      - 发布流程: RELEASE.md

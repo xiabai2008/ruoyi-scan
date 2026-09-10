@@ -1766,7 +1766,7 @@ ruoyi-scan -p http://target:8080/ --ci --template quick \
 ### 相关文档
 
 - [API 使用指南](./API.md) — Web API 端点、WebSocket 事件、错误码详解
-- [项目 README](../README.md) — 项目概览与快速开始
+- [项目首页](index.md) — 项目概览与快速开始
 - [OpenAPI 3.0 规范](./openapi.json) — 通过 `python scripts/export_openapi.py` 生成
 
 ### 常见问题

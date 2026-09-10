@@ -1,0 +1,81 @@
+/* Ruoyi-Scan 文档站定制样式 */
+
+/* 首页 hero 区 */
+.md-typeset .rs-hero {
+  text-align: center;
+  padding: 1.6rem 0 0.8rem;
+}
+.md-typeset .rs-hero h1 {
+  font-weight: 700;
+  margin-bottom: 0.2em;
+}
+.md-typeset .rs-hero p {
+  font-size: 0.72rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* 首页能力卡片网格 */
+.md-typeset .rs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.8rem;
+  margin: 1.2rem 0;
+}
+.md-typeset .rs-grid .admonition,
+.md-typeset .rs-grid details {
+  break-inside: avoid;
+  margin: 0;
+}
+
+/* 徽标行水平居中 */
+.md-typeset .rs-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  margin: 0.6rem 0 1rem;
+}
+.md-typeset .rs-badges img {
+  margin: 0;
+}
+
+/* 三态判定三色徽章（CONFIRMED 红 / SAFE 绿 / UNKNOWN 灰） */
+.md-typeset .rs-tri {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0.8rem 0;
+}
+.md-typeset .rs-tri span {
+  padding: 0.2rem 0.9rem;
+  border-radius: 1rem;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+.md-typeset .rs-tri .confirmed {
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.6);
+  color: #e53935;
+}
+.md-typeset .rs-tri .safe {
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.55);
+  color: #43a047;
+}
+.md-typeset .rs-tri .unknown {
+  background: rgba(158, 158, 158, 0.12);
+  border: 1px solid rgba(158, 158, 158, 0.55);
+  color: #9e9e9e;
+}
+
+/* 代码块圆角微调 */
+.md-typeset .highlight pre {
+  border-radius: 0.4rem;
+}
+
+/* Windows 提示避免 material 警告色冲突 */
+.md-typeset table:not([class]) th {
+  min-width: 4rem;
+}

@@ -1,0 +1,73 @@
+# Docs Site：构建 mkdocs-material 并发布 GitHub Pages
+#
+# 触发条件：
+#   - push main 且 docs/**、mkdocs.yml、README.md、CONTRIBUTING.md、CHANGELOG.md、ROADMAP.md 变化
+#   - 手动 workflow_dispatch
+#
+# 前置准备（一次性，仓库设置）：
+#   Settings → Pages → Build and deployment → Source 选 "GitHub Actions"
+#
+# 权限：pages: write + id-token: write（Pages 官方部署 OIDC 要求）
+
+name: Docs Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'README.md'
+      - 'README_EN.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'ROADMAP.md'
+      - '.github/workflows/docs-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署，取消排队中的旧运行
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Docs (mkdocs-material)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install mkdocs-material
+        run: pip install mkdocs-material mkdocs-minify-plugin
+
+      - name: Build site
+        run: mkdocs build --strict --site-dir site --verbose
+
+      # README/CHANGELOG/ROADMAP/CONTRIBUTING 被 nav 以 ../ 引用，
+      # mkdocs strict 模式要求它们在 docs_dir 内或以绝对路径复制；
+      # 此处采用"构建前软链进 docs/"的方案（保持仓库根文件原位，供 GitHub 渲染）
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
