@@ -1129,7 +1129,7 @@ asyncio.run(listen())
 
 ### 链接到 API 文档
 
-> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式、错误码定义请参考 [API 使用指南](./API.md)。
+> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式、错误码定义请参考 [API 使用指南](./api.md)。
 >
 > OpenAPI 3.0 规范可通过以下命令导出：
 >
@@ -1765,7 +1765,7 @@ ruoyi-scan -p http://target:8080/ --ci --template quick \
 
 ### 相关文档
 
-- [API 使用指南](./API.md) — Web API 端点、WebSocket 事件、错误码详解
+- [API 使用指南](./api.md) — Web API 端点、WebSocket 事件、错误码详解
 - [项目首页](index.md) — 项目概览与快速开始
 - [OpenAPI 3.0 规范](./openapi.json) — 通过 `python scripts/export_openapi.py` 生成
 

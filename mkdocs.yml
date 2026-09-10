@@ -102,17 +102,17 @@ plugins:
 
 nav:
   - 首页: index.md
-  - 快速上手: QUICKSTART.md
+  - 快速上手: quickstart.md
   - 用户指南:
-      - 用户手册: USAGE.md
+      - 用户手册: usage.md
       - 版本矩阵: version-matrix.md
-      - 安全报告说明: SECURITY_REPORT.md
-  - 桌面端: DESKTOP.md
+      - 安全报告说明: security_report.md
+  - 桌面端: desktop.md
   - 开发者:
-      - 插件开发教程: PLUGIN_DEV.md
-      - 插件模板仓库: TEMPLATE_REPO.md
-      - Web API 文档: API.md
-      - DevSecOps 集成: DEVSECOPS.md
+      - 插件开发教程: plugin_dev.md
+      - 插件模板仓库: template_repo.md
+      - Web API 文档: api.md
+      - DevSecOps 集成: devsecops.md
   - 社区:
-      - 社区总览: COMMUNITY.md
-      - 发布流程: RELEASE.md
+      - 社区总览: community.md
+      - 发布流程: release.md

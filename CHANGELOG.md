@@ -98,7 +98,7 @@
 - **W2 暴露面**: 带洞靶场（lab / spring / real-spring）默认绑定 127.0.0.1，Docker 内以 `LAB_HOST` 覆盖；Grafana / Prometheus 宿主端口收口 127.0.0.1；靶场启动增加安全横幅提示
 - **W2 权限**: 三级权限矩阵 read / scan / admin，权限不足返回 403
 - **测试**: 新增 5 个安全回归用例（WS 鉴权 4 + URL 传密钥拒绝 1），完整套件 1185 全绿
-- **文档**: 新增 `docs/SECURITY_REPORT.md` 最终安全报告，并归档至模板仓库 ruoyi-scan-templates
+- **文档**: 新增 `docs/security_report.md` 最终安全报告，并归档至模板仓库 ruoyi-scan-templates
 
 ### Changed
 
@@ -135,9 +135,9 @@
 - **shiro_rememberme 插件完善**: CVE-2016-4437 完整检测逻辑 + 修复详情 + 复现命令
 - **GitHub Release 自动构建**: tag 触发 wheel + sdist 发布
 - **英文 README**: README_EN.md 完整翻译
-- **API 文档**: docs/API.md + OpenAPI 3.0 规范
-- **插件开发教程**: docs/PLUGIN_DEV.md
-- **用户指南**: docs/USAGE.md 完整安装配置说明
+- **API 文档**: docs/api.md + OpenAPI 3.0 规范
+- **插件开发教程**: docs/plugin_dev.md
+- **用户指南**: docs/usage.md 完整安装配置说明
 
 ### Changed
 

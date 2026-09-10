@@ -85,18 +85,18 @@ ruoyi-scan -u http://target:8080
 [?] UNKNOWN    Druid 未授权               （网络异常，请人工复核）
 ```
 
-[快速上手 :material-arrow-right:](QUICKSTART.md){ .md-button .md-button--primary }
-[插件开发 :material-arrow-right:](PLUGIN_DEV.md){ .md-button }
-[Web API :material-arrow-right:](API.md){ .md-button }
+[快速上手 :material-arrow-right:](quickstart.md){ .md-button .md-button--primary }
+[插件开发 :material-arrow-right:](plugin_dev.md){ .md-button }
+[Web API :material-arrow-right:](api.md){ .md-button }
 
 ## 文档导航
 
 | 分类 | 文档 |
 |------|------|
-| 使用 | [用户手册](USAGE.md) · [版本矩阵](version-matrix.md) · [安全报告说明](SECURITY_REPORT.md) |
-| 桌面端 | [单 exe 发布](DESKTOP.md) |
-| 开发 | [插件开发教程](PLUGIN_DEV.md) · [插件模板仓库](TEMPLATE_REPO.md) · [API 文档](API.md) · [DevSecOps 集成](DEVSECOPS.md) |
-| 社区 | [社区总览](COMMUNITY.md)（贡献指南 / 变更日志 / 路线图） · [发布流程](RELEASE.md) |
+| 使用 | [用户手册](usage.md) · [版本矩阵](version-matrix.md) · [安全报告说明](security_report.md) |
+| 桌面端 | [单 exe 发布](desktop.md) |
+| 开发 | [插件开发教程](plugin_dev.md) · [插件模板仓库](template_repo.md) · [API 文档](api.md) · [DevSecOps 集成](devsecops.md) |
+| 社区 | [社区总览](community.md)（贡献指南 / 变更日志 / 路线图） · [发布流程](release.md) |
 
 ## 合规声明
 

@@ -288,7 +288,7 @@ docker compose down
 | `--cors-origins <o>` | Allowed CORS origins (comma-separated) |
 | `--db-path <path>` | SQLite task persistence database path |
 
-> For detailed API endpoint descriptions, request/response examples, and WebSocket event formats, see the [API Usage Guide](docs/API.md).
+> For detailed API endpoint descriptions, request/response examples, and WebSocket event formats, see the [API Usage Guide](docs/api.md).
 > The OpenAPI 3.0 specification can be exported to `docs/openapi.json` via `python scripts/export_openapi.py`.
 
 #### OAST Out-of-Band Detection (D30)

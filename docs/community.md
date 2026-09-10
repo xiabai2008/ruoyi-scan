@@ -12,10 +12,10 @@ Ruoyi-Scan 从「个人项目」走向「有外部贡献者的社区项目」。
 
 - **报告问题**：[Issues](https://github.com/xiabai2008/Ruoyi-Scan/issues) —— 检测误报 /
   漏报请附脱敏扫描 JSON（UNKNOWN 结果尤其欢迎，帮助扩展三态判定覆盖）
-- **贡献 POC**：按[插件开发教程](PLUGIN_DEV.md)实现 PluginBase，通过 PR 提交；
+- **贡献 POC**：按[插件开发教程](plugin_dev.md)实现 PluginBase，通过 PR 提交；
   涉及检测面的改动需附带[签名靶场](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/lab)覆盖
 - **good first issue**：在 issue 列表筛选 `good first issue` 标签入手
-- **安全漏洞反馈**：详见[安全政策](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/docs/DEVSECOPS.md)
+- **安全漏洞反馈**：详见[安全政策](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/docs/devsecops.md)
   ——请勿通过公开 issue 提交安全漏洞
 
 ## 检测插件矩阵
@@ -28,7 +28,7 @@ Ruoyi-Scan 从「个人项目」走向「有外部贡献者的社区项目」。
 | `plugins/jeecgboot/` | 8 | JeecgBoot 拓展（首个非若依框架实证，方法论可复制性验证） |
 
 第三方插件通过 `ruoyi_scan.plugins` entry_points 注册，pip 安装即被自动发现——
-分发与验签流程见[插件模板仓库](TEMPLATE_REPO.md)。
+分发与验签流程见[插件模板仓库](template_repo.md)。
 
 ## 上游生态回馈
 

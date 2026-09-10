@@ -36,11 +36,11 @@ pip install ruoyi-scan
 
 | 文档 | 说明 |
 |------|------|
-| [快速上手](docs/QUICKSTART.md) | 5 分钟从安装到出第一份报告 |
-| [用户指南](docs/USAGE.md) | 安装配置、扫描模式、CLI 参数详解 |
-| [插件开发教程](docs/PLUGIN_DEV.md) | PluginBase、三态判定、entry_points 注册 |
-| [API 文档](docs/API.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
-| [桌面端](docs/DESKTOP.md) | 单 exe 免安装双击即用（引擎内嵌） |
+| [快速上手](docs/quickstart.md) | 5 分钟从安装到出第一份报告 |
+| [用户指南](docs/usage.md) | 安装配置、扫描模式、CLI 参数详解 |
+| [插件开发教程](docs/plugin_dev.md) | PluginBase、三态判定、entry_points 注册 |
+| [API 文档](docs/api.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
+| [桌面端](docs/desktop.md) | 单 exe 免安装双击即用（引擎内嵌） |
 | [贡献指南](CONTRIBUTING.md) | 开发流程、代码规范、提交约定 |
 | [变更日志](CHANGELOG.md) | 版本历史与变更记录 |
 | [发展路线图](ROADMAP.md) | G 系列版本规划、社区路线、度量指标 |
@@ -328,7 +328,7 @@ docker compose down
 | `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
 | `--db-path <path>` | SQLite 任务持久化数据库路径 |
 
-> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](docs/API.md)。
+> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](docs/api.md)。
 > OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
 
 #### OAST 带外检测（D30）
@@ -525,7 +525,7 @@ python tests/regression_spring.py
 - **报告 Bug / 请求 POC**：使用 [Issue 模板](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose)（Bug / POC 请求 / 功能请求）
 - **提交 POC**：`python main.py --plugin-init <name>` 生成骨架 → 实现 `verify()`（三态判定）→ `--plugin-check` 验证 → PR（模板含完整 checklist）
 - **插件分发**：合入后自动进入 [ruoyi-scan-templates](https://github.com/xiabai2008/ruoyi-scan-templates) 官方仓库（Ed25519 签名）
-- **开发指南**：[docs/PLUGIN_DEV.md](docs/PLUGIN_DEV.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
+- **开发指南**：[docs/plugin_dev.md](docs/plugin_dev.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
 
 > 贡献 POC 前请先在自建靶场（`lab/`）或授权目标上复现，确保判定特征真实可靠。
 

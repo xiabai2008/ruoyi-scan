@@ -1,6 +1,6 @@
 # 快速上手
 
-> 5 分钟从安装到出第一份报告。完整参数见 [用户手册](USAGE.md)。
+> 5 分钟从安装到出第一份报告。完整参数见 [用户手册](usage.md)。
 
 ## 1. 安装
 
@@ -29,10 +29,10 @@
 === "桌面端（免 Python）"
 
     从 [GitHub Releases](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载
-    `ruoyi-scan-desktop.exe`，双击即用（引擎内嵌，详见[桌面端文档](DESKTOP.md)）。
+    `ruoyi-scan-desktop.exe`，双击即用（引擎内嵌，详见[桌面端文档](desktop.md)）。
 
 依赖：Python 3.8+；报告增强（PDF/Word/Excel）与 Web API 为可选依赖，缺失时自动降级
-（详见[用户手册 · 依赖要求](USAGE.md#依赖要求)）。
+（详见[用户手册 · 依赖要求](usage.md#依赖要求)）。
 
 ## 2. 四种扫描模式
 
@@ -76,7 +76,7 @@ ruoyi-scan -u http://target:8080 --report ./out --report-format html,pdf,docx
   建议人工复核
 
 > 这条纪律是 Ruoyi-Scan 与「结果全红」扫描器的核心差异：报告里的每一行结论都可信。
-> 判定细节与误报防护矩阵见[安全报告说明](SECURITY_REPORT.md)。
+> 判定细节与误报防护矩阵见[安全报告说明](security_report.md)。
 
 ## 4. 报告在哪
 
@@ -98,11 +98,11 @@ ruoyi-scan --serve --host 127.0.0.1 --port 8123
 # 浏览器打开 http://127.0.0.1:8123 —— 实时任务流 / WebSocket 推送 / 报告下载
 ```
 
-完整 REST 端点与 WebSocket 事件协议见 [API 文档](API.md)。
+完整 REST 端点与 WebSocket 事件协议见 [API 文档](api.md)。
 
 ## 下一步
 
-- [用户手册](USAGE.md)：全部 CLI 参数、扫描模板、分布式、CI/CD 集成
-- [插件开发教程](PLUGIN_DEV.md)：写你的第一个 POC（PluginBase 三态契约）
-- [桌面端](DESKTOP.md)：单 exe 免安装形态
-- [社区总览](COMMUNITY.md)：贡献指南 / 变更日志 / 发展路线图（仓库根文件）
+- [用户手册](usage.md)：全部 CLI 参数、扫描模板、分布式、CI/CD 集成
+- [插件开发教程](plugin_dev.md)：写你的第一个 POC（PluginBase 三态契约）
+- [桌面端](desktop.md)：单 exe 免安装形态
+- [社区总览](community.md)：贡献指南 / 变更日志 / 发展路线图（仓库根文件）

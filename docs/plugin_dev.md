@@ -1377,8 +1377,8 @@ python main.py -u http://target/ -p --bypass-waf auto
 
 更多开发规范、CI 集成、报告生成等内容请参阅：
 
-- `docs/USAGE.md` — 完整 CLI 用法
-- `docs/API.md` — Web API 服务模式
+- `docs/usage.md` — 完整 CLI 用法
+- `docs/api.md` — Web API 服务模式
 - `lib/plugin_sdk.py` — 插件 SDK 源码
 - `plugins/base.py` — `PluginBase` 基类源码
 - `core/loader.py` — 插件加载机制源码

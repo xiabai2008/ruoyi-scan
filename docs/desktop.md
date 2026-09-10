@@ -73,7 +73,7 @@ r = requests.get("http://127.0.0.1:8123/api/plugins")
 print(len(r.json()))  # 51
 ```
 
-端点全表见 [API 文档](API.md)。
+端点全表见 [API 文档](api.md)。
 
 ## 从源码构建桌面端
 
