@@ -102,15 +102,21 @@ fn materialize_engine() -> Option<PathBuf> {
 /// Windows：把子进程挂进 KILL_ON_JOB_CLOSE 的 Job Object。
 /// 壳进程无论正常退出、崩溃还是被任务管理器强杀，Job 句柄关闭时引擎整树自动回收，
 /// 避免 8123 端口被孤儿引擎长期占用。
+///
+/// 重要：Job 句柄**刻意不 CloseHandle** —— 它必须随壳进程存活，壳退出时由内核关闭
+/// 句柄并触发 KILL_ON_JOB_CLOSE。句柄泄漏在此处是设计意图，不是缺陷。
+///
+/// 返回是否挂接成功；诊断信息同时落盘（release 版壳是 GUI 子系统，stderr 不可见）。
 #[cfg(windows)]
-fn tie_to_job(child: &Child) {
+fn tie_to_job(child: &Child) -> bool {
     use std::os::windows::io::AsRawHandle;
 
     unsafe {
         let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
         if job.is_null() {
+            write_job_diag("create_job_failed");
             eprintln!("[ruoyi-scan-desktop] JobObject 创建失败，回退为普通子进程");
-            return;
+            return false;
         }
         let mut info: JOB_EXT_LIMIT_INFO = std::mem::zeroed();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -121,21 +127,44 @@ fn tie_to_job(child: &Child) {
             std::mem::size_of::<JOB_EXT_LIMIT_INFO>() as u32,
         );
         if ret == 0 {
+            write_job_diag("set_info_failed");
             eprintln!("[ruoyi-scan-desktop] JobObject 配置失败");
-            return;
+            return false;
         }
-        if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
-            eprintln!("[ruoyi-scan-desktop] 引擎挂接 JobObject 失败（回收仍由 Exit 事件兜底）");
-        } else {
-            eprintln!("[ruoyi-scan-desktop] 引擎已挂接 JobObject（KILL_ON_JOB_CLOSE）");
+        // 挂接可能因子进程已先挂进别的 Job（嵌套限制）而失败 —— 重试几次吸收瞬时失败
+        let mut ok = false;
+        for attempt in 0..3 {
+            if AssignProcessToJobObject(job, child.as_raw_handle()) != 0 {
+                ok = true;
+                break;
+            }
+            eprintln!("[ruoyi-scan-desktop] 引擎挂接 JobObject 第 {} 次失败，重试", attempt + 1);
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if ok {
+            write_job_diag(&format!("attached pid={}", child.id()));
+            eprintln!("[ruoyi-scan-desktop] 引擎已挂接 JobObject（KILL_ON_JOB_CLOSE）pid={}", child.id());
             // 不调用 CloseHandle：Job 句柄随壳进程存活，壳退出（含被杀）时句柄关闭 → 引擎树终止
             let _ = job;
+        } else {
+            write_job_diag(&format!("assign_failed pid={}", child.id()));
+            eprintln!("[ruoyi-scan-desktop] 引擎挂接 JobObject 失败（回收仍由 Exit 事件兜底）");
         }
+        ok
     }
 }
 
+/// 把 JobObject 挂接诊断写入引擎目录（release 版壳 stderr 不可达，供 CI 断言读取）
+#[cfg(windows)]
+fn write_job_diag(msg: &str) {
+    let path = engine_dir().join("job-diag.txt");
+    let _ = std::fs::write(path, format!("{}\n", msg));
+}
+
 #[cfg(not(windows))]
-fn tie_to_job(_child: &Child) {}
+fn tie_to_job(_child: &Child) -> bool {
+    false
+}
 
 fn spawn_backend() -> Option<Child> {
     if port_open(API_PORT) {

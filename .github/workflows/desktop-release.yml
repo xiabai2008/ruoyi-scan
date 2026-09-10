@@ -133,18 +133,30 @@ jobs:
                 if ($docs.StatusCode -eq 200) { $ready = $true; break }
               } catch { }
             }
-            if (-not $ready) { throw "single-exe engine not ready after 90s" }
-            Write-Host "SINGLE_EXE_SMOKE_OK (engine up at 8123)"
+          if (-not $ready) { throw "single-exe engine not ready after 90s" }
+          Write-Host "SINGLE_EXE_SMOKE_OK (engine up at 8123)"
 
-            # 强杀壳 → JobObject 应自动回收引擎
-            Stop-Process -Id $app.Id -Force
-            Start-Sleep -Seconds 3
+          # 引擎自解压 + JobObject 挂接发生在壳 setup()，写诊断到引擎目录（GUI 壳 stderr 不可达）
+          $diag = "$env:LOCALAPPDATA\Ruoyi-Scan\engine\job-diag.txt"
+          if (Test-Path $diag) { Write-Host "JOB_DIAG: $(Get-Content $diag -Raw)" }
+          else { Write-Host "JOB_DIAG: (no diag file)" }
+
+          # 强杀壳 → JobObject 应自动回收引擎
+          Stop-Process -Id $app.Id -Force
+          # 回收是异步的（内核关句柄 + 引擎树终止），轮询最多 15s 而非固定 3s 就断言
+          $left = $null
+          foreach ($i in 1..15) {
+            Start-Sleep -Seconds 1
             $left = Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue
-            if ($null -ne $left) {
-              $left | Stop-Process -Force
-              throw "engine orphaned after shell hard-kill (JobObject not effective)"
-            }
-            Write-Host "JOB_OBJECT_REAP_OK"
+            if ($null -eq $left) { break }
+          }
+          if ($null -ne $left) {
+            Write-Host "ORPHAN PIDs: $($left.Id -join ',')"
+            if (Test-Path $diag) { Write-Host "JOB_DIAG(after): $(Get-Content $diag -Raw)" }
+            $left | Stop-Process -Force
+            throw "engine orphaned after shell hard-kill (JobObject not effective)"
+          }
+          Write-Host "JOB_OBJECT_REAP_OK"
           } finally {
             Get-Process -Name "ruoyi-scan-desktop","ruoyi-scan-engine" -ErrorAction SilentlyContinue | Stop-Process -Force
           }
