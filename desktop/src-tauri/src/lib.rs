@@ -1,13 +1,11 @@
-// Ruoyi-Scan 桌面端 —— Rust 宿主
+// Ruoyi-Scan 桌面端 —— Rust 宿主（单 exe 架构）
 //
-// 职责：
-//   1. 启动时自动拉起本地 FastAPI sidecar（127.0.0.1:8123）
-//      若 8123 端口已被占用则视为外部已启动，跳过拉起。
-//   2. 应用退出时回收子进程。
+// 发布形态：一个 Ruoyi-Scan.exe 双击即用，无需安装器、无需 Python。
+//   - PyInstaller 冻结的 FastAPI 引擎在编译期嵌入壳二进制（build.rs → OUT_DIR/embedded_engine.bin）
+//   - 首次运行自解压到 %LOCALAPPDATA%\Ruoyi-Scan\engine\（版本戳不匹配时覆盖更新）
+//   - 拉起引擎（127.0.0.1:8123）→ 退出时回收（正常退出走 Exit 事件；被强杀走 JobObject）
 //
-// 后端解析优先级（发布版零配置的关键）：
-//   a) 捆绑引擎：exe 同目录的 ruoyi-scan-engine.exe（NSIS 资源目录 / dev 引擎构建产物）
-//   b) 开发回退：python main.py --serve（RUOYI_SCAN_PYTHON 可指定解释器，工作目录取仓库根）
+// 开发回退：引擎未嵌入（0 字节）时回退 python main.py --serve（仓库根，M1 开发体验）。
 
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -20,7 +18,8 @@ use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
     JobObjectExtendedLimitInformation, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
-// JOBOBJECT_EXTENDED_LIMIT_INFORMATION 与信息类同名冲突，用别名引入
+// JOBOBJECT_EXTENDED_LIMIT_INFORMATION 与信息类常量同名，别名引入
+#[cfg(windows)]
 use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION as JOB_EXT_LIMIT_INFO;
 
 use tauri::Manager;
@@ -29,9 +28,76 @@ use tauri::RunEvent;
 const API_PORT: u16 = 8123;
 // desktop/src-tauri 的上级上级 = 仓库根（开发模式定位 main.py）
 const REPO_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-const ENGINE_EXE: &str = "ruoyi-scan-engine.exe";
+
+// 编译期嵌入的引擎字节流（build.rs 复制 engine/dist/ruoyi-scan-engine.exe 到 OUT_DIR）
+static EMBEDDED_ENGINE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/embedded_engine.bin"));
 
 struct BackendChild(Mutex<Option<Child>>);
+
+fn port_open(port: u16) -> bool {
+    let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+    TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+}
+
+/// 引擎自解压目录：%LOCALAPPDATA%\Ruoyi-Scan\engine\
+#[cfg(windows)]
+fn engine_dir() -> PathBuf {
+    std::env::var("LOCALAPPDATA")
+        .map(|d| PathBuf::from(d).join("Ruoyi-Scan").join("engine"))
+        .unwrap_or_else(|_| PathBuf::from("engine"))
+}
+
+#[cfg(not(windows))]
+fn engine_dir() -> PathBuf {
+    std::env::var("HOME")
+        .map(|d| PathBuf::from(d).join(".ruoyi-scan").join("engine"))
+        .unwrap_or_else(|_| PathBuf::from("engine"))
+}
+
+/// 引擎就位：嵌入字节流非空时，解压到用户目录（内容变化时覆盖）。
+/// 返回 Some(exe) 表示发布模式引擎可用；None 表示开发模式（未嵌入引擎）。
+fn materialize_engine() -> Option<PathBuf> {
+    if EMBEDDED_ENGINE.is_empty() {
+        eprintln!("[ruoyi-scan-desktop] 未嵌入引擎（开发模式构建），回退 python sidecar");
+        return None;
+    }
+    let dir = engine_dir();
+    let exe = dir.join("ruoyi-scan-engine.exe");
+    let stamp = dir.join(".engine-stamp");
+
+    // 以「字节数 + 简单校验和」作版本戳：壳升级换引擎时自动覆盖旧解压产物
+    let checksum: u64 = EMBEDDED_ENGINE.iter().map(|&b| b as u64).sum();
+    let expected = format!("{}\n{}\n", EMBEDDED_ENGINE.len(), checksum);
+    let need_extract = match std::fs::read_to_string(&stamp) {
+        Ok(prev) => prev != expected,
+        Err(_) => true,
+    };
+    if need_extract {
+        std::fs::create_dir_all(&dir).ok()?;
+        // 先写临时文件再改名，避免写入中断留下残缺引擎
+        let tmp = dir.join(".engine.tmp");
+        if std::fs::write(&tmp, EMBEDDED_ENGINE).is_err() {
+            eprintln!("[ruoyi-scan-desktop] 引擎自解压失败（目录不可写？）：{:?}", dir);
+            return None;
+        }
+        // 旧引擎若正被运行中的进程锁定，remove/rename 会失败 → 此时若端口已开则复用现有引擎
+        if exe.exists() {
+            let _ = std::fs::remove_file(&exe);
+        }
+        if std::fs::rename(&tmp, &exe).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            if port_open(API_PORT) {
+                eprintln!("[ruoyi-scan-desktop] 引擎文件被占用但服务已在线，复用现有引擎");
+                return Some(exe);
+            }
+            eprintln!("[ruoyi-scan-desktop] 引擎更新失败且服务离线");
+            return None;
+        }
+        std::fs::write(&stamp, expected).ok()?;
+        eprintln!("[ruoyi-scan-desktop] 引擎已释放：{:?}", exe);
+    }
+    Some(exe)
+}
 
 /// Windows：把子进程挂进 KILL_ON_JOB_CLOSE 的 Job Object。
 /// 壳进程无论正常退出、崩溃还是被任务管理器强杀，Job 句柄关闭时引擎整树自动回收，
@@ -71,34 +137,6 @@ fn tie_to_job(child: &Child) {
 #[cfg(not(windows))]
 fn tie_to_job(_child: &Child) {}
 
-fn port_open(port: u16) -> bool {
-    let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-    TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
-}
-
-/// 定位捆绑的引擎 exe：
-///   - 开发模式：desktop/engine/dist/ruoyi-scan-engine.exe（本地构建验证用）
-///   - 安装模式：主程序同目录（NSIS 资源目录）
-fn bundled_engine() -> Option<PathBuf> {
-    // 1) 主程序同目录（安装后始终命中）
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join(ENGINE_EXE);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    // 2) 开发模式：引擎构建产物目录
-    let dev_engine = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../engine/dist")
-        .join(ENGINE_EXE);
-    if dev_engine.is_file() {
-        return Some(dev_engine);
-    }
-    None
-}
-
 fn spawn_backend() -> Option<Child> {
     if port_open(API_PORT) {
         eprintln!("[ruoyi-scan-desktop] 后端已在 {} 端口运行，跳过拉起", API_PORT);
@@ -112,8 +150,8 @@ fn spawn_backend() -> Option<Child> {
     ]
     .join(",");
 
-    // 优先捆绑引擎（发布版路径；用户机器无需 Python）
-    if let Some(engine) = bundled_engine() {
+    // 发布模式：自解压出的引擎（单 exe 双击即用的核心路径）
+    if let Some(engine) = materialize_engine() {
         match Command::new(&engine)
             .args([
                 "--serve",
