@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, FingerprintResult, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
 from config import settings
 from core.engine import ScanEngine
 from core.fingerprint import detect_cms, detect_waf
@@ -150,6 +150,8 @@ class ScanTask:
             "request_count": self.request_count,
             "result_count": len(self.results),
             "confirmed_count": sum(1 for r in self.results if r.status == STATUS_CONFIRMED),
+            "safe_count": sum(1 for r in self.results if r.status == STATUS_SAFE),
+            "unknown_count": sum(1 for r in self.results if r.status == STATUS_UNKNOWN),
             "error": self.error,
             "fingerprint": {
                 "cms": self.fingerprint.cms if self.fingerprint else "",
@@ -682,6 +684,8 @@ class ScanOrchestrator:
                     "duration": task.duration,
                     "result_count": len(all_results),
                     "confirmed_count": sum(1 for r in all_results if r.status == STATUS_CONFIRMED),
+                    "safe_count": sum(1 for r in all_results if r.status == STATUS_SAFE),
+                    "unknown_count": sum(1 for r in all_results if r.status == STATUS_UNKNOWN),
                 },
             )
 

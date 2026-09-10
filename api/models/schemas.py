@@ -46,6 +46,8 @@ class ScanTaskDTO(BaseModel):
     request_count: int = 0
     result_count: int = 0
     confirmed_count: int = 0
+    safe_count: int = 0
+    unknown_count: int = 0
     error: str = ""
     fingerprint: Optional[dict] = None
     waf: Optional[dict] = None

@@ -39,6 +39,8 @@ export interface ScanTask {
   request_count: number;
   result_count: number;
   confirmed_count: number;
+  safe_count: number;
+  unknown_count: number;
   error: string;
   fingerprint: FingerprintInfo | null;
   waf: Record<string, unknown> | null;

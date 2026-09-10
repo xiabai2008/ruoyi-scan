@@ -35,8 +35,8 @@ export function Overview() {
       return dd === todayStr();
     }).length;
     const confirmed = tasks.reduce((s, t) => s + (t.confirmed_count || 0), 0);
-    const unknown = tasks.reduce((s, t) => s + (t.result_count || 0) - (t.confirmed_count || 0), 0);
-    const safe = tasks.reduce((s, t) => s + (t.result_count || 0), 0) - confirmed - unknown;
+    const safe = tasks.reduce((s, t) => s + (t.safe_count || 0), 0);
+    const unknown = tasks.reduce((s, t) => s + (t.unknown_count || 0), 0);
     return {
       targets,
       today,
