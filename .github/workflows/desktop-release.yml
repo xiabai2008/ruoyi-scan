@@ -84,8 +84,18 @@ jobs:
             if (-not $ready) { throw "engine not ready after 90s" }
             Write-Host "ENGINE_SMOKE_OK"
           } finally {
+            # PyInstaller onefile 是「引导进程 + 真实引擎」双进程：Stop-Process 单杀引导进程
+            # 会留下仍持有 8123 的真实引擎，污染后续 portable 冒烟（壳会误判「后端已在线」早退）。
+            # 必须按进程名清干净，确认端口释放后才继续。
+            Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue | Stop-Process -Force
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
-            Start-Sleep -Seconds 2
+            $freed = $false
+            foreach ($i in 1..15) {
+              Start-Sleep -Seconds 1
+              if (-not (Get-NetTCPConnection -LocalPort 8123 -State Listen -ErrorAction SilentlyContinue)) { $freed = $true; break }
+            }
+            if (-not $freed) { throw "port 8123 still held after engine smoke cleanup" }
+            Write-Host "ENGINE_SMOKE_CLEANUP_OK (8123 freed)"
           }
 
       # ---------- 阶段 2：Tauri 打包（build.rs 编译期嵌入引擎）----------
@@ -118,6 +128,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # 前置守卫：本阶段依赖「壳亲自拉起引擎」来验证 JobObject 回收。
+          # 若 8123 已被占用，壳会走 port_open 早退（产品正确行为，但会使本测试失去意义）。
+          if (Get-NetTCPConnection -LocalPort 8123 -State Listen -ErrorAction SilentlyContinue) {
+            throw "port 8123 already in use before portable smoke — stale engine from earlier stage"
+          }
           # 复制到独立目录模拟用户直接双击（不在仓库内、无安装器）
           $portable = "$env:RUNNER_TEMP\ruoyi-portable"
           New-Item -ItemType Directory -Force -Path $portable | Out-Null
@@ -133,32 +148,37 @@ jobs:
                 if ($docs.StatusCode -eq 200) { $ready = $true; break }
               } catch { }
             }
-          if (-not $ready) { throw "single-exe engine not ready after 90s" }
-          Write-Host "SINGLE_EXE_SMOKE_OK (engine up at 8123)"
+            if (-not $ready) { throw "single-exe engine not ready after 90s" }
+            Write-Host "SINGLE_EXE_SMOKE_OK (engine up at 8123)"
 
-          # 引擎自解压 + JobObject 挂接发生在壳 setup()，写诊断到引擎目录（GUI 壳 stderr 不可达）
-          $diag = "$env:LOCALAPPDATA\Ruoyi-Scan\engine\job-diag.txt"
-          if (Test-Path $diag) { Write-Host "JOB_DIAG: $(Get-Content $diag -Raw)" }
-          else { Write-Host "JOB_DIAG: (no diag file)" }
+            # 引擎自解压 + JobObject 挂接发生在壳 setup()，诊断落盘（GUI 壳 stderr 不可达）。
+            # 若文件缺失 → 壳走了 port_open 早退（说明 8123 被外部占用），JobObject 未被验证。
+            $diag = "$env:LOCALAPPDATA\Ruoyi-Scan\engine\job-diag.txt"
+            if (Test-Path $diag) { Write-Host "JOB_DIAG: $(Get-Content $diag -Raw)" }
+            else { throw "job-diag.txt missing — shell did not spawn engine (port already held?)" }
 
-          # 强杀壳 → JobObject 应自动回收引擎
-          Stop-Process -Id $app.Id -Force
-          # 回收是异步的（内核关句柄 + 引擎树终止），轮询最多 15s 而非固定 3s 就断言
-          $left = $null
-          foreach ($i in 1..15) {
-            Start-Sleep -Seconds 1
-            $left = Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue
-            if ($null -eq $left) { break }
-          }
-          if ($null -ne $left) {
-            Write-Host "ORPHAN PIDs: $($left.Id -join ',')"
-            if (Test-Path $diag) { Write-Host "JOB_DIAG(after): $(Get-Content $diag -Raw)" }
-            $left | Stop-Process -Force
-            throw "engine orphaned after shell hard-kill (JobObject not effective)"
-          }
-          Write-Host "JOB_OBJECT_REAP_OK"
+            # 强杀壳 → JobObject 应自动回收引擎
+            Stop-Process -Id $app.Id -Force
+            # 回收是异步的（内核关句柄 + 引擎树终止），轮询最多 15s
+            $left = $null
+            foreach ($i in 1..15) {
+              Start-Sleep -Seconds 1
+              $left = Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue
+              if ($null -eq $left) { break }
+            }
+            if ($null -ne $left) {
+              Write-Host "ORPHAN PIDs: $($left.Id -join ',')"
+              Write-Host "JOB_DIAG(after): $(Get-Content $diag -Raw)"
+              $left | Stop-Process -Force
+              throw "engine orphaned after shell hard-kill (JobObject not effective)"
+            }
+            Write-Host "JOB_OBJECT_REAP_OK"
           } finally {
             Get-Process -Name "ruoyi-scan-desktop","ruoyi-scan-engine" -ErrorAction SilentlyContinue | Stop-Process -Force
+            foreach ($i in 1..15) {
+              Start-Sleep -Seconds 1
+              if (-not (Get-NetTCPConnection -LocalPort 8123 -State Listen -ErrorAction SilentlyContinue)) { break }
+            }
           }
 
       # ---------- 阶段 4：NSIS 安装包冒烟（装机→自解压→探活→卸载）----------
@@ -166,6 +186,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # 前置守卫：沿用 portable 阶段同样的要求 —— 8123 必须空闲，否则壳会早退
+          if (Get-NetTCPConnection -LocalPort 8123 -State Listen -ErrorAction SilentlyContinue) {
+            throw "port 8123 already in use before NSIS smoke — stale engine"
+          }
           $setup = "desktop/artifacts/Ruoyi-Scan_${{ github.ref_name }}_x64-setup.exe"
           # NSIS 静默安装（currentUser 模式无需管理员）
           $p = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
@@ -199,8 +223,11 @@ jobs:
 
           # 清理：关应用 + 卸载（强杀壳时 JobObject 自动回收引擎）
           Get-Process -Name "ruoyi-scan-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force
+          foreach ($i in 1..15) {
+            Start-Sleep -Seconds 1
+            if (-not (Get-NetTCPConnection -LocalPort 8123 -State Listen -ErrorAction SilentlyContinue)) { break }
+          }
           Get-Process -Name "ruoyi-scan-engine" -ErrorAction SilentlyContinue | Stop-Process -Force
-          Start-Sleep -Seconds 2
           $unins = Get-ChildItem "$appDir" -Filter "unins*.exe" | Select-Object -First 1
           if ($unins) { Start-Process -FilePath $unins.FullName -ArgumentList "/S" -Wait }
           Start-Sleep -Seconds 3
