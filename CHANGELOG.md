@@ -10,6 +10,7 @@
 - **G4 RuoYi nuclei 模板包 v0.1.0**（`contrib/nuclei-templates/`）：3 个专项模板——默认管理员口令（admin/admin123）、定时任务端点未授权（/monitor/job/edit）、管理 API 未授权（/system/user/list）；全部结构化英文 matcher（状态码 + JSON 业务字段 + 否定式排除），不依赖中文文案；**签名靶场 vuln/safe 双模式实测**（vuln 4 命中 / safe 零误报，nuclei v3.11.1 官方二进制，证据见 `EVIDENCE.md`）；CI 新增 `nuclei-templates` 作业（语法校验 + 双模式功能门），Release 附 zip 发布包
 
 - **G4 供应链信任建设**：新增 OpenSSF Scorecard workflow（每周评分 + SARIF 上传 Code Scanning + 公共徽章）；Release 增加 **SLSA 构建来源证明**（`actions/attest-build-provenance`，消费者可 `gh attestation verify` 独立验证）；RuoYi nuclei 模板包 zip 随 Release 分发（校验和一并覆盖）
+- **G4 Awesome-POC 投稿材料（B 渠道，待确认投递）**：`contrib/awesome-poc/` 两篇（后台定时任务 RCE / params[dataScope] SQL 注入），POC 细节源自本项目签名靶场验证过的插件实现；同时记录：`thymeleaf_ssti.py` 的 CVE-2023-38286 归属经 NVD 核查有误（该 CVE 实为 spring-boot-admin MailNotifier 沙箱绕过），后续需修正插件元数据
 - **G4 评分提升（首评 3.1 → 目标 5+）**：全部 workflow 补齐显式最小权限（Token-Permissions）；新增 CodeQL 静态分析（SAST，security-extended）；新增 Dependabot（pip + github-actions 周更）；SLSA 验签已 E2E 实证（`gh attestation verify` → SLSA v1 provenance，builder 为本仓库 release.yml）
 
 ### Notes
