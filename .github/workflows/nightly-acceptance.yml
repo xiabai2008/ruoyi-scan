@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload acceptance report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: acceptance-report
           path: acceptance.json
