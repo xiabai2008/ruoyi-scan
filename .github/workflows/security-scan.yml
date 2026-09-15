@@ -2,6 +2,10 @@
 # PR 触发 + 每周定时扫描；SARIF 上传到 GitHub Code Scanning，高危漏洞在 PR 页面展示
 name: Security Scan
 
+permissions:
+  contents: read
+  security-events: write  # SARIF 上传 Code Scanning
+
 on:
   pull_request:
     branches: [ main ]

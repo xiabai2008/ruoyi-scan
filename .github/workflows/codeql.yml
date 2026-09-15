@@ -1,0 +1,38 @@
+# CodeQL 静态代码分析（G4 信任建设：Scorecard SAST 项 + Code Scanning 闭环）
+# Python 无需编译，build-mode 默认 none；告警进 Security 标签页（不阻塞 CI）
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 0'  # 每周日 03:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write  # 上传分析结果到 Code Scanning
+      packages: read          # CodeQL 查询包拉取
+      actions: read           # 私有仓库需读取 workflow 元数据（公共仓库无害）
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

@@ -10,6 +10,7 @@
 - **G4 RuoYi nuclei 模板包 v0.1.0**（`contrib/nuclei-templates/`）：3 个专项模板——默认管理员口令（admin/admin123）、定时任务端点未授权（/monitor/job/edit）、管理 API 未授权（/system/user/list）；全部结构化英文 matcher（状态码 + JSON 业务字段 + 否定式排除），不依赖中文文案；**签名靶场 vuln/safe 双模式实测**（vuln 4 命中 / safe 零误报，nuclei v3.11.1 官方二进制，证据见 `EVIDENCE.md`）；CI 新增 `nuclei-templates` 作业（语法校验 + 双模式功能门），Release 附 zip 发布包
 
 - **G4 供应链信任建设**：新增 OpenSSF Scorecard workflow（每周评分 + SARIF 上传 Code Scanning + 公共徽章）；Release 增加 **SLSA 构建来源证明**（`actions/attest-build-provenance`，消费者可 `gh attestation verify` 独立验证）；RuoYi nuclei 模板包 zip 随 Release 分发（校验和一并覆盖）
+- **G4 评分提升（首评 3.1 → 目标 5+）**：全部 workflow 补齐显式最小权限（Token-Permissions）；新增 CodeQL 静态分析（SAST，security-extended）；新增 Dependabot（pip + github-actions 周更）；SLSA 验签已 E2E 实证（`gh attestation verify` → SLSA v1 provenance，builder 为本仓库 release.yml）
 
 ### Notes
 - **上游收录尝试存档（避免重复踩坑）**：nuclei-templates PR #17192 被以 *duplicate + unvalidated* 关闭——理由（原文要点）：① 若依指纹检测已存在于 fingerprinthub；② 定时任务未授权模板实网 0 命中（缺流行度证明）；③ 标 PR:H 但利用需 admin 会话（严重度虚高）；④ matcher 仅中文。**结论**：授权配置类模板不符合上游收录标准，策略转为「自建模板包 + Awesome-POC 等中文社区渠道」；仅当出现 CVE/CNVD 编号的若依漏洞时再考虑上游提交，且须遵守：英文结构 matcher、严重度如实、附实网证明
