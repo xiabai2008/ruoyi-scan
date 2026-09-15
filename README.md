@@ -6,6 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Coverage](https://codecov.io/gh/xiabai2008/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/Ruoyi-Scan)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/xiabai2008/ruoyi-scan/badge)](https://securityscorecards.dev/viewer/?uri=github.com/xiabai2008/ruoyi-scan)
 [![Star History](https://api.star-history.com/svg?repos=xiabai2008/ruoyi-scan&type=Date)](https://star-history.com/#xiabai2008/ruoyi-scan&Date)
 
 [中文](README.md) | [English](README_EN.md)
@@ -612,6 +613,15 @@ python tests/regression_spring.py
 ## 安全与合规
 
 本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。
+
+**供应链验证**：Release 产物附带 SLSA 构建来源证明与 SHA256 校验和，可独立验证：
+
+```bash
+# SLSA 构建来源验证（需 gh CLI）
+gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-scan
+# 校验和验证
+sha256sum -c checksums.txt
+```
 
 ---
 

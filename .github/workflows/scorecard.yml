@@ -1,0 +1,51 @@
+# OpenSSF Scorecard：供应链安全评分（G4 信任建设）
+# 结果发布到 OSSF 公共 API（徽章）+ 上传 GitHub Code Scanning（SARIF）
+name: Scorecard supply-chain security
+
+on:
+  # 分支保护配置变更时（评分项之一）
+  branch_protection_rule:
+  # 每周一 02:31 UTC 定期评分
+  schedule:
+    - cron: '31 2 * * 1'
+  # main 分支推送时增量评分
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # 上传 SARIF 到 Code Scanning
+      id-token: write         # 发布结果到 OSSF 公共 API（OIDC）
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # 公开发布评分（供徽章/查看器消费）；仅对公共仓库生效
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

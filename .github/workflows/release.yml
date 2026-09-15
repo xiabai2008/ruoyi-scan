@@ -12,8 +12,9 @@ on:
   workflow_dispatch:  # 手动触发：仅构建+冒烟，不上传 Release
 
 permissions:
-  contents: write  # 创建 Release 需要
-  id-token: write  # PyPI OIDC Trusted Publisher（受信任发布）需要
+  contents: write      # 创建 Release 需要
+  id-token: write      # PyPI OIDC Trusted Publisher（受信任发布）+ SLSA attestation 需要
+  attestations: write  # SLSA 构建来源证明（actions/attest-build-provenance）需要
 
 jobs:
   # 发布门禁：等待同一提交上的 "Ruoyi-Scan CI" 全绿后才允许发布。
@@ -73,11 +74,30 @@ jobs:
           pip install build
           python -m build
 
+      # G4：RuoYi nuclei 模板包随 Release 分发（zip 放独立目录，避免混入 PyPI 上传）
+      - name: Package nuclei template pack
+        run: |
+          mkdir -p release-assets
+          cd contrib/nuclei-templates
+          zip -r "../../release-assets/ruoyi-nuclei-templates-${GITHUB_REF_NAME}.zip" .
+          cd ../..
+          ls -la release-assets/
+
       # F8：生成 SHA256 校验文件（供应链完整性）
       - name: Generate checksums
         run: |
-          sha256sum dist/*.whl dist/*.tar.gz > dist/checksums.txt
+          sha256sum dist/*.whl dist/*.tar.gz release-assets/*.zip > dist/checksums.txt
           cat dist/checksums.txt
+
+      # G4：SLSA 构建来源证明（供应链信任建设）
+      # 消费者验证：gh attestation verify <file> -R xiabai2008/ruoyi-scan
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            release-assets/*.zip
 
       # 冒烟门禁：把构建产物装进全新 venv，验证 CLI 可启动、核心模块可导入、
       # 离线命令可运行。任何一步失败即终止发布（防止 v1.1.0/v1.2.0 那种
@@ -99,6 +119,16 @@ jobs:
           grep -q "quick" /tmp/smoke_t.txt
           echo "SMOKE_GATE_OK"
 
+      # 手动触发（workflow_dispatch）时的产物留存：供 SLSA attestation 验证与调试
+      - name: Upload build artifacts (workflow run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.ref_name }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            release-assets/*.zip
+
       - name: Upload artifacts to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')  # 仅 tag 推送（正式发布）时上传
         uses: softprops/action-gh-release@v2
@@ -109,6 +139,7 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/checksums.txt
+            release-assets/*.zip
 
       # PyPI 发布放最后：即使 OIDC 未配置导致本步失败，GitHub Release 产物也已上传。
       # 前置条件：在 PyPI 项目页 → Publishing → 预登记 Trusted Publisher：
