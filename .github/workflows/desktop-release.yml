@@ -20,13 +20,16 @@ on:
       - 'v*'
   workflow_dispatch:  # 手动触发：仅构建 + 冒烟，不上传 Release
 
+# Scorecard Token-Permissions：顶层只读，写权限在 job 级按需提升
 permissions:
-  contents: write  # 创建 Release 需要
+  contents: read
 
 jobs:
   desktop-release:
     name: Build Windows Desktop Single-Exe
     runs-on: windows-latest
+    permissions:
+      contents: write  # 创建 Release 需要
     timeout-minutes: 90
 
     steps:
