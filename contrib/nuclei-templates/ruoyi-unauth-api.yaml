@@ -1,0 +1,81 @@
+id: ruoyi-unauth-api
+
+info:
+  name: RuoYi - Administrative API Unauthenticated Access
+  author: xiabai2008
+  severity: medium
+  description: |
+    RuoYi administrative list APIs (/system/user/list) return business data
+    without an authenticated session. This typically results from a broken
+    authorization filter configuration and exposes account data to
+    unauthenticated attackers.
+  reference:
+    - https://github.com/xiabai2008/ruoyi-scan
+  classification:
+    cwe-id: CWE-306
+  metadata:
+    max-request: 2
+    product: ruoyi
+    vendor: ruoyi
+    ruoyi-scan-lab-verified: true
+  tags: ruoyi,unauth,misconfig
+
+http:
+  # RuoYi v4 (direct controller paths)
+  - method: GET
+    path:
+      - "{{BaseURL}}/system/user/list"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Business data envelope returned instead of an authorization error
+      - type: word
+        part: body
+        words:
+          - '"rows"'
+          - '"total"'
+        condition: and
+
+      - type: word
+        part: body
+        negative: true
+        words:
+          - '"code":401'
+          - '"code": 401'
+          - '"code":403'
+          - '"code": 403'
+          - "Unauthorized"
+          - "Forbidden"
+
+  # RuoYi v5 (frontend proxy prefix /prod-api)
+  - method: GET
+    path:
+      - "{{BaseURL}}/prod-api/system/user/list"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - '"rows"'
+          - '"total"'
+        condition: and
+
+      - type: word
+        part: body
+        negative: true
+        words:
+          - '"code":401'
+          - '"code": 401'
+          - '"code":403'
+          - '"code": 403'
+          - "Unauthorized"
+          - "Forbidden"

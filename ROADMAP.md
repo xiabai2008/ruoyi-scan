@@ -40,7 +40,7 @@
 | 组件版本检测 | ~~5 个组件~~ **20 个组件（G1 已落地，`lib/component_detect.py`）** | 扩展至 30+ 并补 SnakeYAML 等库级组件；从报错页 / actuator / favicon 提取版本特征 |
 | CVE 数据源 | ~~仅 NVD~~ **NVD + GHSA + CNVD（best-effort）+ 离线库四源（已落地，`lib/cve_sync.py`）** | CNNVD 源评估；离线库 CNVD 别名人工扩充 |
 | 若依变体矩阵 | `core/ruoyi_versions.py` 覆盖 4.2 / 4.7 / v5 / 3.9 / Cloud 里程碑 | 补全 RuoYi-Vue-Plus、RuoYi-App、小程序端点的路由差异与 POC 过滤 |
-| nuclei 兼容升级 | http 协议子集 + 安全白名单（`lib/nuclei_loader.py`） | 扩展协议子集覆盖；向 nuclei-templates 上游贡献若依专项模板（借生态流量） |
+| nuclei 兼容升级 | http 协议子集 + 安全白名单（`lib/nuclei_loader.py`）；**自建 RuoYi 模板包已落地（`contrib/nuclei-templates/`）** | 模板包扩充（组件指纹/变体识别）；上游提交仅限 CVE/CNVD 编号漏洞 |
 
 **验收标准**：新增检测面均有签名靶场覆盖；nightly acceptance 基线文件更新；
 版本矩阵文档 `docs/version-matrix.md` 同步。
@@ -82,8 +82,11 @@
 
 - **文档站**：mkdocs-material + GitHub Pages——现有 `docs/*.md` 分散无导航，
   这是贡献者体验的第一道门槛
-- **借力上游生态**：向 nuclei-templates 提若依专项模板 PR、向 Wappalyzer / EHole
-  提若依指纹——`lib/nuclei_loader.py` 兼容层已证明技术同源
+- ~~**借力上游生态**~~ **已调整策略（2026-09-15）**：上游 nuclei-templates 提交经实战检验
+  不可行（PR #17192 因 duplicate/unvalidated 被关，详见 CHANGELOG Notes）——授权配置类模板
+  不符合其收录标准。**转向自建模板包**（`contrib/nuclei-templates/`，vuln/safe 双模式验证 +
+  CI 功能门 + 随 Release 分发），中文社区渠道（Awesome-POC）作为补充投放；
+  仅未来出现 CVE/CNVD 编号漏洞时再考虑上游
 - **POC 征集 + good first issue**：Ed25519 签名分发闭环（`--plugin-update`）已建好，
   缺的是让第一批外部贡献者进来的钩子；参与 Hacktoberfest 等活动
 - **信任建设**：OpenSSF Scorecard、可复现构建 + SLSA provenance

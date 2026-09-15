@@ -1,0 +1,59 @@
+id: ruoyi-job-unauth
+
+info:
+  name: RuoYi - Scheduled Task Endpoint Unauthenticated Access
+  author: xiabai2008
+  severity: medium
+  description: |
+    The RuoYi scheduled task endpoint (/monitor/job/edit) is reachable
+    without authentication and reaches the business layer instead of
+    returning an authentication error. When combined with a weak or default
+    administrator account this class of exposure enables scheduled task
+    abuse; by itself it indicates a broken authorization configuration.
+  reference:
+    - https://github.com/xiabai2008/ruoyi-scan
+  classification:
+    cwe-id: CWE-306
+  metadata:
+    max-request: 1
+    product: ruoyi
+    vendor: ruoyi
+    ruoyi-scan-lab-verified: true
+  tags: ruoyi,unauth,misconfig
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/monitor/job/edit"
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+    body: "jobId=1&jobName=probe&invokeTarget=probe&cronExpression=0 0 0 * * ?"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Reached the business layer (business response codes), not an auth wall
+      - type: word
+        part: body
+        words:
+          - '"code":500'
+          - '"code": 500'
+          - '"code":0'
+          - '"code": 0'
+        condition: or
+
+      # Exclude explicit authorization failures and login redirects
+      - type: word
+        part: body
+        negative: true
+        words:
+          - '"code":401'
+          - '"code": 401'
+          - '"code":403'
+          - '"code": 403'
+          - "Unauthorized"
+          - "Forbidden"
+          - "login"

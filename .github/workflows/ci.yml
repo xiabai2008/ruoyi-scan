@@ -100,6 +100,57 @@ jobs:
             --report-dir /tmp/e2e/spring --name spring-signature --require-all-confirmed \
             --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权"
 
+  # ── G4：RuoYi nuclei 模板包验证（语法校验 + 签名靶场双模式功能门）──
+  # 功能门 = 与本地 EVIDENCE.md 相同的判定：vuln 模式 ≥3 命中、safe 模式 0 误报
+  nuclei-templates:
+    name: Nuclei Template Pack (validate + lab gate)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lab dependencies
+        run: pip install -r requirements.txt
+      - name: Install nuclei (pinned)
+        run: |
+          curl -sSL -o nuclei.zip https://github.com/projectdiscovery/nuclei/releases/download/v3.11.1/nuclei_3.11.1_linux_amd64.zip
+          unzip -q nuclei.zip -d nuclei-bin
+          ./nuclei-bin/nuclei -version
+      - name: Validate templates
+        run: ./nuclei-bin/nuclei -duc -validate -t contrib/nuclei-templates/
+      - name: Lab dual-mode functional gate
+        run: |
+          set -euo pipefail
+          run_scan() {  # $1=port
+            ./nuclei-bin/nuclei -duc -silent -nc -u "http://127.0.0.1:$1" -t contrib/nuclei-templates/ \
+              | grep -cE '^\[ruoyi-' || true
+          }
+          wait_lab() {  # $1=port
+            for i in $(seq 1 30); do
+              curl -sf "http://127.0.0.1:$1/" >/dev/null 2>&1 && return 0
+              sleep 0.5
+            done
+            echo "lab on port $1 not healthy"; exit 1
+          }
+          # vuln 模式：必须命中 >= 3（模板有效性）
+          LAB_MODE=vuln LAB_PORT=18080 LAB_HOST=127.0.0.1 python lab/server.py > /tmp/lab-vuln.log 2>&1 &
+          LAB_PID=$!
+          wait_lab 18080
+          VULN=$(run_scan 18080)
+          kill $LAB_PID
+          [ "$VULN" -ge 3 ] || { echo "expected >=3 findings, got $VULN"; exit 1; }
+          echo "vuln mode findings: $VULN"
+          # safe 模式：必须 0（误报红线）
+          LAB_MODE=safe LAB_PORT=18081 LAB_HOST=127.0.0.1 python lab/server.py > /tmp/lab-safe.log 2>&1 &
+          LAB_PID=$!
+          wait_lab 18081
+          SAFE=$(run_scan 18081)
+          kill $LAB_PID
+          [ "$SAFE" -eq 0 ] || { echo "false positives in safe mode: $SAFE"; exit 1; }
+          echo "safe mode findings: 0 (no false positive)"
+
   # ── D8 报告格式验收：PDF/Word/Excel 生成 + 去重聚合 + 降级 ──────────
   report-format:
     name: D8 Report Formats (PDF/Word/Excel + Dedup)
