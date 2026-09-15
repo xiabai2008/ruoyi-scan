@@ -11,10 +11,8 @@ on:
       - 'v*'
   workflow_dispatch:  # 手动触发：仅构建+冒烟，不上传 Release
 
-permissions:
-  contents: write      # 创建 Release 需要
-  id-token: write      # PyPI OIDC Trusted Publisher（受信任发布）+ SLSA attestation 需要
-  attestations: write  # SLSA 构建来源证明（actions/attest-build-provenance）需要
+# Scorecard Token-Permissions：顶层只读，写权限在 job 级按需提升
+permissions: read-all
 
 jobs:
   # 发布门禁：等待同一提交上的 "Ruoyi-Scan CI" 全绿后才允许发布。
@@ -62,6 +60,10 @@ jobs:
     name: Build & Publish to GitHub Release
     runs-on: ubuntu-latest
     needs: wait-ci
+    permissions:
+      contents: write      # 创建 Release 需要
+      id-token: write      # PyPI OIDC Trusted Publisher（受信任发布）+ SLSA attestation 需要
+      attestations: write  # SLSA 构建来源证明（actions/attest-build-provenance）需要
     steps:
       - uses: actions/checkout@v4
 

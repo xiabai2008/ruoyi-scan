@@ -2,9 +2,9 @@
 # PR 触发 + 每周定时扫描；SARIF 上传到 GitHub Code Scanning，高危漏洞在 PR 页面展示
 name: Security Scan
 
+# Scorecard Token-Permissions：顶层只读，写权限在 job 级按需提升
 permissions:
   contents: read
-  security-events: write  # SARIF 上传 Code Scanning
 
 on:
   pull_request:
@@ -16,6 +16,9 @@ on:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # SARIF 上传 Code Scanning
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.actor != 'dependabot[bot]') }}
     steps:
       - uses: actions/checkout@v4

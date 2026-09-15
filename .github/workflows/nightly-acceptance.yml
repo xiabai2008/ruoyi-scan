@@ -9,14 +9,17 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
+# Scorecard Token-Permissions：顶层只读，写权限在 job 级按需提升
 permissions:
   contents: read
-  issues: write  # 失败时自动建 issue
 
 jobs:
   acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write  # 失败时自动建 issue
     steps:
       - uses: actions/checkout@v4
 
