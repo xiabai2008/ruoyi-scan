@@ -74,7 +74,7 @@ jobs:
         run: python tests/regression_spring.py
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           file: coverage.xml
           fail_ci_if_error: false
