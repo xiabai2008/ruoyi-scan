@@ -80,3 +80,6 @@ site/
 
 # 桌面端 puppeteer 验证脚本的截图产物（每次运行像素微抖，不入库）
 desktop/scripts/*.png
+
+# 测试运行产物（验收报告等）
+data/acceptance_report*.json
