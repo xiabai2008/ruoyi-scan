@@ -4,6 +4,26 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.2] - 2026-09-15
+
+### Fixed
+- **指纹误判修复**: 软 404 站点（任意路径返回同页面）导致指纹误判——`core/fingerprint.py` 增加软 404 探测判定，`lab/fp_lab/server.py` 补软 404 签名，假阳测试判定补全
+- **CLI 修复**: `-f` 批量模式校验分支补齐 RED/RESET 颜色导入（NameError）
+- **CI**: PyPI 发布加 `skip-existing`——tag 重跑幂等，修复 v1.4.1 发布链两次因 `400 File already exists` 标红（产物无损，重复上传被 PyPI 拒绝）；忽略测试运行产物 data/acceptance_report*.json
+- **文档版本号同步遗漏**: v1.4.1 发版只同步了 README.md——README_EN / docs/USAGE 停留在 1.4.0，本次全部对齐；CHANGELOG 补录 v1.4.1 段
+
+## [1.4.1] - 2026-09-10
+
+### Added
+- **桌面端正式发布**: 桌面端全量入库 + exe 发布链路（PyInstaller 引擎 / Tauri NSIS / CI 单 exe 构建与冒烟）；单 exe 架构——引擎编译期嵌入壳内，免安装双击即用；GitHub Release 新增 desktop 产物（setup.exe + portable exe + desktop checksums）
+- **G4 文档站落地**: mkdocs-material + GitHub Pages 自动部署（docs 站 URL 全量小写化重构 + 交叉引用修正）
+- 社交预览图（GitHub Social Preview，1280x640）；README 新增桌面端章节 + 6 张界面截图 + 与通用扫描器的差异化对比表
+
+### Fixed
+- 桌面端：推送前全量测试修复（卸载残留引擎缓存 + 事件双推去重）；CI 单 exe 冒烟时序竞态（JobObject 挂接诊断 + 轮询等待回收）；三态统计补齐 SAFE / UNKNOWN 维度
+- CI：引擎冒烟残留污染 portable 冒烟——双进程清理 + 阶段前置守卫
+- 版本号同步（README 项目定位段 + whl 安装示例；README_EN / docs/USAGE 漏同步已在 1.4.2 补齐）
+
 ## [1.4.0] - 2026-09-09
 
 ### Added
@@ -172,7 +192,9 @@
 - 签名靶场（Flask lab）
 - 887 单元测试 + 回归测试
 
-[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/xiabai2008/Ruoyi-Scan/compare/v1.2.3...v1.2.4
