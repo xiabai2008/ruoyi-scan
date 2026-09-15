@@ -6,7 +6,7 @@
 #   strong_paths   : 强特征路径列表，每项 {path, expect}
 #                    expect='json'  -> 响应 Content-Type 含 json 且 body 含 code/msg
 #                    expect='image' -> 响应 Content-Type 含 image
-#                    expect='any'   -> 仅需 status_code==200
+#                    expect='any'   -> status_code==200 且响应体不与根路径相同（软404防护）
 #   login_keywords : 登录页/标题强关键字（命中任一 +weight_strong）
 #   weak_keywords  : 弱关键字（标题/响应体含其一 +weight_weak）
 # 置信度：强特征 weight_strong/个，弱特征 weight_weak/个，上限 1.0。

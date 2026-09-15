@@ -53,6 +53,7 @@ class FeatureBasedFingerprint(Fingerprint):
         matched = []
         strong_hits = 0
         weak_hits = 0
+        root_body = ""  # 根路径响应体，供软404检测（catch-all 站点对任意路径返回相同内容）
         w_strong = f.get("weight_strong", 0.5)
         w_weak = f.get("weight_weak", 0.2)
 
@@ -66,6 +67,7 @@ class FeatureBasedFingerprint(Fingerprint):
         try:
             resp = _get(target)
             text = resp.text or ""
+            root_body = text
             title_m = re.findall(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
             title = title_m[0] if title_m else ""
             for kw in f.get("login_keywords", []):
@@ -98,7 +100,13 @@ class FeatureBasedFingerprint(Fingerprint):
                 elif expect == "image":
                     ok = "image" in ct
                 else:
+                    # expect="any"：状态码 200 只是必要条件，还需排除"软404/通配200"——
+                    # 对任意路径返回与根路径完全相同内容的站点（SPA 前端兜底、静态站
+                    # catch-all、部分 CDN/WAF）并非有效强特征；否则会把非若依站点
+                    # （wordpress/django/nginx 等）误判为若依变体。
                     ok = True
+                    if body and root_body and body == root_body:
+                        ok = False
                 if ok:
                     strong_hits += 1
                     matched.append("path:%s(%s,%d)" % (path, expect, r.status_code))

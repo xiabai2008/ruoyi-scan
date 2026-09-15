@@ -117,7 +117,9 @@ def main():
             cms, confidence, confirmed = "error", 0.0, 0
             print(f"[!] 扫描异常 {target_id}: {e}")
 
-        is_fp = cms == "ruoyi"
+        # 假阳判定：任何被识别为"若依"系的 CMS 都算误判
+        # （含 ruoyi / ruoyi-cloud / ruoyi-cloud-plus / ruoyi-vue3 / ruoyi-app 等全部变体）
+        is_fp = bool(cms) and cms.startswith("ruoyi")
         if is_fp:
             false_positives += 1
         verdict = "假阳" if is_fp else "正确"

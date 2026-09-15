@@ -26,7 +26,7 @@ class TestFpLabRender(unittest.TestCase):
 
     def test_all_targets_renderable(self):
         """所有 10 个靶场都能渲染出内容"""
-        self.assertEqual(len(TARGETS), 10, "应有 10 个误报靶场")
+        self.assertEqual(len(TARGETS), 11, "应有 11 个误报靶场（含 soft_404 软404防护靶场）")
         for target_id in TARGETS:
             content, ct = render(target_id)
             self.assertIsInstance(content, str, f"{target_id} 渲染应返回字符串")

@@ -22,6 +22,7 @@ TARGETS = {
     "nginx_welcome": "Nginx 默认欢迎页",
     "apache_welcome": "Apache 默认欢迎页",
     "tomcat_default": "Tomcat 默认首页",
+    "soft_404": "软404/通配200站点（任意路径返回200+首页内容，验证指纹软404防护）",
     "weak_ruoyi_keyword": '含"若依"二字的非若依页面（边界测试，弱特征命中但无强特征）',
 }
 
@@ -122,12 +123,35 @@ def render(target_id):
 
 
 @app.route("/")
-@app.route("/<path:subpath>")
-def index(subpath=""):
-    """所有路径返回同一靶场内容（模拟静态站点）"""
+def index():
+    """根路径返回靶场内容"""
     target_id = os.environ.get("FP_TARGET", "generic_html")
+    if target_id == "soft_404":
+        target_id = "generic_html"
     content, ct = render(target_id)
     return Response(content, mimetype=ct + "; charset=utf-8")
+
+
+@app.route("/<path:subpath>")
+def subpath_handler(subpath):
+    """非根路径处理
+
+    - soft_404 靶场：模拟 SPA/兜底站点的通配 200（返回与首页相同内容），
+      用于验证指纹的软404防护是否生效；
+    - 其余靶场：返回 404，模拟标准真实站点——避免 catch-all 伪造 200
+      给指纹挖出"必中"的假强特征。
+    """
+    target_id = os.environ.get("FP_TARGET", "generic_html")
+    if target_id == "soft_404":
+        content, ct = render("generic_html")
+        return Response(content, mimetype=ct + "; charset=utf-8")
+    return Response(
+        "<!doctype html><html><head><title>404 Not Found</title></head>"
+        "<body><h1>404 Not Found</h1>"
+        "<p>The requested URL was not found on this server.</p></body></html>",
+        status=404,
+        mimetype="text/html; charset=utf-8",
+    )
 
 
 if __name__ == "__main__":
