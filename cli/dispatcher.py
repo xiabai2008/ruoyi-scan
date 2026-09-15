@@ -158,6 +158,7 @@ def dispatch(args: Namespace) -> None:
                 break
         if not mode:
             from lib.colors import RED, RESET  # 与上方 --ai-triage 分支一致的延迟导入
+
             print(f"{RED}[!]-f 批量扫描需配合 -u/-m/-p/-l 指定扫描模式，如：main.py -f targets.txt -p{RESET}")
             return
         run_mode_batch(args.file, mode, args)
