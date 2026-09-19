@@ -129,7 +129,7 @@ pip install ruoyi-scan
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.4.2
+- **版本**：1.4.3
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
@@ -200,7 +200,7 @@ ruoyi-scan -p http://target:8080/
 前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载最新 `.whl` 文件，然后：
 
 ```bash
-pip install ruoyi_scan-1.4.2-py3-none-any.whl
+pip install ruoyi_scan-1.4.3-py3-none-any.whl
 ```
 
 ### 方式三：源码安装

@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [1.4.3] - 2026-09-19
 
 ### Added
 - **G4 RuoYi nuclei 模板包 v0.1.0**（`contrib/nuclei-templates/`）：3 个专项模板——默认管理员口令（admin/admin123）、定时任务端点未授权（/monitor/job/edit）、管理 API 未授权（/system/user/list）；全部结构化英文 matcher（状态码 + JSON 业务字段 + 否定式排除），不依赖中文文案；**签名靶场 vuln/safe 双模式实测**（vuln 4 命中 / safe 零误报，nuclei v3.11.1 官方二进制，证据见 `EVIDENCE.md`）；CI 新增 `nuclei-templates` 作业（语法校验 + 双模式功能门），Release 附 zip 发布包
