@@ -20,7 +20,10 @@ if TYPE_CHECKING:
     from lib.proxy_pool import ProxyPool
 
 
-class TargetUnresponsiveError(requests.exceptions.ConnectionError):
+# type: ignore[misc] 的原因：CI 环境未安装 requests 类型桩，--ignore-missing-imports 使
+# 基类退化为 Any，strict 模式禁止继承 Any；本地装有类型桩时该 ignore 属于未使用，
+# 由 --no-warn-unused-ignores 压制，两种环境下均可通过。
+class TargetUnresponsiveError(requests.exceptions.ConnectionError):  # type: ignore[misc]
     """连续超时熔断触发：目标接受 TCP 连接但不返回响应。
 
     继承 ConnectionError，使插件既有的 `except Exception` 语义完全不变——结果仍按三态
