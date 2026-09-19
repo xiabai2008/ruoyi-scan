@@ -10,8 +10,8 @@ from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
-from plugins.ruoyi.job_invoke_target import JobInvokeTargetPlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
+from plugins.ruoyi.job_invoke_target import JobInvokeTargetPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
 from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin

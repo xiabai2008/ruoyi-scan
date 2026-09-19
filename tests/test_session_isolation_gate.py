@@ -72,7 +72,7 @@ def test_no_plugin_instantiates_auth_chain_directly():
         "检测到插件直接实例化 RuoYiAuthChain（会把登录态泄漏给共享会话，"
         f"在 v4.8.3 上引发跨插件误报）。请改用 core.auth_chain.isolated_auth_session：{violations}"
     )
-    print(f"PASS test_no_plugin_instantiates_auth_chain_directly: plugins/ 全部合规")
+    print("PASS test_no_plugin_instantiates_auth_chain_directly: plugins/ 全部合规")
 
 
 def test_auth_plugins_use_isolated_session():
@@ -102,7 +102,7 @@ def test_auth_plugins_use_isolated_session():
         f"以下插件引用了 core.auth_chain 却未使用 {REQUIRED_HELPER}（必须用独立会话，"
         f"禁止在共享会话上登录）: {missing}"
     )
-    print(f"PASS test_auth_plugins_use_isolated_session")
+    print("PASS test_auth_plugins_use_isolated_session")
 
 
 if __name__ == "__main__":
