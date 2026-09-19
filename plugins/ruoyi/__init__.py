@@ -1,5 +1,5 @@
 # 若依插件包：plugin_list 声明本包插件类（保持执行顺序）
-# Step 2（无损迁移）：path_scan → poc_scan(file_read / file_read_time / sql_inject_role / sql_inject_dept) → web_login
+# Step 2（无损迁移）：path_scan → poc_scan(file_read / file_read_time[后改名 job_invoke_target] / sql_inject_role / sql_inject_dept) → web_login
 # Step 5（专项补齐）：vuln 类追加 file_upload / job_rce / thymeleaf_ssti / unauth_batch；brute 类追加 default_password
 # Step 8（阶段八扩充）：vuln 类追加 file_read_path（high）/ nacos_unauth（medium）
 # plugin_list：插件注册表，扫描器按声明顺序逐条执行——新增插件须在此登记，排序即执行优先级
@@ -10,8 +10,8 @@ from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
-from plugins.ruoyi.file_read_time import FileReadTimePlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
+from plugins.ruoyi.job_invoke_target import JobInvokeTargetPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
 from plugins.ruoyi.plus_auth_login import PlusAuthLoginProbePlugin
@@ -29,7 +29,7 @@ plugin_list = [
     DirectoryScanPlugin,
     # vuln：原有 4 POC（保持原 -p 漏洞检测顺序）
     FileReadPlugin,  # 任意文件读取
-    FileReadTimePlugin,  # 定时任务任意文件读取
+    JobInvokeTargetPlugin,  # 定时任务 invokeTarget 白名单缺失（high，<4.7）
     SqlInjectRolePlugin,  # POST 型报错注入（role）
     SqlInjectDeptPlugin,  # POST 型报错注入（dept）
     # vuln：Step 5 新增专项 POC（按危险度从高到低排序）

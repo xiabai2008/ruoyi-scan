@@ -441,7 +441,99 @@ v4.6.2（4.7.0 白名单生效前的最后版本）已加入矩阵：源码核�
 数字与源码边界完全吻合。回归测试 `test_router_candidates_not_version_filtered`
 与 `test_build_version_matrix_marks_skipped` 锁定该语义。
 
-## 八、后续工作
+## 八、第三条曲线达成：定时任务 invokeTarget 白名单（2026-09-19）
+
+### 8.1 先纠正上一轮的一个错误结论
+
+上一轮记的「4.6.2 上 `POST /monitor/job/edit` 接受 `ruoYiConfig.setProfile` 载荷——
+无白名单实锤」**是误读**，两个原因叠加：
+
+1. 当时只看响应的**字节数**（29 字节 JSON）就推断是「操作成功」，**没核对内容**——
+   实际那次是权限拒绝；
+2. 用 `grep -B 2` 看注解时窗口太窄，**漏掉了 `editSave` 上方的
+   `@RequiresPermissions("monitor:job:edit")`**，于是误以为 4.6.2 的 edit 无权限门。
+
+实测澄清：`/monitor/job/edit` 在 **4.6.2 与 4.7.8 上都需要 `monitor:job:edit` 权限**，
+差异只在白名单。探测账号补齐 `monitor:job:edit` / `monitor:job:changeStatus` /
+`monitor:job:list` 后，判别才成立。
+
+> 教训：**判定的前提是「看到的响应内容」而不是「响应长度」**；看注解要用足够宽的窗口，
+> 或直接读方法全文。
+
+### 8.2 白名单的真实边界（与原先的想当然不同）
+
+4.7.0+ 的 `SysJobController.editSave` 在写入前依次校验：Cron → `rmi://` → LDAP →
+`http(s)` → `JOB_ERROR_STR` 黑名单 → `ScheduleUtils.whiteList` 白名单。
+
+`whiteList` 对单级 `beanName.method(args)` 是**按 bean 所在包**判定：
+
+    Object obj = SpringUtils.getBean(beanName);
+    String pkg = obj.getClass().getPackage().getName();
+    return 含 "com.ruoyi" && 不含 JOB_ERROR_STR
+
+    JOB_ERROR_STR = { java.net.URL, javax.naming.InitialContext, org.yaml.snakeyaml,
+                      org.springframework, org.apache,
+                      com.ruoyi.common.utils.file, com.ruoyi.common.config }
+
+**关键实测**：`ryTask.ryParams('x')` 在 **4.7.8 上也被放行**（`ryTask` 的包是
+`com.ruoyi.quartz.task`，既含 `com.ruoyi` 又不在黑名单）——所以拿它当判别载荷
+**根本区分不出修好没修好**（实测两端 edit 都返回成功、日志都出现标记）。
+真正能区分的载荷必须落在黑名单里：`ruoYiConfig` 位于 `com.ruoyi.common.config` ✓
+
+### 8.3 为什么放弃「读文件」这条 oracle
+
+原插件（`file_read_time`）走「`setProfile('/etc/passwd')` → run → 下载 2.txt →
+看是否含 passwd 特征」，有两个硬伤：
+
+1. **下载路径拼错**：`resourceDownload` 的实现是
+   `downloadPath = RuoYiConfig.getProfile() + substringAfter(resource, "/profile")`；
+   原实现发 `resource=2.txt`（不含 `/profile` 前缀）→ `substringAfter` 返回空串
+   → 拼出的是**目录本身** → `FileInputStream` 读目录抛异常被 catch 吞掉
+   → **响应恒为 0 字节**，无论目标有没有漏洞都读不到内容。这是上轮那个「0 字节」的真因。
+2. **`setProfile` 一旦执行就无法还原**：profile 是上传根目录，原值只在
+   `application.yaml` 里，HTTP 侧读不回来。扫描器不该把目标的配置改坏到重启为止。
+
+（另：`checkAllowDownload` 直接拒绝含 `..` 的 resource，所以「路径穿越绕开 profile」
+也走不通——必须在 profile 上动手，进一步说明这条路代价太高。）
+
+### 8.4 新 oracle：只写不执行
+
+插件改名 `job_invoke_target.py`（类 `JobInvokeTargetPlugin`，显示名
+「定时任务调用目标未校验」），判定流程：
+
+1. 读任务列表拿真实 jobId 与原 invokeTarget/status；
+2. edit 写判别载荷 `ruoYiConfig.setProfile('<随机标记>')`，**并把 status 置 1（暂停）**，
+   避免 cron 在探测窗口内真把载荷跑起来；
+3. 判定 edit 响应（解析 JSON 字段，不做原文子串匹配——服务端可能 unicode 转义）：
+   - `code:0` 且**回读确认写入生效** → **CONFIRMED**
+   - `目标字符串不在白名单内` → **SAFE**
+   - HTML（权限页）→ **UNKNOWN**（账号权限不足，不能当结论）
+4. 还原原 invokeTarget/status，并二次回读确认。
+
+**全程不调用 `/monitor/job/run`**——回归测试里有一条专门断言
+`/monitor/job/run` 不出现在请求历史中。
+
+### 8.5 结果：三条曲线齐了
+
+| 版本 | CONFIRMED | 明细 |
+|---|---|---|
+| v4.6.2 | **3** | 定时任务调用目标未校验 + 重置密码页数据权限绕过 + 部门树越权访问 |
+| v4.7.8 | 2 | 后两个 |
+| v4.8.0 | 2 | 后两个 |
+| v4.8.2 | 0 | — |
+| v4.8.3 | 0 | — |
+
+（报告中该项显示为「远程代码执行」——`core/dedup._resolve_name` 优先取 `vuln_type`
+的中文类名，`rce → 远程代码执行`；`extra.sources` 里能查到真实来源 `job_invoke_target`，
+evidence 也写明了「载荷未执行」的边界。）
+
+### 8.6 一处遗留的命名债
+
+`lab/` 下的本地 mock 靶场与部分文档（`lab/README.md`、`lab/server.py`）仍在描述
+旧插件「读 2.txt」的行为，未同步——那套 mock 服务的是本地端到端测试，
+不影响矩阵结论，列入后续清理。
+
+## 九、后续工作
 
 1. **读回 oracle 补齐**：`file_read_time` 在 ≤4.6.x 上 edit 被接受但读回未完成（UNKNOWN），
    需研究 profile 路径改写后的资源定位（如 setProfile('/') + resource=etc/passwd），
@@ -451,7 +543,7 @@ v4.6.2（4.7.0 白名单生效前的最后版本）已加入矩阵：源码核�
 3. **版权年份映射的维护**：新增版本发布后需人工补 `COPYRIGHT_YEAR_TO_VERSION`，
    可考虑在 seed/check 阶段自动从源码提取校验。
 
-## 九、环境清理
+## 十、环境清理
 
 矩阵产物保留在 `out/`（已 gitignore）。运行期资源收尾：
 

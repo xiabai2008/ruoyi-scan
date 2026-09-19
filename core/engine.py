@@ -54,13 +54,13 @@ class ScanEngine:
             try:
                 inst = cls()
                 # ⚠ 共享会话存在「认证状态泄漏」风险：各插件复用同一个 SessionManager，
-                # 而 file_read_time、cve_2025_46174_resetpwd_scope 等插件会在其上**登录**。
+                # 而 job_invoke_target、cve_2025_46174_resetpwd_scope 等插件会在其上**登录**。
                 # 登录状态会一直保留给后续插件，而其余插件普遍以「未认证基线」为前提判定，
                 # 于是把「已认证下返回的 200」误读为「文件/接口存在」。
                 # 注意：**不能用 cookie 快照/还原来做隔离**——已实测无效：
                 # Shiro 把认证状态存在服务端 session（按 JSESSIONID 索引），
                 # 把 cookie 还原成同一个 JSESSIONID，服务端仍视其为已认证。
-                # 需鉴权的插件必须自建独立会话（见 plugins/ruoyi/file_read_time.py 的写法）。
+                # 需鉴权的插件必须自建独立会话（见 plugins/ruoyi/job_invoke_target.py 的写法）。
                 original = cast(ScanResult, inst.verify(target, session))
                 # D7: WAF 绕过（仅当协调器存在且插件支持绕过且原结果非 CONFIRMED）
                 if (

@@ -199,6 +199,9 @@ LOWPRIV_ROLE_ID = 99  # 专用探测角色（避开官方种子的 role_id 1/2�
 LOWPRIV_DEPT_ID = 105  # 测试部门：在探测角色可见范围内
 RESETPWD_MENU_ID = 1006  # sys_menu.perms = system:user:resetPwd
 USERLIST_MENU_ID = 1000  # sys_menu.perms = system:user:list（供插件做「可见用户」对照基线）
+JOBLIST_MENU_ID = 1050  # sys_menu.perms = monitor:job:list（读任务列表/日志）
+JOBEDIT_MENU_ID = 1052  # sys_menu.perms = monitor:job:edit（定时任务白名单缺陷的触发权限）
+JOBSTATUS_MENU_ID = 1054  # sys_menu.perms = monitor:job:changeStatus（/monitor/job/run 触发权限）
 LOWPRIV_TARGET_DEPT = 103  # 超管所在部门（探测角色可见范围之外）
 
 
@@ -242,6 +245,9 @@ VALUES
 INSERT INTO sys_role_dept (role_id, dept_id) VALUES ({role_id}, {LOWPRIV_DEPT_ID});
 INSERT INTO sys_role_menu (role_id, menu_id) VALUES ({role_id}, {RESETPWD_MENU_ID});
 INSERT INTO sys_role_menu (role_id, menu_id) VALUES ({role_id}, {USERLIST_MENU_ID});
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES ({role_id}, {JOBLIST_MENU_ID});
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES ({role_id}, {JOBEDIT_MENU_ID});
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES ({role_id}, {JOBSTATUS_MENU_ID});
 INSERT INTO sys_user
     (dept_id, login_name, user_name, user_type, email, phonenumber, sex, avatar,
      password, salt, status, del_flag, create_by, create_time, remark)
@@ -266,7 +272,7 @@ INSERT INTO sys_user_role (user_id, role_id)
             f"WHERE rm.role_id={role_id} AND m.perms LIKE 'system:dept%';",
         )
         log(
-            f"{v['tag']}: 低权账号就绪（用户 {n} 个，权限 {perms} 项=[resetPwd,user:list]，"
+            f"{v['tag']}: 低权账号就绪（用户 {n} 个，权限 {perms} 项=[resetPwd,user:list,job:list,job:edit,job:status]，"
             f"其中 dept 类 {dept_perms} 项——必须为 0）"
         )
     log(f"seed 完成（账号 {LOWPRIV_LOGIN} / {LOWPRIV_PASSWORD}）")

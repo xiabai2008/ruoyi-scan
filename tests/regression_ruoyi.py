@@ -43,10 +43,10 @@ from plugins.ruoyi.druid_brute import DruidBrutePlugin
 # 原有 6 个插件（Step 2 迁移）
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
-from plugins.ruoyi.file_read_time import FileReadTimePlugin
 
 # Step 5 新增 5 个 POC 插件
 from plugins.ruoyi.file_upload import FileUploadPlugin
+from plugins.ruoyi.job_invoke_target import JobInvokeTargetPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
 
 # Step 8 新增 2 个 POC 插件（含签名 marker 常量）
@@ -139,9 +139,7 @@ class TestSqlInject(unittest.TestCase):
         m.post(url, text=ambient)
         plugin = SqlInjectRolePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(
-            result.status, STATUS_UNKNOWN, f"基线同样含异常文案时应判 UNKNOWN，实际 {result.status}"
-        )
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"基线同样含异常文案时应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
     def test_no_false_positive_on_payload_reflection(self, m):
@@ -163,9 +161,7 @@ class TestSqlInject(unittest.TestCase):
         )
         plugin = SqlInjectDeptPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertNotEqual(
-            result.status, STATUS_CONFIRMED, "载荷被原样回显不得判 CONFIRMED（自证误报）"
-        )
+        self.assertNotEqual(result.status, STATUS_CONFIRMED, "载荷被原样回显不得判 CONFIRMED（自证误报）")
 
     @requests_mock.Mocker()
     def test_unknown_when_exception_and_reflection_coexist(self, m):
@@ -173,16 +169,11 @@ class TestSqlInject(unittest.TestCase):
         url = MOCK_TARGET + "/system/role/list"
         m.post(
             url,
-            text=(
-                '{"msg":"运行时异常：extractvalue(1,concat(0x7e,(select database()),0x7e)) '
-                '执行失败","code":500}'
-            ),
+            text=('{"msg":"运行时异常：extractvalue(1,concat(0x7e,(select database()),0x7e)) 执行失败","code":500}'),
         )
         plugin = SqlInjectRolePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(
-            result.status, STATUS_UNKNOWN, f"异常文案与载荷回显并存应判 UNKNOWN，实际 {result.status}"
-        )
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"异常文案与载荷回显并存应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
     def test_safe_normal_response(self, m):
@@ -194,127 +185,120 @@ class TestSqlInject(unittest.TestCase):
         self.assertEqual(result.status, STATUS_SAFE)
 
 
-class TestFileReadTime(unittest.TestCase):
-    """3. 定时任务读取链路（登录链 → 发现 jobId → edit → run → 2.txt → 还原）：状态/响应判定正确
+class TestJobInvokeTarget(unittest.TestCase):
+    """定时任务 invokeTarget 白名单缺失（只写不执行的差分判定）
 
-    D1 改造（2026-07-18）：file_read_time 先走 RuoYiAuthChain 登录，再 edit→run→read。
-    mock 需补充 GET /login（HTML 登录页）+ POST /login（code=0 成功）。
-
-    2026-09-17 多版本矩阵实测后加固：插件改为**动态发现 jobId**
-    （原实现硬编码 jobId=4，而各版本 sys_job 种子数据只有 1/2/3，
-    导致链路空转却报 SAFE —— 假阴性），并在探测后**还原任务**。
-    因此 mock 必须补上 POST /monitor/job/list。
+    版本边界（4.6.2 实测接受 / 4.7.8+ 实测拒绝）。判定不执行载荷——因为判别载荷
+    ruoYiConfig.setProfile(...) 一旦执行就改掉目标的上传根目录且**无法从 HTTP 侧还原**
+    （原值只在 application.yaml 里）。故只写、回读确认、还原，永不 run。
     """
 
-    def _mock_login(self, m):
-        """公共：mock 登录链两端点（v4 Session 模式）"""
-        m.get(
-            MOCK_TARGET + "/login",
-            text="<html><head><title>登录若依系统</title></head><body><form>登录</form></body></html>",
-            headers={"Content-Type": "text/html;charset=UTF-8"},
-        )
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+    ORIG_TARGET = "ryTask.ryNoParams"
+    PAGE_403 = "<!DOCTYPE html><html><head><title>RuoYi - 403</title></head><body>无权限</body></html>"
 
-    def _mock_job_list(self, m, rows=None):
-        """公共：mock 任务列表接口（插件据此动态发现真实 jobId）。
+    class _FakeJobServer:
+        """有状态假服务端：edit 被接受时真的改写任务，用来验证回读与还原"""
 
-        默认返回一条与官方种子数据一致的示例任务（jobId=1 / ryTask.ryNoParams）。
-        传 rows=[] 可模拟「无可用任务」。
-        """
-        if rows is None:
-            rows = [
+        def __init__(self, reject=False, write_through=True):
+            self.invoke_target = TestJobInvokeTarget.ORIG_TARGET
+            self.status = "0"
+            self.reject = reject
+            self.write_through = write_through  # False 模拟「返回成功但没写进去」
+
+        def list_resp(self, request, context):
+            return json.dumps(
                 {
-                    "jobId": 1,
-                    "jobName": "系统默认（无参）",
-                    "jobGroup": "DEFAULT",
-                    "invokeTarget": "ryTask.ryNoParams",
-                    "cronExpression": "0/10 * * * * ?",
-                    "misfirePolicy": "3",
-                    "concurrent": "1",
-                    "status": "1",
-                    "remark": "",
+                    "total": 1,
+                    "rows": [
+                        {
+                            "jobId": 1,
+                            "jobName": "系统默认（无参）",
+                            "jobGroup": "DEFAULT",
+                            "invokeTarget": self.invoke_target,
+                            "cronExpression": "0/10 * * * * ?",
+                            "misfirePolicy": "1",
+                            "concurrent": "1",
+                            "status": self.status,
+                            "remark": "",
+                        }
+                    ],
                 }
-            ]
+            )
+
+        def edit_resp(self, request, context):
+            from urllib.parse import parse_qs
+
+            params = parse_qs(request.text or "")
+            target = (params.get("invokeTarget") or [""])[0]
+            if self.reject:
+                return json.dumps({"msg": "修改任务'系统默认（无参）'失败，目标字符串不在白名单内", "code": 500})
+            if self.write_through:
+                self.invoke_target = target
+                self.status = (params.get("status") or [self.status])[0]
+            return json.dumps({"msg": "操作成功", "code": 0})
+
+    def _mock_login_and_jobs(self, m, server):
+        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.post(MOCK_TARGET + "/monitor/job/list", text=server.list_resp, headers={"Content-Type": "application/json"})
+        m.post(MOCK_TARGET + "/monitor/job/edit", text=server.edit_resp, headers={"Content-Type": "application/json"})
+
+    @requests_mock.Mocker()
+    def test_confirmed_when_payload_accepted_and_written(self, m):
+        """漏洞版：任意调用目标被接受并写库 → CONFIRMED；且任务必须还原、载荷绝不执行"""
+        server = self._FakeJobServer(reject=False)
+        self._mock_login_and_jobs(m, server)
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"载荷被接受应判 CONFIRMED，实际 {result.status}")
+        self.assertIn("白名单", result.evidence)
+        # 安全属性：不得触发执行（判据只看写入是否被接受）
+        self.assertNotIn(
+            "/monitor/job/run",
+            " ".join(r.url for r in m.request_history),
+            "本插件不得执行载荷——setProfile 一旦执行就无法还原目标配置",
+        )
+        self.assertEqual(server.invoke_target, self.ORIG_TARGET, "探测后必须还原任务")
+
+    @requests_mock.Mocker()
+    def test_safe_when_whitelist_rejects(self, m):
+        """修复版：写入判别载荷被白名单拒绝 → SAFE"""
+        server = self._FakeJobServer(reject=True)
+        self._mock_login_and_jobs(m, server)
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE, f"被白名单拒绝应判 SAFE，实际 {result.status}")
+        self.assertIn("白名单", result.evidence)
+        self.assertEqual(server.invoke_target, self.ORIG_TARGET)
+
+    @requests_mock.Mocker()
+    def test_unknown_when_edit_denied_by_permission(self, m):
+        """账号缺 monitor:job:edit（返回权限页而非 JSON）→ UNKNOWN，不得判 SAFE"""
+        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
         m.post(
             MOCK_TARGET + "/monitor/job/list",
-            text=json.dumps({"total": len(rows), "rows": rows, "code": 200, "msg": "查询成功"}),
+            text=self._FakeJobServer().list_resp,
             headers={"Content-Type": "application/json"},
         )
+        m.post(MOCK_TARGET + "/monitor/job/edit", text=self.PAGE_403, headers={"Content-Type": "text/html"})
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"权限不足应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
-    def test_hit_full_chain(self, m):
-        """命中：登录成功 + 发现 jobId + edit 200 + run 200 + 2.txt 含 root:/"""
-        self._mock_login(m)
-        self._mock_job_list(m)
-        edit_url = MOCK_TARGET + "/monitor/job/edit"
-        run_url = MOCK_TARGET + "/monitor/job/run"
-        read_url = MOCK_TARGET + "/common/download/resource?resource=2.txt"
-        m.post(edit_url, text='{"code":200,"msg":"操作成功"}')
-        m.post(run_url, text='{"code":200,"msg":"执行成功"}')
-        m.get(read_url, text="root:x:0:0:root:/root:/bin/bash\n")
-        plugin = FileReadTimePlugin()
-        result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_CONFIRMED, f"链路命中应判 CONFIRMED，实际 {result.status}")
-        self.assertIn("root", result.evidence)
-        self.assertIn("jobId=1", result.evidence, "证据应点名实际使用的 jobId")
+    def test_unknown_when_job_list_unreadable(self, m):
+        """任务列表不可读 → UNKNOWN（拿不到可用任务就不下结论）"""
+        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.post(MOCK_TARGET + "/monitor/job/list", text=self.PAGE_403, headers={"Content-Type": "text/html"})
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"列表不可读应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
-    def test_safe_when_2txt_no_root(self, m):
-        """安全：登录成功 + 2.txt 不含 root:/，应判 SAFE（即使 edit/run 成功）"""
-        self._mock_login(m)
-        self._mock_job_list(m)
-        m.post(MOCK_TARGET + "/monitor/job/edit", text="ok")
-        m.post(MOCK_TARGET + "/monitor/job/run", text="ok")
-        m.get(MOCK_TARGET + "/common/download/resource?resource=2.txt", text="empty file content")
-        plugin = FileReadTimePlugin()
-        result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_SAFE)
-        # SAFE 分支必须有证据，否则结论不可审计
-        self.assertIn("jobId=1", result.evidence, "SAFE 结论必须说明测了哪个任务")
-
-    @requests_mock.Mocker()
-    def test_unknown_when_no_available_job(self, m):
-        """新增（2026-09-17）：任务列表为空 → UNKNOWN，不得冒充 SAFE
-
-        回归场景：原实现硬编码 jobId=4，任务不存在时链路静默空转却报 SAFE（假阴性）。
-        现要求无可用任务时判 UNKNOWN —— 「无法判定」比「假装确认不存在」诚实。
-        """
-        self._mock_login(m)
-        self._mock_job_list(m, rows=[])
-        plugin = FileReadTimePlugin()
-        result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_UNKNOWN, f"无可用定时任务应判 UNKNOWN，实际 {result.status}")
-
-    @requests_mock.Mocker()
-    def test_job_is_restored_after_probe(self, m):
-        """新增（2026-09-17）：探测结束后必须把任务还原为原始 invokeTarget
-
-        扫描器不应在被测系统上留下改动。插件先写入读取载荷触发漏洞，
-        随后必须再发一次 edit 把 invokeTarget 改回原值。
-        """
-        self._mock_login(m)
-        self._mock_job_list(m)
-        m.post(MOCK_TARGET + "/monitor/job/edit", text='{"code":200,"msg":"操作成功"}')
-        m.post(MOCK_TARGET + "/monitor/job/run", text='{"code":200,"msg":"执行成功"}')
-        m.get(MOCK_TARGET + "/common/download/resource?resource=2.txt", text="no passwd here")
-        plugin = FileReadTimePlugin()
-        plugin.verify(MOCK_TARGET, SessionManager())
-
-        edits = [r for r in m.request_history if r.url.endswith("/monitor/job/edit")]
-        self.assertGreaterEqual(len(edits), 2, "应至少有「写入载荷」与「还原」两次 edit")
-        self.assertIn("ruoYiConfig.setProfile", edits[0].text or "", "首次 edit 应写入读取载荷")
-        self.assertIn("ryTask.ryNoParams", edits[-1].text or "", "最后一次 edit 应还原为原始 invokeTarget")
-
-    @requests_mock.Mocker()
-    def test_unknown_when_captcha_required(self, m):
-        """D1 新增：登录需验证码 → UNKNOWN（file_read_time 无法处理验证码）"""
-        m.get(MOCK_TARGET + "/login", text="<html><form>登录</form></html>", headers={"Content-Type": "text/html"})
-        m.post(
-            MOCK_TARGET + "/login", text='{"code":500,"msg":"验证码错误"}', headers={"Content-Type": "application/json"}
-        )
-        plugin = FileReadTimePlugin()
-        result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_UNKNOWN, f"验证码拦截应判 UNKNOWN，实际 {result.status}")
+    def test_unknown_when_accepted_but_not_written(self, m):
+        """服务端返回成功但回读发现没写进去 → UNKNOWN（不凭单次响应下结论）"""
+        server = self._FakeJobServer(reject=False, write_through=False)
+        self._mock_login_and_jobs(m, server)
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"写入未生效应判 UNKNOWN，实际 {result.status}")
 
 
 class TestDruidBrute(unittest.TestCase):
@@ -800,9 +784,7 @@ class TestPlusAuthProbe(unittest.TestCase):
         )
         plugin = PlusAuthLoginProbePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertNotEqual(
-            result.status, STATUS_CONFIRMED, "重定向到登录页不得判 CONFIRMED（该路径不是独立认证服务）"
-        )
+        self.assertNotEqual(result.status, STATUS_CONFIRMED, "重定向到登录页不得判 CONFIRMED（该路径不是独立认证服务）")
 
     @requests_mock.Mocker()
     def test_safe_on_html_containing_code_and_msg(self, m):
@@ -883,24 +865,21 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
     """
 
     CONTROL_PAGE = (
-        '<!DOCTYPE html><html><body>'
+        "<!DOCTYPE html><html><body>"
         '<form class="form-horizontal m" id="form-user-resetPwd">'
         '<input name="userId" type="hidden" value="2"/>'
         '<input class="form-control" type="text" readonly="true" name="loginName" value="ry"/>'
         "</form></body></html>"
     )
     LEAKED_PAGE = (
-        '<!DOCTYPE html><html><body>'
+        "<!DOCTYPE html><html><body>"
         '<form class="form-horizontal m" id="form-user-resetPwd">'
         '<input name="userId" type="hidden" value="1"/>'
         '<input class="form-control" type="text" readonly="true" name="loginName" value="admin"/>'
         "</form></body></html>"
     )
     # 修复版：checkUserDataScope 抛 ServiceException → 渲染成 200 错误页
-    DENIED_PAGE = (
-        "<!DOCTYPE html><html><head><title>RuoYi - 500</title></head>"
-        "<body>没有权限访问用户数据</body></html>"
-    )
+    DENIED_PAGE = "<!DOCTYPE html><html><head><title>RuoYi - 500</title></head><body>没有权限访问用户数据</body></html>"
 
     def _mock_login_and_list(self, m, rows):
         m.get(MOCK_TARGET + "/login", text="<html><form>登录</form></html>", headers={"Content-Type": "text/html"})
@@ -1056,7 +1035,7 @@ def run_all():
     test_classes = [
         TestFileRead,
         TestSqlInject,
-        TestFileReadTime,
+        TestJobInvokeTarget,
         TestDruidBrute,
         TestDirectoryScan,
         TestFileUpload,

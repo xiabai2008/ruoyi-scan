@@ -10,7 +10,7 @@ from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
 from plugins.ruoyi.file_read import FileReadPlugin
 from plugins.ruoyi.file_read_path import RuoyiFileReadPathPlugin
-from plugins.ruoyi.file_read_time import FileReadTimePlugin
+from plugins.ruoyi.job_invoke_target import JobInvokeTargetPlugin
 from plugins.ruoyi.file_upload import FileUploadPlugin
 from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
@@ -28,7 +28,7 @@ _BYPASS_PLUGINS = [
     (SqlInjectDeptPlugin, "sqli"),
     (FileReadPlugin, "file_read"),
     (RuoyiFileReadPathPlugin, "file_read"),
-    (FileReadTimePlugin, "file_read"),
+    (JobInvokeTargetPlugin, "rce"),
     (FileUploadPlugin, "rce"),
     (JobRcePlugin, "rce"),
     (ThymeleafSstiPlugin, "rce"),

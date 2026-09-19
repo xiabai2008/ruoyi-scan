@@ -10,7 +10,7 @@
       "scan_mode": "u",
       "expected_confirmed": [
         "任意文件读取",
-        "定时任务任意文件读取",
+        "定时任务调用目标未校验",
         "POST型报错注入（role）",
         "POST型报错注入（dept）",
         "任意文件上传",

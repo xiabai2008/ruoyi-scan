@@ -66,7 +66,7 @@ REPORT_DIR = os.environ.get("RUOYI_SCAN_REPORT_DIR") or os.path.join(BASE_DIR, "
 DRUID_USERS = ["ruoyi", "druid", "admin", "admin123", "auth", "123456"]
 
 # 定时任务任意文件读取：固定 JSESSIONID（沿用原脚本）
-# D1 后：file_read_time 已改用 RuoYiAuthChain 登录链，此值仅保留兼容
+# D1 后：定时任务类插件已改用 RuoYiAuthChain 登录链，此值仅保留兼容
 JOB_JSESSIONID = "6db3d8ea-2d5c-490e-9863-6ef864b99828"
 
 
