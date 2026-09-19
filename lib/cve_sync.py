@@ -30,6 +30,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -728,19 +729,19 @@ def run_cve_sync_mode(args) -> int:
     # 查询单个 CVE
     cve_id = getattr(args, "cve_id", None)
     if cve_id:
-        print(f"[*]查询 CVE: {cve_id}")
+        emit(f"[*]查询 CVE: {cve_id}")
         info = lookup_cve(cve_id, api_key=api_key)
         if info:
-            print(f"[+]CVE-ID: {info.cve_id}")
-            print(f"    数据源: {info.source}")
-            print(f"    严重度: {info.severity} (CVSS {info.cvss_score})")
-            print(f"    向量: {info.cvss_vector}")
-            print(f"    描述: {info.description[:200]}")
-            print(f"    CWE: {', '.join(info.cwe)}")
-            print(f"    合规: {info.to_compliance_tag()}")
+            emit(f"[+]CVE-ID: {info.cve_id}")
+            emit(f"    数据源: {info.source}")
+            emit(f"    严重度: {info.severity} (CVSS {info.cvss_score})")
+            emit(f"    向量: {info.cvss_vector}")
+            emit(f"    描述: {info.description[:200]}")
+            emit(f"    CWE: {', '.join(info.cwe)}")
+            emit(f"    合规: {info.to_compliance_tag()}")
             return 0
         else:
-            print(f"[!]未找到 CVE: {cve_id}")
+            emit(f"[!]未找到 CVE: {cve_id}")
             return 1
 
     # G1：按组件查离线 CVE 库（内网模式）
@@ -748,39 +749,39 @@ def run_cve_sync_mode(args) -> int:
     if component is not None:
         results = search_offline(component=component)
         if not results:
-            print(f"[!]离线库中未找到组件 {component or '(全部)'} 的 CVE（可运行 scripts/build_offline_cve.py 更新）")
+            emit(f"[!]离线库中未找到组件 {component or '(全部)'} 的 CVE（可运行 scripts/build_offline_cve.py 更新）")
             return 1
-        print(f"[+]离线 CVE 库（{'组件 ' + component if component else '全部'}）: {len(results)} 条")
+        emit(f"[+]离线 CVE 库（{'组件 ' + component if component else '全部'}）: {len(results)} 条")
         for info in results:
-            print(f"    {info.cve_id}  CVSS {info.cvss_score}  {info.severity}  {info.description[:60]}")
+            emit(f"    {info.cve_id}  CVSS {info.cvss_score}  {info.severity}  {info.description[:60]}")
         return 0
 
     # 同步所有插件
-    print("[*]扫描插件库中的 CVE 编号...")
+    emit("[*]扫描插件库中的 CVE 编号...")
     plugins_cves = extract_cve_ids_from_plugins()
-    print(f"[+]发现 {len(plugins_cves)} 个 CVE 引用")
+    emit(f"[+]发现 {len(plugins_cves)} 个 CVE 引用")
 
     if not plugins_cves:
-        print("[!]未发现需要同步的 CVE")
+        emit("[!]未发现需要同步的 CVE")
         return 0
 
     # 集合去重后再查询：多个插件引用同一 CVE 只请求一次 NVD
     cve_ids = list({cve for _, cve in plugins_cves})
-    print(f"[*]开始同步 {len(cve_ids)} 个唯一 CVE...")
+    emit(f"[*]开始同步 {len(cve_ids)} 个唯一 CVE...")
 
     cve_infos = batch_lookup_cves(cve_ids, api_key=api_key)
 
     report = build_cve_update_report(plugins_cves, cve_infos)
-    print("\n[+]同步完成:")
-    print(f"    总插件数: {report['total_plugins']}")
-    print(f"    成功更新: {report['updated']}")
-    print(f"    未找到: {report['not_found']}")
+    emit("\n[+]同步完成:")
+    emit(f"    总插件数: {report['total_plugins']}")
+    emit(f"    成功更新: {report['updated']}")
+    emit(f"    未找到: {report['not_found']}")
 
     # 保存报告
     report_path = os.path.join("reports", "cve_sync_report.json")
     os.makedirs("reports", exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f"[+]报告已保存: {report_path}")
+    emit(f"[+]报告已保存: {report_path}")
 
     return 0

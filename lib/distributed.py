@@ -35,6 +35,7 @@ import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -653,7 +654,7 @@ class WorkerNode:
         last_heartbeat = time.time()
         processed = 0
 
-        print(f"[*]Worker {self.worker_id} 已启动，等待任务...")
+        emit(f"[*]Worker {self.worker_id} 已启动，等待任务...")
 
         while self._running:
             # 心跳
@@ -666,7 +667,7 @@ class WorkerNode:
             if task is None:
                 continue
 
-            print(f"[*]收到任务: {task.task_id} → {task.target}")
+            emit(f"[*]收到任务: {task.task_id} → {task.target}")
 
             # 执行扫描（P3: 传入限速器供扫描函数使用）
             start = time.time()
@@ -683,7 +684,7 @@ class WorkerNode:
                 self.queue.push_result(result)
                 self._stats["tasks_completed"] += 1
                 self._stats["total_duration"] += duration
-                print(f"[+]任务完成: {task.task_id}（{len(results or [])} 个结果，{duration:.2f}s）")
+                emit(f"[+]任务完成: {task.task_id}（{len(results or [])} 个结果，{duration:.2f}s）")
 
             except Exception as e:
                 duration = time.time() - start
@@ -695,15 +696,15 @@ class WorkerNode:
                 )
                 self.queue.push_result(result)
                 self._stats["tasks_failed"] += 1
-                print(f"[!]任务失败: {task.task_id} - {e}")
+                emit(f"[!]任务失败: {task.task_id} - {e}")
 
             processed += 1
             if max_tasks > 0 and processed >= max_tasks:
-                print(f"[*]已处理 {processed} 个任务，Worker 退出")
+                emit(f"[*]已处理 {processed} 个任务，Worker 退出")
                 break
 
-        print(f"[*]Worker {self.worker_id} 已停止")
-        print(f"    完成: {self._stats['tasks_completed']} 失败: {self._stats['tasks_failed']}")
+        emit(f"[*]Worker {self.worker_id} 已停止")
+        emit(f"    完成: {self._stats['tasks_completed']} 失败: {self._stats['tasks_failed']}")
 
     def stop(self) -> None:
         """停止 Worker"""
@@ -784,41 +785,41 @@ def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = No
     try:
         master = MasterNode(redis_url)
     except ImportError as e:
-        print(f"[!]{e}")
+        emit(f"[!]{e}")
         return 1
     except ConnectionError as e:
-        print(f"[!]{e}")
+        emit(f"[!]{e}")
         return 1
 
-    print(f"[*]Master 节点启动，分发 {len(targets)} 个任务...")
+    emit(f"[*]Master 节点启动，分发 {len(targets)} 个任务...")
     task_ids = master.distribute_tasks(targets, mode=mode, config=scan_config or {})
-    print(f"[+]已分发 {len(task_ids)} 个任务")
+    emit(f"[+]已分发 {len(task_ids)} 个任务")
 
     # 等待结果
-    print("[*]等待 Worker 处理...")
+    emit("[*]等待 Worker 处理...")
     results = master.collect_results(
         expected_count=len(task_ids),
         timeout=getattr(args, "distributed_timeout", 600),
-        progress_callback=lambda c, t: print(f"[*]进度: {c}/{t} 完成"),
+        progress_callback=lambda c, t: emit(f"[*]进度: {c}/{t} 完成"),
     )
 
     # 聚合结果
     report = master.aggregate_results(results)
-    print("\n[+]扫描完成:")
-    print(f"    总任务: {report['total_tasks']}")
-    print(f"    成功: {report['successful']}")
-    print(f"    失败: {report['failed']}")
-    print(f"    总漏洞: {report['total_vulns']}")
-    print(f"    高危: {report['severity_distribution']['high']}")
-    print(f"    中危: {report['severity_distribution']['medium']}")
-    print(f"    低危: {report['severity_distribution']['low']}")
+    emit("\n[+]扫描完成:")
+    emit(f"    总任务: {report['total_tasks']}")
+    emit(f"    成功: {report['successful']}")
+    emit(f"    失败: {report['failed']}")
+    emit(f"    总漏洞: {report['total_vulns']}")
+    emit(f"    高危: {report['severity_distribution']['high']}")
+    emit(f"    中危: {report['severity_distribution']['medium']}")
+    emit(f"    低危: {report['severity_distribution']['low']}")
 
     # 保存报告
     report_path = os.path.join("reports", "distributed_report.json")
     os.makedirs("reports", exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f"[+]聚合报告已保存: {report_path}")
+    emit(f"[+]聚合报告已保存: {report_path}")
 
     return 0
 
@@ -838,10 +839,10 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
     try:
         worker = WorkerNode(redis_url=redis_url)
     except ImportError as e:
-        print(f"[!]{e}")
+        emit(f"[!]{e}")
         return 1
     except ConnectionError as e:
-        print(f"[!]{e}")
+        emit(f"[!]{e}")
         return 1
 
     max_tasks = getattr(args, "worker_max_tasks", 0) or 0
@@ -851,12 +852,12 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
     rate_limiter = None
     if distributed_rate > 0:
         rate_limiter = DistributedRateLimiter(worker.queue.redis, rate=distributed_rate)
-        print(f"[*]全局限速: {distributed_rate} req/s（{redis_url}）")
+        emit(f"[*]全局限速: {distributed_rate} req/s（{redis_url}）")
 
     try:
         worker.run(scan_fn, max_tasks=max_tasks, rate_limiter=rate_limiter)
     except KeyboardInterrupt:
-        print("\n[*]停止 Worker...")
+        emit("\n[*]停止 Worker...")
         worker.stop()
 
     return 0

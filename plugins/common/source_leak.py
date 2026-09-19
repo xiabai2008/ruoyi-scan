@@ -1,6 +1,7 @@
 # 源码泄露探测 — IDE / SCM 残留文件（.svn/.hg/.idea/.vscode 等）
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
+from lib.soft404 import Soft404Baseline
 from plugins.base import PluginBase
 
 
@@ -60,7 +61,9 @@ class SourceLeakPlugin(PluginBase):
     _TARGETS = [
         # SCM 版本控制
         ("/.svn/entries", "dir"),
-        ("/.hg/store/fncache", "data"),
+        # 关键字收紧：原为 "data"，过于泛用——载荷中的 dataScope 等词即可命中。
+        # hg fncache 的真实内容是一行一个 repo 内路径，形如 data/foo/bar.i
+        ("/.hg/store/fncache", "data/"),
         ("/.bzr/branch-format", "Bazaar"),
         # IDE 配置
         ("/.idea/workspace.xml", "<?xml"),
@@ -77,18 +80,24 @@ class SourceLeakPlugin(PluginBase):
     def verify(self, target, session) -> ScanResult:
         """探测 IDE/SCM 残留文件及依赖锁文件是否可被外网访问
 
+        判定说明：路径存在性先过软 404 基线（随机不存在路径探测）。站点存在兜底路由时，
+        任意路径都返回 2xx，仅凭状态码 + 泛用关键字会把整站误报成残留文件泄露；
+        此时要求响应内容与兜底页不同方可计入。
+
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
         @return: STATUS_CONFIRMED（发现残留文件）或 STATUS_SAFE
         """
         found = []
-        # 每项 = 路径 + 判定关键字：须同时满足 200 与关键字命中，双条件避免仅凭状态码误报
+        baseline = Soft404Baseline.probe(target, session)
+        # 每项 = 路径 + 判定关键字：须同时满足「基线判定为真实文件」与关键字命中，
+        # 双条件避免仅凭状态码误报
         for path, keyword in self._TARGETS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
                 # (resp.text or "") 防御空响应体：无 body 的 200 一律视为未命中关键字
-                if resp.status_code == 200 and keyword in (resp.text or ""):
+                if baseline.looks_like_real_file(resp) and keyword in (resp.text or ""):
                     found.append(path)
             except Exception:
                 continue
@@ -99,8 +108,8 @@ class SourceLeakPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=target,
-                evidence=f"发现 {len(found)} 个残留文件: {', '.join(found[:5])}",
-                extra={"paths": found},
+                evidence=(f"发现 {len(found)} 个残留文件: {', '.join(found[:5])}；{baseline.describe()}"),
+                extra={"paths": found, "baseline": baseline.describe()},
                 fix=self.fix,
             )
         return ScanResult(
@@ -109,5 +118,5 @@ class SourceLeakPlugin(PluginBase):
             severity=self.severity,
             status=STATUS_SAFE,
             url=target,
-            evidence="未发现 IDE/SCM 残留文件",
+            evidence=f"未发现 IDE/SCM 残留文件；{baseline.describe()}",
         )

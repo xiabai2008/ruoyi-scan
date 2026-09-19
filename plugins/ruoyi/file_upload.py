@@ -2,6 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -62,7 +63,7 @@ class FileUploadPlugin(PluginBase):
         try:
             resp = session.post(url, files=files)
         except Exception as e:
-            print(no("任意文件上传（网络异常）"))
+            emit(no("任意文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         # 响应体文本（错误页可能非 JSON，需容错）
@@ -74,7 +75,7 @@ class FileUploadPlugin(PluginBase):
         # 双通道判 JSON：兼容 Content-Type 缺失/错误（部分版本返回 text/html），再看响应体首字符
         is_json = "json" in ctype.lower() or text.lstrip().startswith("{")
         if not is_json:
-            print(no("不存在任意文件上传漏洞"))
+            emit(no("不存在任意文件上传漏洞"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="响应非 JSON（疑似已鉴权拦截）"
             )
@@ -82,7 +83,7 @@ class FileUploadPlugin(PluginBase):
         try:
             data = resp.json()
         except Exception:
-            print(no("不存在任意文件上传漏洞"))
+            emit(no("不存在任意文件上传漏洞"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="响应非合法 JSON")
 
         # RuoYi 上传响应：{"code":200,"fileName":"...","url":"/profile/upload/...","newFileName":"..."}
@@ -102,11 +103,11 @@ class FileUploadPlugin(PluginBase):
             # 进一步排除鉴权拦截：若 msg 含登录关键字，判 SAFE
             msg = str(data.get("msg", ""))
             if any(kw in msg for kw in ["登录", "请先登录", "unauthorized", "未授权"]):
-                print(no("不存在任意文件上传漏洞（接口已鉴权）"))
+                emit(no("不存在任意文件上传漏洞（接口已鉴权）"))
                 return ScanResult(
                     kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应 msg={msg}（疑似拦截）"
                 )
-            print(ok("存在任意文件上传漏洞"))
+            emit(ok("存在任意文件上传漏洞"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -118,7 +119,7 @@ class FileUploadPlugin(PluginBase):
                 fix=self.fix,
             )
 
-        print(no("不存在任意文件上传漏洞"))
+        emit(no("不存在任意文件上传漏洞"))
         return ScanResult(
             kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应未含上传字段：{text[:200]}"
         )

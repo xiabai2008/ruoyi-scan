@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -176,7 +177,7 @@ def auto_login(
         import requests
     except ImportError:
         if verbose:
-            print("  [!]requests 未安装，无法自动登录")
+            emit("  [!]requests 未安装，无法自动登录")
         return {"cookies": {}, "headers": {}, "type": None}
 
     # 推断登录 URL
@@ -187,7 +188,7 @@ def auto_login(
         login_url = urljoin(base, "/login")
 
     if verbose:
-        print(f"  [*]自动登录: {login_url}（用户: {username}）")
+        emit(f"  [*]自动登录: {login_url}（用户: {username}）")
 
     try:
         session = requests.Session()
@@ -219,22 +220,22 @@ def auto_login(
                 config["headers"]["Authorization"] = f"Bearer {token}"
                 config["type"] = "bearer"
                 if verbose:
-                    print("  [+]登录成功，获取到 Bearer Token")
+                    emit("  [+]登录成功，获取到 Bearer Token")
         except Exception:
             logger.debug("从登录响应中提取 Token 失败", exc_info=True)
 
         if config["cookies"] and not config["headers"].get("Authorization"):
             if verbose:
-                print(f"  [+]登录成功，获取到 {len(config['cookies'])} 个 Cookie")
+                emit(f"  [+]登录成功，获取到 {len(config['cookies'])} 个 Cookie")
         elif not config["cookies"] and not config["headers"].get("Authorization"):
             if verbose:
-                print("  [!]登录可能失败，未获取到认证信息")
+                emit("  [!]登录可能失败，未获取到认证信息")
             return {"cookies": {}, "headers": {}, "type": None}
 
         return config
     except Exception as e:
         if verbose:
-            print(f"  [!]自动登录异常: {e}")
+            emit(f"  [!]自动登录异常: {e}")
         return {"cookies": {}, "headers": {}, "type": None}
 
 

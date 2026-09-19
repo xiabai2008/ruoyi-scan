@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_all
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -43,11 +44,11 @@ class JeecgFileReadDownloadPlugin(PluginBase):
             text = session.get(url).text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot 任意文件读取（网络异常）"))
+            emit(no("JeecgBoot 任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 双特征判定：root 账户名 + passwd 行分隔符 ":/"，避免页面恰含 root 字样造成误报
         if match_all(text, ["root", ":/"]):
-            print(ok("存在 JeecgBoot 任意文件读取"))
+            emit(ok("存在 JeecgBoot 任意文件读取"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -58,5 +59,5 @@ class JeecgFileReadDownloadPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "arbitrary_file_read", "plugin_name": "jeecg_file_read"},
             )
-        print(no("不存在 JeecgBoot 任意文件读取"))
+        emit(no("不存在 JeecgBoot 任意文件读取"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

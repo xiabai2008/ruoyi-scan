@@ -13,6 +13,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,7 @@ Python 插件源码。插件规范（必须遵守）：
 7. 使用 from core.http import join_url 拼接 URL
 8. 结果用 self._build_result(status, url, evidence, extra) 构建
 9. 注释使用简体中文
+10. 进度输出使用 from lib.reporter import emit（禁止直接 print——会污染 API 服务日志与测试输出）
 
 只输出 Python 代码本身（不要 markdown 代码块标记，不要额外解释）。"""
 
@@ -320,10 +322,10 @@ def run_ai_generate_mode(args) -> None:
     api_key = getattr(args, "ai_api_key", "") or AI_API_KEY
 
     if not api_key:
-        print(f"{YELLOW}[*]未配置 LLM API Key，使用规则模板模式（生成骨架，需人工补全）{RESET}")
-        print(f"{YELLOW}[*]配置方式: 环境变量 RUOYI_AI_API_KEY / RUOYI_AI_BASE_URL / RUOYI_AI_MODEL{RESET}")
+        emit(f"{YELLOW}[*]未配置 LLM API Key，使用规则模板模式（生成骨架，需人工补全）{RESET}")
+        emit(f"{YELLOW}[*]配置方式: 环境变量 RUOYI_AI_API_KEY / RUOYI_AI_BASE_URL / RUOYI_AI_MODEL{RESET}")
     else:
-        print(f"{YELLOW}[*]AI 生成中（%s）...{RESET}" % description)
+        emit(f"{YELLOW}[*]AI 生成中（%s）...{RESET}" % description)
 
     try:
         filepath, ok, errors = generate_ai_plugin(
@@ -334,19 +336,19 @@ def run_ai_generate_mode(args) -> None:
             max_retries=getattr(args, "ai_retries", 3),
         )
     except FileExistsError as e:
-        print(f"{RED}[!]{e}{RESET}")
+        emit(f"{RED}[!]{e}{RESET}")
         return
     except ValueError as e:
-        print(f"{RED}[!]生成失败: {e}{RESET}")
+        emit(f"{RED}[!]生成失败: {e}{RESET}")
         return
 
-    print(f"{GREEN}[*]插件已生成: {filepath}{RESET}")
+    emit(f"{GREEN}[*]插件已生成: {filepath}{RESET}")
     if ok:
-        print(f"{GREEN}[*]插件验证通过（--plugin-check）{RESET}")
+        emit(f"{GREEN}[*]插件验证通过（--plugin-check）{RESET}")
     else:
-        print(f"{YELLOW}[*]插件验证未通过，错误如下（建议人工修复或重试）:{RESET}")
+        emit(f"{YELLOW}[*]插件验证未通过，错误如下（建议人工修复或重试）:{RESET}")
         for e in errors:
-            print(f"{RED}    - {e}{RESET}")
+            emit(f"{RED}    - {e}{RESET}")
 
     # G3 生成即验证：--ai-validate 联动（签名靶场三态验证决定落盘位置）
     if getattr(args, "ai_validate", None) is True:
@@ -358,20 +360,20 @@ def run_ai_generate_mode(args) -> None:
             validate_ai_plugin,
         )
 
-        print(f"{YELLOW}[*]G3 生成即验证：签名靶场三态验证中...{RESET}")
+        emit(f"{YELLOW}[*]G3 生成即验证：签名靶场三态验证中...{RESET}")
         report = validate_ai_plugin(filepath)
-        print(f"[*]vuln 判定: {report['vuln_status']} / safe 判定: {report['safe_status']}")
+        emit(f"[*]vuln 判定: {report['vuln_status']} / safe 判定: {report['safe_status']}")
         for r in report["reasons"]:
-            print(f"    - {r}")
+            emit(f"    - {r}")
         target_path = decide_install_path(filepath, category, report["verdict"])
         if report["verdict"] == VERDICT_PASS:
-            print(f"{GREEN}[✓]验证通过，插件保留于 {filepath}{RESET}")
+            emit(f"{GREEN}[✓]验证通过，插件保留于 {filepath}{RESET}")
         elif report["verdict"] == VERDICT_UNVERIFIED and target_path:
             os.replace(filepath, target_path)
-            print(f"{YELLOW}[?]未能验证（靶场未覆盖该签名），已移入隔离目录: {target_path}{RESET}")
-            print(f"{YELLOW}   人工确认后手动移入 plugins/{category}/{RESET}")
+            emit(f"{YELLOW}[?]未能验证（靶场未覆盖该签名），已移入隔离目录: {target_path}{RESET}")
+            emit(f"{YELLOW}   人工确认后手动移入 plugins/{category}/{RESET}")
         elif report["verdict"] == VERDICT_FAIL:
             os.remove(filepath)
-            print(f"{RED}[✗]误报红线：safe 模式误报 CONFIRMED，插件已拒绝入库并删除{RESET}")
+            emit(f"{RED}[✗]误报红线：safe 模式误报 CONFIRMED，插件已拒绝入库并删除{RESET}")
     else:
-        print(f"{RED}[!]AI 生成代码请人工复核后再用于生产；生成插件未加入 plugin_list，需手动确认{RESET}")
+        emit(f"{RED}[!]AI 生成代码请人工复核后再用于生产；生成插件未加入 plugin_list，需手动确认{RESET}")

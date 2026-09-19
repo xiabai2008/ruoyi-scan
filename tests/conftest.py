@@ -54,6 +54,25 @@ def _force_exit_bypass_thread_join():
 atexit.register(_force_exit_bypass_thread_join)
 
 
+# ── 输出静默：屏蔽插件 stdout 噪音 ──────────────────────────────
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _quiet_reporter():
+    """测试会话内启用 reporter 静默模式（autouse）
+
+    插件与 core 的进度输出默认写 stdout，在测试中会淹没真正的失败信息
+    （误报基线测试单次执行 51 插件 × 多条语料，此前会倾倒约 2 MB 文本）。
+    这里统一切到静默模式；需要观察进度时设 RUOYI_SCAN_TEST_VERBOSE=1。
+    """
+    from lib.reporter import set_quiet
+
+    verbose = _os.environ.get("RUOYI_SCAN_TEST_VERBOSE") == "1"
+    set_quiet(not verbose)
+    yield
+    set_quiet(False)
+
+
 # ── P0: mock_router / mock_network ──────────────────────────────
 
 
@@ -160,8 +179,9 @@ def client_factory(mock_network):
     """
     import tempfile
 
-    from api.app import create_app
     from starlette.testclient import TestClient
+
+    from api.app import create_app
 
     def _create(api_key="", schedule_expr="", schedule_target=""):
         tmp_dir = tempfile.mkdtemp(prefix="ruoyi_scan_e9_")

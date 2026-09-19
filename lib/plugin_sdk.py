@@ -38,6 +38,7 @@ PLUGIN_TEMPLATE = '''# {description}
 from plugins.base import PluginBase
 from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 from lib.colors import ok, no
+from lib.reporter import emit
 from core.http import join_url
 
 
@@ -90,14 +91,14 @@ class {class_name}(PluginBase):
         text = resp.text or ''
         # TODO: 实现检测逻辑
         if 'TODO_INDICATOR' in text:
-            print(ok(f'存在 {{self.name}}'))
+            emit(ok(f'存在 {{self.name}}'))
             return ScanResult(
                 kind='vuln', name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
                 evidence=f'响应含 TODO_INDICATOR 特征',
                 fix=self.fix,
             )
-        print(no(f'不存在 {{self.name}}'))
+        emit(no(f'不存在 {{self.name}}'))
         return ScanResult(kind='vuln', name=self.name, status=STATUS_SAFE,
                           url=url, evidence='响应不含特征')
 '''

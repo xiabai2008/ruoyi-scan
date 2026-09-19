@@ -18,6 +18,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from lib.reporter import emit
+
 
 @dataclass
 class ScanTemplate:
@@ -162,8 +164,8 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
         return None
 
     if verbose:
-        print(f"  [*]应用模板: {tmpl.display_name}（{tmpl.estimated_time}）")
-        print(f"      {tmpl.description}")
+        emit(f"  [*]应用模板: {tmpl.display_name}（{tmpl.estimated_time}）")
+        emit(f"      {tmpl.description}")
 
     # 应用模板默认参数（仅填充未显式指定的）
     parser_defaults = _get_parser_defaults()
@@ -174,7 +176,7 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
         if current_value == default_value:
             setattr(args, key, tmpl_value)
             if verbose:
-                print(f"      {key}: {current_value} → {tmpl_value}")
+                emit(f"      {key}: {current_value} → {tmpl_value}")
 
     return tmpl
 

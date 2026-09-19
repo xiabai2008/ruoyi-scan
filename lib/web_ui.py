@@ -21,6 +21,8 @@ import html as html_module
 import os
 from typing import Any, Dict
 
+from lib.reporter import emit
+
 # ============================================================
 # Web UI HTML 模板
 # ============================================================
@@ -554,18 +556,18 @@ def run_web_ui_mode(args) -> int:
     output = getattr(args, "web_ui_output", None) or "webui/index.html"
     api_base = getattr(args, "web_ui_api", None) or ""
 
-    print("[*]生成 Web UI 控制台...")
+    emit("[*]生成 Web UI 控制台...")
     path = generate_web_ui(output_path=output, api_base_url=api_base)
 
     size = os.path.getsize(path)
-    print(f"[+]Web UI 已生成: {path}（{size:,} 字节）")
-    print("[+]功能列表:")
+    emit(f"[+]Web UI 已生成: {path}（{size:,} 字节）")
+    emit("[+]功能列表:")
     info = get_web_ui_info(path)
     for feat in info["features"]:
-        print(f"    - {feat}")
-    print("\n[*]使用方式:")
-    print("    1. 启动 API 服务: python main.py --serve --port 8000")
-    print("    2. 浏览器打开: http://localhost:8000/webui/index.html")
-    print(f"       或直接打开文件: {path}")
+        emit(f"    - {feat}")
+    emit("\n[*]使用方式:")
+    emit("    1. 启动 API 服务: python main.py --serve --port 8000")
+    emit("    2. 浏览器打开: http://localhost:8000/webui/index.html")
+    emit(f"       或直接打开文件: {path}")
 
     return 0

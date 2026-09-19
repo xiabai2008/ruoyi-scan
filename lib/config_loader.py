@@ -30,6 +30,7 @@ import os
 from typing import Any, Dict, Optional, Tuple
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -302,13 +303,13 @@ def apply_config_to_args(args, filepath: str, verbose: bool = True) -> Tuple[Any
     config = normalize_config_keys(config)
 
     if verbose and config:
-        print(f"  [*]加载配置文件: {filepath}")
-        print(f"      参数数: {len(config)}")
+        emit(f"  [*]加载配置文件: {filepath}")
+        emit(f"      参数数: {len(config)}")
 
     args, overridden = merge_config_with_args(args, config)
 
     if verbose and overridden:
-        print(f"      覆盖参数: {', '.join(overridden)}")
+        emit(f"      覆盖参数: {', '.join(overridden)}")
 
     return args, config
 

@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_all
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -51,11 +52,11 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot jmreport SQL注入（网络异常）"))
+            emit(no("JeecgBoot jmreport SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 成功执行：返回业务 JSON（code/result 字段）且非 401/403；或 SQL 报错泄漏
         if resp.status_code == 200 and match_all(text, ["code", "result"]):
-            print(ok("存在 JeecgBoot jmreport SQL注入"))
+            emit(ok("存在 JeecgBoot jmreport SQL注入"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -66,5 +67,5 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_jmreport"},
             )
-        print(no("不存在 JeecgBoot jmreport SQL注入"))
+        emit(no("不存在 JeecgBoot jmreport SQL注入"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from config import settings
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -64,7 +65,7 @@ class DruidBrutePlugin(PluginBase):
             with open(settings.PASSWORD_DICT, encoding="utf-8") as f:
                 password_list = f.read().splitlines()
         except Exception as e:
-            print(no(f"Druid 爆破字典读取失败：{e}"))
+            emit(no(f"Druid 爆破字典读取失败：{e}"))
             return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         got_response = False  # 是否至少收到一次响应（避免全网络异常误判 SAFE）
@@ -75,7 +76,7 @@ class DruidBrutePlugin(PluginBase):
                     login_response = session.post(url, data=data)
                 except Exception:
                     # 网络异常：红色提示，继续尝试下一组（不阻断）
-                    print(no(f"请求异常,用户名:{user},密码:{password}"))
+                    emit(no(f"请求异常,用户名:{user},密码:{password}"))
                     continue
                 got_response = True
                 # 判定：解析 JSON 严格比对 success == True（布尔），避免 {"success":false} 误报
@@ -91,7 +92,7 @@ class DruidBrutePlugin(PluginBase):
                     success_ok = (low == "success") or '"success":true' in low or '"success": true' in low
                 if success_ok:
                     # 成功=绿色（对齐原脚本成功配色）
-                    print(ok(f"登录成功,用户名:{user},密码:{password}"))
+                    emit(ok(f"登录成功,用户名:{user},密码:{password}"))
                     return ScanResult(
                         kind="brute",
                         name=self.name,
@@ -104,7 +105,7 @@ class DruidBrutePlugin(PluginBase):
                     )
                 else:
                     # 失败=红色（修正原脚本误用绿色，见 agents.md §3.4）
-                    print(no(f"登录失败,用户名:{user},密码:{password}"))
+                    emit(no(f"登录失败,用户名:{user},密码:{password}"))
         # 全部未命中：若至少收到一次响应，判 SAFE；否则 UNKNOWN
         if got_response:
             return ScanResult(

@@ -27,6 +27,7 @@ from common.logger import get_logger
 
 # 复用现有模型
 from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -487,7 +488,7 @@ def run_siem_export_mode(args, results, target: str = "", scan_time: str = "") -
     formats = parse_formats(fmt_str)
 
     if not formats:
-        print(f"[!]未指定有效的 SIEM 格式（支持: {SUPPORTED_FORMATS}）")
+        emit(f"[!]未指定有效的 SIEM 格式（支持: {SUPPORTED_FORMATS}）")
         return 1
 
     # 导出 Syslog
@@ -502,22 +503,22 @@ def run_siem_export_mode(args, results, target: str = "", scan_time: str = "") -
             port = 514
 
         protocol = getattr(args, "siem_protocol", "udp") or "udp"
-        print(f"[*]发送 {len(results)} 个事件到 Syslog {host}:{port} ({protocol})")
+        emit(f"[*]发送 {len(results)} 个事件到 Syslog {host}:{port} ({protocol})")
 
         sent = 0
         for fmt in formats:
             sent = send_results_to_syslog(results, host, port, fmt, protocol, target)
-            print(f"[+]格式 {fmt}: 已发送 {sent} 个事件")
+            emit(f"[+]格式 {fmt}: 已发送 {sent} 个事件")
 
         return 0
 
     # 导出文件
     output = getattr(args, "siem_output", None) or "reports/siem/"
-    print(f"[*]导出 {len(results)} 个事件到 {output}（格式: {', '.join(formats)}）")
+    emit(f"[*]导出 {len(results)} 个事件到 {output}（格式: {', '.join(formats)}）")
 
     paths = export_to_files(results, formats, output, target, scan_time)
-    print(f"[+]已生成 {len(paths)} 个文件:")
+    emit(f"[+]已生成 {len(paths)} 个文件:")
     for p in paths:
-        print(f"    {p}")
+        emit(f"    {p}")
 
     return 0

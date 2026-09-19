@@ -6,6 +6,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_heapdump_binary
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -67,7 +68,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
             raw = resp.raw.read(65536)
             text = raw.decode("utf-8", errors="ignore")
         except Exception as e:
-            print(no("Spring Boot Actuator heapdump 泄露（网络异常）"))
+            emit(no("Spring Boot Actuator heapdump 泄露（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         content_type = resp.headers.get("Content-Type", "") or ""
@@ -75,7 +76,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
         is_octet = "octet-stream" in content_type or "application/x-gzip" in content_type
 
         if resp.status_code == 200 and is_octet and HEAP_MARKER in text:
-            print(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露"))
+            emit(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -87,7 +88,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
             )
         # 真实漏洞响应：200 + octet-stream + heapdump 二进制特征（JAVA PROFILE / 敏感字符串）
         if resp.status_code == 200 and is_octet and match_heapdump_binary(text):
-            print(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露（真实漏洞响应）"))
+            emit(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -97,7 +98,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
                 evidence=f"响应含 heapdump 二进制特征（JAVA PROFILE / 敏感字符串），Content-Type={content_type}",
                 fix=self.fix,
             )
-        print(no("不存在 Spring Boot Actuator heapdump 敏感信息泄露"))
+        emit(no("不存在 Spring Boot Actuator heapdump 敏感信息泄露"))
         return ScanResult(
             kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="heapdump 端点不可达或需认证（404/401）"
         )

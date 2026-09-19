@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_all
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -41,11 +42,11 @@ class JeecgDictUnauthPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot 字典越权（网络异常）"))
+            emit(no("JeecgBoot 字典越权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # records+code 双特征：未授权返回分页业务 JSON，避开 401 拦截页与统一错误页
         if resp.status_code == 200 and match_all(text, ["records", "code"]):
-            print(ok("存在 JeecgBoot 字典越权"))
+            emit(ok("存在 JeecgBoot 字典越权"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -56,5 +57,5 @@ class JeecgDictUnauthPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "jeecg_dict_unauth"},
             )
-        print(no("不存在 JeecgBoot 字典越权"))
+        emit(no("不存在 JeecgBoot 字典越权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

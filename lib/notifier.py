@@ -33,6 +33,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List
 
+from lib.reporter import emit
+
 
 def parse_notify_arg(notify_args: List[str]) -> List[Dict[str, str]]:
     """解析 --notify 参数列表
@@ -198,15 +200,15 @@ def send_webhook(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code < 400:
             if verbose:
-                print(f"  [+]Webhook 通知已发送: {url[:50]}...")
+                emit(f"  [+]Webhook 通知已发送: {url[:50]}...")
             return True
         else:
             if verbose:
-                print(f"  [!]Webhook 通知失败: HTTP {resp.status_code}")
+                emit(f"  [!]Webhook 通知失败: HTTP {resp.status_code}")
             return False
     except Exception as e:
         if verbose:
-            print(f"  [!]Webhook 通知异常: {e}")
+            emit(f"  [!]Webhook 通知异常: {e}")
         return False
 
 
@@ -233,15 +235,15 @@ def send_dingtalk(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         result = resp.json()
         if result.get("errcode") == 0:
             if verbose:
-                print("  [+]钉钉通知已发送")
+                emit("  [+]钉钉通知已发送")
             return True
         else:
             if verbose:
-                print(f"  [!]钉钉通知失败: {result.get('errmsg', '未知错误')}")
+                emit(f"  [!]钉钉通知失败: {result.get('errmsg', '未知错误')}")
             return False
     except Exception as e:
         if verbose:
-            print(f"  [!]钉钉通知异常: {e}")
+            emit(f"  [!]钉钉通知异常: {e}")
         return False
 
 
@@ -260,15 +262,15 @@ def send_wechat(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         result = resp.json()
         if result.get("errcode") == 0:
             if verbose:
-                print("  [+]企业微信通知已发送")
+                emit("  [+]企业微信通知已发送")
             return True
         else:
             if verbose:
-                print(f"  [!]企业微信通知失败: {result.get('errmsg', '未知错误')}")
+                emit(f"  [!]企业微信通知失败: {result.get('errmsg', '未知错误')}")
             return False
     except Exception as e:
         if verbose:
-            print(f"  [!]企业微信通知异常: {e}")
+            emit(f"  [!]企业微信通知异常: {e}")
         return False
 
 
@@ -287,15 +289,15 @@ def send_feishu(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         result = resp.json()
         if result.get("StatusCode") == 0 or result.get("code") == 0:
             if verbose:
-                print("  [+]飞书通知已发送")
+                emit("  [+]飞书通知已发送")
             return True
         else:
             if verbose:
-                print(f"  [!]飞书通知失败: {result.get('msg', '未知错误')}")
+                emit(f"  [!]飞书通知失败: {result.get('msg', '未知错误')}")
             return False
     except Exception as e:
         if verbose:
-            print(f"  [!]飞书通知异常: {e}")
+            emit(f"  [!]飞书通知异常: {e}")
         return False
 
 
@@ -313,7 +315,7 @@ def send_email(to_addr: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
 
     if not smtp_host or not smtp_user:
         if verbose:
-            print("  [!]邮件通知跳过: 未配置 SMTP 环境变量（SMTP_HOST/SMTP_USER/SMTP_PASS）")
+            emit("  [!]邮件通知跳过: 未配置 SMTP 环境变量（SMTP_HOST/SMTP_USER/SMTP_PASS）")
         return False
 
     try:
@@ -342,11 +344,11 @@ def send_email(to_addr: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         server.quit()
 
         if verbose:
-            print(f"  [+]邮件通知已发送: {to_addr}")
+            emit(f"  [+]邮件通知已发送: {to_addr}")
         return True
     except Exception as e:
         if verbose:
-            print(f"  [!]邮件通知异常: {e}")
+            emit(f"  [!]邮件通知异常: {e}")
         return False
 
 
@@ -413,8 +415,8 @@ def send_notifications(notifications: List[Dict[str, str]], report_builder, verb
 
     msg = build_notification_message(report_builder)
     if verbose:
-        print(f"\n{('=' * 60)}")
-        print(f"[*]发送扫描结果通知（{len(notifications)} 个渠道）")
+        emit(f"\n{('=' * 60)}")
+        emit(f"[*]发送扫描结果通知（{len(notifications)} 个渠道）")
 
     senders = {
         "webhook": send_webhook,
@@ -437,5 +439,5 @@ def send_notifications(notifications: List[Dict[str, str]], report_builder, verb
                     success_count += 1
 
     if verbose:
-        print(f"[*]通知发送完成: {success_count}/{len(notifications)} 成功")
-        print(f"{('=' * 60)}\n")
+        emit(f"[*]通知发送完成: {success_count}/{len(notifications)} 成功")
+        emit(f"{('=' * 60)}\n")

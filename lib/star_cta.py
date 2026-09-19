@@ -16,6 +16,7 @@ import sys
 from typing import IO, Optional
 
 from lib.colors import GREEN, RESET, SEPARATOR, YELLOW
+from lib.reporter import emit
 
 # 仓库地址（star / issue / 文档 同址，统一出口，便于后续改域名只改一处）
 REPO_URL = "https://github.com/xiabai2008/ruoyi-scan"
@@ -69,8 +70,21 @@ def print_star_cta(
             # 某些包装流（StringIO 的部分实现）无 isatty，按非终端处理
             return False
 
-    print(SEPARATOR, file=out)
-    print(f"{GREEN}[*]Ruoyi-Scan 是开源免费工具，如果它帮到了你，欢迎点个 Star ★ 支持一下{RESET}", file=out)
-    print(f"    {GREEN}{REPO_URL}{RESET}", file=out)
-    print(f"{YELLOW}[*]不想看到这行提示？运行时加 --no-cta，或设置环境变量 RUOYI_SCAN_NO_CTA=1{RESET}", file=out)
+    # 输出流语义分两种，不能一刀切：
+    #   - stream is None（默认）：写到 stdout，属「库输出」，必须走输出桥 emit()，
+    #     这样服务模式/测试下会自动静默，不会把 Star 提示混进 API 日志。
+    #   - stream 显式传入：调用方指定了目标流（如 StringIO、日志文件），
+    #     函数契约就是「按传入流输出」，必须直接 print(file=...)，不受静默模式影响。
+    lines = (
+        SEPARATOR,
+        f"{GREEN}[*]Ruoyi-Scan 是开源免费工具，如果它帮到了你，欢迎点个 Star ★ 支持一下{RESET}",
+        f"    {GREEN}{REPO_URL}{RESET}",
+        f"{YELLOW}[*]不想看到这行提示？运行时加 --no-cta，或设置环境变量 RUOYI_SCAN_NO_CTA=1{RESET}",
+    )
+    if stream is None:
+        for line in lines:
+            emit(line)
+    else:
+        for line in lines:
+            print(line, file=out)
     return True

@@ -23,6 +23,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -197,21 +198,21 @@ def run_ai_validate_mode(args) -> int:
 
     filepath = args.ai_validate
     if not os.path.isfile(filepath):
-        print(f"{RED}[!]插件文件不存在: {filepath}{RESET}")
+        emit(f"{RED}[!]插件文件不存在: {filepath}{RESET}")
         return 1
-    print(f"{YELLOW}[*]签名靶场三态验证中: {filepath}{RESET}")
+    emit(f"{YELLOW}[*]签名靶场三态验证中: {filepath}{RESET}")
     report = validate_ai_plugin(filepath)
-    print(f"[*]插件: {report['plugin']}")
-    print(f"[*]vuln 模式判定: {report['vuln_status']} / safe 模式判定: {report['safe_status']}")
+    emit(f"[*]插件: {report['plugin']}")
+    emit(f"[*]vuln 模式判定: {report['vuln_status']} / safe 模式判定: {report['safe_status']}")
     for r in report["reasons"]:
-        print(f"    - {r}")
+        emit(f"    - {r}")
     if report["verdict"] == VERDICT_PASS:
-        print(f"{GREEN}[✓]验证通过（pass）{RESET}")
+        emit(f"{GREEN}[✓]验证通过（pass）{RESET}")
         return 0
     if report["verdict"] == VERDICT_FAIL:
-        print(f"{RED}[✗]验证失败（fail）——误报红线，拒绝入库{RESET}")
+        emit(f"{RED}[✗]验证失败（fail）——误报红线，拒绝入库{RESET}")
         return 1
-    print(f"{YELLOW}[?]未能验证（unverified）——建议人工复核{RESET}")
+    emit(f"{YELLOW}[?]未能验证（unverified）——建议人工复核{RESET}")
     return 2
 
 

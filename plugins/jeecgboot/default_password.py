@@ -2,6 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -46,11 +47,11 @@ class JeecgDefaultPasswordPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常无法证明口令状态：归 UNKNOWN 而非 SAFE，避免把"测不到"误报成"安全"
-            print(no("JeecgBoot 默认口令（网络异常）"))
+            emit(no("JeecgBoot 默认口令（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 以 token 字段为登录成功唯一 oracle：该接口成功响应必然携带 token，避免误判其他页面
         if resp.status_code == 200 and "token" in text:
-            print(ok("存在 JeecgBoot 默认口令"))
+            emit(ok("存在 JeecgBoot 默认口令"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -61,5 +62,5 @@ class JeecgDefaultPasswordPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "default_password", "plugin_name": "jeecg_default_pw"},
             )
-        print(no("不存在 JeecgBoot 默认口令"))
+        emit(no("不存在 JeecgBoot 默认口令"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

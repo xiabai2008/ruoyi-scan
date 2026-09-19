@@ -8,6 +8,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_jolokia_response
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -64,12 +65,12 @@ class SpringJolokiaMletRcePlugin(PluginBase):
         try:
             resp = session.get(url)
         except Exception as e:
-            print(no("Spring Jolokia MLet RCE（网络异常）"))
+            emit(no("Spring Jolokia MLet RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
         if JOLOKIA_MLET_MARKER in text:
-            print(ok("存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞"))
+            emit(ok("存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -82,7 +83,7 @@ class SpringJolokiaMletRcePlugin(PluginBase):
         # list 是只读枚举端点，作为 MLet 滥用的暴露前提：真实 RCE 需对 type=MLet 调 getMBeansFromURL，属利用阶段
         # 真实漏洞响应：Jolokia LIST 响应含 JMX MBean 域列表（reloadByURL / JMXConfigurator 等）
         if resp.status_code == 200 and match_jolokia_response(text):
-            print(ok("存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞（真实漏洞响应）"))
+            emit(ok("存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -92,7 +93,7 @@ class SpringJolokiaMletRcePlugin(PluginBase):
                 evidence="响应含 Jolokia JMX MBean 响应特征（reloadByURL/JMXConfigurator），证实 Jolokia 端点可达",
                 fix=self.fix,
             )
-        print(no("不存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞"))
+        emit(no("不存在 Spring Boot Actuator Jolokia MLet 链远程代码执行漏洞"))
         return ScanResult(
             kind="vuln",
             name=self.name,

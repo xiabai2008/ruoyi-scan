@@ -6,6 +6,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_spring4shell_response
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -72,12 +73,12 @@ class Spring4shellPlugin(PluginBase):
         try:
             resp = session.post(url, data=data)
         except Exception as e:
-            print(no("Spring4Shell RCE（网络异常）"))
+            emit(no("Spring4Shell RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
         if S4S_MARKER in text:
-            print(ok("存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞"))
+            emit(ok("存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -91,7 +92,7 @@ class Spring4shellPlugin(PluginBase):
         # 即说明参数绑定可访问 ClassLoader，存在 Spring4Shell 利用条件
         # 严格排除失败响应：含 Bad Request / error / status:4xx / 5xx 的响应不判 CONFIRMED
         if resp.status_code == 200 and match_spring4shell_response(text):
-            print(ok("存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞（真实漏洞响应）"))
+            emit(ok("存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -101,7 +102,7 @@ class Spring4shellPlugin(PluginBase):
                 evidence="POST class.module.classLoader 返回 200 且响应无错误标识（参数绑定可访问 ClassLoader），证实 Spring4Shell 可达",
                 fix=self.fix,
             )
-        print(no("不存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞"))
+        emit(no("不存在 CVE-2022-22965 Spring4Shell 远程代码执行漏洞"))
         return ScanResult(
             kind="vuln",
             name=self.name,

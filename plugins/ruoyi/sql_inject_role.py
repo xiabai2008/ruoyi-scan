@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -83,23 +84,81 @@ class SqlInjectRolePlugin(PluginBase):
             "params[dataScope]": "and extractvalue(1,concat(0x7e,(select database()),0x7e))",
         }
         url = join_url(target, "/system/role/list")
+        # 基线对照请求：同一请求、仅去掉注入 payload。
+        # 目的：把「目标本身就会返回的文案」与「注入导致的报错」区分开。
+        control_data = dict(data)
+        control_data["params[dataScope]"] = ""
         try:
-            sql_inject = session.post(url, headers=headers, data=data).text
+            control_text = session.post(url, headers=headers, data=control_data).text
+            inject_text = session.post(url, headers=headers, data=data).text
         except Exception as e:
-            print(no("POST型报错注入（role，网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 判定 1:1 保留：'运行时异常' in t or 'database()' in t
-        if "运行时异常" in sql_inject or "database()" in sql_inject:
-            print(ok("存在POST型报错注入"))
+            emit(no("POST型报错注入（role，网络异常）"))
+            return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+
+        # 判定（加固版·差分法）：
+        #   强特征 STRONG_SIG 是 MySQL extractvalue 被真正求值后才产生的报错文案；
+        #   弱特征 WEAK_SIG 是若依统一异常文案，任何 500 都可能出现。
+        #   两类特征都要求「注入后出现、基线不出现」才算命中，避免把目标常驻文案当作注入证据。
+        #   历史缺陷一：原判定 `'database()' in text` 会因响应回显载荷原文（载荷里就含
+        #     database() 字面量）而自证命中；
+        #   历史缺陷二：仅比对单次响应，无法排除「目标任何请求都返回同一张错误页」的情形。
+        STRONG_SIG = "XPATH syntax error"
+        WEAK_SIG = "运行时异常"
+        # 载荷回显特征：出现即说明请求被原样回显（WAF 拦截页 / 框架调试页）
+        REFLECTION = "extractvalue(1,"
+
+        inj_strong = STRONG_SIG in inject_text
+        inj_weak = WEAK_SIG in inject_text
+        ctl_strong = STRONG_SIG in control_text
+        ctl_weak = WEAK_SIG in control_text
+
+        # 1) 强特征差分命中：注入后出现、基线不出现 → 注入确实被求值
+        if inj_strong and not ctl_strong:
+            emit(ok("存在POST型报错注入"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 运行时异常 或 database() 报错特征",
+                evidence=f"响应含 MySQL extractvalue 求值报错特征（{STRONG_SIG}），且基线请求无此特征",
                 fix=self.fix,
             )
-        else:
-            print(no("不存在POST型报错注入"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        # 2) 强特征在基线中同样出现 → 该文案是目标常驻内容，无法归因于注入
+        if inj_strong and ctl_strong:
+            emit(no("POST型报错注入：基线已含求值报错文案，无法归因"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"基线请求与注入请求均含 {STRONG_SIG}，该文案疑似目标常驻内容，需人工复核",
+            )
+        # 3) 弱特征差分命中且无载荷回显 → 注入导致的异常
+        if inj_weak and not ctl_weak and REFLECTION not in inject_text:
+            emit(ok("存在POST型报错注入"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=f"注入请求含 {WEAK_SIG} 而基线请求不含，且无载荷回显",
+                fix=self.fix,
+            )
+        # 4) 弱特征命中但基线同样命中，或响应回显了载荷 → 无法区分，保守判 UNKNOWN
+        if inj_weak and (ctl_weak or REFLECTION in inject_text):
+            emit(no("POST型报错注入：异常文案无法归因，判 UNKNOWN"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=(
+                    f"注入请求含 {WEAK_SIG}，但"
+                    + ("基线请求同样含该文案" if ctl_weak else "响应存在载荷回显")
+                    + "，无法区分注入成功与目标常驻错误页，需人工复核",
+                ),
+            )
+        emit(no("不存在POST型报错注入"))
+        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)

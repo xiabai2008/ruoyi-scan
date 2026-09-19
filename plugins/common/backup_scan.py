@@ -1,6 +1,7 @@
 # 备份文件扫描 — 常见备份/交换/IDE 文件后缀拼接探测
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
+from lib.soft404 import Soft404Baseline
 from plugins.base import PluginBase
 
 
@@ -68,11 +69,16 @@ class BackupScanPlugin(PluginBase):
     def verify(self, target, session) -> ScanResult:
         """探测常见备份/交换/系统残留文件后缀是否可被外网访问
 
+        判定说明：先探测软 404 基线（随机不存在路径）。若站点存在兜底路由
+        （任意路径均返回 2xx + 有内容，典型于 SPA 前端），则仅凭状态码判定存在性
+        会把整站误报成「65 个备份文件泄露」，此时必须要求响应内容与兜底页不同。
+
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
         @return: STATUS_CONFIRMED（发现可访问的备份文件）或 STATUS_SAFE
         """
         found = []
+        baseline = Soft404Baseline.probe(target, session)
         # 探测根路径的几个常见配置文件名组合
         base_names = ["index", "config", ".env", "web", "app"]
         for base in base_names:
@@ -82,8 +88,9 @@ class BackupScanPlugin(PluginBase):
                 url = join_url(target, path)
                 try:
                     resp = session.get(url)
-                    # 要求响应体非空：部分框架对未知路径统一返回空 200（SPA 回退），避免此类响应误报为备份文件
-                    if resp.status_code == 200 and len(resp.content or b"") > 0:
+                    # 存在性判定交给基线：无兜底路由时等价于「2xx + 非空」，
+                    # 有兜底路由时额外要求响应内容与兜底页不同
+                    if baseline.looks_like_real_file(resp):
                         found.append(path)
                 # 单路径请求异常（超时/连接拒绝）直接跳过，不影响其余组合的探测
                 except Exception:
@@ -95,8 +102,8 @@ class BackupScanPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=target,
-                evidence=f"发现 {len(found)} 个可访问备份文件: {', '.join(found[:5])}",
-                extra={"paths": found},
+                evidence=(f"发现 {len(found)} 个可访问备份文件: {', '.join(found[:5])}；{baseline.describe()}"),
+                extra={"paths": found, "baseline": baseline.describe()},
                 fix=self.fix,
             )
         return ScanResult(
@@ -105,5 +112,5 @@ class BackupScanPlugin(PluginBase):
             severity=self.severity,
             status=STATUS_SAFE,
             url=target,
-            evidence="未发现可访问的备份/交换文件",
+            evidence=f"未发现可访问的备份/交换文件；{baseline.describe()}",
         )

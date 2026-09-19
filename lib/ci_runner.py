@@ -26,6 +26,8 @@
 import os
 from typing import List
 
+from lib.reporter import emit
+
 # CI 模式退出码
 EXIT_SUCCESS = 0  # 无漏洞或漏洞低于阈值
 EXIT_VULN_FOUND = 1  # 发现超阈值漏洞
@@ -300,18 +302,18 @@ def run_ci_mode(args, results: List, target: str, duration: float = 0, has_error
     severity_threshold = getattr(args, "severity_threshold", "high")
 
     # 输出 CI 摘要
-    print(format_ci_summary(results, target, duration))
-    print()
-    print(format_ci_vulns(results))
+    emit(format_ci_summary(results, target, duration))
+    emit()
+    emit(format_ci_vulns(results))
 
     # 判断退出码
     exit_code = get_ci_exit_code(results, severity_threshold, has_error)
 
     if exit_code == EXIT_VULN_FOUND:
-        print(f"\n[CI] FAILED: 发现 {severity_threshold}+ 级别漏洞")
+        emit(f"\n[CI] FAILED: 发现 {severity_threshold}+ 级别漏洞")
     elif exit_code == EXIT_SUCCESS:
-        print("\n[CI] PASSED: 无超阈值漏洞")
+        emit("\n[CI] PASSED: 无超阈值漏洞")
     elif exit_code == EXIT_ERROR:
-        print("\n[CI] ERROR: 扫描异常")
+        emit("\n[CI] ERROR: 扫描异常")
 
     return exit_code

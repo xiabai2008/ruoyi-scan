@@ -3,6 +3,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -54,20 +55,27 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot 报表 SSTI（网络异常）"))
+            emit(no("JeecgBoot 报表 SSTI（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 49 是 7*7 的唯一运算结果：命中即证明模板表达式被求值，纯算术探测无副作用
-        if resp.status_code == 200 and "49" in text:
-            print(ok("存在 JeecgBoot 报表 SSTI"))
+        # 加固判定：必须同时满足三个条件
+        #   1) 响应为 JSON 业务响应——JeecgBoot 报表接口返回 JSON，正常 HTML 页面不可能满足
+        #   2) 含求值结果 49
+        #   3) 不含原始表达式 7*7（排除载荷被原样回显）
+        # 历史缺陷：原判定仅 `status==200 and "49" in text`，
+        # 任何正文含「49」（页码、行号、商品数量等）的 200 页面都会被误报为 SSTI。
+        content_type = (resp.headers.get("Content-Type") or "").lower()
+        is_json_resp = "application/json" in content_type
+        if resp.status_code == 200 and is_json_resp and "49" in text and "7*7" not in text:
+            emit(ok("存在 JeecgBoot 报表 SSTI"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 49（${7*7} 模板求值）",
+                evidence="JSON 响应含 49（${7*7} 模板求值）且无载荷回显",
                 fix=self.fix,
                 extra={"vuln_type": "ssti", "plugin_name": "jeecg_ssti"},
             )
-        print(no("不存在 JeecgBoot 报表 SSTI"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        emit(no("不存在 JeecgBoot 报表 SSTI"))
+        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)

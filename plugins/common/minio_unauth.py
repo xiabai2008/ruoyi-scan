@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -44,11 +45,11 @@ class MinioUnauthPlugin(PluginBase):
         try:
             resp = session.get(health_url)
         except Exception as e:
-            print(no("MinIO 未授权（网络异常）"))
+            emit(no("MinIO 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=health_url, evidence=str(e))
         # 200/3xx/400 均为服务存在的表现（含健康检查失败与部署重定向），其余状态即无 MinIO 服务
         if resp.status_code not in (200, 301, 302, 400):
-            print(no("未检测到 MinIO 服务"))
+            emit(no("未检测到 MinIO 服务"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=health_url)
         # 2. 无凭证列举 bucket（匿名桶列表）
         root_url = join_url(target, "/minio/")
@@ -59,7 +60,7 @@ class MinioUnauthPlugin(PluginBase):
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=root_url, evidence=str(e))
         # 匿名列举成功时 /minio/ 返回含 bucket/storage-class 的 XML/JSON 桶列表，命中即无鉴权
         if match_positive(text2, ["bucket", "storage-class", "minio"]):
-            print(ok("存在 MinIO 未授权访问"))
+            emit(ok("存在 MinIO 未授权访问"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -70,5 +71,5 @@ class MinioUnauthPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
             )
-        print(no("不存在 MinIO 未授权访问"))
+        emit(no("不存在 MinIO 未授权访问"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=root_url)

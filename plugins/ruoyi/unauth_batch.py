@@ -5,6 +5,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -156,7 +157,7 @@ class UnauthBatchPlugin(PluginBase):
         # 汇总判定：任一端点命中即 CONFIRMED
         if hit_endpoints:
             hit_names = [h["name"] for h in hit_endpoints]
-            print(ok(f"存在未授权访问（命中端点：{','.join(hit_names)}）"))
+            emit(ok(f"存在未授权访问（命中端点：{','.join(hit_names)}）"))
             evidence_lines = [f"{h['name']}({h['url']}) 命中 {h['matched_keywords']}" for h in hit_endpoints]
             return ScanResult(
                 kind="vuln",
@@ -174,7 +175,7 @@ class UnauthBatchPlugin(PluginBase):
 
         # 全部端点未命中
         if got_response:
-            print(no("不存在未授权访问漏洞（所有端点均已鉴权或无特征）"))
+            emit(no("不存在未授权访问漏洞（所有端点均已鉴权或无特征）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -183,5 +184,5 @@ class UnauthBatchPlugin(PluginBase):
                 evidence="; ".join(f"{n}:{s}({d})" for n, s, d in all_status),
             )
 
-        print(no("未授权访问检测：所有端点网络异常，无法判定"))
+        emit(no("未授权访问检测：所有端点网络异常，无法判定"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=target, evidence="所有端点均网络异常")

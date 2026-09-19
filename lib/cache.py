@@ -22,6 +22,8 @@ import sqlite3
 import threading
 from typing import Any, Dict, List, Optional
 
+from lib.reporter import emit
+
 # ============================================================
 # 缓存键生成
 # ============================================================
@@ -514,23 +516,23 @@ def run_cache_stats_mode(args) -> int:
     cache = ScanCache(db_path=db_path)
     stats = cache.get_stats()
 
-    print("[*]缓存统计:")
-    print(f"    数据库: {db_path}")
-    print(f"    总条目: {stats['total_entries']}")
-    print(f"    活跃条目: {stats['active_entries']}")
-    print(f"    过期条目: {stats['expired_entries']}")
-    print(f"    总命中次数: {stats['total_hits']}")
-    print(f"    命中率: {stats['hit_rate']}")
+    emit("[*]缓存统计:")
+    emit(f"    数据库: {db_path}")
+    emit(f"    总条目: {stats['total_entries']}")
+    emit(f"    活跃条目: {stats['active_entries']}")
+    emit(f"    过期条目: {stats['expired_entries']}")
+    emit(f"    总命中次数: {stats['total_hits']}")
+    emit(f"    命中率: {stats['hit_rate']}")
 
     if stats["top_hit"]:
-        print("\n[+]高频命中:")
+        emit("\n[+]高频命中:")
         for item in stats["top_hit"]:
-            print(f"    {item['target']} → {item['hit_count']} 次")
+            emit(f"    {item['target']} → {item['hit_count']} 次")
 
     if stats["by_target"]:
-        print("\n[+]按目标统计:")
+        emit("\n[+]按目标统计:")
         for item in stats["by_target"]:
-            print(f"    {item['target']} → {item['cnt']} 条缓存")
+            emit(f"    {item['target']} → {item['cnt']} 条缓存")
 
     return 0
 
@@ -542,11 +544,11 @@ def run_cache_clear_mode(args) -> int:
 
     # 先清除过期
     expired = cache.clear_expired()
-    print(f"[+]已清除 {expired} 条过期缓存")
+    emit(f"[+]已清除 {expired} 条过期缓存")
 
     # --cache-clear 清除全部
     if getattr(args, "cache_clear_all", False):
         count = cache.clear_all()
-        print(f"[+]已清除全部 {count} 条缓存")
+        emit(f"[+]已清除全部 {count} 条缓存")
 
     return 0

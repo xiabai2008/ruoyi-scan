@@ -6,6 +6,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_spring_actuator_env
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -69,12 +70,12 @@ class SpringActuatorEnvRcePlugin(PluginBase):
         try:
             resp = session.post(url, json=payload)
         except Exception as e:
-            print(no("Spring Actuator env 配置覆盖 RCE（网络异常）"))
+            emit(no("Spring Actuator env 配置覆盖 RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
         if ENV_MARKER in text:
-            print(ok("存在 Spring Boot Actuator env 配置覆盖 RCE"))
+            emit(ok("存在 Spring Boot Actuator env 配置覆盖 RCE"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -87,7 +88,7 @@ class SpringActuatorEnvRcePlugin(PluginBase):
         # 真实漏洞响应：POST 返回 200/201（非 401/403/404/405）即说明 env 可被写入
         # 真实 Spring Boot env POST 成功返回 200 JSON（含 propertySources 或简单 JSON）
         if resp.status_code in (200, 201) and match_spring_actuator_env(text):
-            print(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）"))
+            emit(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -97,23 +98,23 @@ class SpringActuatorEnvRcePlugin(PluginBase):
                 evidence="响应含 Actuator env 配置特征（propertySources/applicationConfig），证实 env POST 可达",
                 fix=self.fix,
             )
-        # 真实漏洞响应：POST 返回 200 但响应体简单（仅 timestamp/status），
-        # 仍可判定 env POST 可达（无鉴权拦截）
-        # 兜底判定：200 且无明确报错即视为可写入——宽松分支，优先避免真实漏洞漏报
-        if resp.status_code == 200 and "Method Not Allowed" not in text and "error" not in text.lower():
-            print(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（真实漏洞响应）"))
+        # 加固：已删除原「200 且正文无 error 字样即判可写入」的宽松兜底分支。
+        # 该分支等价于「任何对 POST 返回 200 的端点都判 env 可写入 RCE」，
+        # 首页、SPA 空壳页、网关兜底页全部会被误报。
+        # 加固后只接受两类证据：签名 marker，或响应体含 Actuator env 配置结构。
+        # 200 但无上述证据 → UNKNOWN（响应可能被网关改写，不宜直接判 SAFE）
+        if resp.status_code == 200:
+            emit(no("Spring Boot Actuator env：响应无 Actuator 配置特征，判 UNKNOWN"))
             return ScanResult(
-                kind="vuln",
+                kind="info",
                 name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
+                status=STATUS_UNKNOWN,
                 url=url,
-                evidence="POST /actuator/env 返回 200（无鉴权拦截），证实 env 配置可写入",
-                fix=self.fix,
+                evidence=(f"POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：{text[:200]}"),
             )
-        print(no("不存在 Spring Boot Actuator env 配置覆盖 RCE"))
+        emit(no("不存在 Spring Boot Actuator env 配置覆盖 RCE"))
         return ScanResult(
-            kind="vuln",
+            kind="info",
             name=self.name,
             status=STATUS_SAFE,
             url=url,

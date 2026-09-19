@@ -20,6 +20,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional
 
 from common.logger import get_logger
+from lib.reporter import emit
 
 logger = get_logger(__name__)
 
@@ -159,7 +160,7 @@ def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:
     from lib.colors import GREEN, RESET, YELLOW
 
     if builder is None:
-        print(f"{YELLOW}[!]--ai-triage 需在扫描完成后使用（配合 -u/-p 等）{RESET}")
+        emit(f"{YELLOW}[!]--ai-triage 需在扫描完成后使用（配合 -u/-p 等）{RESET}")
         return None
 
     results = builder._effective_results()
@@ -176,7 +177,7 @@ def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:
 
     report = triage_unknowns(results, llm_fn=llm_fn)
     if report["summary"]["total_unknown"] == 0:
-        print(f"{GREEN}[*]本次扫描无 UNKNOWN 结果，无需分流{RESET}")
+        emit(f"{GREEN}[*]本次扫描无 UNKNOWN 结果，无需分流{RESET}")
         return None
 
     out_dir = getattr(args, "report", None) or "reports"
@@ -185,9 +186,9 @@ def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
-    print(f"{YELLOW}[*]UNKNOWN 降噪：共 {report['summary']['total_unknown']} 条，分流如下{RESET}")
+    emit(f"{YELLOW}[*]UNKNOWN 降噪：共 {report['summary']['total_unknown']} 条，分流如下{RESET}")
     for g in report["groups"]:
-        print(f"    [{g['label']}] {g['plugin']} × {g['count']}")
-    print(f"{GREEN}[*]分流报告已生成: {out_path}{RESET}")
-    print(f"{YELLOW}[!]{report['disclaimer']}{RESET}")
+        emit(f"    [{g['label']}] {g['plugin']} × {g['count']}")
+    emit(f"{GREEN}[*]分流报告已生成: {out_path}{RESET}")
+    emit(f"{YELLOW}[!]{report['disclaimer']}{RESET}")
     return out_path

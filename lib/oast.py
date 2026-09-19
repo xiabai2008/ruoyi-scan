@@ -25,6 +25,8 @@ import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
+from lib.reporter import emit
+
 # ============================================================
 # 回调记录存储
 # ============================================================
@@ -435,18 +437,18 @@ def run_oast_mode(args) -> int:
 
     server = OASTServer(host=host, port=port)
     if not server.start():
-        print(f"[!]OAST 服务器启动失败：端口 {port} 被占用")
+        emit(f"[!]OAST 服务器启动失败：端口 {port} 被占用")
         return 1
 
-    print(f"[*]OAST 回调服务器已启动：{host}:{port}")
-    print(f"[*]回调 URL 格式：http://{host}:{port}/?id=<interaction_id>")
-    print("[*]按 Ctrl+C 停止")
+    emit(f"[*]OAST 回调服务器已启动：{host}:{port}")
+    emit(f"[*]回调 URL 格式：http://{host}:{port}/?id=<interaction_id>")
+    emit("[*]按 Ctrl+C 停止")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[*]停止 OAST 服务器")
+        emit("\n[*]停止 OAST 服务器")
         server.stop()
 
     return 0

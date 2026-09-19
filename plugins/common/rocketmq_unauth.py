@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -44,7 +45,7 @@ class RocketmqUnauthPlugin(PluginBase):
                 resp = session.get(url)
                 text = resp.text or ""
             except Exception as e:
-                print(no("RocketMQ Dashboard 未授权（网络异常）"))
+                emit(no("RocketMQ Dashboard 未授权（网络异常）"))
                 return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
             # 控制台特征 + 排除登录页：命中 dashboard 关键字但含 login/sign in 说明有鉴权，不算未授权
             if resp.status_code == 200 and match_positive(
@@ -55,7 +56,7 @@ class RocketmqUnauthPlugin(PluginBase):
                 evidence_url = url
                 break
         if evidence_url:
-            print(ok("存在 RocketMQ Dashboard 未授权"))
+            emit(ok("存在 RocketMQ Dashboard 未授权"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -66,5 +67,5 @@ class RocketmqUnauthPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "rocketmq_unauth"},
             )
-        print(no("不存在 RocketMQ Dashboard 未授权"))
+        emit(no("不存在 RocketMQ Dashboard 未授权"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=target)

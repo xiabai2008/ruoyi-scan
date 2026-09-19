@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_all
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -56,11 +57,11 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot jmreport 文件上传（网络异常）"))
+            emit(no("JeecgBoot jmreport 文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 上传成功响应特征：url（访问路径）+ fileName（落盘文件名），两者齐备才判接口可写
         if resp.status_code == 200 and match_all(text, ["url", "fileName"]):
-            print(ok("存在 JeecgBoot jmreport 文件上传"))
+            emit(ok("存在 JeecgBoot jmreport 文件上传"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -71,5 +72,5 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
             )
-        print(no("不存在 JeecgBoot jmreport 文件上传"))
+        emit(no("不存在 JeecgBoot jmreport 文件上传"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

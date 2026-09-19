@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -79,7 +80,7 @@ class DefaultPasswordPlugin(PluginBase):
         try:
             resp = session.post(url, json=data, headers=headers)
         except Exception as e:
-            print(no("后台默认口令（网络异常）"))
+            emit(no("后台默认口令（网络异常）"))
             return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
@@ -97,7 +98,7 @@ class DefaultPasswordPlugin(PluginBase):
 
         # 1) 验证码拦截：服务端要求验证码 → 无法判定（非 SAFE，避免漏报）
         if match_positive(text, self.CAPTCHA_KEYWORDS):
-            print(no("后台默认口令：服务端要求验证码，无法判定"))
+            emit(no("后台默认口令：服务端要求验证码，无法判定"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
@@ -120,7 +121,7 @@ class DefaultPasswordPlugin(PluginBase):
 
         if token:
             # 含 token → 强命中
-            print(ok("存在后台默认口令漏洞（admin/admin123，返回 token）"))
+            emit(ok("存在后台默认口令漏洞（admin/admin123，返回 token）"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
@@ -134,7 +135,7 @@ class DefaultPasswordPlugin(PluginBase):
 
         if r_code == 200 and not has_login_failure_kw:
             # code == 200 且 msg 不含错误关键字
-            print(ok("存在后台默认口令漏洞（admin/admin123，code=200）"))
+            emit(ok("存在后台默认口令漏洞（admin/admin123，code=200）"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
@@ -150,7 +151,7 @@ class DefaultPasswordPlugin(PluginBase):
             # Admin-Token 是 RuoYi 前后端分离版登录成功下发的专属 token Cookie
             # 注意：JSESSIONID 不在此判定中——Java 应用登录失败时通常也会下发 JSESSIONID，
             # 仅凭 JSESSIONID 会产生大量误报（P0 修复）
-            print(ok("存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）"))
+            emit(ok("存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
@@ -164,7 +165,7 @@ class DefaultPasswordPlugin(PluginBase):
 
         # 3) 明确的失败信号：code == 500 / msg 含「密码错误」等
         if r_code == 500 or has_login_failure_kw:
-            print(no("不存在后台默认口令漏洞（口令已修改）"))
+            emit(no("不存在后台默认口令漏洞（口令已修改）"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
@@ -175,7 +176,7 @@ class DefaultPasswordPlugin(PluginBase):
             )
 
         # 4) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
-        print(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
+        emit(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
         return ScanResult(
             kind="brute",
             name=self.name,

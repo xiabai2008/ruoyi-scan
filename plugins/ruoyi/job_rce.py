@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -80,7 +81,7 @@ class JobRcePlugin(PluginBase):
         try:
             resp = session.post(url, data=data)
         except Exception as e:
-            print(no("定时任务 RCE（网络异常）"))
+            emit(no("定时任务 RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
@@ -97,14 +98,14 @@ class JobRcePlugin(PluginBase):
 
         # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE（使用 match_positive 统一降误报）
         if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
-            print(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
+            emit(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应含鉴权拦截关键字：{text[:200]}"
             )
 
         # 2) HTTP 状态码 401/403 → 鉴权拦截（无论响应是否为 JSON）
         if code in (401, 403):
-            print(no(f"不存在定时任务 RCE 漏洞（HTTP {code} 鉴权拦截）"))
+            emit(no(f"不存在定时任务 RCE 漏洞（HTTP {code} 鉴权拦截）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {code} 鉴权拦截"
             )
@@ -118,15 +119,18 @@ class JobRcePlugin(PluginBase):
             msg = str(body.get("msg", ""))
             # 鉴权失败码（JSON body 内的 code）
             if r_code in (401, 403):
-                print(no(f"不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）"))
+                emit(no(f"不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）"))
                 return ScanResult(
                     kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"code={r_code} msg={msg}"
                 )
+            # 加固：RuoYi AjaxResult 形态校验——必须同时含 code 与 msg 两个键。
+            # 否则任意返回 {"code":200} 的第三方接口 / 网关 JSON 都会被当作「已进入若依业务层」。
+            has_ajaxresult_shape = "code" in body and "msg" in body
             # 业务层响应（200 成功 / 500 任务不存在）→ 绕过鉴权，存在未授权访问
-            # 注意：仅 code==200/500 判 CONFIRMED；其他业务码（400 参数错误等）不判，
+            # 注意：仅 code==200/500 且形态匹配才判 CONFIRMED；其他业务码（400 参数错误等）不判，
             # 避免「r_code is not None」导致任意 JSON 响应均误报（P0 修复）
-            if r_code in (200, 500):
-                print(ok("存在定时任务 RCE 漏洞（未授权访问编辑接口）"))
+            if r_code in (200, 500) and has_ajaxresult_shape:
+                emit(ok("存在定时任务 RCE 漏洞（未授权访问编辑接口）"))
                 return ScanResult(
                     kind="vuln",
                     name=self.name,
@@ -137,36 +141,49 @@ class JobRcePlugin(PluginBase):
                     extra={"code": r_code, "msg": msg},
                     fix=self.fix,
                 )
-            # 其他业务码（如 400 参数错误、404 等）：无法明确判定是否绕过鉴权，标 UNKNOWN
+            # 其他情形（业务码不在已知范围，或 JSON 非 AjaxResult 形态）：无法判定是否绕过鉴权，标 UNKNOWN
             # （不判 SAFE 避免漏报已修复但返回奇怪码的系统；也不判 CONFIRMED 避免误报）
-            print(no(f"定时任务 RCE：JSON code={r_code} 不在已知范围，判 UNKNOWN"))
+            emit(no(f"定时任务 RCE：code={r_code} 形态/取值不满足判定条件，判 UNKNOWN"))
             return ScanResult(
-                kind="vuln",
+                kind="info",
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"JSON 业务码 {r_code} 不在 (200,500) 范围：{msg}",
+                evidence=(
+                    f"JSON 响应不满足 CONFIRMED 条件（code={r_code}, AjaxResult 形态={has_ajaxresult_shape}）：{msg}"
+                ),
             )
 
-        # 4) 非 JSON 响应但 HTTP 200 + 非鉴权关键字 → 可能是 HTML 编辑页（未授权渲染）
-        if code == 200 and not match_positive(text, ["login", "signin", "登录"]):
-            print(ok("存在定时任务 RCE 漏洞（未授权访问编辑页面）"))
+        # 4) 非 JSON 响应：必须真的渲染出「任务编辑页表单」才算未授权可见。
+        #    历史缺陷：原判定为 `HTTP 200 且不含 login/登录 关键字`，等价于「任何 200 页面均判未授权」，
+        #    首页、SPA 空壳页、软 404 兜底页都会被误报成未授权 RCE。
+        #    加固：要求响应含编辑页表单字段名——这些字段只在 /monitor/job/edit 渲染页出现。
+        EDIT_PAGE_MARKERS = [
+            'name="invokeTarget"',
+            "name='invokeTarget'",
+            'name="cronExpression"',
+            "name='cronExpression'",
+            'name="jobName"',
+            "name='jobName'",
+        ]
+        if code == 200 and match_positive(text, EDIT_PAGE_MARKERS):
+            emit(ok("存在定时任务 RCE 漏洞（未授权访问编辑页面）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence=f"HTTP 200 且无鉴权关键字，响应前 200 字节：{text[:200]}",
+                evidence=f"HTTP 200 且渲染出任务编辑页表单字段，响应前 200 字节：{text[:200]}",
                 fix=self.fix,
             )
 
-        # 5) 其他情形：无法明确判定（如非 200 的非 JSON 响应，且无关键字）
-        print(no("定时任务 RCE：响应特征不明确，判 UNKNOWN"))
+        # 5) 其他情形：无未授权证据，无法判定（非 200 的非 JSON 响应，或 200 但非编辑页）
+        emit(no("定时任务 RCE：未发现未授权证据，判 UNKNOWN"))
         return ScanResult(
-            kind="vuln",
+            kind="info",
             name=self.name,
             status=STATUS_UNKNOWN,
             url=url,
-            evidence=f"HTTP {code} 响应前 200 字节：{text[:200]}",
+            evidence=f"HTTP {code} 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：{text[:200]}",
         )

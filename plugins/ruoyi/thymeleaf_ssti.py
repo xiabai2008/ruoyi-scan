@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -64,6 +65,20 @@ class ThymeleafSstiPlugin(PluginBase):
     # 原始表达式片段（用于排除「原文反射」误报）
     RAW_REFLECTION = "7*7"
 
+    # 模板引擎求值失败的强特征关键字。
+    # 加固说明：原列表含 "template"/"expression"/"viewName" 等泛用词，任何带 <template>
+    # 标签或前端模板字符串的正常页面都会命中，与「49」叠加后造成误报。
+    # 现仅保留只会在 Thymeleaf/SpEL 真实求值链路中出现的强特征。
+    ENGINE_EVIDENCE_KEYWORDS = [
+        "org.thymeleaf",
+        "TemplateProcessingException",
+        "TemplateInputException",
+        "SpelEvaluationException",
+        "SpelParseException",
+        "EL104",
+        "Cannot resolve",  # Spring 视图名解析失败（SSTI 的典型伴随症状）
+    ]
+
     # 候选探测路径：RuoYi 不同版本的可疑端点（保守起见探测多个，任一命中即判存在）
     CANDIDATE_PATHS = [
         "__${7*7}__::.x",  # 根路径注入
@@ -79,8 +94,10 @@ class ThymeleafSstiPlugin(PluginBase):
         @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
         @return: ScanResult — 求值结果 49 + 引擎关键字双重命中则 CONFIRMED；仅 49 则 UNKNOWN 待复核；无求值迹象则 SAFE；全部网络异常则 UNKNOWN
         """
-        # 候选路径任一命中即判存在；全部无响应判 UNKNOWN；命中特征但无 49 判 SAFE
+        # 候选路径任一强命中即判存在；弱命中（含 49 无引擎特征）全部扫完后上报 UNKNOWN；
+        # 全部无 49 判 SAFE；全部网络异常判 UNKNOWN
         got_response = False
+        weak_hit = None  # (path, url, text)：记住弱命中候选
         for path in self.CANDIDATE_PATHS:
             # Tomcat/Spring 默认会剥离 URL 路径中的裸花括号 {}，导致 __${7*7}__ 退化成
             # __$7*7__ 而失去求值能力。对探针中的特殊字符做百分号编码，使其在路径中存活，
@@ -94,63 +111,55 @@ class ThymeleafSstiPlugin(PluginBase):
                 continue
             got_response = True
             text = resp.text or ""
-            # 判定 1：响应含求值结果 49 且不含原始表达式 7*7（区分求值与原文反射）
+            # 判定：响应含求值结果 49 且不含原始表达式 7*7（区分求值与原文反射）
             if self.EVAL_RESULT in text and self.RAW_REFLECTION not in text:
-                # 进一步控误报：49 不能是状态码本身（如 490、49ms 等），需在响应体而非状态码
-                # 这里要求 49 出现在响应体内容中（text），且不应是端口/版本号常见场景
-                # 为保守起见，再校验：响应中含错误堆栈或 Thymeleaf/SpEL 关键字
-                evidence_keywords = [
-                    "thymeleaf",
-                    "TemplateEngine",
-                    "SpEL",
-                    "EL104",
-                    "expression",
-                    "viewName",
-                    "template",
-                    "org.thymeleaf",
-                    "Cannot resolve",
-                ]
                 lower_text = text.lower()
-                has_engine_evidence = any(kw.lower() in lower_text for kw in evidence_keywords)
-                # 严格判定：49 + 引擎关键字同时出现才算命中
-                # 退化宽松：仅 49 且无 7*7 反射（可能为业务数值巧合，标 UNKNOWN 待复核）
+                has_engine_evidence = any(kw.lower() in lower_text for kw in self.ENGINE_EVIDENCE_KEYWORDS)
+                # 严格判定：49 + 引擎强特征同时出现才算命中
                 if has_engine_evidence:
-                    print(ok("存在 Thymeleaf/SpEL 模板注入漏洞"))
+                    emit(ok("存在 Thymeleaf/SpEL 模板注入漏洞"))
                     return ScanResult(
                         kind="vuln",
                         name=self.name,
                         severity=self.severity,
                         status=STATUS_CONFIRMED,
                         url=url,
-                        evidence=f"响应含求值结果 {self.EVAL_RESULT} 且含模板引擎关键字，前 200 字节：{text[:200]}",
+                        evidence=f"响应含求值结果 {self.EVAL_RESULT} 且含模板引擎特征，前 200 字节：{text[:200]}",
                         extra={"probe": path, "eval_result": self.EVAL_RESULT},
                         fix=self.fix,
                     )
-                # 49 但无引擎关键字：保留 UNKNOWN，避免漏报也避免误报
-                # 不直接判 SAFE（可能仅是错误页未暴露堆栈），亦不判 CONFIRMED
-                print(no(f"Thymeleaf SSTI：候选 {path} 响应含 49 但无引擎关键字，待复核"))
-                return ScanResult(
-                    kind="vuln",
-                    name=self.name,
-                    status=STATUS_UNKNOWN,
-                    url=url,
-                    evidence=f"响应含 {self.EVAL_RESULT} 但无模板引擎关键字，需人工复核",
-                    extra={"probe": path},
-                )
+                # 49 但无引擎强特征：可能只是业务数值巧合，记录后继续扫其余候选路径。
+                # 历史缺陷：此处原为直接 return UNKNOWN，会在第一个「碰巧含 49」的路径上
+                # 提前终止循环，漏掉后面真正命中的候选路径。
+                if weak_hit is None:
+                    weak_hit = (path, url, text)
+
+        # 全部候选路径扫完，存在弱命中且无强命中 → UNKNOWN 待人工复核（不判 SAFE 避免漏报）
+        if weak_hit is not None:
+            path, url, text = weak_hit
+            emit(no(f"Thymeleaf SSTI：候选 {path} 响应含 {self.EVAL_RESULT} 但无引擎特征，待复核"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"响应含 {self.EVAL_RESULT} 但无模板引擎强特征，需人工复核，前 200 字节：{text[:200]}",
+                extra={"probe": path},
+            )
 
         # 所有候选路径均无 49 出现 → 判 SAFE（无求值迹象）
         if got_response:
-            print(no("不存在 Thymeleaf/SpEL 模板注入漏洞"))
+            emit(no("不存在 Thymeleaf/SpEL 模板注入漏洞"))
             return ScanResult(
-                kind="vuln",
+                kind="info",
                 name=self.name,
                 status=STATUS_SAFE,
                 url=join_url(target, self.CANDIDATE_PATHS[0]),
                 evidence=f"所有候选路径均无求值结果 {self.EVAL_RESULT}",
             )
-        print(no("Thymeleaf SSTI：所有候选路径网络异常，无法判定"))
+        emit(no("Thymeleaf SSTI：所有候选路径网络异常，无法判定"))
         return ScanResult(
-            kind="vuln",
+            kind="info",
             name=self.name,
             status=STATUS_UNKNOWN,
             url=join_url(target, self.CANDIDATE_PATHS[0]),

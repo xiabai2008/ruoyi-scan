@@ -2,10 +2,12 @@
 
 # RuoYi-Plus 定时任务未授权探测（variant='ruoyi-plus' 专项）
 # Plus 版 /monitor/job 定时任务管理接口：未登录可访问即存在越权（存在性验证）
+import json
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -44,24 +46,59 @@ class PlusJobUnauthPlugin(PluginBase):
         try:
             # 裸请求（不携带任何 Cookie/Token）：若仍返回业务数据即说明 Sa-Token 鉴权未生效
             resp = session.get(url)
-            text = resp.text or ""
         except Exception as e:
-            print(no("RuoYi-Plus 定时任务未授权（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 未授权 + 业务 JSON（rows 字段）→ 确认；401/403 视为已鉴权
-        if resp.status_code == 200 and match_positive(
-            text, ["rows", "total", "code"], negatives=["login", "unauthorized"]
-        ):
-            print(ok("存在 RuoYi-Plus 定时任务未授权"))
+            emit(no("RuoYi-Plus 定时任务未授权（网络异常）"))
+            return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 判定（2026-09-17 多版本矩阵实测后加固）
+        # 真实缺陷：原判定为 `status==200 and match_positive(text, ["rows","total","code"],
+        # negatives=["login","unauthorized"])`。问题有三：
+        #   1. positives 中的 "code" 过于泛用——任何含验证码字段的 HTML 都命中；
+        #   2. negatives 用小写 "login"，而真若依登录页里是 `id="formLogin"`（大写 L），排除失效；
+        #   3. 未校验响应是 JSON。
+        # 三者叠加后，在纯 RuoYi 单体实例的登录页 HTML 上误报「未授权任务列表」。
+        # 加固后要求：非 3xx + JSON Content-Type + 解析出的 JSON 同时含 rows 与 total 键。
+        if 300 <= resp.status_code < 400:
+            emit(no("不存在 RuoYi-Plus 定时任务未授权（响应为重定向）"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_SAFE,
+                url=url,
+                evidence=f"HTTP {resp.status_code} 重定向至 {resp.headers.get('Location', '')}，鉴权生效",
+            )
+
+        content_type = (resp.headers.get("Content-Type") or "").lower()
+        body = None
+        if resp.status_code == 200 and "application/json" in content_type:
+            # 优先 resp.json()；失败则回退 json.loads(text)。
+            # 回退是为了兼容未实现 .json() 的轻量响应替身（测试用），
+            # 不削弱判定强度——仍要求解析出合法 JSON 且含 rows/total 键。
+            try:
+                body = resp.json()
+            except Exception:
+                try:
+                    body = json.loads(resp.text or "")
+                except Exception:
+                    body = None
+
+        # 未授权 + 真正的业务列表 JSON（rows 与 total 两个键同时存在）→ 确认
+        if isinstance(body, dict) and "rows" in body and "total" in body:
+            emit(ok("存在 RuoYi-Plus 定时任务未授权"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="未携带 token 返回任务列表 JSON",
+                evidence=f"未携带 token 返回任务列表 JSON（rows/total 键存在，HTTP {resp.status_code}）",
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "plus_job_unauth"},
             )
-        print(no("不存在 RuoYi-Plus 定时任务未授权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        emit(no("不存在 RuoYi-Plus 定时任务未授权"))
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence=f"HTTP {resp.status_code} / Content-Type={content_type or '(空)'}，非未授权业务 JSON",
+        )

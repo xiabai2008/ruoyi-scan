@@ -6,6 +6,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -100,7 +101,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
         try:
             resp = session.get(url)
         except Exception as e:
-            print(no("任意文件读取（网络异常）"))
+            emit(no("任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
@@ -110,7 +111,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
         if code == 200:
             hit, evidence = _is_passwd_file(text)
             if hit:
-                print(ok("存在任意文件读取漏洞（路径穿越）"))
+                emit(ok("存在任意文件读取漏洞（路径穿越）"))
                 return ScanResult(
                     kind="vuln",
                     name=self.name,
@@ -137,5 +138,5 @@ class RuoyiFileReadPathPlugin(PluginBase):
             reason = f"200 但{reason}"
         else:
             reason = f"HTTP {code} 非 200 响应"
-        print(no(f"不存在任意文件读取漏洞（{reason}）"))
+        emit(no(f"不存在任意文件读取漏洞（{reason}）"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=reason)

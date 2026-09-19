@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -60,12 +61,12 @@ class SpringActuatorUnauthPlugin(PluginBase):
         try:
             r1 = session.get(url_root)
         except Exception as e:
-            print(no("Spring Boot Actuator 未授权（网络异常）"))
+            emit(no("Spring Boot Actuator 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_root, evidence=str(e))
 
         # /actuator 根端点必须返回 JSON HAL 响应：纯 200 无效（HTML 错误页也可能是 200）
         if r1.status_code != 200 or "application/json" not in (r1.headers.get("Content-Type", "") or ""):
-            print(no("不存在 Spring Boot Actuator 未授权（/actuator 不可达）"))
+            emit(no("不存在 Spring Boot Actuator 未授权（/actuator 不可达）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -83,7 +84,7 @@ class SpringActuatorUnauthPlugin(PluginBase):
 
         # 第二关通过才确认：/actuator 可达但 env 需认证时属“已保护”场景，不算未授权漏洞
         if r2.status_code == 200 and "application/json" in (r2.headers.get("Content-Type", "") or ""):
-            print(ok("存在 Spring Boot Actuator 未授权访问"))
+            emit(ok("存在 Spring Boot Actuator 未授权访问"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -93,7 +94,7 @@ class SpringActuatorUnauthPlugin(PluginBase):
                 evidence="/actuator/env 可匿名访问，泄露环境变量与配置属性",
                 fix=self.fix,
             )
-        print(no("不存在 Spring Boot Actuator 未授权（/actuator/env 需认证）"))
+        emit(no("不存在 Spring Boot Actuator 未授权（/actuator/env 需认证）"))
         return ScanResult(
             kind="vuln",
             name=self.name,

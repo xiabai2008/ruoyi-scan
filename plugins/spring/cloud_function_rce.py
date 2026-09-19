@@ -6,6 +6,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_cloud_function_spel
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -64,12 +65,12 @@ class SpringCloudFunctionRcePlugin(PluginBase):
         try:
             resp = session.post(url, data="probe", headers=headers)
         except Exception as e:
-            print(no("Spring Cloud Function RCE（网络异常）"))
+            emit(no("Spring Cloud Function RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         text = resp.text or ""
         if SCF_MARKER in text:
-            print(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞"))
+            emit(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -82,7 +83,7 @@ class SpringCloudFunctionRcePlugin(PluginBase):
         # 真实漏洞响应：SpEL 求值结果（7*7=49 短数字 / 命令回显）
         # 真实环境 SpEL 求值结果是很短的数字（如 49），matcher 用启发式识别，不依赖固定回显
         if resp.status_code == 200 and match_cloud_function_spel(text):
-            print(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞（真实漏洞响应）"))
+            emit(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -92,7 +93,7 @@ class SpringCloudFunctionRcePlugin(PluginBase):
                 evidence="响应含 SpEL 求值结果（短数字 / 命令回显），证实 Cloud Function SpEL 注入可达",
                 fix=self.fix,
             )
-        print(no("不存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞"))
+        emit(no("不存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞"))
         return ScanResult(
             kind="vuln",
             name=self.name,

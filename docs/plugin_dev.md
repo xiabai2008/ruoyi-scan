@@ -121,6 +121,7 @@ python main.py --plugin-init my_plugin --category ruoyi
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import ok, no
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -145,7 +146,7 @@ class MyPluginPlugin(PluginBase):
             resp = session.get(url, timeout=10)
         except Exception as e:
             # 铁律：网络异常 → UNKNOWN，绝不判 SAFE
-            print(no(f"{self.name}（网络异常）"))
+            emit(no(f"{self.name}（网络异常）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_UNKNOWN,
                 url=url, evidence=str(e),
@@ -154,7 +155,7 @@ class MyPluginPlugin(PluginBase):
         text = resp.text or ""
         # 明确证据 → CONFIRMED
         if "demo-test-marker" in text:
-            print(ok(f"存在{self.name}"))
+            emit(ok(f"存在{self.name}"))
             return ScanResult(
                 kind="vuln", name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
@@ -162,7 +163,7 @@ class MyPluginPlugin(PluginBase):
                 fix=self.fix,
             )
         # 明确反证 → SAFE
-        print(no(f"不存在{self.name}"))
+        emit(no(f"不存在{self.name}"))
         return ScanResult(
             kind="vuln", name=self.name, status=STATUS_SAFE,
             url=url, evidence="响应不含特征",
@@ -1146,6 +1147,7 @@ def test_all_bypass_plugins_support_waf_bypass():
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from lib.matcher import match_sql_error
 from plugins.base import PluginBase
 
@@ -1241,7 +1243,7 @@ class SqlInjectDemoPlugin(PluginBase):
             resp = session.post(url, headers=headers, data=data, timeout=10)
         except Exception as e:
             # 铁律：网络异常 → UNKNOWN
-            print(no(f"{self.name}（网络异常）"))
+            emit(no(f"{self.name}（网络异常）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_UNKNOWN,
                 url=url, evidence=str(e),
@@ -1251,7 +1253,7 @@ class SqlInjectDemoPlugin(PluginBase):
 
         # 判定：SQL 报错特征（用 lib/matcher.py 统一降误报工具）
         if match_sql_error(text) or "database()" in text:
-            print(ok(f"存在{self.name}"))
+            emit(ok(f"存在{self.name}"))
             return ScanResult(
                 kind="vuln", name=self.name, severity=self.severity,
                 status=STATUS_CONFIRMED, url=url,
@@ -1267,7 +1269,7 @@ class SqlInjectDemoPlugin(PluginBase):
             )
 
         # 明确反证：正常业务响应
-        print(no(f"不存在{self.name}"))
+        emit(no(f"不存在{self.name}"))
         return ScanResult(
             kind="vuln", name=self.name, status=STATUS_SAFE,
             url=url, evidence="响应不含 SQL 报错特征",

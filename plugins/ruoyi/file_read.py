@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_all
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -53,12 +54,12 @@ class FileReadPlugin(PluginBase):
         try:
             file_read_use = session.get(url).text
         except Exception as e:
-            print(no("任意文件读取（网络异常）"))
+            emit(no("任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 判定 1:1 保留：'root' 与 ':/' 同时出现（AND 联合，过滤仅含 root 的噪声）
         # 使用 match_all 统一降误报工具（agents.md §5）
         if match_all(file_read_use, ["root", ":/"]):
-            print(ok("存在任意文件读取漏洞"))
+            emit(ok("存在任意文件读取漏洞"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -75,5 +76,5 @@ class FileReadPlugin(PluginBase):
                 },
             )
         else:
-            print(no("不存在任意文件读取漏洞"))
+            emit(no("不存在任意文件读取漏洞"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

@@ -5,6 +5,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -54,7 +55,7 @@ class SpringMappingsLeakPlugin(PluginBase):
         try:
             resp = session.get(url)
         except Exception as e:
-            print(no("Spring Actuator /mappings 泄露（网络异常）"))
+            emit(no("Spring Actuator /mappings 泄露（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
         ct = (resp.headers.get("Content-Type") or "").lower()
@@ -63,7 +64,7 @@ class SpringMappingsLeakPlugin(PluginBase):
         # 三重校验防误判：HTML 错误页也可能返回 200，必须同时满足 JSON Content-Type 与响应体关键字
         # 判别：200 + JSON + 含 mappings/dispatcherServlets 特征
         if resp.status_code == 200 and "json" in ct and "dispatcherServlets" in text:
-            print(ok("存在 Spring Boot Actuator /mappings 路由映射泄露"))
+            emit(ok("存在 Spring Boot Actuator /mappings 路由映射泄露"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -73,7 +74,7 @@ class SpringMappingsLeakPlugin(PluginBase):
                 evidence="响应含 dispatcherServlets 映射（泄露控制器与请求方法）",
                 fix=self.fix,
             )
-        print(no("不存在 Spring Boot Actuator /mappings 路由映射泄露"))
+        emit(no("不存在 Spring Boot Actuator /mappings 路由映射泄露"))
         return ScanResult(
             kind="vuln",
             name=self.name,

@@ -17,6 +17,7 @@ from api.ws.handler import scan_ws
 from core.orchestrator import ScanOrchestrator
 from core.storage import DEFAULT_DB_PATH, Storage
 from core.task_registry import TaskRegistry
+from lib.reporter import set_quiet
 
 
 @asynccontextmanager
@@ -56,6 +57,10 @@ def create_app(
     Returns:
         配置好的 FastAPI 应用
     """
+    # 服务模式默认静默：插件的进度输出改走 logging，
+    # 不再直接写服务进程的 stdout。API 已通过 WebSocket 事件流（on_result 回调）
+    # 向前端推送实时进度，因此 stdout 输出属于冗余噪音。
+    set_quiet(True)
     app = FastAPI(
         title="若依综合漏洞检测 API",
         description="Ruoyi-Scan Web API — 提交扫描任务、实时事件推送、报告下载",

@@ -4,6 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_positive
+from lib.reporter import emit
 from plugins.base import PluginBase
 
 
@@ -47,7 +48,7 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
             text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
-            print(no("JeecgBoot queryUserByDepId SQL注入（网络异常）"))
+            emit(no("JeecgBoot queryUserByDepId SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
         # 报错注入特征：extractvalue/XPATH/updatexml 任一 + 负向排除普通页面（降误报）
         # 统一小写再匹配：兼容服务端返回大小写不一的报错文案（XPath/XPATH 等变体）
@@ -56,7 +57,7 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
             ["extractvalue", "xpath", "updatexml", "syntax error"],
             negatives=["403", "forbidden", "404 not found"],
         ):
-            print(ok("存在 JeecgBoot queryUserByDepId SQL注入"))
+            emit(ok("存在 JeecgBoot queryUserByDepId SQL注入"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -67,5 +68,5 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_query_user"},
             )
-        print(no("不存在 JeecgBoot queryUserByDepId SQL注入"))
+        emit(no("不存在 JeecgBoot queryUserByDepId SQL注入"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
