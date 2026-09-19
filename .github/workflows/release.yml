@@ -65,9 +65,9 @@ jobs:
       id-token: write      # PyPI OIDC Trusted Publisher（受信任发布）+ SLSA attestation 需要
       attestations: write  # SLSA 构建来源证明（actions/attest-build-provenance）需要
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -94,7 +94,7 @@ jobs:
       # G4：SLSA 构建来源证明（供应链信任建设）
       # 消费者验证：gh attestation verify <file> -R xiabai2008/ruoyi-scan
       - name: Attest build provenance (SLSA)
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             dist/*.whl
@@ -123,7 +123,7 @@ jobs:
 
       # 手动触发（workflow_dispatch）时的产物留存：供 SLSA attestation 验证与调试
       - name: Upload build artifacts (workflow run)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist-${{ github.ref_name }}
           path: |
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload artifacts to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')  # 仅 tag 推送（正式发布）时上传
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
@@ -158,6 +158,8 @@ jobs:
 
       - name: Publish to PyPI
         if: startsWith(github.ref, 'refs/tags/')
+        # 刻意不固定到 SHA：该 action 的官方推荐用法即 @release/v1（指向其受维护的发布分支），
+        # 固定 SHA 会错过发布侧的安全修复。本仓仅两处保留浮动 action 引用，另一处见 desktop-release.yml。
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist

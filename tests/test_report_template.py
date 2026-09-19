@@ -2,7 +2,6 @@
 # 运行：python -m pytest tests/test_report_template.py -q
 import os
 import sys
-import tempfile
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:

@@ -614,13 +614,16 @@ python tests/regression_spring.py
 
 本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。
 
-**供应链验证**：Release 产物附带 SLSA 构建来源证明与 SHA256 校验和，可独立验证：
+**供应链验证**：Release 产物附带 SHA256 校验和，可独立验证；v1.4.3 起同时提供 SLSA 构建来源证明。
+
+> v1.4.2 及更早版本**没有**来源证明——证明步骤在 v1.4.2 发布后 48 分钟才合入 `release.yml`。
+> 对这些版本请只用校验和验证，`gh attestation verify` 会返回 not found。
 
 ```bash
-# SLSA 构建来源验证（需 gh CLI）
-gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-scan
-# 校验和验证
+# 校验和验证（所有版本）
 sha256sum -c checksums.txt
+# SLSA 构建来源验证（需 gh CLI，v1.4.3+ 产物）
+gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-scan
 ```
 
 ---

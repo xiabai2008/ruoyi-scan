@@ -7,6 +7,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from common.logger import get_logger
 from common.models import (
     SEVERITY_CN,
     SEVERITY_HIGH,
@@ -19,6 +20,8 @@ from common.models import (
 )
 from config import settings
 from lib.star_cta import REPO_URL
+
+logger = get_logger(__name__)
 
 
 class ReportBuilder:
@@ -530,7 +533,7 @@ function toggleFilter() {{
                 render_pdf(self, pdf_path)
                 paths.append(pdf_path)
             except ImportError:
-                print("[警告] reportlab 未安装，跳过 PDF 报告（pip install reportlab）")
+                logger.warning("reportlab 未安装，跳过 PDF 报告（pip install reportlab）")
         if "docx" in formats:
             try:
                 from core.report_docx import render_docx
@@ -539,7 +542,7 @@ function toggleFilter() {{
                 render_docx(self, docx_path)
                 paths.append(docx_path)
             except ImportError:
-                print("[警告] python-docx 未安装，跳过 Word 报告（pip install python-docx）")
+                logger.warning("python-docx 未安装，跳过 Word 报告（pip install python-docx）")
         if "xlsx" in formats:
             try:
                 from core.report_xlsx import render_xlsx
@@ -548,7 +551,7 @@ function toggleFilter() {{
                 render_xlsx(self, xlsx_path)
                 paths.append(xlsx_path)
             except ImportError:
-                print("[警告] openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）")
+                logger.warning("openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）")
         # D22: SARIF 报告格式（GitHub Code Scanning）
         if "sarif" in formats:
             try:
@@ -558,7 +561,7 @@ function toggleFilter() {{
                 render_sarif(self, sarif_path)
                 paths.append(sarif_path)
             except Exception as e:
-                print(f"[警告] SARIF 报告生成失败: {e}")
+                logger.warning("SARIF 报告生成失败: %s", e)
         return paths
 
 

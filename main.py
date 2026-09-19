@@ -57,6 +57,18 @@ def build_parser():
     group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
+    group.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        default=False,
+        help="跳过扫描前的目标可达性预检（不可达目标默认直接中止）",
+    )
+    group.add_argument(
+        "--verify-tls",
+        action="store_true",
+        default=False,
+        help="校验目标 TLS 证书（默认不校验，内网自签名证书目标可用）",
+    )
 
     group = parser.add_argument_group("扫描模式")
     group.add_argument("--portscan", action="store_true", default=False, help="端口扫描")
@@ -304,6 +316,8 @@ def print_help():
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
         ("--no-cta", "关闭扫描结尾的仓库引导提示"),
+        ("--skip-preflight", "跳过目标可达性预检（经代理等特殊链路时使用）"),
+        ("--verify-tls", "校验目标 TLS 证书（默认不校验，兼容内网自签名证书）"),
         ("--portscan", "扫描前执行端口扫描 + 服务识别"),
         ("--ports <p1,p2>", "自定义端口列表（逗号分隔）"),
         ("--passive", "启动被动代理模式（监听 HTTP/HTTPS 流量）"),
@@ -417,6 +431,11 @@ def main(argv=None):
 
     # 初始化日志（--debug 启用 DEBUG 级别，默认 WARNING 静默）
     setup_logging(debug=getattr(args, "debug", False))
+
+    # TLS 策略：写入全局 settings，供 core/session.py 与可达性预检共同读取
+    # （与会话层同一事实来源，避免两处策略漂移）
+    if getattr(args, "verify_tls", False):
+        settings.VERIFY_TLS = True
 
     print_banner()
 

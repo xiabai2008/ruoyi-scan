@@ -17,37 +17,85 @@ import pytest
 
 # ── 简易签名靶场（模拟若依目标）──
 class _MockRuoYiHandler(BaseHTTPRequestHandler):
-    """模拟若依目标：返回特征响应供 POC 命中"""
+    """模拟一个「真实存在漏洞」的若依站点，供端到端扫描验证
 
-    ROUTES = {
-        "/": ("<title>若依管理系统</title>", 200),
-        "/login": ("<title>若依管理系统</title>", 200),
-        "/common/download/resource?resource=../../etc/passwd": ("root:x:0:0:root:/root:/bin/bash", 200),
-        "/system/dept/list": ("运行时异常", 500),
-        "/system/role/list": ("database()", 500),
-        "/druid/submitLogin": ("success", 200),
-        "/druid/index.html": ("Druid Stat Index", 200),
-        "/profile": ("若依", 200),
-    }
+    ── 2026-09-16 修正说明（重要）────────────────────────────────────────────
+    旧实现的路由匹配为：
+
+        if route.startswith(path) or path.startswith(route.split("?")[0]):
+
+    由于 ROUTES 的第一项是 "/"，而 `path.startswith("/")` 对任何路径都成立，
+    实际效果是 **所有请求都返回同一张首页 HTML**，注入点、passwd 读取点、
+    Druid 登录点全部不可达。
+
+    该缺陷使本测试长期处于「假绿」状态：扫描结果里出现的 CONFIRMED 唯一来源，
+    是 backup_scan 在「任意路径都返回 200 且有内容」这一条件下的误报
+    （报告 65 个备份文件泄露），与任何真实漏洞特征无关。
+    修正插件误报后本测试立即变红，才暴露出靶场本身从未被真正打通。
+
+    现改为三条原则：
+      1. 路由精确匹配（先剥离查询串），不做前缀兼容；
+      2. 注入点按请求体内容区分「基线请求」与「注入请求」，
+         使插件能做差分判定（这正是加固后的判定方式）；
+      3. 未命中路由一律 404，不再无差别返回 200。
+    ─────────────────────────────────────────────────────────────────────
+    """
+
+    INDEX = "<html><head><title>若依管理系统</title></head><body></body></html>"
+    PASSWD = (
+        "root:x:0:0:root:/root:/bin/bash\n"
+        "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"
+    )
+    NORMAL_LIST = '{"total":0,"rows":[],"code":200,"msg":"查询成功"}'
+    # MySQL extractvalue 被真正求值后才会出现的报错文案
+    INJECT_ERROR = "运行时异常：java.sql.SQLException: XPATH syntax error: '~ry~'"
 
     def do_GET(self):
-        self._respond("GET")
+        path, _, query = self.path.partition("?")
+
+        if path in ("/", "/login", "/profile"):
+            return self._send(200, self.INDEX, "text/html; charset=utf-8")
+        # 任意文件读取点：仅当 resource 参数含目录穿越时返回 passwd（真实漏洞形态）
+        if path == "/common/download/resource":
+            if ".." in query and "etc/passwd" in query:
+                return self._send(200, self.PASSWD, "text/plain; charset=utf-8")
+            return self._send(403, "forbidden", "text/plain; charset=utf-8")
+        # Druid 控制台暴露
+        if path == "/druid/index.html":
+            return self._send(200, "Druid Stat Index", "text/html; charset=utf-8")
+        return self._send(404, "Not Found", "text/plain; charset=utf-8")
 
     def do_POST(self):
-        self._respond("POST")
+        path, _, _ = self.path.partition("?")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        body = self.rfile.read(length).decode("utf-8", "replace") if length else ""
 
-    def _respond(self, _method):
-        path = self.path.split("?")[0] if "?" in self.path else self.path
-        for route, (body, code) in self.ROUTES.items():
-            if route.startswith(path) or path.startswith(route.split("?")[0]):
-                self.send_response(code)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(body.encode("utf-8"))
-                return
-        self.send_response(404)
+        # SQL 报错注入点：按请求体区分基线 / 注入。
+        # 基线请求（无 payload）返回正常业务 JSON；注入请求返回 MySQL 真实报错。
+        # 这样插件必须通过差分才能命中——单看「响应含某个词」无法通过本靶场。
+        if path in ("/system/role/list", "/system/dept/list"):
+            if "extractvalue" in body or "updatexml" in body:
+                return self._send(500, self.INJECT_ERROR, "application/json; charset=utf-8")
+            return self._send(200, self.NORMAL_LIST, "application/json; charset=utf-8")
+        # Druid 弱口令：模拟未授权的 Druid 控制台（任意凭据均可登录）
+        if path == "/druid/submitLogin":
+            return self._send(200, '{"success":true}', "application/json; charset=utf-8")
+        return self._send(404, "Not Found", "text/plain; charset=utf-8")
+
+    def _send(self, code: int, body: str, content_type: str) -> None:
+        payload = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(b"Not Found")
+        self.wfile.write(payload)
+
+    def log_message(self, *args, **kwargs):
+        """静默 HTTP 日志：套件运行时无需逐请求噪声输出"""
+        return
 
 
 def _start_server(port=18999):
@@ -146,9 +194,16 @@ class TestE2E:
 
                 assert "results" in report
                 assert len(report["results"]) > 0
-                # 至少应有确认的漏洞（因为靶场返回了 file_read 的 etc/passwd 特征）
                 confirmed = [r for r in report["results"] if r.get("status") == "CONFIRMED"]
-                assert len(confirmed) > 0, f"应该有确认漏洞，实际: {report['results']}"
+                confirmed_names = [r.get("name", "") for r in confirmed]
+                assert confirmed, f"应该有确认漏洞，实际: {report['results']}"
+                # 只断言「存在任意 CONFIRMED」是不够的：误报同样能满足该条件
+                # （历史教训——本测试此前正是靠 backup_scan 的误报保持绿色）。
+                # 因此必须点名验证靶场确实植入的漏洞特征。
+                assert any("文件读取" in n for n in confirmed_names), (
+                    f"应命中任意文件读取（/common/download/resource 目录穿越返回 passwd），"
+                    f"实际确认项: {confirmed_names}"
+                )
 
         finally:
             server.shutdown()

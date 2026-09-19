@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import sys
 import time
 from argparse import Namespace
 
@@ -55,10 +56,14 @@ def run_chain_mode(chain_name: str, args: Namespace) -> None:
             print(f"{RED}  - {e}{RESET}")
         return
 
+    from cli.preflight import EXIT_UNREACHABLE, preflight_target
     from core.fingerprint import detect_cms
     from core.http import normalize_target
 
     target = normalize_target(target)
+    # 与扫描模式一致的目标预检：链模式同样会打数十个请求，目标不可用时白等超时
+    if not preflight_target(target, args):
+        sys.exit(EXIT_UNREACHABLE)
     session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
 
     # 手动指定 CMS 时跳过指纹识别：confidence=1.0 / matched=["manual"] 标记为人工确认

@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.auth import _required_scope, parse_api_keys
 
-
 # === 权限分级单元测试 ===
 
 

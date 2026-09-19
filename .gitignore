@@ -45,6 +45,10 @@ _p9_*.log
 
 # 真实靶场源码（外部仓库，仅保留文档与复现脚本）
 lab/real-ruoyi/
+# 多版本靶场矩阵：官方源码浅克隆（各版本数 MB）、产物（日志/报告/矩阵）、独立 MySQL 数据目录均不入库
+lab/version_matrix/src/
+lab/version_matrix/out/
+lab/version_matrix/mysql_data/
 
 # Maven 二进制发行包（用户自行下载）
 lab/tools/
@@ -83,3 +87,6 @@ desktop/scripts/*.png
 
 # 测试运行产物（验收报告等）
 data/acceptance_report*.json
+
+# security-scan 插件的运行时状态（hook 状态/扫描历史/报告，机器相关，不入库）
+.mimosa/

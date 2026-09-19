@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from argparse import Namespace
 
+from cli.preflight import EXIT_UNREACHABLE, preflight_target
 from cli.runner import (
     final_prompt,
     run_chain_mode,
@@ -166,6 +167,8 @@ def dispatch(args: Namespace) -> None:
     elif target_for:
         for k in ("u", "m", "p", "l"):
             if k in target_for:
+                if not preflight_target(target_for[k], args):
+                    sys.exit(EXIT_UNREACHABLE)
                 run_mode(k, target_for[k], args)
                 break
 

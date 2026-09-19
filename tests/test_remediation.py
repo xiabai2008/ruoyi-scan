@@ -3,7 +3,6 @@
 import json
 import os
 import sys
-import tempfile
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -15,7 +14,6 @@ from common.models import (
     SEVERITY_HIGH,
     SEVERITY_MEDIUM,
     STATUS_CONFIRMED,
-    STATUS_SAFE,
     ScanResult,
 )
 from core.report import ReportBuilder

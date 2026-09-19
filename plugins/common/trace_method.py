@@ -1,4 +1,6 @@
 # HTTP 方法探测 — OPTIONS 请求 + TRACE 探测
+import uuid
+
 from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
@@ -57,13 +59,22 @@ class TraceMethodPlugin(PluginBase):
         "done"
     )
 
+    # TRACE 回显探针头名。RFC 9110 规定 TRACE 必须把收到的请求报文原样回显，
+    # 因此只有响应体中出现本次发送的自定义头值，才能证明 TRACE 真实启用。
+    # 仅凭状态码 <400 判定不可靠：SPA 路由 / nginx 兜底 location 对任意方法都返回 200。
+    TRACE_PROBE_HEADER = "X-Ruoyi-Scan-Probe"
+
     def verify(self, target, session) -> ScanResult:
-        """探测服务器支持的 HTTP 方法，检测危险 TRACE 是否启用
+        """探测服务器支持的 HTTP 方法，并按回显证据判定 TRACE 是否真实启用
+
+        判定规则：
+          - CONFIRMED：状态码 <400 **且**响应体回显了探针头值（TRACE 真实启用，存在 XST 风险）
+          - SAFE：仅 OPTIONS 返回 Allow（信息级发现，不构成漏洞），或 TRACE 未回显报文
+          - UNKNOWN：请求异常，绝不判 SAFE
 
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
-        @return: STATUS_CONFIRMED（TRACE 开启或 OPTIONS 有 Allow）或 STATUS_SAFE
-        @exception: 请求异常返回 STATUS_UNKNOWN
+        @return: STATUS_CONFIRMED / STATUS_SAFE / STATUS_UNKNOWN
         """
         try:
             # OPTIONS 请求：获取支持的 HTTP 方法
@@ -72,33 +83,24 @@ class TraceMethodPlugin(PluginBase):
             # Allow 头逗号分隔且可能含空格/空段，逐项 strip 并过滤空串
             methods = [m.strip() for m in allow.split(",") if m.strip()] if allow else []
 
-            # TRACE 探测：发送 TRACE 请求
+            # TRACE 探测：带唯一探针头发送，要求响应体回显该值才算真实启用
+            trace_echoed = False
+            probe_value = uuid.uuid4().hex
             try:
-                trace_resp = session.request("TRACE", target)
-                # 以 <400 为启用阈值：多数服务器拒绝 TRACE 时返回 405/403，200/3xx 视为可用
-                trace_enabled = trace_resp.status_code < 400
+                trace_resp = session.request("TRACE", target, headers={self.TRACE_PROBE_HEADER: probe_value})
+                trace_body = trace_resp.text or ""
+                trace_echoed = trace_resp.status_code < 400 and probe_value in trace_body
             except Exception:
-                trace_enabled = False
+                trace_echoed = False
 
-            if methods or trace_enabled:
-                evidence_parts = []
-                if methods:
-                    evidence_parts.append(f"Allow={', '.join(methods)}")
-                if trace_enabled:
-                    evidence_parts.append("TRACE 已启用（存在 XST 攻击风险）")
+            evidence_parts = []
+            if methods:
+                evidence_parts.append(f"Allow={', '.join(methods)}")
+            if trace_echoed:
+                evidence_parts.append("TRACE 已启用且回显请求报文（存在 XST 攻击风险）")
 
-                # TRACE 开启视为确认漏洞（低危）
-                if trace_enabled:
-                    return ScanResult(
-                        kind=self.category,
-                        name=self.name,
-                        severity=self.severity,
-                        status=STATUS_CONFIRMED,
-                        url=target,
-                        evidence="; ".join(evidence_parts),
-                        fix=self.fix,
-                    )
-                # 仅 OPTIONS 有返回，信息级
+            # TRACE 真实启用 → CONFIRMED
+            if trace_echoed:
                 return ScanResult(
                     kind=self.category,
                     name=self.name,
@@ -106,6 +108,19 @@ class TraceMethodPlugin(PluginBase):
                     status=STATUS_CONFIRMED,
                     url=target,
                     evidence="; ".join(evidence_parts),
+                    fix=self.fix,
+                )
+            # 仅 OPTIONS 返回 Allow：信息级发现，不构成漏洞 → SAFE
+            # 历史缺陷：原实现把「仅 OPTIONS 有返回」也判 CONFIRMED，与代码注释「信息级」
+            # 自相矛盾；且 TRACE 判定只看 status_code < 400，导致兜底路由一类的服务器被误报。
+            if methods:
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_SAFE,
+                    url=target,
+                    evidence="; ".join(evidence_parts) + "（信息级发现，TRACE 未回显请求报文）",
                 )
             return ScanResult(
                 kind=self.category,
@@ -113,7 +128,7 @@ class TraceMethodPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_SAFE,
                 url=target,
-                evidence="OPTIONS 无 Allow 头，TRACE 未开启",
+                evidence="OPTIONS 无 Allow 头，TRACE 未回显请求报文",
             )
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"请求异常: {e}")

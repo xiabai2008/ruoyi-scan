@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lib.ai_generator import _clean_code, _rule_fallback, generate_ai_plugin, _write_source
+from lib.ai_generator import _clean_code, _rule_fallback, _write_source, generate_ai_plugin
 
 
 def test_rule_fallback_sql():

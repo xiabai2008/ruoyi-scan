@@ -1,5 +1,4 @@
 # E8 AI 报告解读测试：prompt 构建 / mock LLM / 模板降级 / 文件输出
-import json
 import os
 import shutil
 import sys

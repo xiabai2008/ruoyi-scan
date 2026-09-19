@@ -215,6 +215,44 @@ class PluginBase(ABC):
             compliance=parse_compliance(self.compliance) if self.compliance else {},
         )
 
+    def enrich(self, result: ScanResult) -> ScanResult:
+        """用插件类上声明的元信息回填 ScanResult 中缺失的字段。
+
+        背景：绝大多数插件直接构造 ScanResult 而非调用 _build_result()，
+        导致类上声明的 cve / cvss_vector / compliance / fix_detail / reproduce
+        等元信息从未进入结果对象，报告里这些字段恒为空。
+
+        该方法在引擎收集结果时统一调用，只填空值、不覆盖插件已显式写入的值，
+        因此对所有插件都安全（幂等）。
+
+        Args:
+            result: 插件 verify() 返回的结果对象（原地修改）
+
+        Returns:
+            同一个 result 对象
+        """
+        if not result.name:
+            result.name = self.name or ""
+        if not result.cve:
+            result.cve = self.cve or ""
+        if not result.cvss_vector:
+            result.cvss_vector = self.cvss_vector or ""
+        if not result.cvss_score and result.cvss_vector:
+            result.cvss_score = cvss_score(result.cvss_vector)
+        if not result.compliance:
+            result.compliance = parse_compliance(self.compliance) if self.compliance else {}
+        if not result.fix:
+            result.fix = self.fix or ""
+        if not result.fix_detail:
+            result.fix_detail = self.fix_detail or ""
+        if not result.reproduce:
+            result.reproduce = self.reproduce or ""
+        # kind 归一化：kind 必须与 status 一致，避免 SAFE/UNKNOWN 结果被标成 vuln
+        # 下游报告统一按 status 筛选，此处仅修正语义一致性
+        if result.status != STATUS_CONFIRMED and result.kind == "vuln":
+            result.kind = "info"
+        return result
+
     def meta(self) -> Dict[str, Any]:
         """返回插件元信息字典"""
         return {

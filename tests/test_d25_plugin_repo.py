@@ -68,7 +68,7 @@ def test_manifest_signature_optional():
     except ImportError:
         print("SKIP test_manifest_signature_optional: cryptography 未安装")
         return
-    from lib.plugin_repo import _load_or_create_key, _sign_manifest, build_manifest, verify_manifest, signing_dir
+    from lib.plugin_repo import _load_or_create_key, _sign_manifest, build_manifest, verify_manifest
 
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_sig_")
     key_dir = tempfile.mkdtemp(prefix="ruoyi_scan_key_")
@@ -93,7 +93,6 @@ def test_manifest_signature_optional():
 
 def test_download_and_install():
     """本地 zip 仓库下载 → 校验 → 安装到指定目录"""
-    from lib.plugin_repo import download_and_install
 
     src = tempfile.mkdtemp(prefix="ruoyi_scan_repo_src_")
     dest = tempfile.mkdtemp(prefix="ruoyi_scan_repo_dest_")
@@ -182,9 +181,8 @@ def test_download_rejects_bad_zip():
 
 def test_load_user_installed_plugins():
     """用户安装目录插件自动发现（单文件 PluginBase 子类）"""
-    from lib.plugin_repo import load_user_installed_plugins, user_plugin_dir
-
     import plugins.base
+    from lib.plugin_repo import load_user_installed_plugins
 
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_user_plugins_")
     plugin_file = os.path.join(tmp, "my_demo_plugin.py")

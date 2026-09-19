@@ -17,6 +17,11 @@ import sys
 _DEFAULT_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 _DEFAULT_DATEFMT = "%H:%M:%S"
 
+# 第三方库降噪名单：目标不可达时 urllib3 对每个失败请求输出 2 行 "Retrying" 警告，
+# 数十个插件叠加会刷出数百行并淹没工具自身的进度输出（实测不可达目标时完全看不到
+# 工具结论）。DEBUG 档位不降噪——排查连通性问题时需要底层重试详情。
+_NOISY_LOGGERS = ("urllib3", "requests", "charset_normalizer")
+
 _configured = False
 
 
@@ -43,11 +48,13 @@ def setup_logging(debug: bool = False, level: int | None = None) -> None:
             for h in root.handlers
         ):
             root.addHandler(handler)
-        root.setLevel(level)
         _configured = True
-    else:
-        # 已初始化过：仅动态切换级别，不重复挂载 handler
-        logging.getLogger().setLevel(level)
+    # 重复设置级别是幂等的，故不区分首次/后续调用
+    logging.getLogger().setLevel(level)
+    # NOTSET 表示继承父 logger（root），用于 DEBUG 档位恢复第三方库原始输出
+    third_party_level = logging.NOTSET if level <= logging.DEBUG else logging.ERROR
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(third_party_level)
 
 
 def get_logger(name: str) -> logging.Logger:
