@@ -44,6 +44,8 @@ jobs:
         run: |
           mypy common/ --strict --ignore-missing-imports --no-warn-unused-ignores
           mypy core/ --strict --ignore-missing-imports --no-warn-unused-ignores
+          # lib/ 整体尚未 strict 化（5700+ 语句），先锁定重构新增的两个基础模块
+          mypy lib/reporter.py lib/soft404.py --strict --ignore-missing-imports --no-warn-unused-ignores
       - name: 检出能力矩阵门禁（无验证插件数不得增加）
         # 当前 13 个插件无任何自动化验证证据（见 docs/verification-matrix.md）。
         # 用上限而非「必须为 0」：立即清零不现实，但数量只应下降——新增插件若无任何
