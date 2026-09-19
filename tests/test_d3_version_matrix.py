@@ -19,7 +19,7 @@ def _ruoyi_plugins():
 def test_all_ruoyi_plugins_have_versions():
     """16 个基础 ruoyi POC + 2 个 Plus 专属，全部携带 affected_versions"""
     plugins = _ruoyi_plugins()
-    assert len(plugins) == 18, f"应有 18 个若依插件（16 基础 + F6 Plus 专属 2），实际 {len(plugins)}"
+    assert len(plugins) == 20, f"应有 20 个若依插件（18 基础 + F6 Plus 专属 2），实际 {len(plugins)}"
     for cls in plugins:
         # 类属性必须存在（None 视为未定义 → 失败）
         assert hasattr(cls, "affected_versions"), f"{cls.__name__} 缺少 affected_versions"
@@ -51,7 +51,7 @@ def test_old_version_filter():
     """检测到 v4.5（旧版）→ 全部 POC 适用（在 >=4.0,<4.6 区间内）"""
     fp = FingerprintResult(cms="ruoyi", version="4.5.0", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp)
-    assert len(plugins) == 16, f"v4.5 通用扫描应 16 个插件（Plus 专属不执行），实际 {len(plugins)}"
+    assert len(plugins) == 18, f"v4.5 通用扫描应 18 个插件（Plus 专属不执行），实际 {len(plugins)}"
     print("PASS test_old_version_filter: v4.5 → %d 个插件" % len(plugins))
 
 
@@ -91,6 +91,31 @@ def test_version_in_range_semantics():
     assert version_in_range("4.7.8", ">=4.0,<4.7") is False
     assert version_in_range("4.7.8", ">=4.0,<4.6") is False
     print("PASS test_version_in_range_semantics")
+
+
+def test_version_range_spec_format_is_valid():
+    """回归：affected_versions 的运算符与版本号之间**不得有空格**
+
+    `core.ruoyi_versions.version_in_range` 的解析正则为 `(>=|<=|>|<)(\\d+(?:\\.\\d+)*)`，
+    写成 `"<= 4.8.0"` 时 `re.match` 失败 → 该条件被 `continue` 跳过 →
+    **静默退化为「全版本适用」**，不报错也不过滤。
+
+    2026-09-17 实际踩到：新增的 CVE-2025-46174 插件写了 `"<= 4.8.0"`，
+    结果它在 4.8.2 / 4.8.3（已修复、判定为 SAFE 的版本）上仍被调度执行。
+    本用例对所有插件包做格式校验，防止同类问题再次静默发生。
+    """
+    import re
+
+    bad = []
+    for pkg in ("plugins.ruoyi", "plugins.spring", "plugins.jeecgboot", "plugins.common"):
+        for cls in load_plugins(pkg):
+            spec = getattr(cls, "affected_versions", "") or ""
+            for cond in spec.split(","):
+                cond = cond.strip()
+                if cond and not re.match(r"^(>=|<=|>|<)\d+(?:\.\d+)*$", cond):
+                    bad.append(f"{cls.__name__}: {spec!r}")
+    assert not bad, f"affected_versions 格式不合法（运算符与版本号之间不能有空格，也不支持 '==' 等写法）: {bad}"
+    print("PASS test_version_range_spec_format_is_valid")
 
 
 def test_report_version_matrix_field():

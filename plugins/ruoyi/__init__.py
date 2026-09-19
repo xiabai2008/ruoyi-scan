@@ -3,6 +3,8 @@
 # Step 5（专项补齐）：vuln 类追加 file_upload / job_rce / thymeleaf_ssti / unauth_batch；brute 类追加 default_password
 # Step 8（阶段八扩充）：vuln 类追加 file_read_path（high）/ nacos_unauth（medium）
 # plugin_list：插件注册表，扫描器按声明顺序逐条执行——新增插件须在此登记，排序即执行优先级
+from plugins.ruoyi.cve_2025_46174_resetpwd_scope import Cve202546174ResetPwdScopePlugin
+from plugins.ruoyi.cve_2025_70986_select_dept_tree import Cve202570986SelectDeptTreePlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
 from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
@@ -45,6 +47,9 @@ plugin_list = [
     RuoyiCloudNacosPlugin,  # RuoYi-Cloud Nacos 配置泄露（high）
     RuoyiSwaggerUnauthPlugin,  # Swagger 未授权 API 文档（medium）
     RuoyiGenRcePlugin,  # 代码生成模块 SSTI（high）
+    # 多版本矩阵实测新增（2026-09-17）：认证后越权类，需「持功能权限但数据范围受限」的低权账号
+    Cve202546174ResetPwdScopePlugin,  # CVE-2025-46174 重置密码页数据权限绕过（high，影响 <=4.8.0）
+    Cve202570986SelectDeptTreePlugin,  # CVE-2025-70986 部门树越权访问（medium，影响 <=4.8.0）
     # F6：RuoYi-Plus 变体专项（variant='ruoyi-plus'，仅 Plus 变体目标执行）
     PlusAuthLoginProbePlugin,  # 认证服务探测（low）
     PlusJobUnauthPlugin,  # 定时任务未授权（high）

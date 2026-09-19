@@ -51,6 +51,34 @@ class TestExtractVersion(unittest.TestCase):
         self.assertEqual(extract_version(""), "")
 
 
+    def test_extract_version_by_copyright_year(self):
+            """Thymeleaf 单机版登录页无明文版本号，靠版权年份识别版本
+
+            数据来源：官方各 tag 的 templates/login.html（2026-09-19 逐一核对，
+            v4.6.2~v4.8.3 五个版本年份互不相同）。未收录年份返回空串（保守：不做版本过滤）。
+            """
+            from core.ruoyi_versions import extract_version, extract_version_by_copyright
+
+            cases = {
+                "Copyright © 2018-2021 ruoyi.vip All Rights Reserved.": "4.6.2",
+                "Copyright © 2018-2023 ruoyi.vip All Rights Reserved.": "4.7.8",
+                "Copyright © 2018-2024 ruoyi.vip All Rights Reserved.": "4.8.0",
+                "Copyright © 2018-2025 ruoyi.vip All Rights Reserved.": "4.8.2",
+                "Copyright © 2018-2026 ruoyi.vip All Rights Reserved.": "4.8.3",
+            }
+            for html, want in cases.items():
+                got = extract_version(html)
+                assert got == want, f"版权年份应映射到 {want}，实际 {got!r}（HTML: {html[:40]}）"
+            # 起始年份不同也应命中（只锚定结束年份）；大小写不敏感；(c) 写法
+            assert extract_version_by_copyright("Copyright © 2019-2025") == "4.8.2"
+            assert extract_version_by_copyright("copyright (c) 2018-2023") == "4.7.8"
+            # 未收录年份 / 无版权行 → 空串（不过滤，等价旧行为）
+            assert extract_version_by_copyright("Copyright © 2018-2019") == ""
+            assert extract_version("no copyright here") == ""
+            # 明文版本号优先（旧管线优先级更高）
+            assert extract_version("RuoYi 4.7.8 <br> Copyright © 2018-2021") == "4.7.8"
+
+
 class TestParseVersion(unittest.TestCase):
     """版本号解析"""
 
@@ -149,7 +177,7 @@ class TestRouterVersionFilter(unittest.TestCase):
         fp = FingerprintResult(cms="ruoyi", version="4.2.0", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
         # 4.2.0 应跑全部 16 个 POC（所有 <4.6 和 <4.7 都满足，全版本的也满足）
-        self.assertEqual(len(plugins), 16, f"4.2.0 应跑全部 16 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 18, f"4.2.0 应跑全部 18 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_7_8(self):
         """4.7.8 版本：应过滤掉 <4.6 和 <4.7 的 POC（6 个），只跑全版本的（10 个）"""
@@ -158,20 +186,20 @@ class TestRouterVersionFilter(unittest.TestCase):
         # 4.7.8 应过滤掉 sql_inject_role/dept(2) + file_read/file_read_path(2) +
         # file_upload + job_rce + file_read_time(3) = 7 个，剩 9 个全版本
         # 实际：affected_versions=<4.7 的有 sql_inject_role/dept/file_read/file_read_path/file_upload/job_rce/file_read_time = 7 个
-        self.assertEqual(len(plugins), 9, f"4.7.8 应过滤掉 7 个 <4.7 的 POC，剩 9 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 11, f"4.7.8 应过滤掉 7 个 <4.7 的 POC，剩 11 个，实际 {len(plugins)}")
 
     def test_filter_by_version_4_6_0(self):
         """4.6.0 版本：<4.6 的 POC 被过滤（sql_inject_role/dept），<4.7 的保留"""
         fp = FingerprintResult(cms="ruoyi", version="4.6.0", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
         # 4.6.0 应过滤掉 sql_inject_role/dept(2)，剩 14 个
-        self.assertEqual(len(plugins), 14, f"4.6.0 应过滤掉 2 个 <4.6 的 POC，剩 14 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 16, f"4.6.0 应过滤掉 2 个 <4.6 的 POC，剩 16 个，实际 {len(plugins)}")
 
     def test_no_version_runs_all(self):
         """版本未识别 → 跑全部 POC（保守策略）"""
         fp = FingerprintResult(cms="ruoyi", version="", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 16, f"版本未识别应跑全部 16 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 18, f"版本未识别应跑全部 18 个 POC，实际 {len(plugins)}")
 
     def test_filterd_out_plugins(self):
         """4.7.8 过滤掉的 POC 类名正确（sql_inject_role/dept 等）"""
@@ -184,6 +212,46 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertNotIn("任意文件上传漏洞", plugin_names)
         # 4.7.8 应跑的 POC
         self.assertIn("Thymeleaf/SpEL 模板注入", plugin_names)
+
+
+    def test_router_candidates_not_version_filtered(self):
+        """回归：candidates() 返回**未按版本过滤**的候选集，resolve() 才是过滤后的
+
+        版本对照矩阵必须用 candidates 构造——若用 resolve（已过滤），
+        所有条目 applicable 恒为 True，对照表失去意义。
+        2026-09-19 实测：CLI 报告里的 version_matrix 一度恒为空/全适用。
+        """
+        from common.models import FingerprintResult
+        from core.router import Router
+        from core.ruoyi_versions import version_in_range
+
+        fp = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=[])
+        cands = Router().candidates(fp)
+        resolved = Router().resolve(fp)
+        self.assertGreater(len(cands), len(resolved), "candidates 应包含被版本过滤掉的插件")
+        skipped = [c for c in cands if c not in resolved]
+        self.assertTrue(skipped, "4.8.3 上应存在因版本不适用被跳过的插件")
+        for cls in skipped:
+            self.assertFalse(
+                version_in_range("4.8.3", getattr(cls, "affected_versions", "") or ""),
+                f"{cls.__name__} 被跳过但其版本范围仍适用，candidates/resolve 语义不一致",
+            )
+
+    def test_build_version_matrix_marks_skipped(self):
+        """回归：矩阵必须标出 applicable=False 的条目（否则版本对照表没信息量）"""
+        from common.models import FingerprintResult
+        from core.router import Router
+        from core.ruoyi_versions import build_version_matrix
+
+        fp = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=[])
+        matrix = build_version_matrix("4.8.3", Router().candidates(fp))
+        self.assertTrue(matrix, "矩阵不应为空")
+        self.assertTrue(
+            any(not item["applicable"] for item in matrix),
+            "4.8.3 上应存在 applicable=False 的条目（<4.7 与 <=4.8.0 的插件）",
+        )
+        # 无版本 → 空矩阵（不做对照）
+        self.assertEqual(build_version_matrix("", Router().candidates(fp)), [])
 
 
 class TestVariantInfo(unittest.TestCase):

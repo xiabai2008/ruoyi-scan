@@ -25,6 +25,22 @@ class Router:
         "jeecgboot": "plugins.jeecgboot",
     }
 
+    def candidates(self, fingerprint_result: FingerprintResult) -> List[type]:
+        """返回「按 CMS + 变体收窄、但**未按版本过滤**」的候选插件集
+
+        供版本对照矩阵使用：矩阵的意义在于展示「哪些插件因版本不匹配被跳过」，
+        因此必须拿过滤前的候选集。若用 `resolve()`（已过滤）构造矩阵，
+        所有条目都会是 applicable=True，对照表失去意义
+        （2026-09-19 实测发现：CLI 报告里的 version_matrix 恒为空/全适用）。
+        """
+        cms = fingerprint_result.cms
+        if not cms:
+            return []
+        plugins = self.resolve_by_name(cms)
+        # E1/F6：按 variant 过滤（插件 variant='' 表示全变体适用）
+        variant = getattr(fingerprint_result, "variant", "") or ""
+        return [cls for cls in plugins if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant]
+
     def resolve(self, fingerprint_result: FingerprintResult) -> List[type]:
         """根据指纹结果返回插件类列表（D2：按 affected_versions 过滤；E1：按 variant 过滤）
 
@@ -37,29 +53,14 @@ class Router:
         Returns:
             插件类列表（未匹配返回空列表）
         """
-        cms = fingerprint_result.cms
-        if not cms:
-            return []
-        # 取包后依次收窄：先按变体过滤，再按版本范围过滤，减少无效 POC 执行
-        plugins = self.resolve_by_name(cms)
-        # E1/F6：按 variant 过滤（无条件执行——插件 variant='' 全变体适用；
-        # variant='X' 仅当指纹 variant=='X' 时执行；指纹无 variant 时专属插件不执行）
-        variant = getattr(fingerprint_result, "variant", "") or ""
-        plugins = [
-            cls for cls in plugins if not (getattr(cls, "variant", "") or "") or getattr(cls, "variant") == variant
-        ]
-        # D2：按 affected_versions 过滤
+        # 取包后依次收窄：先按 CMS/变体过滤（candidates），再按版本范围过滤
+        plugins = self.candidates(fingerprint_result)
         version = getattr(fingerprint_result, "version", "") or ""
-        if version:
-            from core.ruoyi_versions import version_in_range
+        if not version:
+            return plugins
+        from core.ruoyi_versions import version_in_range
 
-            filtered = []
-            for cls in plugins:
-                spec = getattr(cls, "affected_versions", "") or ""
-                if version_in_range(version, spec):
-                    filtered.append(cls)
-            return filtered
-        return plugins
+        return [cls for cls in plugins if version_in_range(version, getattr(cls, "affected_versions", "") or "")]
 
     def resolve_by_name(self, cms: str) -> List[type]:
         """按 CMS 名称直接加载插件包（跳过指纹识别，供 --cms 手动指定）

@@ -13,7 +13,7 @@
 #   '<=4.5'       表示 4.5 及以下
 #   ''            空串表示全版本适用（默认）
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from common.logger import get_logger
 
@@ -23,6 +23,41 @@ logger = get_logger(__name__)
 # 真实若依 /login 页面含 "4.7.8" 两次（footer + JS 变量）
 # 主版本限定 4/5：避免误命中页面中其他形如 x.y.z 的无关版本号（JS 库、构建号等）
 VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
+
+# Thymeleaf 单机版的登录页**没有明文版本号**，只有版权年份——而年份与发布版本一一对应。
+# 数据来源：官方各 tag 源码 templates/login.html 逐一核对（2026-09-19）：
+#   v4.6.2 → Copyright © 2018-2021    v4.7.8 → Copyright © 2018-2023
+#   v4.8.0 → Copyright © 2018-2024    v4.8.2 → Copyright © 2018-2025
+#   v4.8.3 → Copyright © 2018-2026
+# 注意：年份→版本是「该年份发布的代表版本」，同年份可能有多个 tag（如 2022 年的 4.7.0~4.7.x）；
+# 未收录年份返回空串（保守：不做版本过滤，等价于旧行为）。
+COPYRIGHT_YEAR_TO_VERSION = {
+    "2021": "4.6.2",
+    "2022": "4.7.0",
+    "2023": "4.7.8",
+    "2024": "4.8.0",
+    "2025": "4.8.2",
+    "2026": "4.8.3",
+}
+# 起始年份不写死（历史版本可能是 2018 之前的年份），只锚定「结束年份」
+COPYRIGHT_PATTERN = re.compile(r"Copyright\s*(?:©|\(c\)|&copy;)\s*\d{4}\s*-\s*(\d{4})", re.IGNORECASE)
+
+
+def extract_version_by_copyright(text: str) -> str:
+    """从版权年份推断若依版本（Thymeleaf 单机版专用指纹）
+
+    Args:
+        text: 登录页/根路径 HTML
+
+    Returns:
+        版本号字符串（如 '4.7.8'）；年份未收录返回 ''
+    """
+    if not text:
+        return ""
+    m = COPYRIGHT_PATTERN.search(text)
+    if not m:
+        return ""
+    return COPYRIGHT_YEAR_TO_VERSION.get(m.group(1), "")
 
 
 def extract_version(text: str) -> str:
@@ -39,7 +74,9 @@ def extract_version(text: str) -> str:
     m = VERSION_PATTERN.search(text)
     if m:
         return "%s.%s.%s" % (m.group(1), m.group(2), m.group(3))
-    return ""
+    # Thymeleaf 单机版：登录页无明文版本号，用版权年份推断
+    # （2026-09-19 实测：v4.6.2~v4.8.3 五个版本的版权年份各不相同，可作版本指纹）
+    return extract_version_by_copyright(text)
 
 
 def detect_version(target: str, session: Any, variant: str = "") -> str:
@@ -274,3 +311,33 @@ RUOYI_CLOUD_PATHS = [
     "/gateway/",  # Spring Gateway
     "/auth/login",  # Cloud 版 Gateway 统一登录
 ]
+
+
+def build_version_matrix(version: str, plugin_classes: Iterable[Any]) -> List[Dict[str, Any]]:
+    """构造「版本对照矩阵」：检测版本 vs 各插件适用性（E3/D2）
+
+    Args:
+        version: 检测到的版本号（如 '4.7.8'）；为空时返回 []（无版本不做对照）
+        plugin_classes: 参与路由的插件类序列
+
+    Returns:
+        [{name, category, affected_versions, applicable}, ...]
+
+    说明：该逻辑原先内联在 core/orchestrator.py 的报告分支里，导致 CLI 路径
+    （传 report_dir="" 由 CLI 自建报告）拿不到矩阵、报告里 version_matrix 恒为空。
+    抽成共享函数后 CLI 与 orchestrator 共用（2026-09-19）。
+    """
+    if not version:
+        return []
+    matrix: List[Dict[str, Any]] = []
+    for cls in plugin_classes:
+        spec = getattr(cls, "affected_versions", "") or ""
+        matrix.append(
+            {
+                "name": getattr(cls, "name", cls.__name__),
+                "category": getattr(cls, "category", ""),
+                "affected_versions": spec or "全版本",
+                "applicable": version_in_range(version, spec),
+            }
+        )
+    return matrix

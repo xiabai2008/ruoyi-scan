@@ -631,21 +631,12 @@ class ScanOrchestrator:
 
             # 8. 报告生成（可选）
             if req.report_dir:
-                # E3：版本对照矩阵（检测版本 vs 各插件适用性）
-                version_matrix = []
-                if fp_result.version:
-                    from core.ruoyi_versions import version_in_range
+                # E3：版本对照矩阵（检测版本 vs 各插件适用性）——与 CLI 共用同一实现，
+                # 避免两处逻辑漂移（CLI 传 report_dir="" 自行出报告，走 cli/runner.py 的补算）
+                from core.ruoyi_versions import build_version_matrix
 
-                    for cls in all_plugins:
-                        spec = getattr(cls, "affected_versions", "") or ""
-                        version_matrix.append(
-                            {
-                                "name": getattr(cls, "name", cls.__name__),
-                                "category": getattr(cls, "category", ""),
-                                "affected_versions": spec or "全版本",
-                                "applicable": version_in_range(fp_result.version, spec),
-                            }
-                        )
+                # 用「未按版本过滤」的候选集——否则 applicable 恒为真，对照表失去意义
+                version_matrix = build_version_matrix(fp_result.version, router.candidates(fp_result))
                 summary = {
                     "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(task.started_at)),
                     "duration": time.time() - task.started_at,

@@ -12,6 +12,7 @@
 #
 # 运行：python tests/regression_ruoyi.py
 # 退出码：0 全部通过，非 0 表示有失败用例
+import json
 import os
 import sys
 import unittest
@@ -33,6 +34,8 @@ from common.models import (
     STATUS_UNKNOWN,
 )
 from core.session import SessionManager
+from plugins.ruoyi.cve_2025_46174_resetpwd_scope import Cve202546174ResetPwdScopePlugin
+from plugins.ruoyi.cve_2025_70986_select_dept_tree import Cve202570986SelectDeptTreePlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
 from plugins.ruoyi.directory_scan import DirectoryScanPlugin
 from plugins.ruoyi.druid_brute import DruidBrutePlugin
@@ -48,6 +51,8 @@ from plugins.ruoyi.job_rce import JobRcePlugin
 
 # Step 8 新增 2 个 POC 插件（含签名 marker 常量）
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+from plugins.ruoyi.plus_auth_login import PlusAuthLoginProbePlugin
+from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
 from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
 from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
@@ -101,26 +106,83 @@ class TestSqlInject(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_hit_extractvalue_runtime_exception(self, m):
-        """命中：响应含『运行时异常』（extractvalue 报错典型特征）"""
+        """命中：注入请求出现 extractvalue 报错特征，基线请求（无 payload）不出现
+
+        判定已升级为「基线差分」：插件先发一次不带 payload 的基线请求，再发注入请求，
+        只有「注入请求出现、基线请求不出现」才算命中。
+        因此 mock 必须按调用顺序提供两个响应，否则等价于「目标任何请求都返回同一张错误页」，
+        这种情况现被判为 UNKNOWN（见 test_unknown_when_signature_is_ambient）。
+        """
         url = MOCK_TARGET + "/system/role/list"
-        # RuoYi 实际报错响应：含运行时异常 + extractvalue SQL 错误堆栈
         m.post(
             url,
-            text='{"msg":"运行时异常：nested exception is java.sql.SQLException: '
-            'XPATH syntax error: \'~ruoyi~\' extractvalue","code":500}',
+            [
+                # 第 1 次调用 = 基线（params[dataScope] 为空）：正常业务响应
+                {"text": '{"total":0,"rows":[],"code":200,"msg":"查询成功"}'},
+                # 第 2 次调用 = 注入：RuoYi 真实报错响应
+                {"text": "运行时异常：java.sql.SQLException: XPATH syntax error: '~ruoyi~'"},
+            ],
         )
         plugin = SqlInjectRolePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_CONFIRMED, f"响应含运行时异常应判 CONFIRMED，实际 {result.status}")
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"注入请求含报错特征应判 CONFIRMED，实际 {result.status}")
 
     @requests_mock.Mocker()
-    def test_hit_database_leak(self, m):
-        """命中：响应泄露 database() 字面量"""
+    def test_unknown_when_signature_is_ambient(self, m):
+        """三态：基线请求同样含报错文案时，无法归因于注入 → UNKNOWN
+
+        回归场景：目标任何请求都返回同一张含「运行时异常」的错误页。
+        加固前该情形会被判 CONFIRMED（只要响应含异常文案即命中），属误报。
+        """
+        url = MOCK_TARGET + "/system/role/list"
+        ambient = "运行时异常：系统繁忙，请稍后重试"
+        m.post(url, text=ambient)
+        plugin = SqlInjectRolePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(
+            result.status, STATUS_UNKNOWN, f"基线同样含异常文案时应判 UNKNOWN，实际 {result.status}"
+        )
+
+    @requests_mock.Mocker()
+    def test_no_false_positive_on_payload_reflection(self, m):
+        """回归：响应回显载荷原文（其中必含 database() 字面量）不得判 CONFIRMED
+
+        历史缺陷：原判定为 `'运行时异常' in t or 'database()' in t`，而载荷本身
+        就含 database() 字面量。WAF 拦截页、框架调试页、网关错误页原样回显请求报文时，
+        该条件会「自证命中」，属典型误报。现要求 MySQL extractvalue 真实报错文案
+        （XPATH syntax error）或「异常文案 + 无载荷回显」方可判 CONFIRMED。
+        """
         url = MOCK_TARGET + "/system/dept/list"
-        m.post(url, text="error: database() leaked in sql query extractvalue")
+        m.post(
+            url,
+            text=(
+                "<html><h1>403 Forbidden</h1><p>您的请求包含可疑字符，已拦截：</p>"
+                "<pre>params[dataScope]=and extractvalue(1, concat(0x7e,(select database()),0x7e))</pre>"
+                "</html>"
+            ),
+        )
         plugin = SqlInjectDeptPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_CONFIRMED, f"响应含 database() 应判 CONFIRMED，实际 {result.status}")
+        self.assertNotEqual(
+            result.status, STATUS_CONFIRMED, "载荷被原样回显不得判 CONFIRMED（自证误报）"
+        )
+
+    @requests_mock.Mocker()
+    def test_unknown_when_exception_and_reflection_coexist(self, m):
+        """三态：响应同时含异常文案与载荷回显时，无法区分注入成功与请求回显 → UNKNOWN"""
+        url = MOCK_TARGET + "/system/role/list"
+        m.post(
+            url,
+            text=(
+                '{"msg":"运行时异常：extractvalue(1,concat(0x7e,(select database()),0x7e)) '
+                '执行失败","code":500}'
+            ),
+        )
+        plugin = SqlInjectRolePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(
+            result.status, STATUS_UNKNOWN, f"异常文案与载荷回显并存应判 UNKNOWN，实际 {result.status}"
+        )
 
     @requests_mock.Mocker()
     def test_safe_normal_response(self, m):
@@ -133,10 +195,15 @@ class TestSqlInject(unittest.TestCase):
 
 
 class TestFileReadTime(unittest.TestCase):
-    """3. 定时任务读取链路（登录链 → edit → run → 2.txt）：状态/响应判定正确
+    """3. 定时任务读取链路（登录链 → 发现 jobId → edit → run → 2.txt → 还原）：状态/响应判定正确
 
     D1 改造（2026-07-18）：file_read_time 先走 RuoYiAuthChain 登录，再 edit→run→read。
     mock 需补充 GET /login（HTML 登录页）+ POST /login（code=0 成功）。
+
+    2026-09-17 多版本矩阵实测后加固：插件改为**动态发现 jobId**
+    （原实现硬编码 jobId=4，而各版本 sys_job 种子数据只有 1/2/3，
+    导致链路空转却报 SAFE —— 假阴性），并在探测后**还原任务**。
+    因此 mock 必须补上 POST /monitor/job/list。
     """
 
     def _mock_login(self, m):
@@ -148,10 +215,37 @@ class TestFileReadTime(unittest.TestCase):
         )
         m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
 
+    def _mock_job_list(self, m, rows=None):
+        """公共：mock 任务列表接口（插件据此动态发现真实 jobId）。
+
+        默认返回一条与官方种子数据一致的示例任务（jobId=1 / ryTask.ryNoParams）。
+        传 rows=[] 可模拟「无可用任务」。
+        """
+        if rows is None:
+            rows = [
+                {
+                    "jobId": 1,
+                    "jobName": "系统默认（无参）",
+                    "jobGroup": "DEFAULT",
+                    "invokeTarget": "ryTask.ryNoParams",
+                    "cronExpression": "0/10 * * * * ?",
+                    "misfirePolicy": "3",
+                    "concurrent": "1",
+                    "status": "1",
+                    "remark": "",
+                }
+            ]
+        m.post(
+            MOCK_TARGET + "/monitor/job/list",
+            text=json.dumps({"total": len(rows), "rows": rows, "code": 200, "msg": "查询成功"}),
+            headers={"Content-Type": "application/json"},
+        )
+
     @requests_mock.Mocker()
     def test_hit_full_chain(self, m):
-        """命中：登录成功 + edit 200 + run 200 + 2.txt 含 root:/"""
+        """命中：登录成功 + 发现 jobId + edit 200 + run 200 + 2.txt 含 root:/"""
         self._mock_login(m)
+        self._mock_job_list(m)
         edit_url = MOCK_TARGET + "/monitor/job/edit"
         run_url = MOCK_TARGET + "/monitor/job/run"
         read_url = MOCK_TARGET + "/common/download/resource?resource=2.txt"
@@ -162,17 +256,54 @@ class TestFileReadTime(unittest.TestCase):
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"链路命中应判 CONFIRMED，实际 {result.status}")
         self.assertIn("root", result.evidence)
+        self.assertIn("jobId=1", result.evidence, "证据应点名实际使用的 jobId")
 
     @requests_mock.Mocker()
     def test_safe_when_2txt_no_root(self, m):
         """安全：登录成功 + 2.txt 不含 root:/，应判 SAFE（即使 edit/run 成功）"""
         self._mock_login(m)
+        self._mock_job_list(m)
         m.post(MOCK_TARGET + "/monitor/job/edit", text="ok")
         m.post(MOCK_TARGET + "/monitor/job/run", text="ok")
         m.get(MOCK_TARGET + "/common/download/resource?resource=2.txt", text="empty file content")
         plugin = FileReadTimePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE)
+        # SAFE 分支必须有证据，否则结论不可审计
+        self.assertIn("jobId=1", result.evidence, "SAFE 结论必须说明测了哪个任务")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_no_available_job(self, m):
+        """新增（2026-09-17）：任务列表为空 → UNKNOWN，不得冒充 SAFE
+
+        回归场景：原实现硬编码 jobId=4，任务不存在时链路静默空转却报 SAFE（假阴性）。
+        现要求无可用任务时判 UNKNOWN —— 「无法判定」比「假装确认不存在」诚实。
+        """
+        self._mock_login(m)
+        self._mock_job_list(m, rows=[])
+        plugin = FileReadTimePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"无可用定时任务应判 UNKNOWN，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_job_is_restored_after_probe(self, m):
+        """新增（2026-09-17）：探测结束后必须把任务还原为原始 invokeTarget
+
+        扫描器不应在被测系统上留下改动。插件先写入读取载荷触发漏洞，
+        随后必须再发一次 edit 把 invokeTarget 改回原值。
+        """
+        self._mock_login(m)
+        self._mock_job_list(m)
+        m.post(MOCK_TARGET + "/monitor/job/edit", text='{"code":200,"msg":"操作成功"}')
+        m.post(MOCK_TARGET + "/monitor/job/run", text='{"code":200,"msg":"执行成功"}')
+        m.get(MOCK_TARGET + "/common/download/resource?resource=2.txt", text="no passwd here")
+        plugin = FileReadTimePlugin()
+        plugin.verify(MOCK_TARGET, SessionManager())
+
+        edits = [r for r in m.request_history if r.url.endswith("/monitor/job/edit")]
+        self.assertGreaterEqual(len(edits), 2, "应至少有「写入载荷」与「还原」两次 edit")
+        self.assertIn("ruoYiConfig.setProfile", edits[0].text or "", "首次 edit 应写入读取载荷")
+        self.assertIn("ryTask.ryNoParams", edits[-1].text or "", "最后一次 edit 应还原为原始 invokeTarget")
 
     @requests_mock.Mocker()
     def test_unknown_when_captcha_required(self, m):
@@ -645,6 +776,278 @@ class TestFileReadPath(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestPlusAuthProbe(unittest.TestCase):
+    """RuoYi-Plus 认证接口探测：重定向与 HTML 均不得判为认证服务
+
+    真实缺陷（2026-09-17，由 lab/version_matrix 在纯 4.7.8 实例上发现）：
+    RuoYi 单体版对未知路径 `/auth/login` 返回 **302 → /login**；requests 默认跟随重定向，
+    最终落到登录页 HTML（HTTP 200）。该 HTML 含验证码字段名 `code`，与插件原先的
+    `match_positive(text, ["code","msg"])` 子串匹配叠加后，在完全没有 Plus 服务的
+    单体实例上误报 CONFIRMED。
+
+    该路径 mock 基线无法覆盖（基线响应不含 code/msg 字样），必须靠真实环境扫描
+    或本用例锁定。加固后要求：非 3xx + JSON Content-Type + 能解析出 code/msg 两个键。
+    """
+
+    @requests_mock.Mocker()
+    def test_safe_on_redirect_to_login(self, m):
+        """302 → /login 不得判 CONFIRMED（历史误报场景）"""
+        m.post(
+            MOCK_TARGET + "/auth/login",
+            status_code=302,
+            headers={"Location": MOCK_TARGET + "/login"},
+            text="",
+        )
+        plugin = PlusAuthLoginProbePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertNotEqual(
+            result.status, STATUS_CONFIRMED, "重定向到登录页不得判 CONFIRMED（该路径不是独立认证服务）"
+        )
+
+    @requests_mock.Mocker()
+    def test_safe_on_html_containing_code_and_msg(self, m):
+        """HTML 正文含 code/msg 字样（如若依登录页的验证码字段）不得判 CONFIRMED"""
+        m.post(
+            MOCK_TARGET + "/auth/login",
+            status_code=200,
+            headers={"Content-Type": "text/html; charset=utf-8"},
+            text='<html><input name="code" placeholder="验证码"><span class="msg"></span></html>',
+        )
+        plugin = PlusAuthLoginProbePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertNotEqual(result.status, STATUS_CONFIRMED, "HTML 中的 code/msg 字样不得当作 JSON 业务特征")
+
+    @requests_mock.Mocker()
+    def test_hit_on_json_with_code_msg_keys(self, m):
+        """真正的 Sa-Token 业务 JSON（含 code/msg 键）应判 CONFIRMED"""
+        m.post(
+            MOCK_TARGET + "/auth/login",
+            status_code=200,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            text='{"code":401,"msg":"用户名或密码错误"}',
+        )
+        plugin = PlusAuthLoginProbePlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"业务 JSON 应判 CONFIRMED，实际 {result.status}")
+
+
+class TestPlusJobUnauth(unittest.TestCase):
+    """RuoYi-Plus 定时任务未授权：登录页 HTML 不得判为「未授权返回任务列表」
+
+    真实缺陷（2026-09-17，多版本矩阵语料新增「若依登录页」后暴露）：
+    原判定 `status==200 and match_positive(text, ["rows","total","code"],
+    negatives=["login","unauthorized"])` 有三个叠加问题：
+      1. 正向特征 "code" 过于泛用——任何含验证码字段的 HTML 都命中；
+      2. 负向 "login" 全小写，而真若依登录页是 `id="formLogin"`（大写 L），排除失效；
+      3. 未校验响应是 JSON。
+    加固后要求：非 3xx + JSON Content-Type + 解析出的 JSON 同时含 rows 与 total 键。
+    """
+
+    @requests_mock.Mocker()
+    def test_safe_on_ruoyi_login_page_html(self, m):
+        """若依登录页 HTML（含 code 字段与 formLogin）不得判 CONFIRMED"""
+        m.get(
+            requests_mock.ANY,
+            status_code=200,
+            headers={"Content-Type": "text/html; charset=utf-8"},
+            text=(
+                "<html><head><title>登录若依系统</title></head><body>"
+                '<form id="formLogin"><input name="code" placeholder="验证码">'
+                '<span class="msg"></span></form></body></html>'
+            ),
+        )
+        plugin = PlusJobUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertNotEqual(result.status, STATUS_CONFIRMED, "登录页 HTML 不得判为未授权任务列表")
+
+    @requests_mock.Mocker()
+    def test_hit_on_real_list_json(self, m):
+        """真正的未授权任务列表 JSON（rows + total 键）应判 CONFIRMED"""
+        m.get(
+            requests_mock.ANY,
+            status_code=200,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            text='{"total":2,"rows":[{"jobId":1,"jobName":"ryTask"}],"code":200,"msg":"查询成功"}',
+        )
+        plugin = PlusJobUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"业务列表 JSON 应判 CONFIRMED，实际 {result.status}")
+
+
+class TestCve202546174ResetPwdScope(unittest.TestCase):
+    """CVE-2025-46174：重置密码页数据权限绕过（差分判定）
+
+    漏洞边界（实测四个版本）：4.7.8 / 4.8.0 无 checkUserDataScope → 可越权；
+    4.8.2 / 4.8.3 有校验 → 被拒。判定必须用差分，不能靠单次响应的关键词匹配：
+    修复版返回的是 **HTTP 200 + 错误页**（RuoYi 把 500 渲染成 200），状态码无区分度。
+    """
+
+    CONTROL_PAGE = (
+        '<!DOCTYPE html><html><body>'
+        '<form class="form-horizontal m" id="form-user-resetPwd">'
+        '<input name="userId" type="hidden" value="2"/>'
+        '<input class="form-control" type="text" readonly="true" name="loginName" value="ry"/>'
+        "</form></body></html>"
+    )
+    LEAKED_PAGE = (
+        '<!DOCTYPE html><html><body>'
+        '<form class="form-horizontal m" id="form-user-resetPwd">'
+        '<input name="userId" type="hidden" value="1"/>'
+        '<input class="form-control" type="text" readonly="true" name="loginName" value="admin"/>'
+        "</form></body></html>"
+    )
+    # 修复版：checkUserDataScope 抛 ServiceException → 渲染成 200 错误页
+    DENIED_PAGE = (
+        "<!DOCTYPE html><html><head><title>RuoYi - 500</title></head>"
+        "<body>没有权限访问用户数据</body></html>"
+    )
+
+    def _mock_login_and_list(self, m, rows):
+        m.get(MOCK_TARGET + "/login", text="<html><form>登录</form></html>", headers={"Content-Type": "text/html"})
+        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.post(
+            MOCK_TARGET + "/system/user/list",
+            text=json.dumps({"total": len(rows), "rows": rows, "code": 200, "msg": "查询成功"}),
+            headers={"Content-Type": "application/json"},
+        )
+
+    @requests_mock.Mocker()
+    def test_confirmed_when_out_of_scope_page_renders(self, m):
+        """漏洞版：不可见用户的页面被越权渲染 → CONFIRMED"""
+        self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
+        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
+        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.LEAKED_PAGE)
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"越权渲染应判 CONFIRMED，实际 {result.status}")
+        self.assertIn("admin", result.evidence, "证据应点名泄露的登录名")
+
+    @requests_mock.Mocker()
+    def test_safe_when_permission_denied(self, m):
+        """修复版：不可见用户被拒（200 + 错误页）→ SAFE
+
+        回归重点：**不能靠状态码判定**——修复版同样返回 200。
+        """
+        self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
+        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
+        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.DENIED_PAGE)
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE, f"被拒应判 SAFE，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_target_visible_to_account(self, m):
+        """目标用户对当前账号可见 → UNKNOWN（构不成越权场景，不能冒充 SAFE）"""
+        self._mock_login_and_list(m, [{"userId": 1, "loginName": "admin"}, {"userId": 2, "loginName": "ry"}])
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"目标可见应判 UNKNOWN，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_control_not_rendered(self, m):
+        """对照组（可见用户）都没渲染出页面 → 链路不可信 → UNKNOWN
+
+        防止把「页面本来就渲染不出来」误判成 SAFE。
+        """
+        self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
+        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text="<html>whatever</html>")
+        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text="<html>whatever</html>")
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"对照组未渲染应判 UNKNOWN，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_no_visible_users(self, m):
+        """用户列表不可读 → 无法建立基线 → UNKNOWN"""
+        self._mock_login_and_list(m, [])
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"无可见用户应判 UNKNOWN，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_does_not_authenticate_shared_session(self, m):
+        """回归：插件必须使用隔离会话，不得在传入的共享会话上留下登录态
+
+        跨插件污染实测（2026-09-17）：登录态泄漏给后续插件后，
+        v4.8.3 一次多出 6 个假 CONFIRMED。此用例锁定「共享会话不被认证」这一约束。
+        """
+        self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
+        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
+        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.DENIED_PAGE)
+        shared = SessionManager()
+        Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, shared)
+        self.assertEqual(len(list(shared.session.cookies)), 0, "共享会话不应被插件登录所污染")
+
+
+class TestCve202570986SelectDeptTree(unittest.TestCase):
+    """CVE-2025-70986：部门树越权访问（差分判定）
+
+    版本边界（实测）：4.7.8 / 4.8.0 的 selectDeptTree、treeData 无权限注解 → 可越权；
+    4.8.2 / 4.8.3 已补 @RequiresPermissions('system:dept:list') → 被拒。
+    判定**不依赖猜中有效部门 id**：无效 id（如 0）在漏洞版上让业务层执行（200 JSON / 500 NPE），
+    在修复版上被 Shiro 权限门先拦（RuoYi - 403 页，且同样是 HTTP 200）——状态码无区分度。
+    """
+
+    PAGE_403 = (
+        "<!DOCTYPE html><html><head><title>RuoYi - 403</title></head>"
+        "<body><h1>403</h1><h3>您没有操作权限</h3></body></html>"
+    )
+    PAGE_LOGIN = "<!DOCTYPE html><html><head><title>登录若依系统</title></head><body><form>登录</form></body></html>"
+    JSON_500 = '{"timestamp":"2026-09-17 10:00:00","status":500,"error":"Internal Server Error"}'
+
+    def _mock_login(self, m):
+        m.get(MOCK_TARGET + "/login", text=self.PAGE_LOGIN, headers={"Content-Type": "text/html"})
+        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+
+    def _mock_probes(self, m, tree_data_body, select_tree_body):
+        m.get(MOCK_TARGET + "/system/dept/treeData/0", text=tree_data_body)
+        m.get(MOCK_TARGET + "/system/dept/selectDeptTree/0", text=select_tree_body)
+
+    @requests_mock.Mocker()
+    def test_confirmed_when_tree_data_leaks(self, m):
+        """漏洞版：无权限账号拿到部门数据 JSON → CONFIRMED"""
+        self._mock_login(m)
+        self._mock_probes(
+            m,
+            '[{"id":105,"pId":101,"name":"测试部门","title":"测试部门"}]',
+            self.JSON_500,
+        )
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"泄露部门数据应判 CONFIRMED，实际 {result.status}")
+        self.assertIn("测试部门", result.evidence, "证据应点名泄露的部门名称")
+
+    @requests_mock.Mocker()
+    def test_confirmed_when_business_layer_executes_without_data(self, m):
+        """漏洞版：接口返回空数组（未取到具体条目）但业务层在无权限下执行 → 仍判 CONFIRMED
+
+        回归重点：4.8.0 实测 treeData 返回空数组——若只认「有数据」会漏判。
+        差分的本质是「未被权限门拦截」，而非「必须拿到数据」。
+        """
+        self._mock_login(m)
+        self._mock_probes(m, "[]", self.JSON_500)
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"业务层无权限执行应判 CONFIRMED，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_safe_when_permission_denied(self, m):
+        """修复版：两个探针均被 RuoYi-403 权限页拦截（注意也是 HTTP 200）→ SAFE"""
+        self._mock_login(m)
+        self._mock_probes(m, self.PAGE_403, self.PAGE_403)
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE, f"被权限门拦截应判 SAFE，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_responses_conflict(self, m):
+        """一个探针被拦、另一个没拦：形态矛盾 → UNKNOWN（不能贸然下结论）"""
+        self._mock_login(m)
+        self._mock_probes(m, self.PAGE_403, "[]")
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"形态矛盾应判 UNKNOWN，实际 {result.status}")
+
+    @requests_mock.Mocker()
+    def test_unknown_when_session_lost(self, m):
+        """会话失效（响应为登录页）→ UNKNOWN，不得据此判 SAFE/CONFIRMED"""
+        self._mock_login(m)
+        self._mock_probes(m, self.PAGE_LOGIN, self.PAGE_LOGIN)
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"会话失效应判 UNKNOWN，实际 {result.status}")
+
+
 def run_all():
     """运行全部测试，返回 0 表示全部通过"""
     loader = unittest.TestLoader()
@@ -664,6 +1067,11 @@ def run_all():
         # Step 8 新增
         TestNacosUnauth,
         TestFileReadPath,
+        # 多版本矩阵实测新增（2026-09-17）：重定向/HTML 误报回归
+        TestPlusAuthProbe,
+        TestPlusJobUnauth,
+        TestCve202546174ResetPwdScope,
+        TestCve202570986SelectDeptTree,
     ]
     for cls in test_classes:
         suite.addTests(loader.loadTestsFromTestCase(cls))

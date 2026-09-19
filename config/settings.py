@@ -35,6 +35,17 @@ RATE = 0
 # 代理（如 http://127.0.0.1:8080，None 表示不使用）
 PROXY = None
 
+# TLS 证书校验（默认关闭，可用 --verify-tls 打开）
+#
+# 默认不校验的理由：内网若依部署普遍使用自签名证书或私有 CA，开启校验时每个请求都会抛
+# SSLError，插件按三态纪律一律降级为 UNKNOWN——工具对这类目标完全失效且没有任何提示。
+# 扫描器行业惯例亦如此（被测目标是分析对象，不是需要防篡改的信道）。
+VERIFY_TLS = False
+
+# 连续超时熔断阈值（core/session.py）：连续 N 个请求超时即判定目标无响应，
+# 后续请求立即失败，避免「接受连接但永不响应」的目标把扫描拖成数分钟无效重试
+TIMEOUT_BREAKER_THRESHOLD = 5
+
 # 字典路径
 RUOYI_DICT = _dict_path("ruoyi.txt")
 PASSWORD_DICT = _dict_path("password.txt")
@@ -72,6 +83,27 @@ class RuoYiAuth:
     TIMEOUT = None
     # 验证码模式：auto（自动探测）/ ocr（D3 接 OCR）/ skip（跳过登录链）
     CAPTCHA_MODE = "auto"
+
+
+class RuoYiLowPriv:
+    """低权限账号配置：用于验证「需普通用户权限才可触发」的越权类漏洞
+
+    为什么需要单独一个账号：RuoYi 的 `checkUserDataScope` 对超级管理员**直接跳过**：
+
+        if (!SysUser.isAdmin(ShiroUtils.getUserId())) { ...校验数据范围... }
+
+    因此拿 admin 去探测，无论目标版本有没有该校验，行为完全一致——**区分不出来**。
+    必须用「持有所需功能权限、但数据范围不含目标用户」的普通账号才能复现。
+
+    该账号由 `lab/version_matrix/run_matrix.py seed` 在各版本库里自动创建
+    （角色：普通角色 role_id=2，data_scope=2 自定义且不含目标部门；
+    额外授予 `system:user:resetPwd` 菜单权限）。
+    """
+
+    USERNAME = os.environ.get("RUOYI_SCAN_LOWPRIV_USER", "scanner_low")
+    PASSWORD = os.environ.get("RUOYI_SCAN_LOWPRIV_PASS", "LowPriv_2026")
+    # 越权探测的目标用户（默认超管自身：普通账号的数据范围必然不含它）
+    TARGET_USER_ID = int(os.environ.get("RUOYI_SCAN_LOWPRIV_TARGET", "1"))
 
 
 # WAF 绕过配置（D7 阶段）

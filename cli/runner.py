@@ -10,6 +10,7 @@ import time
 from argparse import Namespace
 from typing import List, Optional
 
+from cli.preflight import preflight_target
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from config import settings
@@ -149,6 +150,12 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     )
 
 
+# 最近一次扫描的指纹检测结果（由 _cli_event_handler 捕获，供报告摘要使用）。
+# 注意：检测到的指纹必须进报告——此前摘要只认人工 --cms，导致版权年份版本号
+# 识别成功却进不了 report.json（2026-09-19 实测）。
+_LAST_DETECTED_FINGERPRINT = {}
+
+
 def _cli_event_handler(event_type: str, payload):
     """CLI 事件回调：将 orchestrator 事件转为彩色终端输出
 
@@ -215,6 +222,9 @@ def _cli_event_handler(event_type: str, payload):
 
     elif event_type == "fingerprint":
         cms = payload.get("cms", "")
+        # 捕获检测结果供报告摘要使用（人工 --cms 的场景下以人工值优先）
+        _LAST_DETECTED_FINGERPRINT.clear()
+        _LAST_DETECTED_FINGERPRINT.update(payload)
         if cms:
             variant = payload.get("variant", "")
             variant_txt = f" variant={variant}" if variant else ""
@@ -329,15 +339,44 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
             template_obj = get_template(req.template)
             if template_obj and template_obj.report_label:
                 report_label = template_obj.report_label
+        # E3：版本对照矩阵（检测版本 vs 各插件适用性）
+        # CLI 传 report_dir="" 由自己出报告，orchestrator 的矩阵分支被整体跳过——
+        # 若不在此补算，报告的 version_matrix 恒为空、版本对照表不显示（2026-09-19 修复）。
+        version_matrix = []
+        try:
+            fp_cms = req.cms or _LAST_DETECTED_FINGERPRINT.get("cms", "")
+            fp_version = _LAST_DETECTED_FINGERPRINT.get("version", "")
+            if fp_cms and fp_version:
+                from common.models import FingerprintResult
+                from core.loader import load_plugins
+                from core.router import Router
+                from core.ruoyi_versions import build_version_matrix
+
+                fp_obj = FingerprintResult(
+                    cms=fp_cms,
+                    version=fp_version,
+                    confidence=_LAST_DETECTED_FINGERPRINT.get("confidence", 0.0),
+                    matched=list(_LAST_DETECTED_FINGERPRINT.get("matched", [])),
+                    variant=_LAST_DETECTED_FINGERPRINT.get("variant", ""),
+                )
+                # 用未过滤候选集：矩阵要展示「哪些插件因版本被跳过」
+                cands = Router().candidates(fp_obj) or load_plugins("plugins.ruoyi")
+                version_matrix = build_version_matrix(fp_version, cands)
+        except Exception:
+            version_matrix = []  # 矩阵生成失败不影响报告主体
+
         summary = {
             "started_at": started_at,
             "duration": duration,
             "request_count": 0,  # orchestrator 已关闭 session，此处用 0（报告中美化展示）
             "mode": report_label,
+            "version_matrix": version_matrix,
             "fingerprint": {
-                "cms": req.cms or "",
-                "confidence": 1.0 if req.cms else 0.0,
-                "matched": ["manual"] if req.cms else [],
+                "cms": req.cms or _LAST_DETECTED_FINGERPRINT.get("cms", ""),
+                "version": _LAST_DETECTED_FINGERPRINT.get("version", ""),
+                "variant": _LAST_DETECTED_FINGERPRINT.get("variant", ""),
+                "confidence": 1.0 if req.cms else _LAST_DETECTED_FINGERPRINT.get("confidence", 0.0),
+                "matched": ["manual"] if req.cms else _LAST_DETECTED_FINGERPRINT.get("matched", []),
             },
         }
         builder = ReportBuilder(results=all_results, target=target_normalized, summary=summary, dedup=not args.no_dedup)
@@ -615,10 +654,16 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
 
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
+    skipped: List[str] = []
 
     for i, target in enumerate(targets, 1):
         print(f"\n{SEPARATOR}")
         print(f"{YELLOW}[*]进度 [{i}/{len(targets)}] 目标：{target}{RESET}")
+        # 逐目标预检：不可用的目标跳过并继续，不中断整批——目标列表里混着下线主机是
+        # 常态，因一个目标不可用而中止整批是错的行为
+        if not preflight_target(target, args):
+            skipped.append(target)
+            continue
         try:
             results = run_mode(mode, target, args, show_cta=False)
         except Exception as e:
@@ -643,11 +688,19 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
         bpaths = batch.render_all(out_dir)
         print(SEPARATOR)
         print(f"{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}")
+        if skipped:
+            # 明确列出被跳过的目标：静默少扫几个目标会让使用者误判覆盖面
+            print(
+                f"{RED}[!]因目标不可用跳过 {len(skipped)} 个：{', '.join(skipped[:5])}"
+                f"{' 等' if len(skipped) > 5 else ''}{RESET}"
+            )
         for p in bpaths:
             print(f"{GREEN}[*]批量报告：{p}{RESET}")
         # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
         if not getattr(args, "ci", False):
             print_star_cta(explicit_off=getattr(args, "no_cta", False))
+    elif skipped:
+        print(f"\n{RED}[!]全部 {len(skipped)} 个目标均不可用，未产生任何扫描结果{RESET}")
 
     return batch
 

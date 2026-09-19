@@ -130,8 +130,8 @@ def test_router_resolves_ruoyi():
 
     fp_result = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 16, (
-        f"通用 ruoyi 应 16 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
+    assert len(plugins) == 18, (
+        f"通用 ruoyi 应 18 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
     )
     print("PASS test_router_resolves_ruoyi: %d 个插件" % len(plugins))
 
@@ -339,7 +339,7 @@ def test_e1_router_variant_filter():
         category = "vuln"
 
         def verify(self, target, session):
-            from common.models import ScanResult, STATUS_SAFE
+            from common.models import STATUS_SAFE, ScanResult
 
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE)
 
