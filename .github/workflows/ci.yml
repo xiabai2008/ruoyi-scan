@@ -119,17 +119,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: RuoYi signature lab
+        # allow-safe 名单均为「结构性非 CONFIRMED」插件：Redis/MinIO/RocketMQ 为中间件
+        # 探测（靶机无该服务即 SAFE）；shiro_rememberme 是指纹类探测，设计上只有
+        # SAFE（无特征）/UNKNOWN（有特征需验密钥）两种判定，永远不可能 CONFIRMED。
         run: |
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
             --target http://127.0.0.1:8080/ --mode p \
             --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,shiro_rememberme"
       - name: Spring signature lab
         run: |
           python scripts/run_e2e.py --lab lab/spring_server.py --lab-port 8091 \
             --target http://127.0.0.1:8091/ --mode p \
             --report-dir /tmp/e2e/spring --name spring-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,shiro_rememberme"
 
   # ── G4：RuoYi nuclei 模板包验证（语法校验 + 签名靶场双模式功能门）──
   # 功能门 = 与本地 EVIDENCE.md 相同的判定：vuln 模式 ≥3 命中、safe 模式 0 误报

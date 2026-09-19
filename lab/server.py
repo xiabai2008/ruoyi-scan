@@ -31,6 +31,11 @@ DRUID_USERS = {"ruoyi", "druid", "admin", "admin123", "auth", "123456"}
 # 命中即返回 success 的弱口令集合（均存在于 password.txt 字典中）
 DRUID_OK_PASSWORDS = {"ruoyi", "123456", "admin123", "druid"}
 
+# /monitor/job 的有状态存储：job_invoke_target 插件的判定流程是
+# 「读列表 → 写 edit → 回读确认写入生效 → 还原 → 二次确认」，
+# 靶场必须跨请求记住 invokeTarget/status，回读才能反映写入结果（模拟服务端持久化）
+_JOB_STORE = {"invokeTarget": "ryTask.ryParams('ruoyi')", "status": "0"}
+
 # Step 8 POC 签名 marker 已于 D4 改造（2026-07-18）删除：
 # nacos_unauth / file_read_path 改为真实响应特征判定，不再依赖魔法常量
 
@@ -85,10 +90,32 @@ def dispatch(path, method):
             return Response(PASSWD, mimetype="text/plain; charset=utf-8")
         return html_body("<html><body>404 资源不存在</body></html>", 404)
 
-    # 定时任务 edit / run（job_rce + file_read_time）
+    # 定时任务 list / edit / run（job_rce + file_read_time + job_invoke_target）
+    if path == "/monitor/job/list":
+        if vuln:
+            # job_invoke_target 的判定依赖「写入后回读可见」，故回传有状态存储
+            rows = [
+                {
+                    "jobId": 1,
+                    "jobName": "系统默认备份任务",
+                    "jobGroup": "DEFAULT",
+                    "invokeTarget": _JOB_STORE["invokeTarget"],
+                    "cronExpression": "0/10 * * * * ?",
+                    "status": _JOB_STORE["status"],
+                }
+            ]
+            return json_body({"code": 200, "rows": rows, "total": len(rows)})
+        return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/monitor/job/edit":
         if vuln:
-            # 未鉴权进入业务层：code=500 业务校验失败，证明绕过鉴权
+            # 已登录会话（isolated_auth_session 登录后带 Bearer token）：接受写入并记录。
+            # job_invoke_target 的判据是「载荷被接受且回读可见」——白名单缺失即漏洞本身。
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer ") and auth[7:]:
+                _JOB_STORE["invokeTarget"] = request.form.get("invokeTarget", _JOB_STORE["invokeTarget"])
+                _JOB_STORE["status"] = request.form.get("status", _JOB_STORE["status"])
+                return json_body({"code": 200, "msg": "操作成功"})
+            # 未授权进入业务层：code=500 业务校验失败，证明绕过鉴权（job_rce 判定依据，保持不变）
             return json_body({"code": 500, "msg": "定时任务不存在"})
         return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/monitor/job/run":
@@ -99,14 +126,20 @@ def dispatch(path, method):
     # SQL 报错注入（role / dept）
     if path in ("/system/role/list", "/system/dept/list"):
         if vuln:
-            # 含 '运行时异常' 与 'database()' 双重特征 → 命中
-            body = (
-                "<!doctype html><html><body><h1>HTTP Status 500 - "
-                "请求处理失败</h1><pre>java.sql.SQLException: "
-                "XPATH syntax error: '~database()~', 运行时异常</pre>"
-                "</body></html>"
-            )
-            return html_body(body, 500)
+            # 忠实模拟真实行为（lab/REAL-RUOYI.md 对照组记录）：extractvalue 仅在
+            # dataScope 载荷非空时被求值，空载荷返回正常列表。SQLi 插件的差分判定
+            # （强特征「注入后出现、基线不出现」）依赖这一区分——旧实现对任意请求都
+            # 回错误页，会让正确的反误报逻辑在靶场上恒为 UNKNOWN。
+            if (request.form.get("params[dataScope]") or "").strip():
+                # 含 '运行时异常' 与 'database()' 双重特征 → 命中
+                body = (
+                    "<!doctype html><html><body><h1>HTTP Status 500 - "
+                    "请求处理失败</h1><pre>java.sql.SQLException: "
+                    "XPATH syntax error: '~database()~', 运行时异常</pre>"
+                    "</body></html>"
+                )
+                return html_body(body, 500)
+            return json_body({"code": 200, "msg": "操作成功", "rows": [], "total": 0})
         return json_body({"code": 200, "msg": "操作成功", "rows": [], "total": 0})
 
     # Druid 弱口令爆破
@@ -150,8 +183,12 @@ def dispatch(path, method):
                 return json_body({"code": 200, "msg": "操作成功", "token": "eyJhbGciOiJIUzI1NiJ9.ruoyi-lab-signature"})
             # safe 模式：返回密码错误（模拟登录失败，不校验验证码）
             return json_body({"code": 500, "msg": "用户或密码错误"})
-        # GET /login 供目录扫描展示
-        return html_body("<html><head><title>RuoYi管理系统</title></head><body>login</body></html>")
+        # GET /login 返回 JSON（v5 前后端分离形态）：AuthChain.detect_auth_mode 依此
+        # 判定为 v5 JWT，登录后才会以 Authorization: Bearer 携带 token。若返回 HTML
+        # 会被判为 v4 Session（依赖 Cookie），而本靶场 /login 从不 Set-Cookie，
+        # 隔离会话将永远不带凭证——CVE-2025-46174 / job_invoke_target 的已登录判定
+        # 全部退化为未认证请求（实测踩到）。
+        return json_body({"code": 401, "msg": "请先登录"})
 
     # 未授权访问批量端点
     if path == "/actuator/env":
@@ -170,8 +207,28 @@ def dispatch(path, method):
         return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/system/user/list":
         if vuln:
+            # 已登录低权账号：数据范围受限，仅可见自身——CVE-2025-46174 用它建立
+            # 「可见用户集合」对照基线（不可见 userId=1 却能渲染其重置密码页 ⇒ 越权）
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer ") and auth[7:]:
+                return json_body({"code": 200, "rows": [{"userId": 2, "userName": "scanner_low"}], "total": 1})
+            # 未授权可读：用户列表未鉴权（unauth_batch 判定依据，保持不变）
             return json_body({"code": 200, "rows": [{"userId": 1, "userName": "admin"}], "total": 1})
         return json_body({"code": 401, "msg": "请先登录"}, 401)
+
+    # CVE-2025-46174：重置密码页缺数据权限校验（GET /system/user/resetPwd/{userId}）
+    if path.startswith("/system/user/resetPwd/"):
+        if vuln:
+            # 漏洞版（<=4.8.0）：只做 selectUserById，无 checkUserDataScope，
+            # 任意 userId 均渲染重置密码页（含目标登录名输入框）
+            return html_body(
+                '<!doctype html><html><body><form id="form-user-resetPwd">'
+                '<input name="userId" value="1"/>'
+                '<input name="loginName" value="admin"/>'
+                "</form></body></html>"
+            )
+        # 修复版：checkUserDataScope 抛 ServiceException（文本与插件 PERM_DENIED_MARKER 对齐）
+        return html_body("<!doctype html><html><body>没有权限访问用户数据</body></html>", 500)
 
     # Step 8 新增：Nacos 未授权访问（/nacos/v1/auth/users）
     # query 参数（pageNo/pageSize）不影响 request.path 匹配，无需在端点内读取

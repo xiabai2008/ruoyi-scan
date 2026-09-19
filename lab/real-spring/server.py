@@ -265,8 +265,11 @@ def _route(p):
     # GET /actuator/env → actuator_unauth 第二关（真实响应）
     if path == "/actuator/env":
         if method == "POST":
-            # actuator_env_rce 探针：真实响应是 200 JSON 含 propertySources 或 200 简单 JSON
-            return json_body({"timestamp": "2024-01-01T00:00:00.000Z", "status": 200})
+            # 真实响应（REAL-SPRING.md §4.2 判据行）：POST 写入后回显环境配置，
+            # 含 propertySources / applicationConfig 等特征。旧实现回裸 200 只在
+            # actuator_env_rce 还有「200 即判可写入」宽松兜底时够用；该兜底因
+            # 首页/SPA 空壳页全数误报已被插件删除，靶场必须给出与真实一致的响应。
+            return json_body(actuator_env_json())
         return json_body(actuator_env_json())
 
     # GET /actuator/heapdump → 真实 heapdump 二进制
