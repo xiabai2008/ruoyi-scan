@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  version_matrix 专用 Maven 配置（通过 mvn -s 显式指定，不修改用户的 ~/.m2/settings.xml）
+
+  用途：为多版本矩阵构建提供国内镜像加速。RuoYi 依赖 Spring Boot 2.5.x + Shiro +
+  Thymeleaf 全家桶，首次构建需下载数百个构件；国内直连 Maven Central 经常超时。
+
+  使用：
+      mvn.cmd -s lab/version_matrix/maven-settings.xml -B -DskipTests package
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <mirrors>
+    <mirror>
+      <id>aliyun-public</id>
+      <name>Aliyun Public Repository</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>
