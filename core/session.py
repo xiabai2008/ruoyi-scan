@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from lib.proxy_pool import ProxyPool
 
 
-# type: ignore[misc] 的原因：CI 环境未安装 requests 类型桩，--ignore-missing-imports 使
+# 行尾定向 ignore 的原因：CI 环境未安装 requests 类型桩，--ignore-missing-imports 使
 # 基类退化为 Any，strict 模式禁止继承 Any；本地装有类型桩时该 ignore 属于未使用，
 # 由 --no-warn-unused-ignores 压制，两种环境下均可通过。
 class TargetUnresponsiveError(requests.exceptions.ConnectionError):  # type: ignore[misc]
