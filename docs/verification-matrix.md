@@ -56,8 +56,8 @@
 | L2 | Spring Boot Actuator /trace 请求历史泄露 | N/A | medium | 是 | — | `plugins/spring/trace_leak.py` |
 | L3 | 任意文件读取 | CNVD-2021-01931 | high | 是 | — | `plugins/ruoyi/file_read.py` |
 | L3 | 任意文件读取（路径穿越） | CNVD-2021-01931 | high | 是 | — | `plugins/ruoyi/file_read_path.py` |
-| L3 | 定时任务调用目标未校验 | N/A | high | 是 | — | `plugins/ruoyi/job_invoke_target.py` |
 | L3 | 任意文件上传 | N/A | high | 是 | — | `plugins/ruoyi/file_upload.py` |
+| L3 | 定时任务调用目标未校验 | N/A | high | 是 | — | `plugins/ruoyi/job_invoke_target.py` |
 | L3 | 定时任务 RCE（未授权访问） | N/A | high | 是 | — | `plugins/ruoyi/job_rce.py` |
 | L3 | Nacos 未授权访问 | CVE-2021-29441 | medium | 是 | — | `plugins/ruoyi/nacos_unauth.py` |
 | L3 | POST型报错注入（dept） | CNVD-2021-01931 | high | 是 | — | `plugins/ruoyi/sql_inject_dept.py` |
