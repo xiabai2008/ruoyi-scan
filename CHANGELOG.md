@@ -12,6 +12,17 @@
 - **G4 供应链信任建设**：新增 OpenSSF Scorecard workflow（每周评分 + SARIF 上传 Code Scanning + 公共徽章）；Release 增加 **SLSA 构建来源证明**（`actions/attest-build-provenance`，消费者可 `gh attestation verify` 独立验证）；RuoYi nuclei 模板包 zip 随 Release 分发（校验和一并覆盖）
 - **G4 Awesome-POC 投稿材料（B 渠道，待确认投递）**：`contrib/awesome-poc/` 两篇（后台定时任务 RCE / params[dataScope] SQL 注入），POC 细节源自本项目签名靶场验证过的插件实现；同时记录：`thymeleaf_ssti.py` 的 CVE-2023-38286 归属经 NVD 核查有误（该 CVE 实为 spring-boot-admin MailNotifier 沙箱绕过），后续需修正插件元数据
 - **G4 评分提升（首评 3.1 → 目标 5+）**：全部 workflow 补齐显式最小权限（Token-Permissions）；新增 CodeQL 静态分析（SAST，security-extended）；新增 Dependabot（pip + github-actions 周更）；SLSA 验签已 E2E 实证（`gh attestation verify` → SLSA v1 provenance，builder 为本仓库 release.yml）
+- **插件误报基线门禁**（`tests/test_fp_baseline.py`）：把「确定不含漏洞」的良性响应喂给全部插件，断言零 CONFIRMED；另设陷阱语料，确需放宽判定的插件必须在 `KNOWN_FALSE_POSITIVES` 登记原因（技术债可见而非隐藏）。动因：实测 51 插件中 5 个（9.8%）对完全正常的 200 页面返回 CONFIRMED，而当时的测试套件对此零告警——仅约 100 处真正调用过 `verify()`
+- **软 404 基线**（`lib/soft404.py`）：`Soft404Baseline` 先探测随机不存在路径建立站点基线，catch-all 路由不再把任意路径误判为「文件存在」；`backup_scan` / `source_leak` 已接入
+- **检出能力矩阵**（`scripts/verification_matrix.py` → `docs/verification-matrix.md`）：按插件汇总验证级别（L3 真实软件双向验证 / L2 真实响应靶场 / L1 签名靶场 / none），证据自动提取自 lab 文档与测试源码；CI 增量门禁——none 级插件数量不得增加，矩阵文档与脚本输出强制一致
+- **新增 CVE 插件**：CVE-2025-46174（重置密码页数据权限绕过，含越权场景判定与对照逻辑）、CVE-2025-70986（selectDeptTree 未授权越权读取组织架构）；均已纳入 `tests/regression_ruoyi.py`
+- **目标可用性预检 + 超时熔断 + TLS 策略**：扫描前两级探测（TCP → HTTP），不可达/无响应目标秒级中止并给出可操作提示（exit=3，与 CI 模式 0/1/2 区分）；批量模式逐目标跳过并在汇总中列出；按主机共享的连续超时熔断（黑洞目标 `-p` 模式从 120 秒以上未完成降至 21 秒）；TLS 默认不校验证书（内网自签名为若依部署常态，此前该类目标所有请求降级 UNKNOWN 且无提示），`--verify-tls` 可开启严格校验；验证码 OCR 引擎改为进程级缓存（默认字典 1052 条口令，原先每个口令重建一次模型）
+- **多版本矩阵工具**（`lab/version_matrix/`）：多 RuoYi 版本编译构建 + 逐插件检出对拍的本地靶场工具链
+
+### Changed
+- **插件输出通道重构**（58 文件）：插件与 core 模块的进度输出从直接 `print()` 改为 `lib.reporter.emit` 单一出口。CLI 模式观感与迁移前完全一致；API / 桌面端 / 测试模式自动静默（原先插件输出直接写进程 stdout 污染服务日志——实测误报基线测试向 stdout 倾倒约 2 MB 文本；静默模式下转 DEBUG 日志，`--debug` 或 `RUOYI_SCAN_DEBUG=1` 可见）。**对以 stdout 解析扫描结果的外部脚本是行为变更**：以库/API 方式调用时插件不再写 stdout
+- **CI 门禁收紧**：`tests/` 与 `scripts/` 纳入 ruff lint（原先 1212 个测试完全不受 lint 约束，实测累积 16 处未用导入/顺序漂移）；覆盖率由全仓统一 70% 改为按目录棘轮（core 78 / common 84 / lib 72 / api 85 / plugins 75 / chains 95，取实测值下浮 3 点，防止低覆盖模块躲在平均值后）；`lib/reporter.py`、`lib/soft404.py` 纳入 mypy strict；全部 GitHub Actions 固定到 commit SHA（仅 `dtolnay/rust-toolchain@stable` 与 `pypa/gh-action-pypi-publish@release/v1` 保留浮动并注明理由）；main 分支启用保护（必过状态检查 + 禁强推/删除，管理员直推不受限）
+- **目录扫描输出降噪**：目标不可用时同一失败原因只提示一次（原先 696 条路径刷出 541 行），失败原因与数量写入结果 evidence
 
 ### Notes
 - **上游收录尝试存档（避免重复踩坑）**：nuclei-templates PR #17192 被以 *duplicate + unvalidated* 关闭——理由（原文要点）：① 若依指纹检测已存在于 fingerprinthub；② 定时任务未授权模板实网 0 命中（缺流行度证明）；③ 标 PR:H 但利用需 admin 会话（严重度虚高）；④ matcher 仅中文。**结论**：授权配置类模板不符合上游收录标准，策略转为「自建模板包 + Awesome-POC 等中文社区渠道」；仅当出现 CVE/CNVD 编号的若依漏洞时再考虑上游提交，且须遵守：英文结构 matcher、严重度如实、附实网证明
