@@ -24,11 +24,32 @@ from core.http import join_url
 
 logger = get_logger(__name__)
 
+# OCR 引擎进程级缓存（见 _init_ocr_backend 的说明）：
+#   ddddocr 后端 → DdddOcr 实例；pytesseract 后端 → (pytesseract, PIL.Image) 元组
+_OCR_ENGINE: Any = None
+_OCR_BACKEND: Optional[str] = None
+_OCR_PROBED = False
+
 # 验证码接口候选路径（按若依版本兼容性排序）
+#
+# ⚠ RuoYi 4.x 的 SysCaptchaController 有隐藏前提：**必须带 type 参数**。
+#   其源码形如：
+#       if ("math".equals(type)) { ... } else if ("char".equals(type)) { ... }
+#       // 没有 else 分支
+#       ImageIO.write(bi, "jpg", out);
+#   type 缺失时 BufferedImage 保持 null，ImageIO.write 抛异常并被 catch 静默吞掉，
+#   于是返回 **HTTP 200 + Content-Type: image/jpeg + 0 字节**。
+#   2026-09-17 实测：不带参数 0 字节；?type=char 3071 字节；?type=math 2818 字节。
+#
+# 之所以优先 type=char：controller 会把「渲染出来的文本」存入 session
+# （math 分支存入的是算式**结果**）——所以请求 char 时 OCR 结果可直接当 validateCode 用，
+# 无需本地做算术求值，稳定性和准确率都更高。
 CAPTCHA_PATHS = [
-    "/captcha/captchaImage",  # RuoYi 4.x 标准（SysCaptchaController）
+    "/captcha/captchaImage?type=char",  # RuoYi 4.x 标准（推荐：session 存的就是渲染文本）
+    "/captcha/captchaImage?type=math",  # 算术验证码（需本地求值，见 _normalize_code）
+    "/captcha/captchaImage",  # 兜底：无参（部分定制版仍可用）
     "/captcha/image",  # 部分旧版/定制版
-    "/code",  # RuoYi 5.x（前后端分离）
+    "/code",  # RuoYi 5.x（前后端分离，返回 base64 JSON）
 ]
 
 
@@ -58,15 +79,32 @@ class CaptchaSolver:
         self._captcha_path: Optional[str] = None
 
     def _init_ocr_backend(self) -> Optional[str]:
-        """初始化 OCR 后端，返回后端名称或 None"""
-        if self._ocr_backend is not None:
-            return self._ocr_backend
+        """初始化 OCR 后端，返回后端名称或 None
+
+        引擎缓存在进程级（模块全局）而非实例级：登录爆破对每个口令新建一个
+        CaptchaSolver（默认字典 1052 条），实例级缓存等于每个口令重新加载一次
+        DdddOcr 模型——实测默认 -u 扫描因此白等 100 秒以上。引擎本身无状态，
+        进程内复用安全（并发首次加载最多重复构造一次，无副作用）。
+        """
+        global _OCR_ENGINE, _OCR_BACKEND, _OCR_PROBED
+
+        if _OCR_PROBED:
+            self._ocr_backend = _OCR_BACKEND
+            if _OCR_BACKEND == "ddddocr":
+                self._ocr = _OCR_ENGINE
+            elif _OCR_BACKEND == "pytesseract":
+                self._pytesseract, self._PIL = _OCR_ENGINE
+            return _OCR_BACKEND
+
+        _OCR_PROBED = True
         # 1. 优先 ddddocr
         try:
             import ddddocr
 
-            self._ocr = ddddocr.DdddOcr(show_ad=False)
-            self._ocr_backend = "ddddocr"
+            _OCR_ENGINE = ddddocr.DdddOcr(show_ad=False)
+            _OCR_BACKEND = "ddddocr"
+            self._ocr = _OCR_ENGINE
+            self._ocr_backend = _OCR_BACKEND
             return self._ocr_backend
         except Exception:
             logger.debug("ddddocr 后端加载失败", exc_info=True)
@@ -75,24 +113,39 @@ class CaptchaSolver:
             import pytesseract
             from PIL import Image
 
-            self._pytesseract = pytesseract
-            self._PIL = Image
-            self._ocr_backend = "pytesseract"
+            _OCR_ENGINE = (pytesseract, Image)
+            _OCR_BACKEND = "pytesseract"
+            self._pytesseract, self._PIL = _OCR_ENGINE
+            self._ocr_backend = _OCR_BACKEND
             return self._ocr_backend
         except Exception:
             logger.debug("pytesseract 后端加载失败", exc_info=True)
+        # 两个后端都不可用：记录已探测，避免每次识别都重试 import
+        _OCR_BACKEND = None
         return None
 
     def detect_captcha(self) -> Tuple[bool, str]:
         """探测验证码接口是否存在
 
-        按候选路径顺序请求，找到第一个返回图片的路径。
+        按候选路径顺序请求，**优先返回能拿到非空图片的路径**。
+
+        历史缺陷（2026-09-17 多版本矩阵实测发现）：原实现遇到第一个
+        `200 + image/*` 就返回，不检查响应体是否为空。而 RuoYi 4.x 的无参路径
+        `/captcha/captchaImage` 恰好返回 200 + image/jpeg + **0 字节**
+        （controller 缺 type 参数时 BufferedImage 为 null，ImageIO.write 抛异常被吞），
+        于是探测在第一个候选上「成功」，后面的 `?type=char` 永远得不到尝试机会，
+        调用方随后在 OCR 阶段失败并上报「接口存在但识别失败」——真实原因被掩盖。
+
+        现策略：空图片只记为候选（endpoint 确实存在），继续找可用图片；
+        若所有候选都拿不到图，再返回该候选（语义仍是「有验证码，但解不了」）。
 
         Returns:
             (has_captcha: bool, captcha_path: str)
-            has_captcha=True, captcha_path='/captcha/captchaImage'：存在验证码
+            has_captcha=True, captcha_path 为可用路径：存在验证码且能取到图
+            has_captcha=True, captcha_path 为空图路径：接口存在但拿不到图（调用方应报 LOGIN_CAPTCHA）
             has_captcha=False, captcha_path=''：无验证码
         """
+        empty_fallback = ""
         for path in CAPTCHA_PATHS:
             try:
                 resp = self.session.get(join_url(self.target, path))
@@ -100,6 +153,13 @@ class CaptchaSolver:
                 code = getattr(resp, "status_code", 0)
                 # 验证码接口返回 image/* 类型
                 if code == 200 and ("image" in ct or "jpeg" in ct or "png" in ct):
+                    if not (resp.content or b""):
+                        # 200 + image/* 但响应体为空：接口存在却给不出图。
+                        # 记为兜底候选并继续尝试其他路径（不要在这里就「成功」返回）。
+                        if not empty_fallback:
+                            empty_fallback = path
+                        logger.debug("验证码接口 %s 返回空图片，继续尝试下一候选", path)
+                        continue
                     self._captcha_path = path
                     return True, path
                 # RuoYi 5.x 返回 JSON（base64 图片）
@@ -113,6 +173,11 @@ class CaptchaSolver:
                         logger.debug("验证码接口 JSON 响应解析失败", exc_info=True)
             except Exception:
                 continue
+        if empty_fallback:
+            # 所有候选都拿不到图，但确实存在验证码接口：仍判「存在」，
+            # 由调用方按「验证码不可解」处理（LOGIN_CAPTCHA），而不是误判为无验证码。
+            self._captcha_path = empty_fallback
+            return True, empty_fallback
         return False, ""
 
     def _download_image(self) -> Tuple[bytes, bool]:

@@ -73,7 +73,37 @@ class TestDetectCaptcha(unittest.TestCase):
         solver = CaptchaSolver(MOCK_TARGET, SessionManager())
         has, path = solver.detect_captcha()
         self.assertTrue(has)
-        self.assertEqual(path, "/captcha/captchaImage")
+        # 首选候选是带 type=char 的路径：RuoYi 4.x 无参时会返回 0 字节空图
+        self.assertIn("captchaImage", path)
+        self.assertIn("type=char", path)
+
+    @requests_mock.Mocker()
+    def test_detect_prefers_usable_image_over_empty(self, m):
+        """回归：首个候选返回空图时，必须继续找可用候选，不能就此判「探测成功」
+
+        历史缺陷（2026-09-17 多版本矩阵实测发现）：原实现遇到第一个 200 + image/*
+        就返回，不校验响应体。真实 RuoYi 4.x 的无参路径恰好返回
+        200 + image/jpeg + 0 字节（controller 缺 type 参数导致），
+        于是 `?type=char` 永远得不到尝试机会；
+        调用方随后在 OCR 阶段失败，上报含糊的「接口存在但识别失败」。
+
+        本用例构造：无参路径 → 空图；?type=char → 真图。
+        正确行为是返回**能取到图**的那个路径。
+        """
+        m.get(
+            MOCK_TARGET + "/captcha/captchaImage",
+            content=b"",
+            headers={"Content-Type": "image/jpeg"},
+        )
+        m.get(
+            MOCK_TARGET + "/captcha/captchaImage?type=char",
+            content=TEST_PNG_BYTES,
+            headers={"Content-Type": "image/jpeg"},
+        )
+        solver = CaptchaSolver(MOCK_TARGET, SessionManager())
+        has, path = solver.detect_captcha()
+        self.assertTrue(has)
+        self.assertEqual(path, "/captcha/captchaImage?type=char", "应选中能取到图的候选，而不是空图候选")
 
     @requests_mock.Mocker()
     def test_detect_no_captcha(self, m):

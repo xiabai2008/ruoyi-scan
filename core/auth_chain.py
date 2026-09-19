@@ -17,7 +17,8 @@
 #   - 登录失败不抛异常，返回 (ok, reason)，调用方决定是否继续
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
-from typing import Any, Optional, Tuple
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional, Tuple
 
 from common.logger import get_logger
 from core.http import join_url
@@ -34,6 +35,53 @@ LOGIN_OK = "ok"  # 登录成功
 LOGIN_FAIL = "fail"  # 登录失败（用户名/密码错误）
 LOGIN_CAPTCHA = "captcha"  # 需要验证码（D1 不处理，留 D3）
 LOGIN_ERROR = "error"  # 网络异常或响应异常
+
+
+@contextmanager
+def isolated_auth_session(
+    target: str,
+    username: str,
+    password: str,
+    timeout: Optional[float] = None,
+) -> Iterator[Tuple[Any, bool, str]]:
+    """在**独立会话**中登录，yield (session, ok, reason)；退出时关闭该会话。
+
+    为什么需要独立会话（2026-09-17 多版本矩阵实测后确立）
+    ----------------------------------------------------
+    扫描器让所有插件复用同一个 `SessionManager`。若插件直接在共享会话上登录，
+    认证状态会**一直保留给后续插件**，而其余插件的判定普遍以「未认证基线」为前提：
+      - 未认证时未知路径 → 302 → 登录页（200，约 4KB）；
+      - 已认证时未知路径 → v4.7.8 返回 404，但 v4.8.3（Spring Boot 4.0.3）返回 200。
+    于是 v4.8.3 上一次性多出 6 个误报（备份文件 65 个 / MinIO / RocketMQ /
+    Swagger / IDE 残留 / Plus 认证），属**跨插件状态污染**。
+
+    ⚠ 不能用「cookie 快照 + 还原」做隔离——已实测无效：Shiro 把认证状态存在
+    服务端 session（按 JSESSIONID 索引），把 cookie 还原成同一个 JSESSIONID 后，
+    服务端仍视其为已认证。唯一的正确做法是让需鉴权的插件自建会话。
+
+    用法：
+        with isolated_auth_session(target, user, pwd) as (sess, ok, reason):
+            if not ok:
+                return ScanResult(... STATUS_UNKNOWN ...)
+            resp = sess.get(join_url(target, "/monitor/job"))
+
+    Args:
+        target: 目标站点根 URL
+        username / password: 登录凭据
+        timeout: 请求超时（None 用 SessionManager 默认）
+    """
+    from core.session import SessionManager
+
+    own = SessionManager(timeout=int(timeout) if timeout is not None else None)
+    try:
+        chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
+        ok, reason = chain.login()
+        yield own, ok, reason
+    finally:
+        try:
+            own.close()
+        except Exception:  # pragma: no cover - 关闭失败不应影响扫描结论
+            logger.debug("关闭隔离会话失败", exc_info=True)
 
 
 class RuoYiAuthChain:
@@ -118,16 +166,25 @@ class RuoYiAuthChain:
         self.auth_mode = AUTH_V4_SESSION
         return AUTH_V4_SESSION
 
-    def login(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
-        """按探测到的鉴权模式登录
+    def login(self, captcha_code: Optional[str] = None, max_attempts: int = 5) -> Tuple[bool, str]:
+        """按探测到的鉴权模式登录（验证码错误时自动重试）
+
+        为什么需要重试：RuoYi 4.x 登录必带验证码，而 OCR 不可能 100% 准确。
+        2026-09-17 在真实 4.7.8 实例上实测：ddddocr 单次识别并登录成功约 67%。
+        验证码错误时重新取一张新图再识别即可，因此重试是**有效**的；
+        加上重试后整体成功率约为 1-(1-p)^n——3 次约 96%（矩阵实测仍会偶发失败），
+        5 次约 99.6%。
+
+        只对「验证码错误」重试——账号密码错误、网络异常重试没有意义。
 
         Args:
             captcha_code: 验证码（D3）。None=自动探测+OCR；''=跳过验证码；非空=手动提供
+            max_attempts: 含首次在内的最大尝试次数（显式传入 captcha_code 时不重试）
 
         Returns:
             (ok: bool, reason: str)
             ok=True, reason=LOGIN_OK：登录成功，session 已带凭证
-            ok=False, reason=LOGIN_CAPTCHA：需要验证码且 OCR 失败
+            ok=False, reason=LOGIN_CAPTCHA：需要验证码且多次 OCR 均失败
             ok=False, reason=LOGIN_FAIL：用户名/密码错误
             ok=False, reason=LOGIN_ERROR：网络异常
         """
@@ -138,6 +195,21 @@ class RuoYiAuthChain:
             # 无鉴权，直接返回成功
             return True, LOGIN_OK
 
+        attempts = 1 if captcha_code else max(1, max_attempts)
+        last_reason = LOGIN_ERROR
+        for i in range(attempts):
+            ok, reason = self._login_once(captcha_code)
+            if ok:
+                return True, LOGIN_OK
+            last_reason = reason
+            # 仅验证码错误值得换图重试
+            if not reason.startswith(LOGIN_CAPTCHA):
+                break
+            logger.debug("第 %d/%d 次登录因验证码失败，换图重试", i + 1, attempts)
+        return False, last_reason
+
+    def _login_once(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
+        """执行一次登录尝试（按 auth_mode 分发，不含重试）"""
         if self.auth_mode == AUTH_V4_SESSION:
             return self._login_v4_session(captcha_code)
 
