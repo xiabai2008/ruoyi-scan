@@ -94,7 +94,7 @@ dev = [
     "pytest-benchmark>=4.0",
     # lint 工具固定版本（与 .github/workflows/ci.yml 一致）：
     # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移
-    "ruff==0.16.7",
+    "ruff==0.16.8",
     "mypy==2.3.1",
 ]
 
