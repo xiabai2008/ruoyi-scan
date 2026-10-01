@@ -36,6 +36,9 @@ LAB_MODE=vuln LAB_PORT=8080 python server.py
 
 # safe 模式（应全 SAFE，零误报）
 LAB_MODE=safe LAB_PORT=8081 python server.py
+
+# 可选：在登录页显示演示账号提示（源码不落任何凭据字面量）
+LAB_DEMO_CRED="admin / admin123" LAB_MODE=vuln python server.py
 ```
 
 ### 方式 B：Docker
@@ -45,6 +48,19 @@ cd lab/
 docker compose up --build        # 默认 vuln 模式，端口 8080
 # 切换 safe 模式：编辑 docker-compose.yml 中 LAB_MODE=safe 后重跑
 ```
+
+### 拟真前端（2026-10 新增）
+
+靶场浏览器观感对齐真实 RuoYi-Vue，便于教学演示与人工访问：
+
+- `/` 登录页：RuoYi-Vue 风格完整登录表单，可真实提交登录（vuln 模式登录成功并跳转后台，safe 模式返回「用户或密码错误」）
+- `/index` 后台首页：侧边栏 + 统计卡 + 系统信息表，带 vuln/safe 模式徽章
+- 全站 404：Spring Boot Whitelabel 错误页风格（与真实若依行为一致）
+
+> 约束：以上页面均不改变插件判定签名——`<title>`、漏洞端点响应体、状态码零改动，
+> vuln/safe 双模式对拍结果与升级前完全一致（已实测）。修改模板时注意：
+> 页面文本不得含 WAF 裸子串关键词（如色值 `#f59a23` 会触发 F5 误判）、
+> 版权年份结束年不得落在 `core/ruoyi_versions.py` 收录区间（详见 `server.py` 头部注释）。
 
 ---
 
