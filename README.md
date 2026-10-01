@@ -34,9 +34,61 @@ pip install ruoyi-scan
 
 ---
 
+## 命令行 · 真实运行截图
+
+> 以下均为对本机签名靶场（[`lab/`](lab/)，vuln / safe 双模式）的真实运行记录：vuln 模式 23 个漏洞全部命中，safe 模式零误报。
+
+<p align="center">
+  <img src="docs/images/cli-01-help.png" alt="命令行帮助：Banner 与扫描模式一览" width="900" />
+</p>
+
+**帮助** —— `python main.py -h`：5 种扫描模式与全部可选长参数一览。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/cli-02-scan-running.png" alt="综合扫描进行中：指纹识别、WAF 检测与目录扫描" width="900" />
+</p>
+
+**综合扫描（进行中）** —— 自动指纹识别（cms=ruoyi，置信度 0.70）、WAF 特征检测、目录扫描实时输出。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/cli-03-scan-results.png" alt="综合扫描结果：漏洞命中与登录爆破成功" width="900" />
+</p>
+
+**综合扫描（结果）** —— 未授权访问、Nacos 配置泄露、SSTI、任意文件读取、定时任务 RCE 等逐一判定；Druid 弱口令 ruoyi/123456 与后台默认口令 admin/admin123 爆破成功。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/cli-04-bruteforce.png" alt="登录爆破模式：弱口令命中" width="900" />
+</p>
+
+**登录爆破** —— `-l` 模式：Druid 弱口令与后台默认口令一键爆破，命中即判定。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/cli-06-safe-verdicts.png" alt="safe 靶场零误报验证：全部判定不存在" width="900" />
+</p>
+
+**零误报验证** —— 对 safe 靶场（全修复模式）执行漏洞检测：满屏「不存在」，拿不准的如实标注「无法判定」，不凑数、不误报。
+
+<br />
+
+<p align="center">
+  <img src="docs/images/cli-07-report.png" alt="扫描报告生成：HTML/JSON/CSV/PDF/DOCX/XLSX/SARIF" width="900" />
+</p>
+
+**报告生成** —— `--report reports`：扫描摘要（耗时 / 风险分布 / 去重统计）+ 7 种格式报告一键落盘。
+
+---
+
 ## 桌面端 · 单个 exe，双击即用
 
-> 引擎、51 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+> 引擎、53 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
 
 <p align="center">
   <img src="docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
@@ -55,10 +107,10 @@ pip install ruoyi-scan
 <br />
 
 <p align="center">
-  <img src="docs/images/desktop-03-vulndb.png" alt="漏洞库：51 个 POC 插件与 CVE / CNVD 映射" width="900" />
+  <img src="docs/images/desktop-03-vulndb.png" alt="漏洞库：53 个 POC 插件与 CVE / CNVD 映射" width="900" />
 </p>
 
-**漏洞库** —— 51 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+**漏洞库** —— 53 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
 
 <br />
 
@@ -140,7 +192,7 @@ pip install ruoyi-scan
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 18 个插件（文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
+| `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
 | `plugins/common/` | 通用漏洞包 11 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
@@ -546,10 +598,14 @@ python main.py -u http://target:8080/
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI 入口（~440 行，纯参数解析+分发）
+├── main.py                  # CLI 入口（~525 行，纯参数解析+分发）
 ├── config/settings.py       # 全局配置
+├── cli/                     # CLI 控制层
+│   ├── dispatcher.py        # 模式分发（工具/服务/扫描三段）
+│   ├── runner.py            # 扫描模式执行器（参数 → ScanRequest）
+│   └── ...                  # preflight / serve_runner / chain_runner 等
 ├── core/                    # 核心引擎层
-│   ├── runner.py            # 扫描编排器（P0 拆分）
+│   ├── orchestrator.py      # 扫描编排器（CLI 与 Web API 共用）
 │   ├── engine.py            # 并发编排+令牌桶限速
 │   ├── models.py            # 数据模型（三态判定）
 │   ├── loader.py            # 插件动态发现
@@ -561,18 +617,20 @@ Ruoyi-Scan/
 │   └── ...                  # 更多核心模块
 ├── plugins/                 # 插件系统
 │   ├── base.py              # PluginBase 抽象基类
-│   ├── ruoyi/               # 若依 18 个插件
+│   ├── ruoyi/               # 若依 20 个插件（含 2 个 Plus 变体专属）
 │   ├── spring/              # Spring 14 个 POC
 │   ├── jeecgboot/           # JeecgBoot 8 个插件
 │   ├── common/              # 通用 11 个插件
 │   └── chain/               # 3 条利用链
-├── lib/                     # 工具库（33 个模块）
+├── lib/                     # 工具库（40 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
-├── tests/                   # 51 个测试文件 / 1000+ 条用例
+├── tests/                   # 66 个测试文件 / 1000+ 条用例
 ├── lab/                     # 靶场环境
 ├── web/                     # Web 控制台前端
 ├── monitoring/              # Grafana + Prometheus
+├── desktop/                 # Tauri 桌面端（React 前端 + Rust 壳 + 内嵌引擎）
+├── scripts/                 # 构建 / 验收 / OpenAPI 导出脚本
 ├── .github/workflows/       # CI 配置
 ├── Dockerfile               # Docker 镜像
 ├── docker-compose.yml       # Docker 编排
