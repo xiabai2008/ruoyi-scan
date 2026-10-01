@@ -114,6 +114,16 @@ nav:
       - 插件模板仓库: template_repo.md
       - Web API 文档: api.md
       - DevSecOps 集成: devsecops.md
+  - 代码 Wiki:
+      - 总览: wiki/README.md
+      - 01 整体架构: wiki/01-architecture.md
+      - 02 入口与 CLI: wiki/02-entrypoint-cli.md
+      - 03 核心引擎层: wiki/03-core.md
+      - 04 插件体系与利用链: wiki/04-plugins-chains.md
+      - 05 工具库层: wiki/05-lib.md
+      - 06 API 与 Web 控制台: wiki/06-api-web.md
+      - 07 桌面端、靶场与部署: wiki/07-desktop-deploy.md
+      - 08 依赖关系: wiki/08-dependencies.md
   - 社区:
       - 社区总览: community.md
       - 发布流程: release.md

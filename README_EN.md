@@ -37,7 +37,7 @@ pip install ruoyi-scan
 
 | Module | Description |
 |--------|-------------|
-| `plugins/ruoyi/` | 18 RuoYi plugins (file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
+| `plugins/ruoyi/` | 20 RuoYi plugins (including 2 RuoYi-Plus-exclusive; file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
 | `plugins/spring/` | 14 Spring Boot POCs (Actuator, Gateway, Jolokia, Spring4Shell, etc.) |
 | `plugins/common/` | Common vulnerability package, 11 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, etc.) |
 | `plugins/jeecgboot/` | JeecgBoot extension plugin package (8 plugins, first non-RuoYi framework extension) |
@@ -406,10 +406,14 @@ docker compose down
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI entry point (~440 lines, pure arg parsing + dispatch)
+├── main.py                  # CLI entry point (~525 lines, pure arg parsing + dispatch)
 ├── config/settings.py       # Global configuration
+├── cli/                     # CLI control layer
+│   ├── dispatcher.py        # Mode dispatch (tool / service / scan)
+│   ├── runner.py            # Scan mode executor (args → ScanRequest)
+│   └── ...                  # preflight / serve_runner / chain_runner, etc.
 ├── core/                    # Core engine layer
-│   ├── runner.py            # Scan orchestrator (P0 split)
+│   ├── orchestrator.py      # Scan orchestrator (shared by CLI and Web API)
 │   ├── engine.py            # Concurrency orchestration + token-bucket rate limiting
 │   ├── models.py            # Data models (three-state verdict)
 │   ├── loader.py            # Dynamic plugin discovery
@@ -421,18 +425,20 @@ Ruoyi-Scan/
 │   └── ...                  # More core modules
 ├── plugins/                 # Plugin system
 │   ├── base.py              # PluginBase abstract base class
-│   ├── ruoyi/               # 18 RuoYi plugins
+│   ├── ruoyi/               # 20 RuoYi plugins (2 Plus-exclusive)
 │   ├── spring/              # 14 Spring POCs
 │   ├── jeecgboot/           # 8 JeecgBoot plugins
 │   ├── common/              # 11 common plugins
 │   └── chain/               # 3 exploit chains
-├── lib/                     # Utility library (33 modules)
+├── lib/                     # Utility library (40 modules)
 ├── api/                     # Web API (FastAPI + WebSocket)
 ├── data/                    # Dictionary files
-├── tests/                   # 51 test files / 1000+ test cases
+├── tests/                   # 66 test files / 1000+ test cases
 ├── lab/                     # Lab environments
 ├── web/                     # Web console frontend
 ├── monitoring/              # Grafana + Prometheus
+├── desktop/                 # Tauri desktop app (React frontend + Rust shell + embedded engine)
+├── scripts/                 # Build / acceptance / OpenAPI export scripts
 ├── .github/workflows/       # CI configuration
 ├── Dockerfile               # Docker image
 ├── docker-compose.yml       # Docker Compose
