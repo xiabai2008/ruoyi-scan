@@ -379,6 +379,24 @@ def dispatch(path, method):
             return json_body({"code": 200, "msg": "操作成功", "rows": [], "total": 0})
         return json_body({"code": 200, "msg": "操作成功", "rows": [], "total": 0})
 
+    # CVE-2025-70986：部门树接口无权限注解（/system/dept/selectDeptTree、treeData）
+    # 差分判定的两个分支在此各占一边：vuln 模式业务层照常执行（未被权限门拦截），
+    # safe 模式被 Shiro 权限门先拦下。缺这段端点时靶场返回 404，插件会因「未见 403 标记」
+    # 误判 CONFIRMED——插件侧已补 404 → UNKNOWN 守卫，此处补齐端点使其仍可被正向验证。
+    if path in ("/system/dept/treeData/0", "/system/dept/selectDeptTree/0"):
+        if vuln:
+            if path.endswith("/treeData/0"):
+                # 漏洞版：无 @RequiresPermissions，业务层直接返回部门数据
+                return json_body([{"id": 105, "pId": 101, "name": "研发部门", "title": "研发部门"}])
+            # 部门树页面：无效部门编号（0）在漏洞版上业务层执行后抛 NPE（与真实 4.8.0 一致）
+            return json_body({"timestamp": "2026-09-17 10:00:00", "status": 500, "error": "Internal Server Error"}, 500)
+        # 修复版（>=4.8.2）：Shiro 权限门拦截。注意若依把 403 渲染成 HTTP 200 页面，
+        # 状态码无区分度——插件正是靠 <title>RuoYi - 403</title> 标记识别这一形态。
+        return html_body(
+            "<!DOCTYPE html><html><head><title>RuoYi - 403</title></head>"
+            "<body><h1>403</h1><h3>您没有操作权限</h3></body></html>"
+        )
+
     # Druid 弱口令爆破
     if path == "/druid/submitLogin":
         user = request.form.get("loginUsername", "")

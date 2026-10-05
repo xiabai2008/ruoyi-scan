@@ -160,6 +160,29 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                 )
             bodies = {"treeData": r_data.text or "", "selectDeptTree": r_page.text or ""}
 
+            # 端点缺失守卫：探针 404 说明目标根本没有该端点（非若依站点 / 该版本无此路径）。
+            # 差分的两个分支——「业务层在无权限下执行」与「被权限门拦下」——此时一个都不成立，
+            # 属不可判定情形，按铁律返回 UNKNOWN。
+            # 缺这道守卫时，任何不含 403 标记的响应（如 Whitelabel 404 页）都会落进
+            # 「全部未命中权限门」分支被判成 CONFIRMED——实测签名靶场未实现该端点即触发假阳性。
+            missing = [
+                label
+                for label, resp in (("treeData", r_data), ("selectDeptTree", r_page))
+                if getattr(resp, "status_code", 0) == 404
+            ]
+            if missing:
+                emit(no(f"部门树越权访问（端点不存在：{'、'.join(missing)}）"))
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url_data,
+                    evidence=(
+                        f"探针 {'、'.join(missing)} 返回 404，目标未暴露部门树端点，"
+                        f"无法区分「业务层无权限执行」与「端点不存在」，不予判定"
+                    ),
+                )
+
             # 会话失效守卫：响应是登录页说明认证态丢了，不能据此判定
             if any(LOGIN_PAGE_MARKER in b for b in bodies.values()):
                 emit(no("部门树越权访问（会话失效，响应为登录页）"))

@@ -1026,6 +1026,22 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"会话失效应判 UNKNOWN，实际 {result.status}")
 
+    @requests_mock.Mocker()
+    def test_unknown_when_endpoint_missing(self, m):
+        """端点不存在（404，非若依站点 / 该版本无此路径）→ UNKNOWN，不得判 CONFIRMED
+
+        回归重点：本插件的差分为「业务层在无权限下执行」与「被权限门拦下」两支，
+        404 一支都不满足；但 404 页也不含 RuoYi-403 标记，于是旧实现落进
+        「全部未命中权限门」分支误判 CONFIRMED。签名靶场未实现该端点时实测触发
+        （nightly 自 2026-09-19 起连续 16 天假阳性即由此而来）。
+        """
+        self._mock_login(m)
+        m.get(MOCK_TARGET + "/system/dept/treeData/0", text="Whitelabel Error Page", status_code=404)
+        m.get(MOCK_TARGET + "/system/dept/selectDeptTree/0", text="Whitelabel Error Page", status_code=404)
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"端点缺失应判 UNKNOWN，实际 {result.status}")
+        self.assertIn("404", result.evidence, "证据说明端点缺失原因")
+
 
 def run_all():
     """运行全部测试，返回 0 表示全部通过"""

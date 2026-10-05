@@ -82,3 +82,16 @@ jobs:
 
           $(cat acceptance.json 2>/dev/null || echo 'acceptance.json 未生成（靶场启动阶段即失败）')
           "
+
+      - name: Enforce acceptance gate
+        # 必须放在最后：上面「Run acceptance comparison」用 set +e 吞掉了退出码（为了把
+        # 报告写进 issue 正文），「Create issue on failure」又只建 issue 不置败——两者都
+        # 成功收尾，job 恒为绿。结果就是验收连续失败 16 天（2026-09-19 ~ 10-04）却没有任何
+        # 红色信号，只能靠人工翻 issue 列表发现。此 step 把失败重新暴露为 run 失败。
+        if: always()
+        run: |
+          if [ "${{ steps.acceptance.outputs.exit }}" != "0" ]; then
+            echo "::error::Nightly 验收未通过（run_acceptance.py 退出码 '${{ steps.acceptance.outputs.exit }}'）"
+            exit 1
+          fi
+          echo "验收通过"
