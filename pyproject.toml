@@ -40,7 +40,7 @@ classifiers = [
 # 核心依赖（零系统依赖，必装）
 dependencies = [
     "requests>=2.28",
-    "requests-mock>=1.11",
+    "requests-mock>=1.12.1",
 ]
 
 # 可选依赖分组（pip install ".[group]"）
