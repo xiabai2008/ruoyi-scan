@@ -25,3 +25,10 @@ updates:
     labels:
       - dependencies
       - ci
+    groups:
+      # codeql-action 的 init / analyze / upload-sarif 必须同主版本：混用会在 analyze
+      # 阶段报 "CodeQL job status was configuration error"。不带分组时 Dependabot 按
+      # 动作路径拆成多个 PR（#20 init / #22 analyze），各自只升半边、双双 CI 失败。
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
