@@ -49,7 +49,7 @@ dependencies = [
 report = [
     "reportlab>=4.0",
     "python-docx>=1.1",
-    "openpyxl>=3.1",
+    "openpyxl>=3.1.5",
 ]
 # Web API 服务：FastAPI + WebSocket
 serve = [
@@ -76,7 +76,7 @@ lab = [
 all = [
     "reportlab>=4.0",
     "python-docx>=1.1",
-    "openpyxl>=3.1",
+    "openpyxl>=3.1.5",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
     "redis>=4.5",
