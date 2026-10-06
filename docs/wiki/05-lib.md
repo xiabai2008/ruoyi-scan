@@ -395,7 +395,7 @@ decide_install_path(filepath, category, verdict)   # 通过才决定安装路径
 | `validate_ai_plugin(filepath, port)` | 完整验证流程，返回 verdict |
 | `validate_generated_source(...)` | **生成 → 验证 → 失败重试**的闭环 |
 
-靶场是「签名靶场」——即已知漏洞存在/不存在的地面真值（见 [07 章](07-desktop-deploy.md#3-lab-靶场)）。**三态判定给了 AI 生成一个客观的验收标准**：插件在 vuln 模式下必须 CONFIRMED，在 safe 模式下必须 SAFE。
+靶场是「签名靶场」——即已知漏洞存在/不存在的地面真值（见 [07 章](07-desktop-deploy.md#3-靶场lab)）。**三态判定给了 AI 生成一个客观的验收标准**：插件在 vuln 模式下必须 CONFIRMED，在 safe 模式下必须 SAFE。
 
 这就把"AI 生成的代码看起来对不对"变成了"AI 生成的代码在靶场上的行为对不对"。
 

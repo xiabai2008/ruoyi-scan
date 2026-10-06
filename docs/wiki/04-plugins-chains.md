@@ -214,7 +214,7 @@ plugin_list = [
 | 10 | `DirListing` | `dir_listing.py` | 目录列表 |
 | 11 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
 
-> ⚠️ **`shiro_rememberme.py` 存在但未登记进 `plugin_list`**——包内有 12 个 `.py`，只登记了 11 个。该文件的探测思路被 [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) 的 Shiro 组件版本检测复用。这是文档漂移清单中的一项（见 [README](README.md#文档与实现不一致清单)）。
+> ⚠️ **`shiro_rememberme.py` 存在但未登记进 `plugin_list`**——包内有 12 个 `.py`，只登记了 11 个。该文件的探测思路被 [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) 的 Shiro 组件版本检测复用。这是文档漂移清单中的一项（见 [README](README.md#五文档与实现的一致性说明)）。
 
 ### 4.4 `plugins/jeecgboot` — 8 个
 

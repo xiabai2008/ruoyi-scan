@@ -242,7 +242,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 
 `ALL_EVENTS` 集合用于校验与文档——新增事件需同步登记。
 
-> 注：orchestrator 的 `_emit` 还发了一些未列入 `ALL_EVENTS` 的事件（`recon` / `component` / `auth` / `template` / `plugins_loaded` / `waf_bypass` 等）。`ALL_EVENTS` 是**核心事件集合**，不是穷举。这是 [README 文档漂移清单](README.md#文档与实现不一致清单) 之外的又一处口径差异。
+> 注：orchestrator 的 `_emit` 还发了一些未列入 `ALL_EVENTS` 的事件（`recon` / `component` / `auth` / `template` / `plugins_loaded` / `waf_bypass` 等）。`ALL_EVENTS` 是**核心事件集合**，不是穷举。这是 [README 文档漂移清单](README.md#五文档与实现的一致性说明) 之外的又一处口径差异。
 
 ---
 
@@ -368,7 +368,7 @@ stats["unknown"] += max(0, total - confirmed)
 
 它通过 REST 提交任务 + WebSocket 订阅事件流，与服务端保持"零 API 版本耦合"——因为 WS 事件结构就是协议。
 
-Prometheus 抓取配置在 [monitoring/prometheus.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/monitoring/prometheus.yml)，配合 Docker 的 `--profile monitor` 使用（见 [07 章](07-desktop-deploy.md#4-docker-与监控)）。
+Prometheus 抓取配置在 [monitoring/prometheus.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/monitoring/prometheus.yml)，配合 Docker 的 `--profile monitor` 使用（见 [07 章](07-desktop-deploy.md#4-容器部署)）。
 
 ---
 

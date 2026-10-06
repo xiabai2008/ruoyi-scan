@@ -112,7 +112,7 @@ from cli.dispatcher import dispatch;  dispatch(args)
 | D36 分布式扫描 | `--distributed` `--redis-url` `--distributed-rate` | D36 |
 | D37 结果缓存 | `--cache` `--cache-ttl` `--cache-stats` … | D37 |
 
-> 参数数量是这个项目「能力密度」的直接体现：CLI 层几乎是一个功能矩阵的入口清单。但它也带来了维护成本——`print_help()` 里有一张 100+ 行的手工参数表，与 `build_parser()` 存在漂移风险（见 [README 的文档漂移清单](README.md#文档与实现不一致清单)）。
+> 参数数量是这个项目「能力密度」的直接体现：CLI 层几乎是一个功能矩阵的入口清单。但它也带来了维护成本——`print_help()` 里有一张 100+ 行的手工参数表，与 `build_parser()` 存在漂移风险（见 [README 的文档漂移清单](README.md#五文档与实现的一致性说明)）。
 
 ---
 

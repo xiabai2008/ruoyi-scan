@@ -76,6 +76,14 @@ markdown_extensions:
   - toc:
       permalink: "#"
       toc_depth: "2-3"
+      # slugify：默认实现会剥离所有非 ASCII 字符，中文标题因此得到空 slug，
+      # Python-Markdown 只能退化为 _1 / _2 / _3 序号锚点——于是全站所有
+      # 「#中文标题」形式的页内链接（TOC、交叉引用）全部失效，构建期报 42 处
+      # anchor 警告。改用 pymdownx.slugs.slugify 保留 Unicode，锚点还原为
+      # #安装方式 这类可读形式，链接与锚点即可对上。
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
