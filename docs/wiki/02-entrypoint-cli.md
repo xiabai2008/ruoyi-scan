@@ -2,7 +2,7 @@
 
 > 这一章回答：命令行的参数是怎么被解析的？一次扫描从敲下回车到发出第一个 HTTP 请求，中间经过了哪些层？
 >
-> 相关源码：[main.py](../../main.py) · [cli/](../../cli)
+> 相关源码：[main.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py) · [cli/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/cli)
 
 ---
 
@@ -12,10 +12,10 @@
 
 | 函数 | 位置 | 职责 |
 | --- | --- | --- |
-| `print_banner()` | [main.py#L15-L29](../../main.py#L15-L29) | 打印 ASCII Art banner（绿色）+ 版本/作者/GitHub 信息（黄色） |
-| `build_parser()` | [main.py#L32-L294](../../main.py#L32-L294) | 构建 argparse 解析器，约 150 个参数按功能分成 **23 个参数组** |
-| `print_help()` | [main.py#L297-L418](../../main.py#L297-L418) | 自建帮助输出，对齐原脚本的 `-h` 排版（不用 argparse 默认格式） |
-| `main(argv=None)` | [main.py#L422-L521](../../main.py#L422-L521) | 主入口：编码兜底 → 日志 → TLS 策略 → banner → YAML 回填 → 模板 → 校验 → 分发 |
+| `print_banner()` | [main.py#L15-L29](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L15-L29) | 打印 ASCII Art banner（绿色）+ 版本/作者/GitHub 信息（黄色） |
+| `build_parser()` | [main.py#L32-L294](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L32-L294) | 构建 argparse 解析器，约 150 个参数按功能分成 **23 个参数组** |
+| `print_help()` | [main.py#L297-L418](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L297-L418) | 自建帮助输出，对齐原脚本的 `-h` 排版（不用 argparse 默认格式） |
+| `main(argv=None)` | [main.py#L422-L521](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L422-L521) | 主入口：编码兜底 → 日志 → TLS 策略 → banner → YAML 回填 → 模板 → 校验 → 分发 |
 
 ### 1.1 为什么禁用 argparse 内置 `-h`
 
@@ -122,18 +122,18 @@ from cli.dispatcher import dispatch;  dispatch(args)
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
-| [dispatcher.py](../../cli/dispatcher.py) | 模式分发总闸：按 args 决定走哪条路 | `dispatch(args)` |
-| [runner.py](../../cli/runner.py) | 核心扫描：`run_mode` / `run_mode_batch` + 报告后处理；并**重导出**其余模式函数 | `run_mode()` `run_mode_batch()` `final_prompt()` |
-| [preflight.py](../../cli/preflight.py) | 目标可达性预检（单目标/批量/链 三种入口共用） | `preflight_target()` `EXIT_UNREACHABLE` |
-| [chain_runner.py](../../cli/chain_runner.py) | 漏洞利用链执行 | `run_chain_mode()` |
-| [passive_runner.py](../../cli/passive_runner.py) | 被动代理模式 | `run_passive_mode()` |
-| [plugin_runner.py](../../cli/plugin_runner.py) | 插件管理（init/new/check/list/export/manifest/update） | `run_plugin_*_mode()` |
-| [serve_runner.py](../../cli/serve_runner.py) | 启动 Web API 服务（uvicorn） | `run_serve_mode()` |
-| [tool_runner.py](../../cli/tool_runner.py) | 纯工具模式（diff/wiki/ci-init/template-list…） | `run_diff_only_mode()` 等 |
+| [dispatcher.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py) | 模式分发总闸：按 args 决定走哪条路 | `dispatch(args)` |
+| [runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/runner.py) | 核心扫描：`run_mode` / `run_mode_batch` + 报告后处理；并**重导出**其余模式函数 | `run_mode()` `run_mode_batch()` `final_prompt()` |
+| [preflight.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/preflight.py) | 目标可达性预检（单目标/批量/链 三种入口共用） | `preflight_target()` `EXIT_UNREACHABLE` |
+| [chain_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/chain_runner.py) | 漏洞利用链执行 | `run_chain_mode()` |
+| [passive_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/passive_runner.py) | 被动代理模式 | `run_passive_mode()` |
+| [plugin_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/plugin_runner.py) | 插件管理（init/new/check/list/export/manifest/update） | `run_plugin_*_mode()` |
+| [serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py) | 启动 Web API 服务（uvicorn） | `run_serve_mode()` |
+| [tool_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/tool_runner.py) | 纯工具模式（diff/wiki/ci-init/template-list…） | `run_diff_only_mode()` 等 |
 
 ### 4.1 为什么 `preflight` 要独立成模块
 
-[preflight.py](../../cli/preflight.py) 的模块 docstring 给出了理由：
+[preflight.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/preflight.py) 的模块 docstring 给出了理由：
 
 > 独立成模块的原因：`dispatcher`、`runner`、`chain_runner` 三者都需要它，而 `chain_runner` 由 `runner` 导入——若把实现放在 `dispatcher` 会形成循环导入。
 
@@ -172,7 +172,7 @@ ok, reason = probe_http_responsive(target)    # HTTP 层：端口通但服务不
 
 ## 5. 模式分发决策树
 
-[dispatcher.dispatch()](../../cli/dispatcher.py#L35-L175) 是一条**严格有序**的 `if` 链，顺序即优先级：
+[dispatcher.dispatch()](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py#L35-L175) 是一条**严格有序**的 `if` 链，顺序即优先级：
 
 ```
 dispatch(args)
@@ -200,7 +200,7 @@ dispatch(args)
 ### 5.1 顺序背后的三条规则
 
 1. **工具 > 服务 > 扫描**。纯工具模式（生成配置、查缓存、验证模板）不算扫描，先处理并 `return`，避免被后续扫描分支误捕获。
-2. **`--ai-triage` 是「修饰符」而非「模式」**。它单独出现无意义——[dispatcher.py#L111-L115](../../cli/dispatcher.py#L111-L115) 显式拦截并给出提示，要求配合扫描模式使用。这是**防止参数误用**的显式守卫，而不是静默忽略。
+2. **`--ai-triage` 是「修饰符」而非「模式」**。它单独出现无意义——[dispatcher.py#L111-L115](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py#L111-L115) 显式拦截并给出提示，要求配合扫描模式使用。这是**防止参数误用**的显式守卫，而不是静默忽略。
 3. **单目标优先级 `u > m > p > l` 隐含在元组顺序里**。同时给多个目标时只有第一个会被执行，且不警告。这是继承自原脚本的行为。
 
 ### 5.2 `-f` 批量模式的约束
@@ -223,7 +223,7 @@ if args.file:
 
 ## 6. `runner.run_mode()` 的主干
 
-`run_mode()` 是 CLI 扫描的实际执行者，[cli/runner.py](../../cli/runner.py)：
+`run_mode()` 是 CLI 扫描的实际执行者，[cli/runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/runner.py)：
 
 ```
 run_mode(mode, target, args, show_cta=True)
@@ -271,18 +271,18 @@ MODE_CATEGORIES = {
 
 | 变量 | 默认值 | 作用域 | 说明 |
 | --- | --- | --- | --- |
-| `RUOYI_SCAN_DEBUG` | 空 | [common/logger.py](../../common/logger.py) | 非空即启用 DEBUG 日志级别 |
-| `RUOYI_SCAN_REPORT_DIR` | `<BASE_DIR>/reports` | [config/settings.py](../../config/settings.py) | 覆盖报告默认输出目录 |
-| `RUOYI_SCAN_API_KEY` | 空 | [api/auth.py](../../api/auth.py) / [cli/serve_runner.py](../../cli/serve_runner.py) | API Key 兜底来源（`--api-key` 优先） |
-| `RUOYI_SCAN_LOWPRIV_USER` | `scanner_low` | [config/settings.py](../../config/settings.py) | G1 垂直越权对比用低权账号 |
+| `RUOYI_SCAN_DEBUG` | 空 | [common/logger.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/common/logger.py) | 非空即启用 DEBUG 日志级别 |
+| `RUOYI_SCAN_REPORT_DIR` | `<BASE_DIR>/reports` | [config/settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py) | 覆盖报告默认输出目录 |
+| `RUOYI_SCAN_API_KEY` | 空 | [api/auth.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/auth.py) / [cli/serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py) | API Key 兜底来源（`--api-key` 优先） |
+| `RUOYI_SCAN_LOWPRIV_USER` | `scanner_low` | [config/settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py) | G1 垂直越权对比用低权账号 |
 | `RUOYI_SCAN_LOWPRIV_PASS` | `LowPriv_2026` | 同上 | 低权账号密码 |
 | `RUOYI_SCAN_LOWPRIV_TARGET` | `1` | 同上 | 越权对比目标用户 ID |
-| `RUOYI_SCAN_HOME` | `<home>/Ruoyi-Scan` | [desktop/engine/ruoyi_scan_engine.py](../../desktop/engine/ruoyi_scan_engine.py) | 桌面端引擎解压目录 |
-| `RUOYI_AI_API_KEY` | 空 | [lib/ai_generator.py](../../lib/ai_generator.py) | LLM Key（无 Key 时降级规则模板） |
+| `RUOYI_SCAN_HOME` | `<home>/Ruoyi-Scan` | [desktop/engine/ruoyi_scan_engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/desktop/engine/ruoyi_scan_engine.py) | 桌面端引擎解压目录 |
+| `RUOYI_AI_API_KEY` | 空 | [lib/ai_generator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ai_generator.py) | LLM Key（无 Key 时降级规则模板） |
 | `RUOYI_AI_BASE_URL` | `https://api.openai.com/v1` | 同上 | LLM 接口地址（可指向兼容网关） |
 | `RUOYI_AI_MODEL` | `gpt-4o-mini` | 同上 | LLM 模型名 |
 | `RUOYI_AI_TIMEOUT` | `60` | 同上 | LLM 请求超时秒数 |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | — | [lib/notifier.py](../../lib/notifier.py) | D21 邮件通知 SMTP 配置 |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | — | [lib/notifier.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/notifier.py) | D21 邮件通知 SMTP 配置 |
 
 ---
 

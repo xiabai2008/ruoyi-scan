@@ -123,7 +123,7 @@ Ruoyi-Scan/
 
 #### 插件数量的三个口径（重要）
 
-原 README 的「51 / 18」并非随手写错，而是**按"通用目标实际执行数"统计**（53 登记数中减去 2 个 Plus 变体专属插件 = 51），与 [tests/test_fingerprint.py](../../tests/test_fingerprint.py) 的断言一致。修正后统一到"登记总数"口径，并保留 Plus 专属的说明：
+原 README 的「51 / 18」并非随手写错，而是**按"通用目标实际执行数"统计**（53 登记数中减去 2 个 Plus 变体专属插件 = 51），与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 的断言一致。修正后统一到"登记总数"口径，并保留 Plus 专属的说明：
 
 | 口径 | 数量 | 来源 | 说明 |
 |------|------|------|------|

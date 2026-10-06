@@ -10,10 +10,10 @@
 
 | 形态 | 入口 | 依赖 | 适用场景 |
 |------|------|------|---------|
-| CLI | [main.py](../../main.py) | `pip install .` | 日常扫描、CI 集成 |
+| CLI | [main.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py) | `pip install .` | 日常扫描、CI 集成 |
 | Web API | `main.py --serve` | `pip install ".[serve]"` | 团队共用、被其它系统调用 |
 | 桌面端 | `desktop/`（Tauri 壳） | 发布版自带引擎 | 非技术用户一键使用 |
-| 容器 | [Dockerfile](../../Dockerfile) / [docker-compose.yml](../../docker-compose.yml) | Docker | 批量部署、靶场联调 |
+| 容器 | [Dockerfile](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/Dockerfile) / [docker-compose.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/docker-compose.yml) | Docker | 批量部署、靶场联调 |
 
 四者共用同一套 `core/` 引擎——桌面端与容器只是**换了个进程外壳**，不存在第二份扫描逻辑。
 
@@ -41,7 +41,7 @@ desktop/
 
 ### 2.2 编译期嵌入：`build.rs`
 
-[build.rs](../../desktop/src-tauri/build.rs) 只有 25 行，逻辑是"有引擎就复制，没有就写 0 字节占位"：
+[build.rs](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/desktop/src-tauri/build.rs) 只有 25 行，逻辑是"有引擎就复制，没有就写 0 字节占位"：
 
 ```
 engine/dist/ruoyi-scan-engine.exe
@@ -58,7 +58,7 @@ $OUT_DIR/embedded_engine.bin  ← lib.rs 用 include_bytes! 固定路径读取
 
 ### 2.3 运行时：引擎自解压
 
-[lib.rs](../../desktop/src-tauri/src/lib.rs) 中：
+[lib.rs](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/desktop/src-tauri/src/lib.rs) 中：
 
 ```rust
 const API_PORT: u16 = 8123;
@@ -144,9 +144,9 @@ python main.py --serve                                  ← 开发回退（RUOYI
 
 | 路径 | 作用 |
 |------|------|
-| [lab/server.py](../../lab/server.py) | 若依签名靶场（Flask），覆盖 ruoyi 插件包的签名路径 |
-| [lab/spring_server.py](../../lab/spring_server.py) | Spring 签名靶场 |
-| [lab/run_acceptance.py](../../lab/run_acceptance.py) / `.sh` | 验收驱动脚本 |
+| [lab/server.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lab/server.py) | 若依签名靶场（Flask），覆盖 ruoyi 插件包的签名路径 |
+| [lab/spring_server.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lab/spring_server.py) | Spring 签名靶场 |
+| [lab/run_acceptance.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lab/run_acceptance.py) / `.sh` | 验收驱动脚本 |
 | `lab/real-spring/` | 真实 Spring 靶场（纯 Flask 模拟，CI 自动跑） |
 | `lab/real-ruoyi/` | 真实 RuoYi（Java + MySQL + Maven，源码不入 git，体积过大） |
 | `lab/fp_lab/` | 误报测试语料 |
@@ -174,7 +174,7 @@ python main.py --serve                                  ← 开发回退（RUOYI
 
 ### 4.1 Dockerfile：两阶段构建
 
-[Dockerfile](../../Dockerfile) 结构：
+[Dockerfile](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/Dockerfile) 结构：
 
 ```
 阶段 1 builder  python:3.11-slim + gcc
@@ -195,7 +195,7 @@ python main.py --serve                                  ← 开发回退（RUOYI
 
 ### 4.2 docker-compose：六服务
 
-[docker-compose.yml](../../docker-compose.yml) 定义：
+[docker-compose.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/docker-compose.yml) 定义：
 
 | 服务 | 镜像/构建 | 端口 | 说明 |
 |------|----------|------|------|
@@ -241,7 +241,7 @@ grafana:    "127.0.0.1:3000:3000"
 
 | 工作流 | 触发 | 职责 |
 |--------|------|------|
-| [ci.yml](../../.github/workflows/ci.yml) | push/PR/tag | 主门禁（见下） |
+| [ci.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/ci.yml) | push/PR/tag | 主门禁（见下） |
 | `codeql.yml` | 定时/PR | CodeQL 静态分析 |
 | `security-scan.yml` | 定时/PR | 依赖与漏洞扫描 |
 | `scorecard.yml` | 定时 | OpenSSF Scorecard 供应链评分 |
@@ -305,7 +305,7 @@ diff -u docs/verification-matrix.md /tmp/matrix.md
 
 ### 6.1 规模与配置
 
-`tests/` 约 66 个 `.py`。配置在 [pyproject.toml](../../pyproject.toml)：
+`tests/` 约 66 个 `.py`。配置在 [pyproject.toml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/pyproject.toml)：
 
 ```toml
 [tool.pytest.ini_options]
@@ -318,7 +318,7 @@ addopts = "-q --timeout=30 --timeout-method=thread"
 
 ### 6.2 `conftest.py` 的三个关键设计
 
-[tests/conftest.py](../../tests/conftest.py) 不只是堆 fixture，它解决了两个真实踩过的坑：
+[tests/conftest.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/conftest.py) 不只是堆 fixture，它解决了两个真实踩过的坑：
 
 **① 进程退出安全网（CI 挂起根因）**
 
@@ -375,12 +375,12 @@ RUOYI_SCAN_TEST_VERBOSE=1 pytest        # 需要看插件进度时
 
 | 脚本 | 作用 |
 |------|------|
-| [run_e2e.py](../../scripts/run_e2e.py) | 端到端验收：起靶场 → 扫描 → 断言命中数（`--require-all-confirmed` / `--min-confirmed N` / `--allow-safe`） |
-| [verification_matrix.py](../../scripts/verification_matrix.py) | 生成检出能力矩阵（"插件 × 有无自动化验证证据"），CI 用它做棘轮门禁 |
-| [run_fp_test.py](../../scripts/run_fp_test.py) | 误报测试驱动 |
-| [build_offline_cve.py](../../scripts/build_offline_cve.py) | 构建离线 CVE 库 `data/cve_offline.json` |
-| [export_openapi.py](../../scripts/export_openapi.py) | 导出 OpenAPI schema（供前端/文档使用） |
-| [build_release.sh](../../scripts/build_release.sh) | 发布构建 |
+| [run_e2e.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/run_e2e.py) | 端到端验收：起靶场 → 扫描 → 断言命中数（`--require-all-confirmed` / `--min-confirmed N` / `--allow-safe`） |
+| [verification_matrix.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/verification_matrix.py) | 生成检出能力矩阵（"插件 × 有无自动化验证证据"），CI 用它做棘轮门禁 |
+| [run_fp_test.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/run_fp_test.py) | 误报测试驱动 |
+| [build_offline_cve.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/build_offline_cve.py) | 构建离线 CVE 库 `data/cve_offline.json` |
+| [export_openapi.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/export_openapi.py) | 导出 OpenAPI schema（供前端/文档使用） |
+| [build_release.sh](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/scripts/build_release.sh) | 发布构建 |
 
 ---
 

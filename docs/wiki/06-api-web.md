@@ -2,7 +2,7 @@
 
 > 这一章回答：`--serve` 起来的服务里有什么？鉴权怎么分级？实时进度是怎么推到浏览器的？
 >
-> 相关源码：[api/](../../api) · [web/](../../web) · [cli/serve_runner.py](../../cli/serve_runner.py)
+> 相关源码：[api/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/api) · [web/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/web) · [cli/serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py)
 
 ---
 
@@ -27,7 +27,7 @@ cli/serve_runner.run_serve_mode(args)
 
 ## 2. 应用工厂 `create_app()`
 
-[api/app.py](../../api/app.py) 用工厂函数而非模块级 `app = FastAPI(...)`，理由是**可测试**：每个测试用例可以建一个独立 app，传入不同的 api_key / db_path。
+[api/app.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/app.py) 用工厂函数而非模块级 `app = FastAPI(...)`，理由是**可测试**：每个测试用例可以建一个独立 app，传入不同的 api_key / db_path。
 
 ### 2.1 创建顺序
 
@@ -76,7 +76,7 @@ allow_headers = ["X-API-Key", "Content-Type", "Authorization"]
 
 ## 3. 鉴权：API Key 分级（D11 / E9）
 
-[api/auth.py](../../api/auth.py) 是一个 `BaseHTTPMiddleware`。整个模块的头部注释就写明了三条安全纪律，值得逐条理解。
+[api/auth.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/auth.py) 是一个 `BaseHTTPMiddleware`。整个模块的头部注释就写明了三条安全纪律，值得逐条理解。
 
 ### 3.1 权限矩阵
 
@@ -167,7 +167,7 @@ PUBLIC_PATHS = ("/docs", "/openapi.json", "/redoc",
 
 ### 4.1 为什么 WebSocket 要单独做鉴权
 
-[api/ws/handler.py](../../api/ws/handler.py) 的注释点出了关键：
+[api/ws/handler.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/ws/handler.py) 的注释点出了关键：
 
 > `BaseHTTPMiddleware` **不拦截 WebSocket 请求**，此处单独做与 REST 一致的鉴权。
 
@@ -225,7 +225,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 {"type": "<事件类型>", "data": { ... }, "task_id": "<id>"}
 ```
 
-事件类型常量在 [api/ws/events.py](../../api/ws/events.py)：
+事件类型常量在 [api/ws/events.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/ws/events.py)：
 
 | 事件 | 触发 |
 | --- | --- |
@@ -250,7 +250,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 
 所有路由挂载在 `prefix="/api"` 下。
 
-### 5.1 扫描任务（[api/routes/scan.py](../../api/routes/scan.py)）
+### 5.1 扫描任务（[api/routes/scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/routes/scan.py)）
 
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
@@ -280,7 +280,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 
 创建时**先校验 cron 表达式**（`parse_schedule_expr` 抛 `ValueError` → 400），避免存进调度器后才失败。调度器未初始化时返回 503 而非 500——明确区分"服务没这个能力"与"服务内部错误"。
 
-### 5.3 报告（[api/routes/report.py](../../api/routes/report.py)）
+### 5.3 报告（[api/routes/report.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/routes/report.py)）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -292,7 +292,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 | `GET` | `/api/report/{task_id}/docx` | Word |
 | `GET` | `/api/report/{task_id}/xlsx` | Excel |
 
-### 5.4 插件与系统（[api/routes/plugin.py](../../api/routes/plugin.py) / [system.py](../../api/routes/system.py)）
+### 5.4 插件与系统（[api/routes/plugin.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/routes/plugin.py) / [system.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/routes/system.py)）
 
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
@@ -303,7 +303,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 | `GET` | `/api/system/fingerprint` | read | 在线指纹探测 |
 | `GET` | `/api/system/metrics` | 公开 | Prometheus 指标 |
 
-### 5.5 依赖注入（[api/deps.py](../../api/deps.py)）
+### 5.5 依赖注入（[api/deps.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/deps.py)）
 
 ```python
 def get_registry(request) -> TaskRegistry:      # 从 request.app.state 取
@@ -318,7 +318,7 @@ def get_orchestrator(request) -> ScanOrchestrator:
 
 ## 6. Prometheus 指标（D16）
 
-[api/metrics.py](../../api/metrics.py) 手写 PlainText 格式（不引 `prometheus_client`）：
+[api/metrics.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/metrics.py) 手写 PlainText 格式（不引 `prometheus_client`）：
 
 | 指标 | 类型 | 说明 |
 | --- | --- | --- |
@@ -356,7 +356,7 @@ stats["unknown"] += max(0, total - confirmed)
 
 ## 7. Web 控制台
 
-[web/index.html](../../web/index.html) 是一个 **27 KB 的单文件控制台**，由 `StaticFiles(html=True)` 挂载到 `/`。
+[web/index.html](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/web/index.html) 是一个 **27 KB 的单文件控制台**，由 `StaticFiles(html=True)` 挂载到 `/`。
 
 **单文件、零构建、零 npm** 的选择理由：
 
@@ -368,7 +368,7 @@ stats["unknown"] += max(0, total - confirmed)
 
 它通过 REST 提交任务 + WebSocket 订阅事件流，与服务端保持"零 API 版本耦合"——因为 WS 事件结构就是协议。
 
-Prometheus 抓取配置在 [monitoring/prometheus.yml](../../monitoring/prometheus.yml)，配合 Docker 的 `--profile monitor` 使用（见 [07 章](07-desktop-deploy.md#4-docker-与监控)）。
+Prometheus 抓取配置在 [monitoring/prometheus.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/monitoring/prometheus.yml)，配合 Docker 的 `--profile monitor` 使用（见 [07 章](07-desktop-deploy.md#4-docker-与监控)）。
 
 ---
 
@@ -376,7 +376,7 @@ Prometheus 抓取配置在 [monitoring/prometheus.yml](../../monitoring/promethe
 
 | 存储 | 路径 | 内容 |
 | --- | --- | --- |
-| 任务/事件/定时任务 | `data/tasks.db`（`--db-path` 可改） | [core/storage.py](../../core/storage.py) 的 `Storage` |
+| 任务/事件/定时任务 | `data/tasks.db`（`--db-path` 可改） | [core/storage.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/storage.py) 的 `Storage` |
 | API 报告 | `reports/api/` | 固定目录 |
 
 `TaskRegistry` 是**内存为主**（速度快），`Storage` 负责**落盘与恢复**。启动时 `restore_from_storage()` 把历史任务读回内存，于是：

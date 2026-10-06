@@ -2,7 +2,7 @@
 
 > 这一章回答：`lib/` 的 40 个模块分别解决什么问题？几个关键机制（WAF 绕过、OAST、nuclei 兼容、插件仓库签名、分布式）是怎么实现的？
 >
-> 相关源码：[lib/](../../lib)
+> 相关源码：[lib/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/lib)
 
 ---
 
@@ -29,19 +29,19 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [colors.py](../../lib/colors.py) | ANSI 颜色常量（`GREEN`/`RED`/`YELLOW`/`RESET`/`SEPARATOR`）+ `ok()` / `no()` 语义函数 |
-| [reporter.py](../../lib/reporter.py) | 扫描进度输出桥：`set_quiet()` / `is_quiet()` / `strip_ansi()` / `emit()` |
-| [i18n.py](../../lib/i18n.py) | D23 中英文报告：`get_text` / `localize_report_dict` / `get_csv_header` |
-| [star_cta.py](../../lib/star_cta.py) | 扫描结束的仓库引导（`print_star_cta` / `cta_enabled`） |
+| [colors.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/colors.py) | ANSI 颜色常量（`GREEN`/`RED`/`YELLOW`/`RESET`/`SEPARATOR`）+ `ok()` / `no()` 语义函数 |
+| [reporter.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/reporter.py) | 扫描进度输出桥：`set_quiet()` / `is_quiet()` / `strip_ansi()` / `emit()` |
+| [i18n.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/i18n.py) | D23 中英文报告：`get_text` / `localize_report_dict` / `get_csv_header` |
+| [star_cta.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/star_cta.py) | 扫描结束的仓库引导（`print_star_cta` / `cta_enabled`） |
 
-**`reporter.emit()` 的意义**：CLI 下走 stdout（带颜色），库/服务模式下 `set_quiet(True)` 后改走 logging。这就是 [api/app.py](../../api/app.py) 在 `create_app()` 第一行调 `set_quiet(True)` 的原因——**服务进程的 stdout 不该被插件的进度输出污染**，实时进度已经由 WebSocket 推送。
+**`reporter.emit()` 的意义**：CLI 下走 stdout（带颜色），库/服务模式下 `set_quiet(True)` 后改走 logging。这就是 [api/app.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/app.py) 在 `create_app()` 第一行调 `set_quiet(True)` 的原因——**服务进程的 stdout 不该被插件的进度输出污染**，实时进度已经由 WebSocket 推送。
 
 ### 2.2 判定辅助（2）
 
 | 模块 | 作用 |
 | --- | --- |
-| [matcher.py](../../lib/matcher.py) | **降误报判定工具**：正向关键字 + 负向排除联合判定；12+ 个专用匹配器（`match_sql_error` / `match_file_read_leak` / `match_spring_actuator_env` / `match_heapdump_binary` / `match_jolokia_response` / `match_cloud_function_spel` …） |
-| [soft404.py](../../lib/soft404.py) | 软 404（catch-all 路由）基线探测：`Soft404Baseline` 用 `_digest(body)` 对比，识别"任意路径都返回同一页面"的站点 |
+| [matcher.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/matcher.py) | **降误报判定工具**：正向关键字 + 负向排除联合判定；12+ 个专用匹配器（`match_sql_error` / `match_file_read_leak` / `match_spring_actuator_env` / `match_heapdump_binary` / `match_jolokia_response` / `match_cloud_function_spel` …） |
+| [soft404.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/soft404.py) | 软 404（catch-all 路由）基线探测：`Soft404Baseline` 用 `_digest(body)` 对比，识别"任意路径都返回同一页面"的站点 |
 
 这两个模块直接服务于**误报率**这个核心质量指标。`matcher.match_positive(text, positives, negatives)` 的签名本身就体现了方法论：**只匹配正向关键字不够，必须同时排除负向特征**。
 
@@ -49,10 +49,10 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [crawler.py](../../lib/crawler.py) | D14 主动爬虫：`Crawler` BFS + `LinkExtractor(HTMLParser)` 解析链接；`crawl_with_js_urls()` 额外收集 JS URL |
-| [js_extractor.py](../../lib/js_extractor.py) | D14 JS 端点提取：从 JS 文件提取 API 路径/URL |
-| [subdomain.py](../../lib/subdomain.py) | D14 被动子域名枚举（`verify_dns=False` 默认不爆破，避免对目标造成压力） |
-| [origin_finder.py](../../lib/origin_finder.py) | D7 源站真实 IP 探测：`OriginIPFinder`，标准库 + 免费 API，**零依赖** |
+| [crawler.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/crawler.py) | D14 主动爬虫：`Crawler` BFS + `LinkExtractor(HTMLParser)` 解析链接；`crawl_with_js_urls()` 额外收集 JS URL |
+| [js_extractor.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/js_extractor.py) | D14 JS 端点提取：从 JS 文件提取 API 路径/URL |
+| [subdomain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/subdomain.py) | D14 被动子域名枚举（`verify_dns=False` 默认不爆破，避免对目标造成压力） |
+| [origin_finder.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/origin_finder.py) | D7 源站真实 IP 探测：`OriginIPFinder`，标准库 + 免费 API，**零依赖** |
 
 **子域名枚举默认不做 DNS 爆破**——`enumerate_subdomains(verify_dns=False, use_crtsh=True)` 优先走证书透明日志（crt.sh）。这是"不攻击目标"的自我约束。
 
@@ -60,9 +60,9 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [auth_scan.py](../../lib/auth_scan.py) | D26 认证注入：`parse_auth_arg` / `load_auth_file` / `auto_login` / `apply_auth_to_session` / `parse_login_arg` |
-| [auth_surface.py](../../lib/auth_surface.py) | G1 认证后深度扫描：登录态资产盘点 + 越权矩阵（`AuthSurfaceScanner` / `SurfaceAsset` / `_looks_denied`） |
-| [proxy_pool.py](../../lib/proxy_pool.py) | D13 代理池：`ProxyPool` + `ProxyStats`，轮换 + 健康检查 + 自动剔除 |
+| [auth_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/auth_scan.py) | D26 认证注入：`parse_auth_arg` / `load_auth_file` / `auto_login` / `apply_auth_to_session` / `parse_login_arg` |
+| [auth_surface.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/auth_surface.py) | G1 认证后深度扫描：登录态资产盘点 + 越权矩阵（`AuthSurfaceScanner` / `SurfaceAsset` / `_looks_denied`） |
+| [proxy_pool.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/proxy_pool.py) | D13 代理池：`ProxyPool` + `ProxyStats`，轮换 + 健康检查 + 自动剔除 |
 
 **`auth_surface` 的核心难点在"如何判断拒绝"**：`_looks_denied(status_code, body)` 不只看 403——若依会返回 HTTP 200 但内容为"没有权限"错误码，只看状态码会把拒绝误判成越权成功。
 
@@ -70,15 +70,15 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [logic_scan.py](../../lib/logic_scan.py) | D31 业务逻辑漏洞：`IDORDetector`（越权）/ `PrivilegeEscalationDetector`（提权）/ `ParameterTamperingDetector`（参数篡改）/ `RaceConditionDetector`（竞争条件）/ `LogicScanner` 编排 |
+| [logic_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/logic_scan.py) | D31 业务逻辑漏洞：`IDORDetector`（越权）/ `PrivilegeEscalationDetector`（提权）/ `ParameterTamperingDetector`（参数篡改）/ `RaceConditionDetector`（竞争条件）/ `LogicScanner` 编排 |
 
 ### 2.6 WAF 绕过（3）
 
 | 模块 | 作用 |
 | --- | --- |
-| [waf_bypass.py](../../lib/waf_bypass.py) | D7 WAF 绕过策略库与编排器（见 §3） |
-| [tamper.py](../../lib/tamper.py) | payload 变形器**纯函数**：`space2comment` / `mysql_version_comment` / `randomcase` / `between_replace` / `url_encode` / `double_urlencode` / `hex_encode` / `base64_encode` / `split_for_chunked` / `hpp_duplicate` / `append_nullbyte` / `apply_chain` |
-| [origin_finder.py](../../lib/origin_finder.py) | 源站 IP 探测（见 §2.3） |
+| [waf_bypass.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/waf_bypass.py) | D7 WAF 绕过策略库与编排器（见 §3） |
+| [tamper.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/tamper.py) | payload 变形器**纯函数**：`space2comment` / `mysql_version_comment` / `randomcase` / `between_replace` / `url_encode` / `double_urlencode` / `hex_encode` / `base64_encode` / `split_for_chunked` / `hpp_duplicate` / `append_nullbyte` / `apply_chain` |
+| [origin_finder.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/origin_finder.py) | 源站 IP 探测（见 §2.3） |
 
 **`tamper.py` 刻意为纯函数**（无 IO、无状态）——因此可被单测穷举，也可以在 `apply_chain(payload, *tampers)` 里任意组合。
 
@@ -86,28 +86,28 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [oast.py](../../lib/oast.py) | D30 OAST 带外检测（见 §4） |
-| [component_detect.py](../../lib/component_detect.py) | E2 组件版本检测：fastjson / Spring Boot / Shiro / Nacos / Log4j（见 §5） |
+| [oast.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/oast.py) | D30 OAST 带外检测（见 §4） |
+| [component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) | E2 组件版本检测：fastjson / Spring Boot / Shiro / Nacos / Log4j（见 §5） |
 
 ### 2.8 模板兼容与插件生态（4）
 
 | 模块 | 作用 |
 | --- | --- |
-| [nuclei_loader.py](../../lib/nuclei_loader.py) | E4 nuclei YAML 兼容层（见 §6） |
-| [plugin_sdk.py](../../lib/plugin_sdk.py) | D25 插件 SDK：`generate_plugin` / `init_plugin_file` / `check_plugin` / `list_all_plugins` / `generate_plugin_docs` |
-| [plugin_repo.py](../../lib/plugin_repo.py) | E5 插件模板仓库：导出 / manifest / Ed25519 签名 / 远程更新（见 §7） |
-| [scan_templates.py](../../lib/scan_templates.py) | D19 扫描模板：`ScanTemplate` / `apply_template` / `filter_plugins`（quick/deep/compliance/dengbao） |
+| [nuclei_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/nuclei_loader.py) | E4 nuclei YAML 兼容层（见 §6） |
+| [plugin_sdk.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_sdk.py) | D25 插件 SDK：`generate_plugin` / `init_plugin_file` / `check_plugin` / `list_all_plugins` / `generate_plugin_docs` |
+| [plugin_repo.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_repo.py) | E5 插件模板仓库：导出 / manifest / Ed25519 签名 / 远程更新（见 §7） |
+| [scan_templates.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/scan_templates.py) | D19 扫描模板：`ScanTemplate` / `apply_template` / `filter_plugins`（quick/deep/compliance/dengbao） |
 
 ### 2.9 报告与交付（6）
 
 | 模块 | 作用 |
 | --- | --- |
-| [report_template.py](../../lib/report_template.py) | G5 docx 合规报告模板引擎：占位符替换（`build_scalar_values`）+ 块级填充（`_fill_block_vuln_table` / `_fill_block_vuln_details`） |
-| [remediation.py](../../lib/remediation.py) | G5 整改复测：`build_remediation_report` / `render_remediation_docx` |
-| [diff_scan.py](../../lib/diff_scan.py) | D20 增量差异：`VulnFingerprint` / `DiffEntry` / `DiffReport` / `load_report` |
-| [notifier.py](../../lib/notifier.py) | D21 告警通知（见 §8） |
-| [siem_export.py](../../lib/siem_export.py) | D33 SIEM 集成：`to_ecs_event`/`render_ecs`（ECS）+ `to_cef_event`/`render_cef`（CEF） |
-| [vuln_wiki.py](../../lib/vuln_wiki.py) | D29 漏洞知识库（离线 Wiki 生成） |
+| [report_template.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/report_template.py) | G5 docx 合规报告模板引擎：占位符替换（`build_scalar_values`）+ 块级填充（`_fill_block_vuln_table` / `_fill_block_vuln_details`） |
+| [remediation.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/remediation.py) | G5 整改复测：`build_remediation_report` / `render_remediation_docx` |
+| [diff_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/diff_scan.py) | D20 增量差异：`VulnFingerprint` / `DiffEntry` / `DiffReport` / `load_report` |
+| [notifier.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/notifier.py) | D21 告警通知（见 §8） |
+| [siem_export.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/siem_export.py) | D33 SIEM 集成：`to_ecs_event`/`render_ecs`（ECS）+ `to_cef_event`/`render_cef`（CEF） |
+| [vuln_wiki.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/vuln_wiki.py) | D29 漏洞知识库（离线 Wiki 生成） |
 
 **报告模板引擎有两种替换机制**：标量占位符（`{{target}}`）直接替换段落文本；表格类占位符（`{{vuln_table}}`）则是**在文档中插入真实表格对象**（`_style_table` + `doc.add_table`）。后者是难点——python-docx 里"在一个段落位置插入表格"需要先拿到段落的 XML 位置。
 
@@ -115,34 +115,34 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [cve_sync.py](../../lib/cve_sync.py) | D32 CVE 同步：NVD + GHSA + CNVD 三源查询 + 离线库（见 §9） |
+| [cve_sync.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/cve_sync.py) | D32 CVE 同步：NVD + GHSA + CNVD 三源查询 + 离线库（见 §9） |
 
 ### 2.11 AI 能力（4）
 
 | 模块 | 作用 |
 | --- | --- |
-| [ai_generator.py](../../lib/ai_generator.py) | E7 AI 生成插件（见 §10） |
-| [ai_validate.py](../../lib/ai_validate.py) | G3 生成即验证（见 §10） |
-| [ai_triage.py](../../lib/ai_triage.py) | G3 UNKNOWN 智能降噪：`cluster_unknowns` / `triage_unknowns` |
-| [ai_report.py](../../lib/ai_report.py) | E8 AI 报告解读：`generate_analysis` / `_template_summary`（无 Key 降级模板） |
+| [ai_generator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ai_generator.py) | E7 AI 生成插件（见 §10） |
+| [ai_validate.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ai_validate.py) | G3 生成即验证（见 §10） |
+| [ai_triage.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ai_triage.py) | G3 UNKNOWN 智能降噪：`cluster_unknowns` / `triage_unknowns` |
+| [ai_report.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ai_report.py) | E8 AI 报告解读：`generate_analysis` / `_template_summary`（无 Key 降级模板） |
 
 ### 2.12 引擎与集成（5）
 
 | 模块 | 作用 |
 | --- | --- |
-| [async_engine.py](../../lib/async_engine.py) | D34 异步扫描引擎：`AsyncScanEngine` / `scan_batch_targets` / `scan_plugins_concurrent` / `benchmark_sync_vs_async` |
-| [distributed.py](../../lib/distributed.py) | D36 分布式任务队列（见 §11） |
-| [cache.py](../../lib/cache.py) | D37 结果缓存：`generate_cache_key` / `CacheStorage` / `ScanCache` / `cached_scan` 装饰器 |
-| [ci_runner.py](../../lib/ci_runner.py) | D28 CI/CD 集成：`should_fail_ci` / `get_ci_exit_code` / `generate_ci_config`（github/gitlab/jenkins） |
-| [scheduler.py](../../lib/scheduler.py) | E9 定时扫描：`parse_schedule_expr` / `ScanScheduler` |
-| [config_loader.py](../../lib/config_loader.py) | D27 YAML 配置：`load_yaml_config` / `normalize_config_keys` / `apply_config_to_args` |
-| [web_ui.py](../../lib/web_ui.py) | D35 Web UI 生成：`generate_web_ui`（单文件控制台） |
+| [async_engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/async_engine.py) | D34 异步扫描引擎：`AsyncScanEngine` / `scan_batch_targets` / `scan_plugins_concurrent` / `benchmark_sync_vs_async` |
+| [distributed.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/distributed.py) | D36 分布式任务队列（见 §11） |
+| [cache.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/cache.py) | D37 结果缓存：`generate_cache_key` / `CacheStorage` / `ScanCache` / `cached_scan` 装饰器 |
+| [ci_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ci_runner.py) | D28 CI/CD 集成：`should_fail_ci` / `get_ci_exit_code` / `generate_ci_config`（github/gitlab/jenkins） |
+| [scheduler.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/scheduler.py) | E9 定时扫描：`parse_schedule_expr` / `ScanScheduler` |
+| [config_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/config_loader.py) | D27 YAML 配置：`load_yaml_config` / `normalize_config_keys` / `apply_config_to_args` |
+| [web_ui.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/web_ui.py) | D35 Web UI 生成：`generate_web_ui`（单文件控制台） |
 
 ---
 
 ## 3. 关键机制一：WAF 绕过（D7）
 
-[waf_bypass.py](../../lib/waf_bypass.py) 是全项目最长的 `lib` 模块之一（550+ 行），结构是一个**策略模式 + 统计追踪 + 会话代理**的三件套。
+[waf_bypass.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/waf_bypass.py) 是全项目最长的 `lib` 模块之一（550+ 行），结构是一个**策略模式 + 统计追踪 + 会话代理**的三件套。
 
 ### 3.1 11 个绕过策略
 
@@ -178,13 +178,13 @@
 
 `BypassSession` 是 `SessionManager` 的包装（应用传输层变换），`WafBypassCoordinator` 是顶层编排：拿 `waf_type` + `vuln_type` → 选策略 → 包 session → 调插件的 `verify_with_bypass()`。
 
-**引擎侧只看到一个 `waf_bypass_coordinator` 对象**，不知道 11 个策略的存在。这是 [core/engine.py](../../core/engine.py) 能保持 132 行的原因。
+**引擎侧只看到一个 `waf_bypass_coordinator` 对象**，不知道 11 个策略的存在。这是 [core/engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/engine.py) 能保持 132 行的原因。
 
 ---
 
 ## 4. 关键机制二：OAST 带外检测（D30）
 
-[oast.py](../../lib/oast.py) 用标准库实现了一个完整的带外回调服务：
+[oast.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/oast.py) 用标准库实现了一个完整的带外回调服务：
 
 | 组件 | 作用 |
 | --- | --- |
@@ -205,7 +205,7 @@
 
 ## 5. 关键机制三：组件版本检测（E2）
 
-[component_detect.py](../../lib/component_detect.py) 覆盖 5 个组件，每个一个 `detect_*` 函数：
+[component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) 覆盖 5 个组件，每个一个 `detect_*` 函数：
 
 ```
 detect_fastjson / detect_spring_boot / detect_shiro / detect_nacos / detect_log4j
@@ -229,7 +229,7 @@ to_scan_result(ComponentVersionResult)   # 转成标准 ScanResult（category='c
 
 ## 6. 关键机制四：nuclei YAML 兼容层（E4）
 
-[nuclei_loader.py](../../lib/nuclei_loader.py) 让项目能直接加载 nuclei 社区的 YAML 模板。
+[nuclei_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/nuclei_loader.py) 让项目能直接加载 nuclei 社区的 YAML 模板。
 
 ### 6.1 数据模型
 
@@ -269,7 +269,7 @@ nuclei 的 matcher 支持 `dsl:` 表达式（如 `status_code == 200 && contains
 
 ## 7. 关键机制五：插件仓库与签名（E5）
 
-[plugin_repo.py](../../lib/plugin_repo.py) 是插件生态的供应链层。
+[plugin_repo.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_repo.py) 是插件生态的供应链层。
 
 ### 7.1 函数族
 
@@ -315,7 +315,7 @@ def _safe_join(base, rel)         # 校验后再拼接
 
 ## 8. 告警通知（D21）
 
-[notifier.py](../../lib/notifier.py) 支持 5 种通道：
+[notifier.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/notifier.py) 支持 5 种通道：
 
 | 通道 | 函数 | 协议 |
 | --- | --- | --- |
@@ -333,7 +333,7 @@ def _safe_join(base, rel)         # 校验后再拼接
 
 ## 9. CVE 数据同步（D32）
 
-[cve_sync.py](../../lib/cve_sync.py) 是四层数据源 + 缓存的组合：
+[cve_sync.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/cve_sync.py) 是四层数据源 + 缓存的组合：
 
 ```
 lookup_cve(cve_id, use_cache=True, api_key=None)
@@ -420,7 +420,7 @@ triage_unknowns(...)            # 每组分流
 
 ## 11. 分布式扫描（D36）
 
-[distributed.py](../../lib/distributed.py) 是一个**基于 Redis 的极简分布式框架**：
+[distributed.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/distributed.py) 是一个**基于 Redis 的极简分布式框架**：
 
 | 类 | 角色 |
 | --- | --- |
@@ -489,7 +489,7 @@ parse_schedule_expr(expr)   # 解析 cron 5 段式 或 every:<秒>
 class ScanScheduler:        # start() / shutdown() / add_job()
 ```
 
-被 [api/app.py](../../api/app.py) 的 `lifespan` 在 startup 时 `start()`、shutdown 时 `shutdown()`。加载失败则降级为无调度模式（`scheduler = None`），不影响主服务。
+被 [api/app.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/app.py) 的 `lifespan` 在 startup 时 `start()`、shutdown 时 `shutdown()`。加载失败则降级为无调度模式（`scheduler = None`），不影响主服务。
 
 ### 13.2 `config_loader.py`（D27）
 

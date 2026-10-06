@@ -2,7 +2,7 @@
 
 > 这一章回答：一条扫描请求进来之后，`core/` 里的 24 个模块是怎么协作的？每个模块的边界在哪里？
 >
-> 相关源码：[core/](../../core) · [common/](../../common) · [config/](../../config)
+> 相关源码：[core/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/core) · [common/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/common) · [config/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/config)
 
 ---
 
@@ -10,7 +10,7 @@
 
 `core/` 是**与 CLI/API 无关的纯引擎层**：它不 `print`、不读 `argparse`、不碰 `sys.exit`。CLI 与 Web API 都通过同一个 `ScanOrchestrator` 驱动它，差异只体现在事件回调的落点上。
 
-这条边界的价值在 [orchestrator.py](../../core/orchestrator.py) 的头部注释里写得很明确：
+这条边界的价值在 [orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py) 的头部注释里写得很明确：
 
 ```
 架构约束（红线）：
@@ -32,59 +32,59 @@
 
 | 模块 | 职责 | 关键符号 |
 | --- | --- | --- |
-| [orchestrator.py](../../core/orchestrator.py) | 扫描编排器：CLI 与 API 共用主流程 | `ScanOrchestrator` `ScanRequest` `ScanTask` `_DaemonThreadPoolExecutor` |
-| [engine.py](../../core/engine.py) | 并发编排 + 令牌桶限速；单插件执行序列 | `ScanEngine` |
-| [loader.py](../../core/loader.py) | 插件动态发现与加载（内置/外部/entry_points） | `load_plugins` `load_external_plugins` `discover_plugin_packages` `load_entry_point_plugins` |
-| [chain.py](../../core/chain.py) | 漏洞利用链编排（DAG） | `ChainDef` `ChainStep` `ChainEdge` `ChainContext` `ChainEngine` `ChainResult` |
+| [orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py) | 扫描编排器：CLI 与 API 共用主流程 | `ScanOrchestrator` `ScanRequest` `ScanTask` `_DaemonThreadPoolExecutor` |
+| [engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/engine.py) | 并发编排 + 令牌桶限速；单插件执行序列 | `ScanEngine` |
+| [loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/loader.py) | 插件动态发现与加载（内置/外部/entry_points） | `load_plugins` `load_external_plugins` `discover_plugin_packages` `load_entry_point_plugins` |
+| [chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/chain.py) | 漏洞利用链编排（DAG） | `ChainDef` `ChainStep` `ChainEdge` `ChainContext` `ChainEngine` `ChainResult` |
 
 ### 2.2 网络与会话
 
 | 模块 | 职责 | 关键符号 |
 | --- | --- | --- |
-| [session.py](../../core/session.py) | 会话封装：Cookie/代理/重试/连接池/TLS/超时熔断 | `SessionManager` `TargetUnresponsiveError` `_HostBreaker` `is_timeout_error` |
-| [http.py](../../core/http.py) | URL 归一化与可达性预检 | `normalize_target` `join_url` `host_of` `split_target` `probe_reachable` `probe_http_responsive` |
-| [portscan.py](../../core/portscan.py) | 端口扫描 + Banner 识别（纯 socket，无 nmap 依赖） | `PortScanner` `PortResult` |
-| [proxy_server.py](../../core/proxy_server.py) | HTTP/HTTPS 代理（被动扫描模式） | — |
-| [captcha_solver.py](../../core/captcha_solver.py) | 验证码识别（D3） | — |
-| [auth_chain.py](../../core/auth_chain.py) | 若依登录链编排（D1） | — |
+| [session.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/session.py) | 会话封装：Cookie/代理/重试/连接池/TLS/超时熔断 | `SessionManager` `TargetUnresponsiveError` `_HostBreaker` `is_timeout_error` |
+| [http.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/http.py) | URL 归一化与可达性预检 | `normalize_target` `join_url` `host_of` `split_target` `probe_reachable` `probe_http_responsive` |
+| [portscan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/portscan.py) | 端口扫描 + Banner 识别（纯 socket，无 nmap 依赖） | `PortScanner` `PortResult` |
+| [proxy_server.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/proxy_server.py) | HTTP/HTTPS 代理（被动扫描模式） | — |
+| [captcha_solver.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/captcha_solver.py) | 验证码识别（D3） | — |
+| [auth_chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/auth_chain.py) | 若依登录链编排（D1） | — |
 
 ### 2.3 识别与路由
 
 | 模块 | 职责 | 关键符号 |
 | --- | --- | --- |
-| [fingerprint.py](../../core/fingerprint.py) | 指纹识别接口 + 多 CMS 交叉判定 | `Fingerprint` `FeatureBasedFingerprint` `RuoyiFingerprint` `detect_cms` `detect_waf` `detect_variant` |
-| [fingerprint_features.py](../../core/fingerprint_features.py) | 指纹特征库（数据驱动） | `CMS_FEATURES` `VARIANT_FEATURES` `get_feature` `list_cms` `list_variants` |
-| [waf_features.py](../../core/waf_features.py) | WAF 指纹特征库 | `get_waf_names` `is_waf_blocked` |
-| [ruoyi_versions.py](../../core/ruoyi_versions.py) | 若依版本指纹库与区间判定 | `extract_version` `detect_version` `version_in_range` `build_version_matrix` `get_variant_api_prefixes` |
-| [router.py](../../core/router.py) | 指纹 → 插件包路由 | `Router.candidates/resolve/resolve_by_name` |
-| [cache.py](../../core/cache.py) | 指纹识别请求级缓存 | `FingerprintCache` |
+| [fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/fingerprint.py) | 指纹识别接口 + 多 CMS 交叉判定 | `Fingerprint` `FeatureBasedFingerprint` `RuoyiFingerprint` `detect_cms` `detect_waf` `detect_variant` |
+| [fingerprint_features.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/fingerprint_features.py) | 指纹特征库（数据驱动） | `CMS_FEATURES` `VARIANT_FEATURES` `get_feature` `list_cms` `list_variants` |
+| [waf_features.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/waf_features.py) | WAF 指纹特征库 | `get_waf_names` `is_waf_blocked` |
+| [ruoyi_versions.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/ruoyi_versions.py) | 若依版本指纹库与区间判定 | `extract_version` `detect_version` `version_in_range` `build_version_matrix` `get_variant_api_prefixes` |
+| [router.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/router.py) | 指纹 → 插件包路由 | `Router.candidates/resolve/resolve_by_name` |
+| [cache.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/cache.py) | 指纹识别请求级缓存 | `FingerprintCache` |
 
 ### 2.4 结果处理
 
 | 模块 | 职责 | 关键符号 |
 | --- | --- | --- |
-| [dedup.py](../../core/dedup.py) | 结果去重聚合 | `fingerprint` `aggregate` `DedupReport` `AggregatedVuln` |
-| [report.py](../../core/report.py) | 报告渲染（HTML/JSON/CSV，纯标准库） | `ReportBuilder` `BatchReport` |
-| [report_pdf.py](../../core/report_pdf.py) | PDF 报告（reportlab） | — |
-| [report_docx.py](../../core/report_docx.py) | Word 报告（python-docx） | — |
-| [report_xlsx.py](../../core/report_xlsx.py) | Excel 报告（openpyxl） | — |
-| [report_sarif.py](../../core/report_sarif.py) | SARIF 2.1.0 报告（D22） | — |
+| [dedup.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/dedup.py) | 结果去重聚合 | `fingerprint` `aggregate` `DedupReport` `AggregatedVuln` |
+| [report.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report.py) | 报告渲染（HTML/JSON/CSV，纯标准库） | `ReportBuilder` `BatchReport` |
+| [report_pdf.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report_pdf.py) | PDF 报告（reportlab） | — |
+| [report_docx.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report_docx.py) | Word 报告（python-docx） | — |
+| [report_xlsx.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report_xlsx.py) | Excel 报告（openpyxl） | — |
+| [report_sarif.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report_sarif.py) | SARIF 2.1.0 报告（D22） | — |
 
 ### 2.5 服务端支撑
 
 | 模块 | 职责 | 关键符号 |
 | --- | --- | --- |
-| [task_registry.py](../../core/task_registry.py) | 任务状态管理 + WebSocket 推送桥 | `TaskRegistry` `TaskRecord` |
-| [storage.py](../../core/storage.py) | SQLite 持久层：任务历史 + 事件 + 定时任务 | `Storage` `DEFAULT_DB_PATH` |
+| [task_registry.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/task_registry.py) | 任务状态管理 + WebSocket 推送桥 | `TaskRegistry` `TaskRecord` |
+| [storage.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/storage.py) | SQLite 持久层：任务历史 + 事件 + 定时任务 | `Storage` `DEFAULT_DB_PATH` |
 
 ### 2.6 共享基础与配置
 
 | 路径 | 职责 |
 | --- | --- |
-| [common/models.py](../../common/models.py) | `ScanResult` / `FingerprintResult` / `ComponentVersionResult` + 三态与严重度常量 |
-| [common/logger.py](../../common/logger.py) | 项目级日志（`get_logger` / `setup_logging` / `set_quiet`） |
-| [common/console.py](../../common/console.py) | `force_utf8_stdio()` Windows 代码页兜底 |
-| [config/settings.py](../../config/settings.py) | 全局配置：超时/线程/限速/TLS/字典/报告目录/凭据 |
+| [common/models.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/common/models.py) | `ScanResult` / `FingerprintResult` / `ComponentVersionResult` + 三态与严重度常量 |
+| [common/logger.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/common/logger.py) | 项目级日志（`get_logger` / `setup_logging` / `set_quiet`） |
+| [common/console.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/common/console.py) | `force_utf8_stdio()` Windows 代码页兜底 |
+| [config/settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py) | 全局配置：超时/线程/限速/TLS/字典/报告目录/凭据 |
 
 ---
 
@@ -184,7 +184,7 @@ version_matrix = build_version_matrix(fp_result.version, router.candidates(fp_re
 
 ## 4. `ScanEngine`：单插件执行序列
 
-[core/engine.py](../../core/engine.py) 只有 132 行，是并发与限速的唯一实现处。
+[core/engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/engine.py) 只有 132 行，是并发与限速的唯一实现处。
 
 ### 4.1 构造函数
 
@@ -230,7 +230,7 @@ if wait > 0:
 
 ## 5. `SessionManager`：网络层的所有策略集中地
 
-[core/session.py](../../core/session.py) 承载 4 类策略，是唯一被允许直接构造 `requests` 请求的地方：
+[core/session.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/session.py) 承载 4 类策略，是唯一被允许直接构造 `requests` 请求的地方：
 
 ### 5.1 连接池与重试
 
@@ -272,7 +272,7 @@ TIMEOUT_BREAKER_THRESHOLD = 5    # config/settings.py
 
 ## 6. 指纹识别：数据驱动 + 两级防误判
 
-[core/fingerprint.py](../../core/fingerprint.py) 的设计核心是**把知识放进数据文件、把逻辑放进通用引擎**。
+[core/fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/fingerprint.py) 的设计核心是**把知识放进数据文件、把逻辑放进通用引擎**。
 
 ### 6.1 加权打分
 
@@ -336,7 +336,7 @@ if best.cms == "ruoyi":
 
 ## 7. `Router`：指纹 → 插件包
 
-[core/router.py](../../core/router.py) 只有 83 行，但它是**插件体系的入口闸门**。
+[core/router.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/router.py) 只有 83 行，但它是**插件体系的入口闸门**。
 
 ```python
 mapping = {
@@ -377,7 +377,7 @@ sha1(endpoint | vuln_type | payload_class)   → 指纹
 
 ## 9. `chain.py`：DAG 利用链
 
-[core/chain.py](../../core/chain.py) 是一个**小型工作流引擎**（约 400 行），实现拓扑执行 + 条件分支 + 失败策略。
+[core/chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/chain.py) 是一个**小型工作流引擎**（约 400 行），实现拓扑执行 + 条件分支 + 失败策略。
 
 | 类 | 职责 |
 | --- | --- |
@@ -392,7 +392,7 @@ sha1(endpoint | vuln_type | payload_class)   → 指纹
 
 1. **环检测在 `validate()` 里做**，不在执行时。链定义是静态资产，错误应该在加载期暴露。
 2. **`on_fail` 三值语义**：`abort`（整链终止）/ `continue`（跳过依赖此步的支线）/ —— 由 `_propagate_abort()` 统一传播。
-3. **`outputs` 用前缀区分敏感度**：`secret:` 前缀 → 凭证类，脱敏存储；`extra:` → 附加事实，明文保留。前缀约定见 [chains/ruoyi_sql_to_rce.py](../../chains/ruoyi_sql_to_rce.py)。
+3. **`outputs` 用前缀区分敏感度**：`secret:` 前缀 → 凭证类，脱敏存储；`extra:` → 附加事实，明文保留。前缀约定见 [chains/ruoyi_sql_to_rce.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/chains/ruoyi_sql_to_rce.py)。
 
 细节见 [04 章 · 插件与利用链](04-plugins-chains.md)。
 
@@ -400,7 +400,7 @@ sha1(endpoint | vuln_type | payload_class)   → 指纹
 
 ## 10. 报告层
 
-### 10.1 `ReportBuilder`（[core/report.py](../../core/report.py)）
+### 10.1 `ReportBuilder`（[core/report.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/report.py)）
 
 | 方法 | 作用 |
 | --- | --- |
@@ -426,7 +426,7 @@ sha1(endpoint | vuln_type | payload_class)   → 指纹
 
 ## 11. 服务端支撑两个模块
 
-### 11.1 `TaskRegistry`（[core/task_registry.py](../../core/task_registry.py)）
+### 11.1 `TaskRegistry`（[core/task_registry.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/task_registry.py)）
 
 内存中的任务表 + WebSocket 推送桥。
 
@@ -441,7 +441,7 @@ sha1(endpoint | vuln_type | payload_class)   → 指纹
 
 `bind_loop` 的存在说明了架构约束：扫描线程是普通线程，而 WS 推送必须在 asyncio loop 上执行，因此需要 `loop.call_soon_threadsafe` 这类桥接。绑定时机在 FastAPI 的 `lifespan` startup。
 
-### 11.2 `Storage`（[core/storage.py](../../core/storage.py)）
+### 11.2 `Storage`（[core/storage.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/storage.py)）
 
 SQLite 持久层，三张逻辑表（任务 / 事件 / 定时任务）：
 

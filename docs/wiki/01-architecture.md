@@ -63,10 +63,10 @@
 
 | 对象 | 定义位置 | 作用 |
 |------|----------|------|
-| `ScanResult` | [common/models.py](../../common/models.py) | **全局结果契约**。含 `kind/name/severity/status/url/evidence/extra/fix/fix_detail/reproduce/cve/cvss_score/cvss_vector/compliance` |
+| `ScanResult` | [common/models.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/common/models.py) | **全局结果契约**。含 `kind/name/severity/status/url/evidence/extra/fix/fix_detail/reproduce/cve/cvss_score/cvss_vector/compliance` |
 | `FingerprintResult` | 同上 | 指纹识别结果：`cms/version/confidence/matched/variant` |
 | `ComponentVersionResult` | 同上 | 组件版本检测结果（`lib/component_detect.py` 产出） |
-| `ScanRequest` | [core/orchestrator.py](../../core/orchestrator.py) | **跨 CLI/API 的输入契约**，封装一次扫描的全部参数 |
+| `ScanRequest` | [core/orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py) | **跨 CLI/API 的输入契约**，封装一次扫描的全部参数 |
 | `ScanTask` | 同上 | 任务句柄：状态、结果、计时、报告路径，供 `TaskRegistry` 管理 |
 
 > 设计要点：`ScanRequest` 与 `ScanResult` 分别是系统的**输入契约**与**输出契约**。CLI 与 API 都只构造 `ScanRequest`，这让「HTTP 提交的扫描」和「命令行扫描」走完全相同的代码路径。
@@ -79,13 +79,13 @@ STATUS_SAFE      = "SAFE"       # 确认不存在
 STATUS_UNKNOWN   = "UNKNOWN"    # 无法判定（网络异常等）
 ```
 
-`ScanResult.kind` 与 `status` 是**联动**的：只有 `CONFIRMED` 才能是 `kind="vuln"`，其余一律 `kind="info"`。这个归一化在 [plugins/base.py](../../plugins/base.py) 的 `PluginBase.enrich()` 中强制执行，防止 `SAFE` 结果被下游报告当成漏洞渲染。
+`ScanResult.kind` 与 `status` 是**联动**的：只有 `CONFIRMED` 才能是 `kind="vuln"`，其余一律 `kind="info"`。这个归一化在 [plugins/base.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/plugins/base.py) 的 `PluginBase.enrich()` 中强制执行，防止 `SAFE` 结果被下游报告当成漏洞渲染。
 
 ---
 
 ## 三、一次扫描的完整流程
 
-`ScanOrchestrator._run()`（[core/orchestrator.py](../../core/orchestrator.py)）是全局主流程，共 9 步：
+`ScanOrchestrator._run()`（[core/orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py)）是全局主流程，共 9 步：
 
 ```
 run_sync(req, on_event)                      ← CLI 入口
@@ -113,7 +113,7 @@ submit(req) → TaskRegistry.register()        ← API 入口
 
 ### 3.1 引擎内部单插件执行序列
 
-`ScanEngine._exec()`（[core/engine.py](../../core/engine.py)）对每个插件类做 5 件事：
+`ScanEngine._exec()`（[core/engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/engine.py)）对每个插件类做 5 件事：
 
 ```
 1. _rate_limit()            ← 令牌桶限速（sleep 在锁外，避免并发退化）
@@ -135,7 +135,7 @@ submit(req) → TaskRegistry.register()        ← API 入口
 | CLI | `on_event` 回调 | `cli/runner.py:_cli_event_handler()` 把事件渲染成彩色终端输出 |
 | API | `registry.notify()` | 推送到 WebSocket 订阅队列，并落 SQLite 历史 |
 
-事件类型（[api/ws/events.py](../../api/ws/events.py)）：`status`、`complete`、`fingerprint`、`waf`、`portscan`、`category_start`、`result`、`progress`、`report`、`error`。
+事件类型（[api/ws/events.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/ws/events.py)）：`status`、`complete`、`fingerprint`、`waf`、`portscan`、`category_start`、`result`、`progress`、`report`、`error`。
 编排层额外发出：`recon`、`recon_start`、`recon_error`、`auth`、`template`、`component`、`waf_bypass`、`plugin_fallback`、`plugins_loaded`、`nuclei_error`。
 
 > **注意**：`submit()` 调用 `_run(task, None)` 时 `on_event` 传 `None`。原因是事件推送已统一走 `_emit` 内的 `registry.notify`，若再传回调会导致每个事件被推送两次（代码中有明确注释）。

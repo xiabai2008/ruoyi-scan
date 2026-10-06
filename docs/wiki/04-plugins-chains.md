@@ -2,13 +2,13 @@
 
 > 这一章回答：一个漏洞是怎么变成"一个插件"的？插件从哪来、怎么被选中、结果怎么变成报告里的一行？
 >
-> 相关源码：[plugins/](../../plugins) · [chains/](../../chains) · [data/](../../data)
+> 相关源码：[plugins/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/plugins) · [chains/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/chains) · [data/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/data)
 
 ---
 
 ## 1. 设计纲领：每漏洞一插件
 
-[plugins/base.py](../../plugins/base.py) 的开头直接引用了设计文档的纲领：
+[plugins/base.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/plugins/base.py) 的开头直接引用了设计文档的纲领：
 
 ```
 # 插件抽象基类（agents.md §5：每漏洞一插件，继承 PluginBase）
@@ -128,11 +128,11 @@ if result.status != STATUS_CONFIRMED and result.kind == "vuln":
 
 | # | 路径 | 入口函数 | 说明 |
 | --- | --- | --- | --- |
-| 1 | 内置包 `plugin_list` | [`load_plugins()`](../../core/loader.py) | 每个包 `__init__.py` 显式登记；**顺序 = 执行优先级** |
-| 2 | 外部路径 | [`load_external_plugins()`](../../core/loader.py) | `--plugin-path` 目录或 `.py` 文件，模块名前缀 `_external_plugin_` 隔离 |
-| 3 | 用户目录 | [`load_user_installed_plugins()`](../../lib/plugin_repo.py) | `~/.ruoyi-scan/plugins/`（由 `--plugin-update` 安装） |
-| 4 | entry_points | [`load_entry_point_plugins()`](../../core/loader.py) | `ruoyi_scan.plugins` 组，pip 安装即发现 |
-| 5 | nuclei YAML | [`load_nuclei_templates()`](../../lib/nuclei_loader.py) | E4 兼容层，把 YAML 模板包装成插件类 |
+| 1 | 内置包 `plugin_list` | [`load_plugins()`](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/loader.py) | 每个包 `__init__.py` 显式登记；**顺序 = 执行优先级** |
+| 2 | 外部路径 | [`load_external_plugins()`](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/loader.py) | `--plugin-path` 目录或 `.py` 文件，模块名前缀 `_external_plugin_` 隔离 |
+| 3 | 用户目录 | [`load_user_installed_plugins()`](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_repo.py) | `~/.ruoyi-scan/plugins/`（由 `--plugin-update` 安装） |
+| 4 | entry_points | [`load_entry_point_plugins()`](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/loader.py) | `ruoyi_scan.plugins` 组，pip 安装即发现 |
+| 5 | nuclei YAML | [`load_nuclei_templates()`](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/nuclei_loader.py) | E4 兼容层，把 YAML 模板包装成插件类 |
 
 另外还有一个独立的 `discover_plugin_packages()`：遍历 `plugins/` 下所有子包（**排除 `chain`**，因为链步骤插件不参与常规扫描）。
 
@@ -214,7 +214,7 @@ plugin_list = [
 | 10 | `DirListing` | `dir_listing.py` | 目录列表 |
 | 11 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
 
-> ⚠️ **`shiro_rememberme.py` 存在但未登记进 `plugin_list`**——包内有 12 个 `.py`，只登记了 11 个。该文件的探测思路被 [lib/component_detect.py](../../lib/component_detect.py) 的 Shiro 组件版本检测复用。这是文档漂移清单中的一项（见 [README](README.md#文档与实现不一致清单)）。
+> ⚠️ **`shiro_rememberme.py` 存在但未登记进 `plugin_list`**——包内有 12 个 `.py`，只登记了 11 个。该文件的探测思路被 [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) 的 Shiro 组件版本检测复用。这是文档漂移清单中的一项（见 [README](README.md#文档与实现不一致清单)）。
 
 ### 4.4 `plugins/jeecgboot` — 8 个
 
@@ -229,7 +229,7 @@ plugin_list = [
 | 7 | `JeecgDictUnauth` | `dict_unauth.py` | 字典越权（medium） |
 | 8 | `JeecgDefaultPassword` | `default_password.py` | 默认口令（brute） |
 
-这个包的战略意义写在 [plugins/jeecgboot/__init__.py](../../plugins/jeecgboot/__init__.py) 的注释里：
+这个包的战略意义写在 [plugins/jeecgboot/__init__.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/plugins/jeecgboot/__init__.py) 的注释里：
 
 > JeecgBoot 插件包（F5：第一个拓展框架）
 > 定位：证明基建通用性——指纹/路由/三态/报告零改动接入新框架
@@ -249,7 +249,7 @@ plugin_list = [
 > **插件数量有三个口径，勿混用**：
 > - **57** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含未登记的 `shiro_rememberme.py` 与 `plugins/chain/` 的 3 个链步骤文件）；
 > - **53** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
-> - **51** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](../../tests/test_fingerprint.py) 断言一致）。
+> - **51** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
 >
 > README 原先的「51 / 若依 18」即第三种口径，已统一为 53 / 20 并保留 Plus 专属说明。详见 [README 的文档漂移清单](README.md#五文档与实现的一致性说明)。
 
@@ -257,7 +257,7 @@ plugin_list = [
 
 ## 5. 路由：指纹怎么变成插件包
 
-[core/router.py](../../core/router.py) 的映射表：
+[core/router.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/router.py) 的映射表：
 
 ```python
 mapping = {
@@ -290,7 +290,7 @@ mapping = {
 
 ### 6.2 注册表与惰性导入
 
-[chains/registry.py](../../chains/registry.py) 用 `name → (模块路径, 变量名)` 的字典登记三条链：
+[chains/registry.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/chains/registry.py) 用 `name → (模块路径, 变量名)` 的字典登记三条链：
 
 ```python
 _CHAIN_REGISTRY = {
@@ -328,7 +328,7 @@ CHAIN = ChainDef(...)
 
 ### 6.5 逐行解剖 `ruoyi_sql_to_rce`
 
-[chains/ruoyi_sql_to_rce.py](../../chains/ruoyi_sql_to_rce.py)：
+[chains/ruoyi_sql_to_rce.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/chains/ruoyi_sql_to_rce.py)：
 
 ```
 步骤 1: sql_inject     on_fail=abort      ← 链路起点，失败则整链无意义
@@ -375,7 +375,7 @@ outputs={"db_password": "secret:db_password",                           # 凭证
 
 ### 6.7 `ChainEngine` 执行机制
 
-[core/chain.py](../../core/chain.py) 的执行流程：
+[core/chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/chain.py) 的执行流程：
 
 ```
 _topological_sort()       # 拓扑排序（ChainDef.validate() 已在加载期做过环检测）
@@ -411,7 +411,7 @@ _aggregate_status()       # 聚合链状态 → ChainResult
 | `scan_cache.db` | 20 KB | D37 结果缓存（SQLite） |
 | `tasks.db` | 112 KB | D11 Web API 任务持久化（SQLite） |
 
-字典分级由 [config/settings.py](../../config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步生效（见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)）。
+字典分级由 [config/settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步生效（见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)）。
 
 > `scan_cache.db` / `tasks.db` 是**运行时产物**，不应随仓库分发（已在 `.gitignore` 中）。
 

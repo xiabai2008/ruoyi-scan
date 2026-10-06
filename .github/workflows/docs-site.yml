@@ -47,7 +47,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install mkdocs-material
-        run: pip install mkdocs-material mkdocs-minify-plugin
+        # 版本固定：与 ci.yml 固定 ruff/mypy 同理——mkdocs strict 模式下，链接校验
+        # 的严格程度随版本演进（新增校验项会静默把原本通过的文档变成构建失败）。
+        # 升级时请同步跑一次 `mkdocs build --strict` 验证后再改此处。
+        run: pip install "mkdocs==1.6.1" "mkdocs-material==9.7.7" "mkdocs-minify-plugin==0.8.0"
 
       - name: Build site
         run: mkdocs build --strict --site-dir site --verbose
