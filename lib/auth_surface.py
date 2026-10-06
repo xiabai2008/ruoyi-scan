@@ -452,9 +452,7 @@ def _login(target: str, session, username: str, password: str) -> Tuple[bool, st
     return RuoYiAuthChain(target, session, username=username, password=password).login()
 
 
-def run_auth_surface_mode(
-    args, target: str, variant: str = ""
-) -> Tuple[List[SurfaceAsset], List[LogicVuln], str]:
+def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[SurfaceAsset], List[LogicVuln], str]:
     """认证后深度扫描模式入口（--auth-surface）
 
     登录编排：高权凭证取 --auth-login（user:pass，双路自动登录）；
