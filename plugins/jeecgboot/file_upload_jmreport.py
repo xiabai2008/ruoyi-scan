@@ -2,9 +2,29 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import parse_json_body
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+
+def _is_upload_success_json(resp):
+    """判定响应是否为上传成功 JSON（结构成立，而非仅含 url/fileName 泛词）
+
+    正向证据要求：
+    - 能解析为 JSON 对象（失败 → 未命中）
+    - fileName 为非空字符串
+    - url 为非空字符串 或 code == 200
+    """
+    body = parse_json_body(resp)
+    if not isinstance(body, dict):
+        return False
+    file_name = body.get("fileName")
+    if not isinstance(file_name, str) or not file_name.strip():
+        return False
+    url = body.get("url")
+    has_url = isinstance(url, str) and url.strip()
+    code_ok = body.get("code") == 200
+    return bool(has_url or code_ok)
 
 
 class JeecgFileUploadJmreportPlugin(PluginBase):
@@ -54,13 +74,13 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
                 data=body,
                 headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary},
             )
-            text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             emit(no("JeecgBoot jmreport 文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 上传成功响应特征：url（访问路径）+ fileName（落盘文件名），两者齐备才判接口可写
-        if resp.status_code == 200 and match_all(text, ["url", "fileName"]):
+        # 旧实现判定为 match_all(text, ["url", "fileName"])：url/fileName 是通用键，任意页面
+        # 含这两个词即误报。现改为解析 JSON 并要求 fileName 非空且（url 非空 或 code==200）。
+        if resp.status_code == 200 and _is_upload_success_json(resp):
             emit(ok("存在 JeecgBoot jmreport 文件上传"))
             return ScanResult(
                 kind="vuln",
@@ -68,7 +88,7 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="上传接口返回 url/fileName（可写）",
+                evidence="上传接口返回非空 fileName 且 url/code 成立（可写）",
                 fix=self.fix,
                 extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
             )

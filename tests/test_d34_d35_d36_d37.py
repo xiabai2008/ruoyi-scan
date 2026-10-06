@@ -100,7 +100,7 @@ class TestBatchScan:
     """批量扫描测试"""
 
     def test_scan_batch_targets(self):
-        from lib.async_engine import scan_batch_targets
+        from lib.async_engine import flatten, scan_batch_targets
 
         # 模拟扫描函数
         def mock_scan(target):
@@ -108,10 +108,15 @@ class TestBatchScan:
 
         targets = ["http://a.com", "http://b.com", "http://c.com"]
         results = scan_batch_targets(mock_scan, targets, max_workers=3)
-        assert len(results) == 3
+        # 新契约：返回 {target: results}，结果按 target 归位（旧契约返回扁平列表，丢失归属）
+        assert isinstance(results, dict)
+        assert set(results.keys()) == set(targets)
+        assert all(len(v) == 1 for v in results.values())
+        # flatten() 提供旧扁平行为，向后兼容旧调用方
+        assert len(flatten(results)) == 3
 
     def test_scan_batch_with_progress(self):
-        from lib.async_engine import scan_batch_targets
+        from lib.async_engine import flatten, scan_batch_targets
 
         progress = []
 
@@ -122,18 +127,18 @@ class TestBatchScan:
             progress.append((completed, total))
 
         results = scan_batch_targets(mock_scan, ["a", "b"], max_workers=2, progress_callback=progress_cb)
-        assert len(results) == 2
+        assert len(flatten(results)) == 2
         assert len(progress) == 2
 
     def test_scan_batch_empty(self):
         from lib.async_engine import scan_batch_targets
 
         results = scan_batch_targets(lambda t: [], [], max_workers=2)
-        assert results == []
+        assert results == {}
 
     def test_scan_batch_exception(self):
-        """单个目标失败不影响其他"""
-        from lib.async_engine import scan_batch_targets
+        """单个目标失败不影响其他；失败目标在字典中保留为空列表"""
+        from lib.async_engine import flatten, scan_batch_targets
 
         def mock_scan(t):
             if t == "fail":
@@ -141,8 +146,11 @@ class TestBatchScan:
             return [{"target": t}]
 
         results = scan_batch_targets(mock_scan, ["ok1", "fail", "ok2"], max_workers=3)
-        # 失败的目标返回空，成功的正常
-        assert len(results) == 2  # ok1 + ok2
+        # 失败的目标归为空列表，成功的正常归位
+        assert len(flatten(results)) == 2  # ok1 + ok2
+        assert results["ok1"] == [{"target": "ok1"}]
+        assert results["ok2"] == [{"target": "ok2"}]
+        assert results["fail"] == []
 
 
 class TestPluginsConcurrent:

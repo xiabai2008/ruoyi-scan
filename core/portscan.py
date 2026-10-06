@@ -1,4 +1,5 @@
 # 端口扫描 + 服务 Banner 识别（纯 socket 实现，不依赖 nmap）
+import errno
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -214,21 +215,46 @@ class PortScanner:
         return sorted(results, key=lambda r: r.port)
 
     def _scan_port(self, host: str, port: int) -> PortResult:
-        """扫描单个端口：TCP connect → 成功则抓 Banner"""
+        """扫描单个端口：TCP connect → 成功则抓 Banner
+
+        ⚠ 旧实现的缺陷：`connect_ex() != 0` 归为 closed，而 except 分支又无条件把
+        任何 OSError 归为 filtered——同一物理事实（连接被拒 ECONNREFUSED）走两条路径
+        得出矛盾结论。这里按 errno 统一分类：
+          - ECONNREFUSED                    → closed（对端明确拒绝，端口关闭）
+          - ETIMEDOUT/EHOSTUNREACH/ENETUNREACH → filtered（无响应/路由不可达，包被丢弃）
+          - 其他/无法判定                    → filtered（保守，绝不臆断为 closed）
+
+        注意：connect_ex() 是**返回 errno 不抛异常**的，所以此处的 except 主要捕获
+        socket 创建/settimeout 阶段（以及少数平台 connect_ex 仍抛连接错误）的异常。
+        """
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.timeout)
         try:
             # connect_ex 不抛异常而是返回 errno（0=连接成功），比 connect 省一层 try/except
-            if sock.connect_ex((host, port)) != 0:
-                return PortResult(port=port, state="closed")
+            ret = sock.connect_ex((host, port))
+            if ret != 0:
+                return PortResult(port=port, state=self._classify_connect_error(ret, port))
             # 端口开放，识别服务名
             service = PORT_SERVICE_MAP.get(port, "unknown")
             banner = self._grab_banner(sock, service)
             return PortResult(port=port, state="open", service=service, banner=banner)
-        except (socket.timeout, ConnectionRefusedError, OSError):
-            return PortResult(port=port, state="filtered")
+        except (socket.timeout, ConnectionRefusedError, OSError) as e:
+            # 与 connect_ex 的 errno 分类保持同一口径，避免两条路径结论矛盾
+            code = getattr(e, "errno", None)
+            return PortResult(port=port, state=self._classify_connect_error(code, port))
         finally:
             sock.close()
+
+    @staticmethod
+    def _classify_connect_error(errno_code: Optional[int], port: int) -> str:
+        """按 errno 判定端口状态（closed / filtered），无法判定时保守判 filtered"""
+        if errno_code == errno.ECONNREFUSED:
+            return "closed"
+        if errno_code in (errno.ETIMEDOUT, errno.EHOSTUNREACH, errno.ENETUNREACH):
+            return "filtered"
+        # 无法判定：记 debug 后保守判 filtered（丢包/未知错误绝不能臆断为 closed）
+        logger.debug("端口 %d 连接错误无法归类（errno=%s），保守判 filtered", port, errno_code)
+        return "filtered"
 
     def _grab_banner(self, sock: socket.socket, service: str) -> str:
         """尝试抓取 Banner（发探测包 → 接收响应）"""

@@ -1,8 +1,11 @@
 # 指纹→插件包路由（自动同步特征库 cms，新增 CMS 零改动）
 from typing import List
 
+from common.logger import get_logger
 from common.models import FingerprintResult
 from core.loader import load_plugins
+
+logger = get_logger(__name__)
 
 
 class Router:
@@ -74,10 +77,16 @@ class Router:
         if not package:
             # 动态尝试 plugins.<cms>（特征库已注册的 CMS 自动可用）
             candidate = "plugins.%s" % cms
-            # 动态加载失败视为该 CMS 未注册，返回空列表（与显式映射缺失同语义）
             try:
                 load_plugins(candidate)
                 package = candidate
-            except Exception:
+            except ModuleNotFoundError:
+                # 包确实不存在 → 该 CMS 未注册，返回空列表（与显式映射缺失同语义）
+                return []
+            except Exception as e:
+                # ⚠ 旧实现把「包存在但导入报错」也当作未注册静默吞掉：依赖缺失/语法错误
+                # 时，上层会无提示地回退跑若依插件，目标专属 POC 一个都没跑。
+                # 这里用 WARNING 明确记录（默认级别可见），仍返回 [] 保持上层兼容。
+                logger.warning("插件包 %s 加载失败（非缺失，可能是依赖/语法错误）：%s", candidate, e, exc_info=True)
                 return []
         return load_plugins(package)

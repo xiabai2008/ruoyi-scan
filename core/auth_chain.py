@@ -29,6 +29,9 @@ logger = get_logger(__name__)
 AUTH_NONE = "none"  # 无鉴权（如 VulnPreviewController 直接暴露）
 AUTH_V4_SESSION = "v4"  # RuoYi v4 Session（Cookie）
 AUTH_V5_JWT = "v5"  # RuoYi v5 JWT（Authorization 头）
+# 鉴权模式探测失败（无法请求 /login：网络故障/目标宕机）。三态铁律：探测失败是
+# 「不可判定」，绝不能降级为 AUTH_NONE（那等于断言「目标无鉴权」，是确定结论）。
+AUTH_UNKNOWN = "unknown"  # 探测失败，不可判定
 
 # 登录结果
 LOGIN_OK = "ok"  # 登录成功
@@ -126,13 +129,20 @@ class RuoYiAuthChain:
         判定依据：
         - GET /login 返回 HTML 登录页 → v4 Session（Shiro 表单登录）
         - GET /login 返回 JSON（{code:401} 或重定向）→ v5 JWT（前后端分离）
-        - GET /login 404 或无响应 → 无鉴权
+        - GET /login 404 → 无鉴权
+        - GET /login 请求异常（网络故障/目标宕机）→ AUTH_UNKNOWN（不可判定）
+
+        ⚠ 旧实现的缺陷：请求异常时返回 AUTH_NONE，把「探测失败」当成「目标无鉴权」的
+        确定结论。这是三态铁律违反——网络故障下不能断言鉴权情况。且 login() 见到
+        AUTH_NONE 会直接返回成功并继续跑需鉴权的 POC，用未认证会话得出错误结论。
         """
         try:
             resp = self.session.get(join_url(self.target, "/login"))
         except Exception:
-            self.auth_mode = AUTH_NONE
-            return AUTH_NONE
+            # 探测失败 → 不可判定（保守），绝不能伪装成「无鉴权」
+            self.auth_mode = AUTH_UNKNOWN
+            logger.warning("鉴权模式探测失败（无法请求 /login），判为 UNKNOWN：%s", self.target, exc_info=True)
+            return AUTH_UNKNOWN
 
         http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
         text = resp.text or ""
@@ -194,6 +204,12 @@ class RuoYiAuthChain:
         if self.auth_mode == AUTH_NONE:
             # 无鉴权，直接返回成功
             return True, LOGIN_OK
+
+        if self.auth_mode == AUTH_UNKNOWN:
+            # 探测失败：不能当成「无鉴权登录成功」（旧实现 AUTH_NONE 分支那样），
+            # 否则调用方会用未认证会话继续跑需鉴权 POC，得出错误结论。
+            # 返回 LOGIN_ERROR，让调用方按三态保守处理（判 UNKNOWN）。
+            return False, f"{LOGIN_ERROR}: 鉴权模式探测失败（不可判定）"
 
         attempts = 1 if captcha_code else max(1, max_attempts)
         last_reason = LOGIN_ERROR

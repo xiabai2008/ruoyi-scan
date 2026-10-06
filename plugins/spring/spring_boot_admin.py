@@ -1,5 +1,5 @@
 # Spring Boot Admin 未授权访问
-from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
 
@@ -48,30 +48,50 @@ class SpringBootAdminPlugin(PluginBase):
 
     def verify(self, target, session) -> ScanResult:
         """验证 SBA 未授权访问：依次探测 3 个管理端点，任一端点命中关键字即确认。
+
+        三态：
+        - 任一端点命中 SBA 专有特征 → CONFIRMED
+        - 至少拿到一个响应（含 404/403）且均未命中 → SAFE
+        - 三个端点全部请求异常（不可达 / 超时 / WAF 断连）→ UNKNOWN
+          旧实现此处直接落 SAFE，把「一个都没扫到」呈现为「确认安全」，违反三态铁律。
+
         @param target: 目标站点根 URL
         @param session: 共享 HTTP 会话
-        @return: ScanResult——命中任一端点返回 CONFIRMED，全部未命中返回 SAFE
+        @return: ScanResult
         """
+        errors = []
+        responded = 0
         for path in ["/applications", "/wallboard", "/instances"]:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
-                # 只匹配响应前 500 字符：SBA 页面体积大，关键字头部即可命中，避免全量匹配开销
-                if resp.status_code == 200 and any(
-                    kw in (resp.text or "")[:500] for kw in ["spring-boot-admin", "applications"]
-                ):
-                    return ScanResult(
-                        kind=self.category,
-                        name=self.name,
-                        severity=self.severity,
-                        status=STATUS_CONFIRMED,
-                        url=url,
-                        evidence=f"{path} 可未授权访问",
-                        fix=self.fix,
-                    )
-            # 单一路径异常视为不可达，继续探测其余路径（容错而非整体失败）
-            except Exception:
+            except Exception as e:
+                # 单一路径异常视为不可达，继续探测其余路径（容错而非整体失败）
+                errors.append(f"{path}: {e}")
                 continue
+            responded += 1
+            # 只匹配响应前 500 字符：SBA 页面体积大，关键字头部即可命中，避免全量匹配开销。
+            # 关键字收紧为 SBA 专有标识——旧实现含裸词 "applications"，任意在首 500 字符
+            # 出现该英文词的 200 页面（普通站点首页、JS、文档）都会被误报为未授权。
+            if resp.status_code == 200 and "spring-boot-admin" in (resp.text or "")[:500]:
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"{path} 可未授权访问",
+                    fix=self.fix,
+                )
+        if responded == 0:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="三个 SBA 端点均请求失败，无法判定（测不到 ≠ 安全）：" + "；".join(errors),
+            )
         return ScanResult(
             kind=self.category,
             name=self.name,

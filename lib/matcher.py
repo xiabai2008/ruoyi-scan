@@ -25,6 +25,32 @@ def match_all(text, keywords):
     return all(k in text for k in keywords)
 
 
+def parse_json_body(resp):
+    """从响应中尽最大努力解析出 JSON 对象（dict），失败或非对象返回 None
+
+    优先用 resp.json()；部分 response 实现（测试桩/老版本客户端）未提供可用的 .json()，
+    此时回退解析 resp.text。统一封装避免各插件重复 try/except 导致行为漂移。
+    """
+    if resp is None:
+        return None
+    try:
+        body = resp.json()
+    except Exception:
+        body = None
+    # 空 dict 视为未解析出有效对象：部分测试桩 .json() 恒返回 {}（即使正文有 JSON），
+    # 若直接采信会丢失真实响应体，故继续走正文回退。
+    if isinstance(body, dict) and body:
+        return body
+    # 回退：直接解析正文（.json() 抛错/返回非对象/返回空对象时）
+    import json
+
+    try:
+        body = json.loads(getattr(resp, "text", "") or "")
+    except Exception:
+        return None
+    return body if isinstance(body, dict) else None
+
+
 def match_php_eval_response(text):
     """检测响应是否是 PHP 函数求值结果（phpinfo / phpversion 真实漏洞响应）
 
@@ -91,6 +117,48 @@ def match_file_read_leak(text):
         "[boot loader]",  # Windows boot.ini
     ]
     return any(f in text for f in file_features)
+
+
+def is_passwd_file(text):
+    """判定响应是否为真实 /etc/passwd 文件内容（严格正向证据，可复用于文件读取类插件）
+
+    真实 /etc/passwd 文件特征：
+    - 每行格式：username:x:uid:gid:gecos:home:shell
+    - 含 root 账户行：root:x:0:0:root:/root:/bin/bash（或 /bin/sh）
+    - 含 daemon/bin/sys 等系统账户行
+    - uid/gid 为数字
+
+    提取自 plugins/ruoyi/file_read_path.py 的私有 _is_passwd_file，统一为可复用公共函数，
+    供 file_read / file_read_path 等插件共享，避免各自维护一份易漂移的判定逻辑。
+
+    Returns:
+        (hit: bool, evidence: str)
+    """
+    if not text:
+        return False, "空响应"
+
+    import re
+
+    # 要求 ≥2 个 passwd 格式行：单行 root:x:0:0: 可能是恰好命中的噪声片段，
+    # 真实 /etc/passwd 必含 root + 多个系统账户
+    passwd_pattern = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_-]*):x:(\d+):(\d+):", re.MULTILINE)
+    matches = passwd_pattern.findall(text)
+    if not matches:
+        return False, "响应不含 passwd 格式行"
+    if len(matches) < 2:
+        return False, f"仅匹配到 {len(matches)} 个 passwd 行（需 ≥2）"
+
+    # 强特征：含 root 账户（uid=0）
+    has_root = any(name == "root" and uid == "0" for name, uid, gid in matches)
+    # 次强特征：含常见系统账户（daemon/bin/sys/nobody/mail 等）
+    system_accounts = {"root", "daemon", "bin", "sys", "nobody", "mail", "ftp", "www-data"}
+    has_system = any(name in system_accounts for name, uid, gid in matches)
+
+    if has_root or has_system:
+        # 提取前 3 个账户名作为证据
+        names = [m[0] for m in matches[:3]]
+        return True, f"读取到 /etc/passwd：{names}"
+    return False, "passwd 行无 root/系统账户"
 
 
 def match_spring_actuator_env(text):
@@ -176,17 +244,19 @@ def match_spring4shell_response(text):
     Spring4Shell 实际利用不直接返回特征（写 Tomcat 日志），但当 class.module.classLoader
     探针 POST 返回 200 且响应无错误标识时，说明参数绑定可访问 ClassLoader。
 
-    真实成功响应特征：
+    真实成功响应特征（正向证据，缺一不可）：
     - JSON 含 "status":200 或 "status": 200（Spring Boot 标准成功响应）
     - JSON 含 "timestamp"（Spring Boot 标准响应格式）
-    - 空响应体（部分 Tomcat 直接返回 200 空体）
 
     排除的失败响应特征：
     - "Bad Request" / "error" / "Whitelabel Error Page" / "status":400
     """
     if not text:
-        # 空响应体 + 200 状态码（由插件保证）= 成功利用
-        return True
+        # 旧实现把「空响应体 + 200」当作利用成功，违反三态铁律：
+        # 「没有证据」不能当正向证据——Tomcat 对任意 POST 都可能返回 200 空体，
+        # 据此判 CONFIRMED 会把绝大多数无关目标误报为已利用。
+        # 现改为返回 False，让调用方走 SAFE/UNKNOWN 分支，而非误判 CONFIRMED。
+        return False
     # 排除失败响应特征
     fail_indicators = [
         "Bad Request",
@@ -203,7 +273,9 @@ def match_spring4shell_response(text):
     if any(ind in text for ind in fail_indicators):
         return False
     # 真实成功响应特征：JSON 含 "status":200 / "timestamp"
-    success_indicators = ['"status":200', '"status": 200', '"timestamp"', "message"]
+    # 旧实现还含裸词 "message"，但 Spring 标准错误体 {"status":405,...,"message":"..."}
+    # 同样命中 "message"，会把普通错误响应误判为利用成功；故删除，仅保留两个强特征。
+    success_indicators = ['"status":200', '"status": 200', '"timestamp"']
     return any(ind in text for ind in success_indicators)
 
 

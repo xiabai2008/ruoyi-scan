@@ -181,6 +181,9 @@ class Crawler:
         self.on_page = on_page
         # 统计信息
         self.visited: Set[str] = set()
+        # 旧实现缺陷：BFS 去重靠 `any(absolute == q[0] for q in queue)` 线性扫描整个 deque，
+        # 每次发现新链接都是 O(n)，整体 O(n²)。改用 set 记录已入队 URL，查询/插入均 O(1)。
+        self._queued: Set[str] = set()
         self.discarded: List[str] = []  # 被过滤的链接
         self.errors: List[str] = []
         self._lock = threading.Lock()
@@ -202,6 +205,8 @@ class Crawler:
 
         # BFS 队列：(url, depth)
         queue = deque([(start_url, 1)])
+        # 同步记录起始 URL 已入队，与下方去重逻辑对齐
+        self._queued.add(start_url)
         results: List[str] = []
 
         while queue and len(results) < self.max_pages:
@@ -267,8 +272,8 @@ class Crawler:
                 absolute = normalize_link(url, link)
                 if not absolute:
                     continue
-                # 去重
-                if absolute in self.visited or any(absolute == q[0] for q in queue):
+                # 去重：visited（已访问）或 _queued（已入队待访问）任一命中即跳过，O(1)
+                if absolute in self.visited or absolute in self._queued:
                     continue
                 # 同 host 限制
                 if self.same_host_only and not is_same_host(start_url, absolute):
@@ -278,6 +283,7 @@ class Crawler:
                     with self._lock:
                         self.discarded.append(absolute)
                     continue
+                self._queued.add(absolute)
                 queue.append((absolute, depth + 1))
 
             if self.delay:

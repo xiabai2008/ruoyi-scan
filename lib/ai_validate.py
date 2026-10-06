@@ -105,6 +105,7 @@ def _run_plugin_on_lab(plugin_cls: type, target: str) -> Optional[Any]:
     """在当前 lab 模式下执行插件 verify；返回 ScanResult（异常返回 None）"""
     from core.session import SessionManager
 
+    session = None
     try:
         inst = plugin_cls()
         session = SessionManager(timeout=5)
@@ -112,6 +113,11 @@ def _run_plugin_on_lab(plugin_cls: type, target: str) -> Optional[Any]:
     except Exception as e:
         logger.debug("插件在靶场执行异常: %s", e, exc_info=True)
         return None
+    finally:
+        # 旧实现缺陷：成功/异常均不关闭 session，每次验证（vuln+safe 两模式）泄漏 2 个连接。
+        # finally 保证任何路径都释放连接（参考 core/auth_chain.py 的正确写法）。
+        if session is not None:
+            session.close()
 
 
 def validate_ai_plugin(filepath: str, port: int = 0) -> Dict[str, Any]:

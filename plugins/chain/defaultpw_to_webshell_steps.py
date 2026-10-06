@@ -5,11 +5,10 @@
 #   2. FileUploadVerifyPlugin: 任意文件上传验证（上传 JSP 探针，非真实 webshell）
 #
 # 注意：本链仅验证可利用性，不实际上传真实 webshell。
-import re
-
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import parse_json_body
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -75,22 +74,23 @@ class DefaultPasswordLoginPlugin(PluginBase):
                         "password": password,
                     },
                 )
-                text = resp.text
-                # Ruoyi 登录成功特征：返回 token
-                # 同时兼容新旧版本响应：新版返回 token，旧版仅返回 code 字段
-                if "token" in text.lower() or '"code":0' in text or '"code":200' in text:
-                    token_match = re.search(r'"token"\s*:\s*"([^"]+)"', text)
-                    token = token_match.group(1) if token_match else ""
-                    return ScanResult(
-                        kind="chain",
-                        name=self.name,
-                        severity=self.severity,
-                        status=STATUS_CONFIRMED,
-                        url=login_url,
-                        evidence=f"默认口令登录成功: {username}/{password}",
-                        fix=self.fix,
-                        extra={"login_token": token, "username": username, "vuln_type": "default_password"},
-                    )
+                # 旧判定为 `"token" in text.lower() or '"code":0' in text or '"code":200' in text`：
+                # 任何含 "token" 字样的页面或任意返回 code:200 的接口都会误报。现改为解析 JSON，
+                # 要求顶层 token 为非空字符串（登录成功的正向证据）。
+                body = parse_json_body(resp)
+                if body is not None:
+                    token = body.get("token")
+                    if isinstance(token, str) and token.strip():
+                        return ScanResult(
+                            kind="chain",
+                            name=self.name,
+                            severity=self.severity,
+                            status=STATUS_CONFIRMED,
+                            url=login_url,
+                            evidence=f"默认口令登录成功: {username}/{password}",
+                            fix=self.fix,
+                            extra={"login_token": token, "username": username, "vuln_type": "default_password"},
+                        )
             except Exception:
                 continue
 

@@ -3,51 +3,14 @@
 #   攻击者构造 ../ 路径穿越可读取任意文件（如 /etc/passwd、/proc/self/environ）。
 # 本插件仅做存在性验证：读取 /etc/passwd，检测响应是否含真实 passwd 文件特征。
 # D4 改造（2026-07-18）：删除签名 marker，改真实 /etc/passwd 特征判定，兼容签名靶场与真实若依。
+# 判定逻辑已提取为 lib.matcher.is_passwd_file 公共函数（供 file_read / file_read_path 复用），
+# 此处以 _is_passwd_file 别名引入，避免改动本模块既有的两处调用点，行为完全不变。
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import is_passwd_file as _is_passwd_file
 from lib.reporter import emit
 from plugins.base import PluginBase
-
-
-def _is_passwd_file(text):
-    """判定响应是否为真实 /etc/passwd 文件内容
-
-    真实 /etc/passwd 文件特征：
-    - 每行格式：username:x:uid:gid:gecos:home:shell
-    - 含 root 账户行：root:x:0:0:root:/root:/bin/bash（或 /bin/sh）
-    - 含 daemon/bin/sys 等系统账户行
-    - uid/gid 为数字
-
-    Returns:
-        (hit: bool, evidence: str)
-    """
-    if not text:
-        return False, "空响应"
-
-    # 提取所有形如 name:x:uid:gid:... 的行
-    import re
-
-    passwd_pattern = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_-]*):x:(\d+):(\d+):", re.MULTILINE)
-    matches = passwd_pattern.findall(text)
-    if not matches:
-        return False, "响应不含 passwd 格式行"
-
-    # 至少匹配到 2 个账户行（真实 /etc/passwd 通常含 root + 多个系统账户）
-    if len(matches) < 2:
-        return False, f"仅匹配到 {len(matches)} 个 passwd 行（需 ≥2）"
-
-    # 强特征：含 root 账户（uid=0）
-    has_root = any(name == "root" and uid == "0" for name, uid, gid in matches)
-    # 次强特征：含常见系统账户（daemon/bin/sys/nobody/mail 等）
-    system_accounts = {"root", "daemon", "bin", "sys", "nobody", "mail", "ftp", "www-data"}
-    has_system = any(name in system_accounts for name, uid, gid in matches)
-
-    if has_root or has_system:
-        # 提取前 3 个账户名作为证据
-        names = [m[0] for m in matches[:3]]
-        return True, f"读取到 /etc/passwd：{names}"
-    return False, "passwd 行无 root/系统账户"
 
 
 class RuoyiFileReadPathPlugin(PluginBase):

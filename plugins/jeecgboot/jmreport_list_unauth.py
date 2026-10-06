@@ -2,9 +2,11 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+# 复用同目录 dict_unauth 的分页列表结构判定（records/rows + total/success + code==200）
+from plugins.jeecgboot.dict_unauth import _is_dict_list_json
 
 
 class JeecgJmreportListUnauthPlugin(PluginBase):
@@ -40,13 +42,13 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
         try:
             # 分页参数命中列表分支：未授权返回 records 数据，鉴权拦截返回 401/403
             resp = session.get(url)
-            text = resp.text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             emit(no("JeecgBoot 报表未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 未授权 + 业务 JSON（records 字段）→ 确认
-        if resp.status_code == 200 and match_all(text, ["records", "code"]):
+        # 旧实现判定为 match_all(text, ["records", "code"])：records/code 是最通用的分页 JSON 键，
+        # 任意分页接口都会误报。现改为解析 JSON 校验分页结构成立（见 _is_dict_list_json）。
+        if resp.status_code == 200 and _is_dict_list_json(resp):
             emit(ok("存在 JeecgBoot 报表未授权"))
             return ScanResult(
                 kind="vuln",
@@ -54,7 +56,7 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="未授权返回报表列表 JSON",
+                evidence="未授权返回报表列表 JSON（records/rows 数组 + 分页结构成立）",
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "jeecg_jmreport_list"},
             )

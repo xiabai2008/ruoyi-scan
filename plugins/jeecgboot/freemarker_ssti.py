@@ -1,5 +1,7 @@
-# JeecgBoot Freemarker SSTI（CVE-2022-26809 家族）：/jmreport/testConnection 报表数据源测试接口
+# JeecgBoot Freemarker SSTI（编号待核实）：/jmreport/testConnection 报表数据源测试接口
 # 存在性验证：提交含 ${7*7} 的模板，响应含 49 即确认（不落地 RCE payload）
+# 注：原注释标注为「CVE-2022-26809 家族」，但 CVE-2022-26809 实为 Windows RPC 漏洞，
+#     与 JeecgBoot Freemarker SSTI 无关（编号与漏洞不符，待核实正确 CVE/CNVD 编号）。
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
@@ -9,7 +11,7 @@ from plugins.base import PluginBase
 
 class JeecgFreemarkerSstiPlugin(PluginBase):
     name = "JeecgBoot 报表 SSTI"
-    cve = "CVE-2022-26809"
+    cve = "CVE-2022-26809"  # TODO: 编号与漏洞不符，待核实正确 CVE/CNVD 编号
     severity = "high"
     category = "vuln"
     description = "JeecgBoot 报表模块 /jmreport/testConnection 存在 Freemarker 模板注入，可 RCE"

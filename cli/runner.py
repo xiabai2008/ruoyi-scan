@@ -481,36 +481,53 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
                     urls = [line.strip() for line in f if line.strip()]
                 endpoints = parse_endpoints_from_urls(urls)
         logic_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-        scanner = LogicScanner(session=logic_session)
-        logic_vulns = scanner.scan(target_normalized, endpoints)
-        # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
-        for lv in logic_vulns:
-            all_results.append(
-                ScanResult(
-                    kind="vuln",
-                    name=lv.name,
-                    severity=lv.severity,
-                    status=STATUS_CONFIRMED,
-                    url=lv.url,
-                    evidence=lv.evidence,
-                    fix=lv.fix,
-                    fix_detail=lv.fix_detail,
-                    reproduce=lv.reproduce,
+        try:
+            scanner = LogicScanner(session=logic_session)
+            logic_vulns = scanner.scan(target_normalized, endpoints)
+            # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
+            # untested=True 的条目是“端点未测成”的占位，不计入漏洞，仅用于提示人工复核
+            untested_count = 0
+            confirmed_count = 0
+            for lv in logic_vulns:
+                if getattr(lv, "untested", False):
+                    untested_count += 1
+                    continue
+                confirmed_count += 1
+                all_results.append(
+                    ScanResult(
+                        kind="vuln",
+                        name=lv.name,
+                        severity=lv.severity,
+                        status=STATUS_CONFIRMED,
+                        url=lv.url,
+                        evidence=lv.evidence,
+                        fix=lv.fix,
+                        fix_detail=lv.fix_detail,
+                        reproduce=lv.reproduce,
+                    )
                 )
-            )
-        print(f"{YELLOW}[*]业务逻辑扫描完成：发现 {len(logic_vulns)} 个漏洞{RESET}")
-        logic_session.close()
+            print(f"{YELLOW}[*]业务逻辑扫描完成：发现 {confirmed_count} 个漏洞{RESET}")
+            if untested_count:
+                print(f"{YELLOW}[!]⚠ {untested_count} 个端点未能测试（请求异常），结果不完整，需人工复核{RESET}")
+        finally:
+            # 旧实现缺陷：close() 位于 try 尾部，扫描中途抛异常时被跳过 → 连接/会话泄漏。
+            # 改为 finally 保证无论正常/异常都会关闭。
+            logic_session.close()
 
     # G1：认证后深度扫描（登录态接口资产盘点 + 越权矩阵）
     if getattr(args, "auth_surface", False):
         from lib.auth_surface import run_auth_surface_mode
 
         print(f"{YELLOW}[*]认证后深度扫描：登录态资产盘点 + 越权矩阵...{RESET}")
-        surface_assets, surface_vulns = run_auth_surface_mode(args, target_normalized)
-        print(
-            f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
-            f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
-        )
+        surface_assets, surface_vulns, surface_status = run_auth_surface_mode(args, target_normalized)
+        if surface_status == "login_failed":
+            # 登录失败与“扫完无结果”语义已由 status 区分，避免误报“0 资产 0 漏洞”为扫描完成
+            print(f"{RED}[!]认证后深度扫描未执行：高权登录失败（检查 --auth-login）{RESET}")
+        else:
+            print(
+                f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
+                f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
+            )
         if getattr(args, "surface_output", None) and surface_assets:
             print(f"{GREEN}[*]资产清单已输出：{args.surface_output}{RESET}")
         # 漏洞并入统一结果集（CONFIRMED 语义已在扫描器内保证，UNKNOWN 仅记录资产不产漏洞）
@@ -577,7 +594,10 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
         print(f"\r{YELLOW}[*]进度 [{done}/{total_count}] 当前：{current:<40}{RESET}", end="", flush=True)
 
     print(f"{YELLOW}[*]开始并发扫描 {total} 个目标（{max_workers} workers）...{RESET}")
-    all_results_flat = scan_batch_targets(
+    # scan_batch_targets 返回 {target: results}，每个目标的结果按 target 归位
+    # 旧实现缺陷：返回扁平列表时无法按目标归位，调用方只能把全部结果塞给第一个目标，
+    # 其余目标报告显示 0 漏洞（大批量 --async 扫描静默丢失 99% 结果）。
+    results_by_target = scan_batch_targets(
         scan_fn=_scan_single,
         targets=targets,
         max_workers=max_workers,
@@ -588,26 +608,27 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     # 按 target 分组重建报告
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
-    for i, target in enumerate(targets):
-        # all_results_flat 是扁平化的，我们需要按 target 索引重建
-        # 但 scan_batch_targets 返回的是扁平列表，所以我们重新扫描生成报告
-        # 更好的方案：scan_batch_targets 返回 {target: results} 字典
-        # 这里保持简单：用同步方式重新生成报告（结果已缓存）
-        results = all_results_flat if i == 0 else []
-        if results:
-            builder = ReportBuilder(
-                results=results,
-                target=target,
-                summary={
-                    "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "duration": 0,
-                    "request_count": len(results),
-                    "mode": label,
-                    "fingerprint": {"cms": "", "confidence": 0},
-                },
-                dedup=not args.no_dedup,
-            )
-            batch.add(builder)
+    failed_targets = []  # 扫描失败/无结果的目标，显式列出而非静默少一行
+    for target in targets:
+        results = results_by_target.get(target) or []
+        if not results:
+            # 注意：_scan_single 异常时返回 []，与“扫完确实无漏洞”同为空——
+            # 二者无法从返回值区分，故统一列入“无结果/失败”清单提示人工复核
+            failed_targets.append(target)
+            continue
+        builder = ReportBuilder(
+            results=results,
+            target=target,
+            summary={
+                "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "duration": 0,
+                "request_count": len(results),
+                "mode": label,
+                "fingerprint": {"cms": "", "confidence": 0},
+            },
+            dedup=not args.no_dedup,
+        )
+        batch.add(builder)
 
     if batch.builders:
         bpaths = batch.render_all(out_dir)
@@ -617,6 +638,11 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
             print(f"{GREEN}[*]批量报告：{p}{RESET}")
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
+    # 显式列出失败/无结果目标，杜绝“99 个目标静默显示 0 漏洞”的观感
+    if failed_targets:
+        print(f"{YELLOW}[!]以下 {len(failed_targets)} 个目标无结果（扫描失败或未发现漏洞）：{RESET}")
+        for ft in failed_targets:
+            print(f"    {YELLOW}- {ft}{RESET}")
     # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
     if not getattr(args, "ci", False):
         print_star_cta(explicit_off=getattr(args, "no_cta", False))

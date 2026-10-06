@@ -97,8 +97,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.send_response(200, "Connection Established")
         self.end_headers()
         # 双向转发
-        self._relay(self.connection, remote)
-        remote.close()
+        # 旧实现缺陷：_relay 抛异常时 remote.close() 被跳过 → 远端 socket 泄漏。
+        # 用 try/finally 保证隧道结束/异常都关闭远端连接。
+        try:
+            self._relay(self.connection, remote)
+        finally:
+            remote.close()
 
     def _relay(self, client: socket.socket, remote: socket.socket) -> None:
         """双向数据转发"""

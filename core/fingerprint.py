@@ -212,7 +212,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
     return best_variant
 
 
-def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
+def detect_cms(target: str, session: SessionManager, cache: Any = None) -> FingerprintResult:
     """多 CMS 指纹识别：遍历所有注册 CMS，返回置信度最高的结果
 
     用于阶段二自动路由：未知目标自动识别为对应 CMS 并加载插件包。
@@ -221,12 +221,17 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     阶段五：内部创建 FingerprintCache 共享根响应/favicon 响应，避免多 CMS
     遍历时重复 GET 相同 URL（detect 签名不变，向后兼容旧调用方）。
 
+    性能（P1-C）：调用方可传入自建的 cache 并在事后交给 detect_waf 复用，
+    使根路径响应在 detect_cms 与 detect_waf 之间共享（单目标少 1 次根请求）。
+    不传 cache 时内部自建，行为与旧版一致。
+
     D2 阶段：识别出 CMS 后，对若依额外探测版本号（/login 页面 HTML 中的 X.Y.Z），
     版本号存入 FingerprintResult.version，供 Router 按 affected_versions 过滤 POC。
     """
     from core.cache import FingerprintCache
 
-    cache = FingerprintCache(session)
+    if cache is None:
+        cache = FingerprintCache(session)
     best = FingerprintResult(cms="", version="", confidence=0.0, matched=[])
     for cms in list_cms():
         res = FeatureBasedFingerprint(cms).detect(target, session, cache=cache)
@@ -270,21 +275,31 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
     return best
 
 
-def detect_waf(target: str, session: SessionManager) -> Dict[str, Any]:
+def detect_waf(target: str, session: SessionManager, cache: Any = None) -> Dict[str, Any]:
     """WAF 指纹识别：检测目标是否部署了 Web 应用防火墙（P1-C）
 
     通过分析根路径响应头、响应体、Set-Cookie 特征判断 WAF 类型。
 
+    性能（P1-C）：detect_cms 阶段已对根路径发过请求，本函数若再发一次，单目标扫描
+    至少有 3 次根路径请求。传入 detect_cms 使用的同一个 FingerprintCache（cache）
+    即可复用其缓存的根响应，未命中才发请求（并回填缓存）。cache=None 时行为与旧版
+    完全一致（向后兼容）。
+
     Args:
         target: 目标 URL
         session: SessionManager 实例
+        cache: 可选 FingerprintCache（复用 detect_cms 已缓存的根响应，避免重复请求）
     Returns:
         dict: {'waf': 'WAF标识' 或 '', 'display': '显示名', 'bypass_hint': '绕过提示'}
     """
     from core.waf_features import WAF_FEATURES
 
     try:
-        resp = session.get(target)
+        # cache 命中则直接复用响应（不增加 request_count），未命中才发请求
+        resp = cache.get(target) if cache is not None else session.get(target)
+        if resp is None:
+            # FingerprintCache 对网络异常缓存 None，此时按探测失败处理
+            return {"waf": "", "display": "", "bypass_hint": ""}
         resp_headers = {k.lower(): v for k, v in resp.headers.items()}
         resp_text = (resp.text or "").lower()
         cookie = (resp.headers.get("Set-Cookie") or "").lower()

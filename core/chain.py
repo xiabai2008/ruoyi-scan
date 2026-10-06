@@ -21,6 +21,7 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
+from common.logger import get_logger
 from common.models import (
     SEVERITY_HIGH,
     STATUS_CONFIRMED,
@@ -29,6 +30,9 @@ from common.models import (
     FingerprintResult,
     ScanResult,
 )
+
+# 模块级 logger（供 _evaluate_condition 记录被吞的异常；run() 内的 _log 是历史遗留）
+logger = get_logger(__name__)
 
 # === 失败策略常量 ===
 ON_FAIL_ABORT = "abort"  # 关键节点失败则整链中断，下游全 skipped
@@ -374,12 +378,20 @@ class ChainEngine:
         return result
 
     def _evaluate_condition(self, condition: Optional[Callable[..., bool]], ctx: ChainContext) -> bool:
-        """评估条件函数，异常默认返回 False（不执行）"""
+        """评估条件函数，异常默认返回 False（不执行）
+
+        ⚠ 旧实现的缺陷：`except Exception: return False` 静默吞掉异常，把「条件无法
+        评估」伪装成「条件不满足」。调用方因此无法区分「确实不该执行」与「条件回调
+        自身报错」，日志里也看不到任何线索。这里保留返回 False 的兼容行为（调用方
+        依赖），但把异常升级为 WARNING 并写明后果——节点将因跳过而被判 UNKNOWN，
+        让日志能解释 UNKNOWN 的来源。
+        """
         if condition is None:
             return True
         try:
             return bool(condition(ctx))
         except Exception:
+            logger.warning("条件求值异常，按不满足处理（节点将判 UNKNOWN）", exc_info=True)
             return False
 
     def _execute_step(self, step: ChainStep, ctx: ChainContext) -> Tuple[ScanResult, str]:
@@ -505,13 +517,18 @@ class ChainEngine:
 
             # 检查上游是否已 abort
             if step_id in aborted:
+                # ⚠ 旧实现用 STATUS_SAFE：这是三态铁律的直接违反——节点**从未执行**，
+                # 上游失败导致它根本没跑，「没跑」不等于「确认不存在」。SAFE 语义是
+                # 「已验证该漏洞不存在」，把跳过标成 SAFE 会让报告漏掉一整类未测项。
+                # 改判 UNKNOWN：节点状态仍保持 NODE_SKIPPED（确实被跳过，_aggregate_status
+                # 用的是 node_status，不受本改动影响），仅 ScanResult.status 改为不可判定。
                 ctx.set_result(
                     step_id,
                     ScanResult(
                         kind="chain",
                         name=step_id,
-                        status=STATUS_SAFE,
-                        evidence="上游节点失败，本节点被跳过",
+                        status=STATUS_UNKNOWN,
+                        evidence="上游节点失败，本节点被跳过（未执行，不可判定）",
                     ),
                     NODE_SKIPPED,
                 )
@@ -521,13 +538,17 @@ class ChainEngine:
 
             # 评估 condition
             if not self._evaluate_condition(step.condition, ctx):
+                # ⚠ 旧实现用 STATUS_SAFE：同样违反三态铁律。且 _evaluate_condition 在
+                # 条件回调抛异常时 `except: return False`（见本文件），把「条件无法评估」
+                # 伪装成「条件不满足」——两者都不该判 SAFE。改判 UNKNOWN（不可判定）。
+                # node_status 仍是 NODE_SKIPPED，_aggregate_status 不受影响。
                 ctx.set_result(
                     step_id,
                     ScanResult(
                         kind="chain",
                         name=step_id,
-                        status=STATUS_SAFE,
-                        evidence="条件不满足，跳过执行",
+                        status=STATUS_UNKNOWN,
+                        evidence="条件不满足，跳过执行（未执行，不可判定）",
                     ),
                     NODE_SKIPPED,
                 )

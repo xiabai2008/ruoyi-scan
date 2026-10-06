@@ -11,6 +11,7 @@ import re
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import match_sql_error
 from plugins.base import PluginBase
 
 
@@ -65,15 +66,18 @@ class SQLInjectExtractPlugin(PluginBase):
                 fix=self.fix,
                 extra={"db_name": db_name, "vuln_type": "sql_inject_extract"},
             )
-        # 备用特征：直接包含 database() 报错
-        if "database()" in text and "error" in text.lower():
+        # 备用特征：真实 SQL 报错文案（XPATH syntax error / SQLSTATE / SQL syntax 等）
+        # 旧判定为 `"database()" in text and "error" in text.lower()`：载荷本身含 database()
+        # 字面量，WAF 拦截页/网关错误页原样回显请求报文时即"自证命中"，属典型误报。
+        # 现要求 match_sql_error 的真实数据库报错特征（其中已含 XPATH syntax error）。
+        if match_sql_error(text):
             return ScanResult(
                 kind="chain",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 database() 报错特征",
+                evidence="响应含真实 SQL 报错特征（confirm SQL 被执行）",
                 fix=self.fix,
                 extra={"db_name": "unknown", "vuln_type": "sql_inject_extract"},
             )
@@ -119,8 +123,11 @@ class ConfigReadPlugin(PluginBase):
             except Exception:
                 continue
 
-            # 配置文件特征：包含 password 或 spring 关键字
-            if "password" not in text.lower() and "spring" not in text.lower():
+            # 配置文件特征：YAML 结构成立（含 password:/datasource:/spring: 键行）。
+            # 旧判定 `"password" not in text.lower() and "spring" not in text.lower()` 使用裸词，
+            # 任意提及 spring 的错误页/网关页都会命中，退化成"只要响应提到 spring 即算读到配置"。
+            # 现要求匹配真实的 YAML 键行（key: value 形式），排除仅有词而无结构的页面。
+            if not re.search(r"(?m)^\s*(password|datasource|spring)\s*:", text):
                 continue
 
             # 正则提取数据库密码

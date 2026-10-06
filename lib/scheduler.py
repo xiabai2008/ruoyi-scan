@@ -187,7 +187,12 @@ class ScanScheduler:
         with self._lock:
             job_ids = list(self._jobs.keys())
         for jid in job_ids:
-            self._schedule_job(jid, self._jobs[jid])
+            # 旧实现缺陷：锁外 self._jobs[jid] 直接解引用，并发 remove_job 会把该 jid 删掉
+            # 触发 KeyError。改为 get + None 跳过（check-then-act 竞态修复）。
+            job = self._jobs.get(jid)
+            if job is None:
+                continue
+            self._schedule_job(jid, job)
 
     def shutdown(self):
         """停止调度器"""

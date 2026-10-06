@@ -51,7 +51,11 @@ class NacosUnauthPlugin(PluginBase):
                 continue
 
             # 未授权特征：返回 JSON 含 username 字段（无 403）
-            if "username" in text and resp.status_code == 200:
+            # 旧判定仅 `"username" in text`：username 过于通用，任何含该词的页面都误报。
+            # 现要求同时含 password/datasource 等配置类键，或含 Nacos 用户列表特有结构
+            # （pageItems/totalCount），以确认是 Nacos 配置/用户接口的真实响应。
+            _nacos_markers = ("password", "datasource", "pageItems", "totalCount")
+            if "username" in text and any(k in text for k in _nacos_markers) and resp.status_code == 200:
                 # 进一步验证配置接口可访问
                 # dataId/group/tenant 全空 = 列出全部配置；pageSize 调小避免响应过大
                 config_url = join_url(target, f"{prefix}/v1/cs/configs?dataId=&group=&tenant=&pageNo=1&pageSize=10")
