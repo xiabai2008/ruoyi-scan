@@ -60,9 +60,11 @@ class DruidBrutePlugin(PluginBase):
         user_list = settings.DRUID_USERS
         # 原脚本：self.url + 'druid/submitLogin'（self.url 以 / 结尾，故仅一个斜杠）
         url = join_url(target, "druid/submitLogin")
-        # 字典原样读取（splitlines 保留空行口令、'NULL' 字符串等，勿 strip）
+        # 字典路径优先取扫描级注入（session.password_dict，API/批量并发下与其他任务隔离），
+        # 回退进程级默认值；字典原样读取（splitlines 保留空行口令、'NULL' 字符串等，勿 strip）
+        dict_path = getattr(session, "password_dict", None) or settings.PASSWORD_DICT
         try:
-            with open(settings.PASSWORD_DICT, encoding="utf-8") as f:
+            with open(dict_path, encoding="utf-8") as f:
                 password_list = f.read().splitlines()
         except Exception as e:
             emit(no(f"Druid 爆破字典读取失败：{e}"))
@@ -76,7 +78,7 @@ class DruidBrutePlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"口令字典 {settings.PASSWORD_DICT} 为空，未发送任何请求，无法判定",
+                evidence=f"口令字典 {dict_path} 为空，未发送任何请求，无法判定",
             )
 
         got_response = False  # 是否至少收到一次响应（避免全网络异常误判 SAFE）

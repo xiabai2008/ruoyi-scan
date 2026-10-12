@@ -284,9 +284,8 @@ class ScanOrchestrator:
         req = task.request
         target = normalize_target(req.target)
         # 资源清理状态：session 在 try 内创建，必须在 finally 关闭（失败路径同样要关，
-        # 否则异常退出会泄漏连接池）；口令字典被本任务改写前需记录原值以便恢复
+        # 否则异常退出会泄漏连接池）
         session: Optional[SessionManager] = None
-        prev_password_dict: Optional[str] = None
         # 提前初始化结果列表：异常路径也要能返回失败前已收集的部分结果，
         # 而不是静默丢弃（task.results 在失败时可能尚未赋值）
         all_results: List[ScanResult] = []
@@ -394,11 +393,13 @@ class ScanOrchestrator:
                     },
                 )
 
-            # 3. 口令字典分级（记录原值，扫描结束在 finally 恢复——API 并发扫描下
-            # 进程级 settings.PASSWORD_DICT 不能永久停留在某个任务的级别）
+            # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
+            # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
+            # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
+            selected_password_dict = settings.PASSWORD_DICT
             if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
-                prev_password_dict = settings.PASSWORD_DICT
-                settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
+                selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
+            session.password_dict = selected_password_dict
 
             # 4. 指纹识别
             router = Router()
@@ -737,15 +738,13 @@ class ScanOrchestrator:
             return task.results
 
         finally:
-            # 无论成功/失败都关闭会话（含认证注入、指纹、WAF、插件执行等中途异常），
-            # 并恢复进程级口令字典，避免污染其他并发任务/进程后续扫描
+            # 无论成功/失败都关闭会话（含认证注入、指纹、WAF、插件执行等中途异常）；
+            # 口令字典已改为扫描级注入（session.password_dict），无需恢复进程级全局
             if session is not None:
                 try:
                     session.close()
                 except Exception:
                     logger.debug("会话关闭失败", exc_info=True)
-            if prev_password_dict is not None:
-                settings.PASSWORD_DICT = prev_password_dict
 
     def _build_waf_bypass(
         self, req: ScanRequest, waf_result: Dict[str, Any], target: str, session: SessionManager

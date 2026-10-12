@@ -4,7 +4,7 @@
 # 使用 Redis 作为消息中间件（轻量级实现，不强制依赖 Celery）。
 #
 # 设计原则：
-#   1. 基于 Redis list 实现简单的 FIFO 任务队列（LPUSH/BRPOP）
+#   1. 基于 Redis list 实现简单的 FIFO 任务队列（LPUSH/BRPOPLPUSH + 租约恢复）
 #   2. 无 Celery 依赖，降低部署复杂度
 #   3. 支持 Master-Worker 架构：Master 分发任务，Worker 执行扫描
 #   4. 结果聚合到 Redis，Master 汇总生成报告
@@ -195,6 +195,8 @@ TASK_STATUS_KEY = "ruoyi_scan:status"  # Hash: task_id → status
 WORKER_HEARTBEAT_KEY = "ruoyi_scan:workers"  # Hash: worker_id → last_heartbeat
 RATE_LIMIT_KEY = "ruoyi_scan:rate_limit"  # P3: 全局限速令牌桶
 RATE_STATS_KEY = "ruoyi_scan:rate_stats"  # P3: 限速统计 HASH
+PROCESSING_LIST_KEY = "ruoyi_scan:processing"  # 已出队未确认的任务载荷（Worker 崩溃恢复用）
+TASK_CLAIM_KEY = "ruoyi_scan:claims"  # Hash: task_id → 出队时间戳（租约判定）
 
 
 class DistributedRateLimiter:
@@ -362,10 +364,12 @@ class DistributedTaskQueue:
     注：ScanTask.priority 为预留字段，当前不参与出队排序。
     """
 
-    def __init__(self, redis_url: str = "redis://127.0.0.1:6379"):
+    def __init__(self, redis_url: str = "redis://127.0.0.1:6379", lease_timeout: float = 600.0):
         """
         Args:
             redis_url: Redis 连接 URL
+            lease_timeout: 任务租约秒数——出队后超过该时长仍未确认（push_result + ack）
+                的任务视为 Worker 崩溃，由 recover_stale_tasks() 重新入队
 
         Raises:
             ImportError: 未安装 redis
@@ -373,6 +377,7 @@ class DistributedTaskQueue:
         """
         self.redis = get_redis_client(redis_url)
         self.redis_url = redis_url
+        self.lease_timeout = lease_timeout
 
     def push_task(self, task: ScanTask) -> str:
         """推送任务到队列
@@ -416,14 +421,17 @@ class DistributedTaskQueue:
         Returns:
             ScanTask 或 None（超时）
         """
-        # BRPOP 从队列尾部获取（FIFO）
-        result = self.redis.brpop(TASK_QUEUE_KEY, timeout=timeout)
-        if result is None:
+        # BRPOPLPUSH：出队的同时把原始载荷保留在 processing 列表（FIFO 语义不变），
+        # Worker 崩溃时 recover_stale_tasks() 可据此重入队
+        task_json = self.redis.brpoplpush(TASK_QUEUE_KEY, PROCESSING_LIST_KEY, timeout=timeout)
+        if task_json is None:
             return None
-        _, task_json = result
         task = ScanTask.from_json(task_json)
+        # 记录原始载荷（ack 时精确 LREM）与租约时间戳
+        task._processing_raw = task_json
         # 更新状态为 running
         self.redis.hset(TASK_STATUS_KEY, task.task_id, "running")
+        self.redis.hset(TASK_CLAIM_KEY, task.task_id, str(time.time()))
         return task
 
     def push_result(self, result: TaskResult) -> None:
@@ -435,6 +443,70 @@ class DistributedTaskQueue:
         self.redis.lpush(RESULT_QUEUE_KEY, result.to_json())
         status = "failed" if result.error else "completed"
         self.redis.hset(TASK_STATUS_KEY, result.task_id, status)
+
+    def ack_task(self, task: ScanTask) -> None:
+        """确认任务已处理（push_result 之后调用）：清除 processing 载荷与租约
+
+        未确认的任务在租约超时后会被 recover_stale_tasks() 重新入队（至少一次语义），
+        因此 Worker 必须在成功/失败路径都执行本方法（WorkerNode.run 已在 finally 调用）。
+        """
+        raw = getattr(task, "_processing_raw", None)
+        if raw:
+            self.redis.lrem(PROCESSING_LIST_KEY, 1, raw)
+        self.redis.hdel(TASK_CLAIM_KEY, task.task_id)
+
+    def recover_stale_tasks(self, lease_timeout: Optional[float] = None) -> int:
+        """把租约过期的任务重新入队（Worker 崩溃恢复）
+
+        Args:
+            lease_timeout: 覆盖实例默认租约秒数（None 用 self.lease_timeout）
+
+        Returns:
+            重新入队的任务数量；载荷已丢失的过期任务会被标记 failed（避免调用方干等到超时）
+        """
+        lease = self.lease_timeout if lease_timeout is None else lease_timeout
+        now = time.time()
+        requeued = 0
+        try:
+            claims = self.redis.hgetall(TASK_CLAIM_KEY)
+        except Exception:
+            logger.debug("读取任务租约失败", exc_info=True)
+            return 0
+        for task_id, claimed_at in claims.items():
+            try:
+                expired = (now - float(claimed_at)) >= lease
+            except (TypeError, ValueError):
+                expired = True  # 损坏的时间戳按过期处理
+            if not expired:
+                continue
+            raw = self._find_processing_raw(task_id)
+            if raw is None:
+                # 出队与记账之间的极小窗口：只能判失败，不能让调用方等到超时
+                if self.redis.hget(TASK_STATUS_KEY, task_id) == "running":
+                    self.redis.hset(TASK_STATUS_KEY, task_id, "failed")
+                    logger.warning("任务 %s 租约过期且载荷丢失，已标记 failed", task_id)
+                self.redis.hdel(TASK_CLAIM_KEY, task_id)
+                continue
+            self.redis.lrem(PROCESSING_LIST_KEY, 1, raw)
+            self.redis.lpush(TASK_QUEUE_KEY, raw)
+            self.redis.hset(TASK_STATUS_KEY, task_id, "pending")
+            self.redis.hdel(TASK_CLAIM_KEY, task_id)
+            requeued += 1
+            logger.warning("任务 %s 租约过期，已重新入队（Worker 崩溃恢复）", task_id)
+        return requeued
+
+    def _find_processing_raw(self, task_id: str) -> Optional[str]:
+        """在 processing 列表中按 task_id 查找原始载荷（列表长度受 Worker 并发上限约束）"""
+        try:
+            for raw in self.redis.lrange(PROCESSING_LIST_KEY, 0, -1):
+                try:
+                    if json.loads(raw).get("task_id") == task_id:
+                        return raw
+                except (TypeError, ValueError):
+                    continue
+        except Exception:
+            logger.debug("扫描 processing 列表失败", exc_info=True)
+        return None
 
     def pop_result(self, timeout: int = 0) -> Optional[TaskResult]:
         """获取任务结果
@@ -499,7 +571,14 @@ class DistributedTaskQueue:
 
     def clear_all(self) -> None:
         """清空所有队列和状态"""
-        self.redis.delete(TASK_QUEUE_KEY, RESULT_QUEUE_KEY, TASK_STATUS_KEY, WORKER_HEARTBEAT_KEY)
+        self.redis.delete(
+            TASK_QUEUE_KEY,
+            RESULT_QUEUE_KEY,
+            TASK_STATUS_KEY,
+            WORKER_HEARTBEAT_KEY,
+            PROCESSING_LIST_KEY,
+            TASK_CLAIM_KEY,
+        )
 
     def get_stats(self) -> Dict[str, Any]:
         """获取队列统计"""
@@ -572,6 +651,9 @@ class MasterNode:
                 if progress_callback:
                     progress_callback(len(results), expected_count)
             else:
+                # B-2：先回收租约过期的任务（Worker 崩溃恢复），再判断是否还有未完成任务
+                if self.queue.recover_stale_tasks() > 0:
+                    continue
                 # 检查是否还有未完成任务
                 stats = self.queue.get_stats()
                 if stats["queue_size"] == 0 and stats["running"] == 0:
@@ -675,6 +757,10 @@ class WorkerNode:
         """
         self._running = True
         self.queue.register_worker(self.worker_id)
+        # B-2：启动即接管上一个 Worker 崩溃遗留的过期任务（多 Worker 场景下幂等，无害）
+        recovered = self.queue.recover_stale_tasks()
+        if recovered:
+            emit(f"[*]已回收 {recovered} 个租约过期的遗留任务")
 
         last_heartbeat = time.time()
         processed = 0
@@ -722,6 +808,11 @@ class WorkerNode:
                 self.queue.push_result(result)
                 self._stats["tasks_failed"] += 1
                 emit(f"[!]任务失败: {task.task_id} - {e}")
+
+            finally:
+                # 无论成功/失败都确认任务（清除 processing 载荷与租约），否则任务会在
+                # 租约超时后被误判为 Worker 崩溃并重复执行
+                self.queue.ack_task(task)
 
             processed += 1
             if max_tasks > 0 and processed >= max_tasks:

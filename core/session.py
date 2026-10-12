@@ -109,7 +109,12 @@ class SessionManager:
     - 线程安全请求计数：threading.Lock 保护 request_count
 
     D13：支持代理池轮换。传入 proxy_pool 时，每次请求自动从池中获取代理。
+
+    口令字典：password_dict 为扫描级注入的字典路径（orchestrator 按 pass_level 设置），
+    爆破类插件应优先读取本属性，而不是进程级 settings.PASSWORD_DICT（并发下会互相覆盖）。
     """
+
+    password_dict: Optional[str] = None
 
     def __init__(
         self,
