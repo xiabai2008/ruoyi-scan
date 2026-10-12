@@ -16,8 +16,8 @@ def test_parse_api_keys():
     assert parsed == {"key1": "read", "key2": "scan", "key3": "admin"}, parsed
     # 单 key 无 scope → admin（向后兼容）
     assert parse_api_keys("single-key") == {"single-key": "admin"}
-    # 无效 scope → admin
-    assert parse_api_keys("k:x") == {"k": "admin"}
+    # 无效 scope → 最小权限 read（fail-closed，安全修复）
+    assert parse_api_keys("k:x") == {"k": "read"}
     # 空 → 空
     assert parse_api_keys("") == {}
     print("PASS test_parse_api_keys")

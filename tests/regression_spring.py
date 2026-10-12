@@ -47,15 +47,9 @@ from plugins.spring.trace_leak import SpringTraceLeakPlugin
 MOCK_TARGET = "http://spring-mock.test"
 
 
-def json_ok(body=""):
+def json_ok():
     """返回 application/json 的 mock 响应头"""
     return {"Content-Type": "application/json;charset=UTF-8"}
-
-
-def json_body(d, indent=None):
-    import json as _json
-
-    return _json.dumps(d)
 
 
 class TestSpring4shell(unittest.TestCase):
@@ -77,9 +71,7 @@ class TestSpring4shell(unittest.TestCase):
     @requests_mock.Mocker()
     def test_real_vuln(self, m):
         """真实漏洞响应（Spring Boot 成功 JSON，无 marker）应判 CONFIRMED"""
-        # 真实 Spring4Shell 成功响应：200 + {"timestamp":...,"status":200}
-        real_resp = '{"timestamp":"2024-01-01T00:00:00.000Z","status":200,"error":"Not Found","path":"/"}'
-        # 实际成功响应是无 error 字段的标准 JSON
+        # 真实成功响应：200 + 无 error 字段的标准 JSON
         real_success = '{"timestamp":"2024-01-01T00:00:00.000Z","status":200,"message":"ok"}'
         m.post(MOCK_TARGET + "/", text=real_success)
         r = Spring4shellPlugin().verify(MOCK_TARGET, SessionManager())

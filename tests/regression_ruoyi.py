@@ -33,6 +33,7 @@ from common.models import (
     STATUS_SAFE,
     STATUS_UNKNOWN,
 )
+from core.http import join_url
 from core.session import SessionManager
 from plugins.ruoyi.cve_2025_46174_resetpwd_scope import Cve202546174ResetPwdScopePlugin
 from plugins.ruoyi.cve_2025_70986_select_dept_tree import Cve202570986SelectDeptTreePlugin
@@ -59,9 +60,15 @@ from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
 from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 
 # 统一 mock 目标（不使用真实域名，避免误发请求）
-# 注意：无尾部斜杠，配合 join_url() 归一化（P1-6 修复后所有插件使用 join_url，
-#       若 target 以 / 结尾且 path 以 / 开头则去重，确保 mock 注册路径与实际请求一致）
-MOCK_TARGET = "http://ruoyi-mock.test"
+# 尾斜杠与生产一致：生产环境 target 会被归一化为以 '/' 结尾。
+# mock 注册 URL 一律经 mock_url() → join_url() 拼接，保证与插件实际请求路径完全一致；
+# 若基准无尾斜杠，join_url 会退化为朴素拼接，让 host 吞掉路径（如 ...testdruid/submitLogin）。
+MOCK_TARGET = "http://ruoyi-mock.test/"
+
+
+def mock_url(path: str) -> str:
+    """构造 mock 注册 URL：与插件使用同一个 join_url，注册路径 == 实际请求路径"""
+    return join_url(MOCK_TARGET, path)
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +82,7 @@ class TestFileRead(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_root_x_0_0(self, m):
         """命中：响应含 root:x:0:0:root:/root:/bin/bash"""
-        url = MOCK_TARGET + "/common/download/resource?resource=/profile/../../../../../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         m.get(url, text="root:x:0:0:root:/root:/bin/bash\nbin:x:1:1:bin:/bin:/sbin/nologin\n")
         plugin = FileReadPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -85,7 +92,7 @@ class TestFileRead(unittest.TestCase):
     @requests_mock.Mocker()
     def test_ignore_noise_only_root(self, m):
         """噪声：响应仅含 root 单词（无 :/），应判 SAFE"""
-        url = MOCK_TARGET + "/common/download/resource?resource=/profile/../../../../../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         m.get(url, text="this is a root word but no path separator")
         plugin = FileReadPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -94,7 +101,7 @@ class TestFileRead(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_when_no_root(self, m):
         """无 root：响应不含 root，应判 SAFE"""
-        url = MOCK_TARGET + "/common/download/resource?resource=/profile/../../../../../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         m.get(url, text="404 not found page")
         plugin = FileReadPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -113,7 +120,7 @@ class TestSqlInject(unittest.TestCase):
         因此 mock 必须按调用顺序提供两个响应，否则等价于「目标任何请求都返回同一张错误页」，
         这种情况现被判为 UNKNOWN（见 test_unknown_when_signature_is_ambient）。
         """
-        url = MOCK_TARGET + "/system/role/list"
+        url = mock_url("/system/role/list")
         m.post(
             url,
             [
@@ -134,7 +141,7 @@ class TestSqlInject(unittest.TestCase):
         回归场景：目标任何请求都返回同一张含「运行时异常」的错误页。
         加固前该情形会被判 CONFIRMED（只要响应含异常文案即命中），属误报。
         """
-        url = MOCK_TARGET + "/system/role/list"
+        url = mock_url("/system/role/list")
         ambient = "运行时异常：系统繁忙，请稍后重试"
         m.post(url, text=ambient)
         plugin = SqlInjectRolePlugin()
@@ -150,7 +157,7 @@ class TestSqlInject(unittest.TestCase):
         该条件会「自证命中」，属典型误报。现要求 MySQL extractvalue 真实报错文案
         （XPATH syntax error）或「异常文案 + 无载荷回显」方可判 CONFIRMED。
         """
-        url = MOCK_TARGET + "/system/dept/list"
+        url = mock_url("/system/dept/list")
         m.post(
             url,
             text=(
@@ -166,7 +173,7 @@ class TestSqlInject(unittest.TestCase):
     @requests_mock.Mocker()
     def test_unknown_when_exception_and_reflection_coexist(self, m):
         """三态：响应同时含异常文案与载荷回显时，无法区分注入成功与请求回显 → UNKNOWN"""
-        url = MOCK_TARGET + "/system/role/list"
+        url = mock_url("/system/role/list")
         m.post(
             url,
             text=('{"msg":"运行时异常：extractvalue(1,concat(0x7e,(select database()),0x7e)) 执行失败","code":500}'),
@@ -178,7 +185,7 @@ class TestSqlInject(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_normal_response(self, m):
         """安全：正常业务响应，应判 SAFE"""
-        url = MOCK_TARGET + "/system/role/list"
+        url = mock_url("/system/role/list")
         m.post(url, text='{"rows":[],"code":200,"msg":"查询成功"}')
         plugin = SqlInjectRolePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -238,10 +245,10 @@ class TestJobInvokeTarget(unittest.TestCase):
             return json.dumps({"msg": "操作成功", "code": 0})
 
     def _mock_login_and_jobs(self, m, server):
-        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
-        m.post(MOCK_TARGET + "/monitor/job/list", text=server.list_resp, headers={"Content-Type": "application/json"})
-        m.post(MOCK_TARGET + "/monitor/job/edit", text=server.edit_resp, headers={"Content-Type": "application/json"})
+        m.get(mock_url("/login"), text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.post(mock_url("/monitor/job/list"), text=server.list_resp, headers={"Content-Type": "application/json"})
+        m.post(mock_url("/monitor/job/edit"), text=server.edit_resp, headers={"Content-Type": "application/json"})
 
     @requests_mock.Mocker()
     def test_confirmed_when_payload_accepted_and_written(self, m):
@@ -272,23 +279,23 @@ class TestJobInvokeTarget(unittest.TestCase):
     @requests_mock.Mocker()
     def test_unknown_when_edit_denied_by_permission(self, m):
         """账号缺 monitor:job:edit（返回权限页而非 JSON）→ UNKNOWN，不得判 SAFE"""
-        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.get(mock_url("/login"), text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
         m.post(
-            MOCK_TARGET + "/monitor/job/list",
+            mock_url("/monitor/job/list"),
             text=self._FakeJobServer().list_resp,
             headers={"Content-Type": "application/json"},
         )
-        m.post(MOCK_TARGET + "/monitor/job/edit", text=self.PAGE_403, headers={"Content-Type": "text/html"})
+        m.post(mock_url("/monitor/job/edit"), text=self.PAGE_403, headers={"Content-Type": "text/html"})
         result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"权限不足应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
     def test_unknown_when_job_list_unreadable(self, m):
         """任务列表不可读 → UNKNOWN（拿不到可用任务就不下结论）"""
-        m.get(MOCK_TARGET + "/login", text="<html>登录</html>", headers={"Content-Type": "text/html"})
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
-        m.post(MOCK_TARGET + "/monitor/job/list", text=self.PAGE_403, headers={"Content-Type": "text/html"})
+        m.get(mock_url("/login"), text="<html>登录</html>", headers={"Content-Type": "text/html"})
+        m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.post(mock_url("/monitor/job/list"), text=self.PAGE_403, headers={"Content-Type": "text/html"})
         result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"列表不可读应判 UNKNOWN，实际 {result.status}")
 
@@ -323,7 +330,7 @@ class TestDruidBrute(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_correct_password(self, m):
         """命中：admin/admin123 返回 success"""
-        url = MOCK_TARGET + "druid/submitLogin"
+        url = mock_url("druid/submitLogin")
         # requests_mock 按 LIFO 顺序匹配（最后注册的最先检查）：
         # 先注册兜底（其他凭据返回 failure），再注册特定凭据（success，最先被检查）
         m.post(url, text='{"code":500,"msg":"password error"}')
@@ -343,7 +350,7 @@ class TestDruidBrute(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_wrong_password(self, m):
         """未命中：所有凭据都返回失败"""
-        url = MOCK_TARGET + "druid/submitLogin"
+        url = mock_url("druid/submitLogin")
         m.post(url, text='{"code":500,"msg":"password error"}')
         plugin = DruidBrutePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -357,9 +364,9 @@ class TestDirectoryScan(unittest.TestCase):
     def test_status_code_classification(self, m):
         """200 命中（绿）/ 403 不命中为漏洞但仍记录"""
         # 准备 3 个端点：200 有标题、200 无标题、403
-        m.get(MOCK_TARGET + "/login", status_code=200, text="<html><title>RuoYi管理系统</title>login page</html>")
-        m.get(MOCK_TARGET + "/index", status_code=200, text="<html><title>首页</title></html>")
-        m.get(MOCK_TARGET + "/admin", status_code=403, text="<html><title>Forbidden</title>403</html>")
+        m.get(mock_url("/login"), status_code=200, text="<html><title>RuoYi管理系统</title>login page</html>")
+        m.get(mock_url("/index"), status_code=200, text="<html><title>首页</title></html>")
+        m.get(mock_url("/admin"), status_code=403, text="<html><title>Forbidden</title>403</html>")
 
         # 临时字典：仅包含测试用条目
         import tempfile
@@ -380,11 +387,11 @@ class TestDirectoryScan(unittest.TestCase):
                 hits = result.extra.get("hits", [])
                 hit_urls = [h["url"] for h in hits]
                 # 200 端点应被收集
-                self.assertIn(MOCK_TARGET + "/login", hit_urls)
-                self.assertIn(MOCK_TARGET + "/index", hit_urls)
+                self.assertIn(mock_url("/login"), hit_urls)
+                self.assertIn(mock_url("/index"), hit_urls)
                 # 403 端点：根据收集逻辑（'20' in code or 'NULL' not in title）
                 # 403 不含 '20' 但 title 非空（'Forbidden'）→ 也应被收集
-                self.assertIn(MOCK_TARGET + "/admin", hit_urls)
+                self.assertIn(mock_url("/admin"), hit_urls)
                 # 校验状态码记录
                 for h in hits:
                     if "login" in h["url"]:
@@ -400,7 +407,7 @@ class TestDirectoryScan(unittest.TestCase):
     def test_title_extraction(self, m):
         """标题提取：<title>RuoYi管理系统</title>"""
         m.get(
-            MOCK_TARGET + "/login", status_code=200, text="<html><head><title>RuoYi管理系统</title></head>login</html>"
+            mock_url("/login"), status_code=200, text="<html><head><title>RuoYi管理系统</title></head>login</html>"
         )
         import tempfile
 
@@ -435,7 +442,7 @@ class TestFileUpload(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_json_with_url(self, m):
         """命中：响应 JSON 含 url 字段（/profile/upload/...）"""
-        url = MOCK_TARGET + "common/upload"
+        url = mock_url("common/upload")
         m.post(
             url,
             headers={"Content-Type": "application/json"},
@@ -451,7 +458,7 @@ class TestFileUpload(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_auth_block(self, m):
         """安全：响应含『请先登录』鉴权拦截关键字"""
-        url = MOCK_TARGET + "common/upload"
+        url = mock_url("common/upload")
         m.post(url, headers={"Content-Type": "application/json"}, text='{"code":401,"msg":"请先登录"}')
         plugin = FileUploadPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -460,7 +467,7 @@ class TestFileUpload(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_non_json(self, m):
         """安全：响应非 JSON（HTML 错误页）"""
-        url = MOCK_TARGET + "common/upload"
+        url = mock_url("common/upload")
         m.post(url, text="<html><body>404 not found</body></html>")
         plugin = FileUploadPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -473,7 +480,7 @@ class TestJobRce(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_unauthorized_business_layer(self, m):
         """命中：未鉴权进入业务层（code=500 任务不存在）"""
-        url = MOCK_TARGET + "monitor/job/edit"
+        url = mock_url("monitor/job/edit")
         m.post(url, headers={"Content-Type": "application/json"}, text='{"code":500,"msg":"定时任务不存在"}')
         plugin = JobRcePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -482,7 +489,7 @@ class TestJobRce(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_auth_required(self, m):
         """安全：响应含『认证失败』鉴权关键字"""
-        url = MOCK_TARGET + "monitor/job/edit"
+        url = mock_url("monitor/job/edit")
         m.post(url, text='{"msg":"请求访问：/monitor/job/edit，认证失败，无法访问系统资源","code":401}')
         plugin = JobRcePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -491,7 +498,7 @@ class TestJobRce(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_403_status(self, m):
         """安全：HTTP 403 状态码"""
-        url = MOCK_TARGET + "monitor/job/edit"
+        url = mock_url("monitor/job/edit")
         m.post(url, status_code=403, text="Forbidden")
         plugin = JobRcePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -501,7 +508,7 @@ class TestJobRce(unittest.TestCase):
     def test_safe_code_400_param_error(self, m):
         """安全（P0 修复验证）：JSON code=400 参数错误不应判 CONFIRMED
         修复前 'or r_code is not None' 会导致任意非空 code 均误报为 RCE"""
-        url = MOCK_TARGET + "monitor/job/edit"
+        url = mock_url("monitor/job/edit")
         m.post(url, headers={"Content-Type": "application/json"}, text='{"code":400,"msg":"参数错误：jobId 不能为空"}')
         plugin = JobRcePlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -550,12 +557,12 @@ class TestUnauthBatch(unittest.TestCase):
     def test_hit_druid_monitor(self, m):
         """命中：/druid/index.html 含 Druid 特征关键字"""
         # 先注册其他端点的 404 兜底（最后注册优先匹配，故放最前）
-        m.get(MOCK_TARGET + "actuator/env", status_code=404, text="Not Found")
-        m.get(MOCK_TARGET + "swagger-ui.html", status_code=404, text="Not Found")
-        m.get(MOCK_TARGET + "system/user/list", status_code=404, text="Not Found")
+        m.get(mock_url("actuator/env"), status_code=404, text="Not Found")
+        m.get(mock_url("swagger-ui.html"), status_code=404, text="Not Found")
+        m.get(mock_url("system/user/list"), status_code=404, text="Not Found")
         # 最后注册命中端点（最先被匹配）
         m.get(
-            MOCK_TARGET + "druid/index.html",
+            mock_url("druid/index.html"),
             text="<html><head><title>Druid Stat Index</title></head><body>Druid Monitor View</body></html>",
         )
         plugin = UnauthBatchPlugin()
@@ -567,11 +574,11 @@ class TestUnauthBatch(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_actuator_env(self, m):
         """命中：/actuator/env 含 propertySources"""
-        m.get(MOCK_TARGET + "druid/index.html", status_code=404, text="Not Found")
-        m.get(MOCK_TARGET + "swagger-ui.html", status_code=404, text="Not Found")
-        m.get(MOCK_TARGET + "system/user/list", status_code=404, text="Not Found")
+        m.get(mock_url("druid/index.html"), status_code=404, text="Not Found")
+        m.get(mock_url("swagger-ui.html"), status_code=404, text="Not Found")
+        m.get(mock_url("system/user/list"), status_code=404, text="Not Found")
         m.get(
-            MOCK_TARGET + "actuator/env",
+            mock_url("actuator/env"),
             headers={"Content-Type": "application/json"},
             text='{"propertySources":[{"name":"systemEnvironment"}],"activeProfiles":["prod"]}',
         )
@@ -582,10 +589,10 @@ class TestUnauthBatch(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_all_auth_blocked(self, m):
         """安全：所有端点均返回 401 鉴权拦截"""
-        m.get(MOCK_TARGET + "actuator/env", status_code=401, text='{"msg":"认证失败，无法访问系统资源","code":401}')
-        m.get(MOCK_TARGET + "druid/index.html", status_code=401, text="请先登录")
-        m.get(MOCK_TARGET + "swagger-ui.html", status_code=401, text="unauthorized")
-        m.get(MOCK_TARGET + "system/user/list", status_code=401, text='{"msg":"认证失败","code":401}')
+        m.get(mock_url("actuator/env"), status_code=401, text='{"msg":"认证失败，无法访问系统资源","code":401}')
+        m.get(mock_url("druid/index.html"), status_code=401, text="请先登录")
+        m.get(mock_url("swagger-ui.html"), status_code=401, text="unauthorized")
+        m.get(mock_url("system/user/list"), status_code=401, text='{"msg":"认证失败","code":401}')
         plugin = UnauthBatchPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE, f"全部端点鉴权拦截应判 SAFE，实际 {result.status}")
@@ -594,7 +601,7 @@ class TestUnauthBatch(unittest.TestCase):
     def test_safe_no_keywords(self, m):
         """安全：端点返回 200 但无特征关键字（如 404 自定义页）"""
         for path in ["actuator/env", "druid/index.html", "swagger-ui.html", "system/user/list"]:
-            m.get(MOCK_TARGET + path, status_code=200, text="<html>custom 404 page</html>")
+            m.get(mock_url(path), status_code=200, text="<html>custom 404 page</html>")
         plugin = UnauthBatchPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE)
@@ -606,7 +613,7 @@ class TestDefaultPassword(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_token(self, m):
         """命中：登录返回 token"""
-        url = MOCK_TARGET + "login"
+        url = mock_url("login")
         m.post(
             url,
             headers={"Content-Type": "application/json"},
@@ -622,7 +629,7 @@ class TestDefaultPassword(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_password_error(self, m):
         """安全：返回密码错误（code=500）"""
-        url = MOCK_TARGET + "login"
+        url = mock_url("login")
         m.post(url, headers={"Content-Type": "application/json"}, text='{"code":500,"msg":"用户不存在/密码错误"}')
         plugin = DefaultPasswordPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -631,7 +638,7 @@ class TestDefaultPassword(unittest.TestCase):
     @requests_mock.Mocker()
     def test_unknown_captcha_required(self, m):
         """无法判定：服务端要求验证码"""
-        url = MOCK_TARGET + "login"
+        url = mock_url("login")
         m.post(url, headers={"Content-Type": "application/json"}, text='{"code":500,"msg":"验证码已失效，请重新获取"}')
         plugin = DefaultPasswordPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -642,7 +649,7 @@ class TestDefaultPassword(unittest.TestCase):
     def test_safe_jsessionid_only_no_token(self, m):
         """安全（P0 修复验证）：登录失败仅返回 JSESSIONID（无 Admin-Token）不应判 CONFIRMED
         Java 应用登录失败时常下发 JSESSIONID 会话 Cookie，修复前会误报为默认口令命中"""
-        url = MOCK_TARGET + "login"
+        url = mock_url("login")
         m.post(
             url,
             headers={"Content-Type": "application/json", "Set-Cookie": "JSESSIONID=abc123def456; Path=/; HttpOnly"},
@@ -667,7 +674,7 @@ class TestNacosUnauth(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit(self, m):
         """命中：响应含真实 Nacos 用户列表（分页字段 + username/password）→ CONFIRMED"""
-        url = MOCK_TARGET + "/nacos/v1/auth/users?pageNo=1&pageSize=10"
+        url = mock_url("/nacos/v1/auth/users?pageNo=1&pageSize=10")
         # D4 改造：真实风格响应，无 marker，含分页字段 + 多个用户条目
         m.get(
             url,
@@ -686,7 +693,7 @@ class TestNacosUnauth(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit_single_user(self, m):
         """命中：仅 1 个用户条目但含分页字段 + username/password → CONFIRMED"""
-        url = MOCK_TARGET + "/nacos/v1/auth/users?pageNo=1&pageSize=10"
+        url = mock_url("/nacos/v1/auth/users?pageNo=1&pageSize=10")
         m.get(
             url,
             text='{"totalCount":1,"pageNumber":1,"pageSize":10,'
@@ -699,7 +706,7 @@ class TestNacosUnauth(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_no_user_fields(self, m):
         """安全：200 但响应无 username/password 字段 → SAFE"""
-        url = MOCK_TARGET + "/nacos/v1/auth/users?pageNo=1&pageSize=10"
+        url = mock_url("/nacos/v1/auth/users?pageNo=1&pageSize=10")
         m.get(url, text='{"code":200,"msg":"操作成功","data":[]}')
         plugin = RuoyiNacosUnauthPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -708,7 +715,7 @@ class TestNacosUnauth(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe(self, m):
         """安全：HTTP 401 鉴权拦截 → SAFE"""
-        url = MOCK_TARGET + "/nacos/v1/auth/users?pageNo=1&pageSize=10"
+        url = mock_url("/nacos/v1/auth/users?pageNo=1&pageSize=10")
         m.get(url, status_code=401, text='{"code":401,"msg":"请先登录"}')
         plugin = RuoyiNacosUnauthPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -721,7 +728,7 @@ class TestFileReadPath(unittest.TestCase):
     @requests_mock.Mocker()
     def test_hit(self, m):
         """命中：响应含真实 /etc/passwd（root + 系统账户）→ CONFIRMED"""
-        url = MOCK_TARGET + "/common/download/resource?resource=../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=../../../etc/passwd")
         # D4 改造：真实 /etc/passwd 内容，无 marker
         m.get(
             url,
@@ -739,7 +746,7 @@ class TestFileReadPath(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe_no_passwd(self, m):
         """安全：200 但响应无 passwd 特征 → SAFE"""
-        url = MOCK_TARGET + "/common/download/resource?resource=../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=../../../etc/passwd")
         m.get(url, text="<html><body>文件不存在</body></html>")
         plugin = RuoyiFileReadPathPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -748,7 +755,7 @@ class TestFileReadPath(unittest.TestCase):
     @requests_mock.Mocker()
     def test_safe(self, m):
         """安全：HTTP 404 端点不存在 → SAFE"""
-        url = MOCK_TARGET + "/common/download/resource?resource=../../../etc/passwd"
+        url = mock_url("/common/download/resource?resource=../../../etc/passwd")
         m.get(url, status_code=404, text="404 not found")
         plugin = RuoyiFileReadPathPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -777,9 +784,9 @@ class TestPlusAuthProbe(unittest.TestCase):
     def test_safe_on_redirect_to_login(self, m):
         """302 → /login 不得判 CONFIRMED（历史误报场景）"""
         m.post(
-            MOCK_TARGET + "/auth/login",
+            mock_url("/auth/login"),
             status_code=302,
-            headers={"Location": MOCK_TARGET + "/login"},
+            headers={"Location": mock_url("/login")},
             text="",
         )
         plugin = PlusAuthLoginProbePlugin()
@@ -790,7 +797,7 @@ class TestPlusAuthProbe(unittest.TestCase):
     def test_safe_on_html_containing_code_and_msg(self, m):
         """HTML 正文含 code/msg 字样（如若依登录页的验证码字段）不得判 CONFIRMED"""
         m.post(
-            MOCK_TARGET + "/auth/login",
+            mock_url("/auth/login"),
             status_code=200,
             headers={"Content-Type": "text/html; charset=utf-8"},
             text='<html><input name="code" placeholder="验证码"><span class="msg"></span></html>',
@@ -803,7 +810,7 @@ class TestPlusAuthProbe(unittest.TestCase):
     def test_hit_on_json_with_code_msg_keys(self, m):
         """真正的 Sa-Token 业务 JSON（含 code/msg 键）应判 CONFIRMED"""
         m.post(
-            MOCK_TARGET + "/auth/login",
+            mock_url("/auth/login"),
             status_code=200,
             headers={"Content-Type": "application/json; charset=utf-8"},
             text='{"code":401,"msg":"用户名或密码错误"}',
@@ -882,10 +889,10 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
     DENIED_PAGE = "<!DOCTYPE html><html><head><title>RuoYi - 500</title></head><body>没有权限访问用户数据</body></html>"
 
     def _mock_login_and_list(self, m, rows):
-        m.get(MOCK_TARGET + "/login", text="<html><form>登录</form></html>", headers={"Content-Type": "text/html"})
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.get(mock_url("/login"), text="<html><form>登录</form></html>", headers={"Content-Type": "text/html"})
+        m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
         m.post(
-            MOCK_TARGET + "/system/user/list",
+            mock_url("/system/user/list"),
             text=json.dumps({"total": len(rows), "rows": rows, "code": 200, "msg": "查询成功"}),
             headers={"Content-Type": "application/json"},
         )
@@ -894,8 +901,8 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
     def test_confirmed_when_out_of_scope_page_renders(self, m):
         """漏洞版：不可见用户的页面被越权渲染 → CONFIRMED"""
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
-        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
-        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.LEAKED_PAGE)
+        m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
+        m.get(mock_url("/system/user/resetPwd/1"), text=self.LEAKED_PAGE)
         result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"越权渲染应判 CONFIRMED，实际 {result.status}")
         self.assertIn("admin", result.evidence, "证据应点名泄露的登录名")
@@ -907,8 +914,8 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         回归重点：**不能靠状态码判定**——修复版同样返回 200。
         """
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
-        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
-        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.DENIED_PAGE)
+        m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
+        m.get(mock_url("/system/user/resetPwd/1"), text=self.DENIED_PAGE)
         result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE, f"被拒应判 SAFE，实际 {result.status}")
 
@@ -926,8 +933,8 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         防止把「页面本来就渲染不出来」误判成 SAFE。
         """
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
-        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text="<html>whatever</html>")
-        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text="<html>whatever</html>")
+        m.get(mock_url("/system/user/resetPwd/2"), text="<html>whatever</html>")
+        m.get(mock_url("/system/user/resetPwd/1"), text="<html>whatever</html>")
         result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"对照组未渲染应判 UNKNOWN，实际 {result.status}")
 
@@ -946,8 +953,8 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         v4.8.3 一次多出 6 个假 CONFIRMED。此用例锁定「共享会话不被认证」这一约束。
         """
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
-        m.get(MOCK_TARGET + "/system/user/resetPwd/2", text=self.CONTROL_PAGE)
-        m.get(MOCK_TARGET + "/system/user/resetPwd/1", text=self.DENIED_PAGE)
+        m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
+        m.get(mock_url("/system/user/resetPwd/1"), text=self.DENIED_PAGE)
         shared = SessionManager()
         Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, shared)
         self.assertEqual(len(list(shared.session.cookies)), 0, "共享会话不应被插件登录所污染")
@@ -970,12 +977,12 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
     JSON_500 = '{"timestamp":"2026-09-17 10:00:00","status":500,"error":"Internal Server Error"}'
 
     def _mock_login(self, m):
-        m.get(MOCK_TARGET + "/login", text=self.PAGE_LOGIN, headers={"Content-Type": "text/html"})
-        m.post(MOCK_TARGET + "/login", text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
+        m.get(mock_url("/login"), text=self.PAGE_LOGIN, headers={"Content-Type": "text/html"})
+        m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
 
     def _mock_probes(self, m, tree_data_body, select_tree_body):
-        m.get(MOCK_TARGET + "/system/dept/treeData/0", text=tree_data_body)
-        m.get(MOCK_TARGET + "/system/dept/selectDeptTree/0", text=select_tree_body)
+        m.get(mock_url("/system/dept/treeData/0"), text=tree_data_body)
+        m.get(mock_url("/system/dept/selectDeptTree/0"), text=select_tree_body)
 
     @requests_mock.Mocker()
     def test_confirmed_when_tree_data_leaks(self, m):
@@ -1031,26 +1038,13 @@ def run_all():
     """运行全部测试，返回 0 表示全部通过"""
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    # 按类加载，保证顺序
+    # 自动收集本模块定义的 TestCase（__dict__ 顺序即定义顺序），替代手工维护列表：
+    # 手工列表漏列一个类时 `python tests/regression_ruoyi.py` 会静默少跑（pytest 仍能发现），
+    # 派生集合让两条入口的覆盖范围始终一致。__module__ 过滤掉外部导入的 TestCase。
     test_classes = [
-        TestFileRead,
-        TestSqlInject,
-        TestJobInvokeTarget,
-        TestDruidBrute,
-        TestDirectoryScan,
-        TestFileUpload,
-        TestJobRce,
-        TestThymeleafSsti,
-        TestUnauthBatch,
-        TestDefaultPassword,
-        # Step 8 新增
-        TestNacosUnauth,
-        TestFileReadPath,
-        # 多版本矩阵实测新增（2026-09-17）：重定向/HTML 误报回归
-        TestPlusAuthProbe,
-        TestPlusJobUnauth,
-        TestCve202546174ResetPwdScope,
-        TestCve202570986SelectDeptTree,
+        obj
+        for obj in vars(sys.modules[__name__]).values()
+        if isinstance(obj, type) and issubclass(obj, unittest.TestCase) and obj.__module__ == __name__
     ]
     for cls in test_classes:
         suite.addTests(loader.loadTestsFromTestCase(cls))
@@ -1061,9 +1055,9 @@ def run_all():
 
 
 # Windows ANSI 代码页（cp1252/GBK）控制台下中文输出防崩溃（G2 可移植性）
+# 仅在直接运行时调用：模块级调用会在 pytest 收集期重配 sys.stdout/stderr，干扰输出捕获
 from common.console import force_utf8_stdio
 
-force_utf8_stdio()
-
 if __name__ == "__main__":
+    force_utf8_stdio()
     sys.exit(run_all())

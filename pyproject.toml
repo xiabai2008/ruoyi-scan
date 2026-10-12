@@ -40,7 +40,7 @@ classifiers = [
 # 核心依赖（零系统依赖，必装）
 dependencies = [
     "requests>=2.28",
-    "requests-mock>=1.11",
+    # requests-mock 仅测试 mock 用，已列在 [project.optional-dependencies].dev（不进运行时分发）
 ]
 
 # 可选依赖分组（pip install ".[group]"）
@@ -72,7 +72,15 @@ yaml = [
 lab = [
     "flask>=2.3",
 ]
+# 对抗型传输层（方案 A）：Scrapling 指纹伪装 / 隐身浏览器绕过 CF Turnstile
+# 刻意不并入 all：本依赖会拉入 playwright/patchright/curl_cffi 并需另打浏览器二进制
+# （约 150MB+），只应由需要对抗能力的用户显式安装。
+adversarial = [
+    "scrapling[fetchers]>=0.4.15",
+]
 # 全部可选依赖
+# 注意：PEP 621 不支持 extra 之间互相引用，本列表须与上方 report/serve/distributed/async/yaml/lab
+# 手工保持同步（有意不含 adversarial，理由见上）。新增或升级依赖时请两处一起改。
 all = [
     "reportlab>=4.0",
     "python-docx>=1.1",

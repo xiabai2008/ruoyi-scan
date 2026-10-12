@@ -121,10 +121,14 @@ def test_origin_direct_strategy_transport():
 
 
 def test_registry_default_strategies():
-    """默认注册 11 个策略"""
+    """默认注册 11 条内置策略（L5 对抗传输策略需显式注册/开关启用，不计入默认）"""
     reg = StrategyRegistry()
     all_s = reg.all_strategies()
-    assert len(all_s) == 11, f"应注册 11 个策略，实际 {len(all_s)}"
+    ids = {s.strategy_id for s in all_s}
+    assert len(all_s) == 11, f"应注册 11 个内置策略，实际 {len(all_s)}"
+    assert {"BP-GEN-1", "BP-GEN-2", "BP-CF-1", "BP-CF-2"} <= ids
+    # 方案 A 的 L5 引擎策略默认不注册（保证零行为变化）
+    assert "BP-ENG-1" not in ids
 
 
 def test_registry_get_strategies_cloudflare_sqli():
@@ -296,6 +300,183 @@ def test_coordinator_bypass_exception_not_safe():
     assert result.status != STATUS_SAFE
 
 
+def test_engine_strategy_reserved_in_attempts_window():
+    """方案 A：enable_engine_fallback 开启时，L5 引擎策略不被 attempts 截断
+
+    cloudflare/sqli 下按 priority 排序 BP-ENG-1 排第 5，而 attempts=min(3, N)=3，
+    若不保底则永不触发。开启开关后应按「追加」纳入，且不挤掉窗口内廉价策略。
+    默认（开关关闭）则完全不含 BP-ENG-1，保证零行为变化。
+    """
+
+    class RecordingPlugin:
+        vuln_type = "sqli"
+        bypass_max_attempts = 3
+
+        def __init__(self):
+            self.attempted: list = []
+
+        def verify_with_bypass(self, target, session, ctx):
+            self.attempted.append(ctx.strategy.strategy_id)
+            # 立即返回 UNKNOWN，不调用 session → 不触发真实浏览器（离线测试）
+            return ScanResult(kind="vuln", name="rec", status=STATUS_UNKNOWN, url=target, evidence="x")
+
+    original = ScanResult(kind="vuln", name="t", status=STATUS_UNKNOWN, url="http://x.com", evidence="no")
+
+    # 关闭开关（默认）：零行为变化，不含引擎策略
+    p_off = RecordingPlugin()
+    WafBypassCoordinator(waf_type="cloudflare").maybe_bypass(p_off, "http://x.com/", MockSession(), original)
+    assert "BP-ENG-1" not in p_off.attempted, f"默认不应启用引擎兜底：{p_off.attempted}"
+    assert len(p_off.attempted) <= 3
+
+    # 开启开关：引擎策略追加到末尾，且不挤掉廉价策略
+    p_on = RecordingPlugin()
+    coord = WafBypassCoordinator(waf_type="cloudflare", enable_engine_fallback=True)
+    coord.maybe_bypass(p_on, "http://x.com/", MockSession(), original)
+    assert "BP-ENG-1" in p_on.attempted, f"开启开关后 L5 引擎策略仍被截断：{p_on.attempted}"
+    assert "BP-CF-2" in p_on.attempted, f"廉价策略被挤掉：{p_on.attempted}"
+    assert p_on.attempted[-1] == "BP-ENG-1", f"引擎策略应作为最后兜底：{p_on.attempted}"
+
+
+def test_scrapling_cookie_normalization_and_injection():
+    """方案 A：Playwright cookie 元组归一化为 {name:value}，并注入基础会话"""
+    from lib.scrapling_transport import ScraplingTransport
+
+    # Scrapling 返回的是 Playwright cookie 对象（expires 为 float），必须只取 name/value
+    raw = (
+        {"name": "cf_clearance", "value": "abc", "expires": 1234.5, "httpOnly": True},
+        {"name": "XSRF-TOKEN", "value": "xyz", "expires": 99.9},
+    )
+    assert ScraplingTransport._cookie_dict(raw) == {"cf_clearance": "abc", "XSRF-TOKEN": "xyz"}
+
+    from requests.cookies import RequestsCookieJar
+    from requests.structures import CaseInsensitiveDict
+
+    class _Sess:
+        def __init__(self):
+            self.cookies = RequestsCookieJar()
+            self.headers = CaseInsensitiveDict()
+
+    s = _Sess()
+    t = ScraplingTransport()
+    t._clearance_cookies = {"cf_clearance": "abc"}  # noqa: SLF001
+    t._clearance_ua = "UA/1.0"  # noqa: SLF001
+    t.apply_clearance(s)
+    assert s.cookies.get("cf_clearance") == "abc"
+    assert s.headers["User-Agent"] == "UA/1.0"
+
+
+def test_bypass_session_clearance_primes_once_per_host():
+    """方案 A：reuse 模式下同一 host 只解一次挑战，后续请求走基础会话"""
+    from lib.waf_bypass import BypassSession
+
+    class _Engine:
+        request_count = 0
+
+        def __init__(self):
+            self.primes = []
+            self.applied = 0
+
+        def prime(self, url):
+            self.primes.append(url)
+
+        def apply_clearance(self, session):
+            self.applied += 1
+
+    class _Sess:
+        request_count = 0
+
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, **k):
+            self.calls.append(("GET", url))
+            return "RAW"
+
+        def post(self, url, **k):
+            self.calls.append(("POST", url))
+            return "RAW"
+
+        def request(self, method, url, **k):
+            self.calls.append((method, url))
+            return "RAW"
+
+        def close(self):
+            pass
+
+    sess = _Sess()
+    bs = BypassSession(sess, {"engine": "scrapling", "scrapling_reuse": True})
+    bs._engine_transport = _Engine()  # noqa: SLF001  注入假引擎，避免真起浏览器
+
+    bs.get("http://t/a")  # 首个 host：解挑战 + 注入
+    bs.get("http://t/b")  # 同 host：跳过
+    bs.post("http://t/c")  # 同 host：跳过，且走基础会话（支持 POST）
+    bs.get("http://other/d")  # 新 host：再解一次
+
+    assert len(bs._engine_transport.primes) == 2  # noqa: SLF001
+    assert bs._engine_transport.applied == 2  # noqa: SLF001
+    # 复用路径下实际请求由基础会话发出（证明未逐请求起浏览器）
+    assert ("POST", "http://t/c") in sess.calls
+
+
+def test_clearance_prime_memoized_across_bypass_sessions():
+    """方案 A：同一次扫描内多个 BypassSession（多策略/多插件）共享基础会话，只解一次挑战
+
+    回归背景：解挑战（隐身浏览器）单次约 10~20s。maybe_bypass 会为**每个策略尝试**
+    新建一个 BypassSession，引擎也会为**每个插件**重复调用；若去重标记只挂在
+    BypassSession 实例上，则插件数×策略数会成倍拉起浏览器。故去重必须以
+    基础会话为维度。
+    """
+    from lib.waf_bypass import BypassSession
+
+    class _Engine:
+        request_count = 0
+
+        def __init__(self):
+            self.primes = []
+            self.applied = 0
+
+        def prime(self, url):
+            self.primes.append(url)
+
+        def apply_clearance(self, session):
+            self.applied += 1
+
+    class _Sess:
+        request_count = 0
+
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, **k):
+            self.calls.append(("GET", url))
+            return "RAW"
+
+        def post(self, url, **k):
+            self.calls.append(("POST", url))
+            return "RAW"
+
+        def request(self, method, url, **k):
+            self.calls.append((method, url))
+            return "RAW"
+
+        def close(self):
+            pass
+
+    sess = _Sess()
+    engine = _Engine()
+
+    # 模拟一次真实扫描：3 个 BypassSession（策略/插件叠加）共享同一基础会话与同一 host
+    for _ in range(3):
+        bs = BypassSession(sess, {"engine": "scrapling", "scrapling_reuse": True})
+        bs._engine_transport = engine  # noqa: SLF001  注入假引擎，避免真起浏览器
+        bs.get("http://t/a")
+
+    assert len(engine.primes) == 1  # 仅首个 BypassSession 触发解挑战
+    assert engine.applied == 1
+    # 每个 BypassSession 的请求仍由基础会话发出（快速路径）
+    assert sess.calls.count(("GET", "http://t/a")) == 3
+
+
 if __name__ == "__main__":
     test_strategy_is_applicable_match()
     test_strategy_is_applicable_waf_mismatch()
@@ -320,4 +501,8 @@ if __name__ == "__main__":
     test_coordinator_bypass_success()
     test_coordinator_bypass_all_failed()
     test_coordinator_bypass_exception_not_safe()
+    test_engine_strategy_reserved_in_attempts_window()
+    test_scrapling_cookie_normalization_and_injection()
+    test_bypass_session_clearance_primes_once_per_host()
+    test_clearance_prime_memoized_across_bypass_sessions()
     print("All D7.1 WAF bypass tests passed!")

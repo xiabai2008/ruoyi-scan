@@ -13,6 +13,7 @@
 """
 
 import atexit
+import concurrent.futures  # noqa: F401  # 见下方「进程退出安全网」：确保 _python_exit 先完成注册
 import os as _os
 import sys as _sys
 from pathlib import Path
@@ -33,9 +34,10 @@ if PROJECT_ROOT not in _sys.path:
 # 内部线程池的非 daemon 线程。当 mock fixture 失效后后台线程加载真实插件
 # 并发起 HTTP 请求，join 无限等待导致 pytest 进程挂起（CI D9 超时根因）。
 #
-# 解决方案：在 _python_exit 之前注册我们的 atexit handler，用 os._exit 绕过
-# 后续 atexit handler（包括 _python_exit）。atexit 按后注册先执行的顺序调用，
-# 因此我们在 conftest import 时注册即可保证先于 _python_exit 执行。
+# 解决方案：注册我们的 atexit handler，用 os._exit 绕过后续 atexit handler
+# （包括 _python_exit）。atexit 按「后注册先执行」（LIFO）顺序调用，因此必须
+# 保证 _python_exit 先于本 handler 注册：文件顶部强制 import concurrent.futures
+# 完成注册后，本 handler 再注册，LIFO 下才会先于 _python_exit 执行。
 _exit_code_holder = {"code": 0}
 
 
@@ -160,8 +162,13 @@ def client(app, mock_network):
 
 
 @pytest.fixture
-def client_with_key(app_with_key):
-    """带 API Key 鉴权的 TestClient"""
+def client_with_key(app_with_key, mock_network):
+    """带 API Key 鉴权的 TestClient
+
+    依赖 mock_network（同 client）：保证 mock 覆盖 TestClient 的
+    startup/shutdown 生命周期，避免 orchestrator.shutdown() 阶段加载真实插件
+    导致后台线程脱离 mock 后挂起。
+    """
     from starlette.testclient import TestClient
 
     with TestClient(app_with_key) as c:
@@ -176,15 +183,21 @@ def client_factory(mock_network):
         def test_xxx(client_factory):
             with client_factory(api_key="k1:read,k2:admin") as client:
                 ...
+
+    每次调用创建的临时目录由 fixture teardown 统一回收（此前 mkdtemp 无清理）。
     """
+    import shutil
     import tempfile
 
     from starlette.testclient import TestClient
 
     from api.app import create_app
 
+    tmp_dirs = []
+
     def _create(api_key="", schedule_expr="", schedule_target=""):
         tmp_dir = tempfile.mkdtemp(prefix="ruoyi_scan_e9_")
+        tmp_dirs.append(tmp_dir)
         db_path = _os.path.join(tmp_dir, "tasks.db")
         app_inst = create_app(
             api_key=api_key,
@@ -194,7 +207,11 @@ def client_factory(mock_network):
         )
         return TestClient(app_inst)
 
-    return _create
+    yield _create
+    # TestClient 未关闭时 Windows 上 SQLite 句柄可能仍被占用，故 ignore_errors；
+    # 目录入的是系统临时区，残留也只是可回收垃圾，不应让 teardown 报错
+    for tmp_dir in tmp_dirs:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # ── P1: storage / registry ──────────────────────────────────────

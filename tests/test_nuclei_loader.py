@@ -46,9 +46,9 @@ def test_parse_example_template():
 
 
 def test_parse_matchers_condition():
-    """swagger 示例含 matchers-condition: or + 多类型 matcher"""
+    """swagger 示例含 matchers-condition: and + 多类型 matcher（关键字必须命中，防 200 误报）"""
     tpl = parse_nuclei_template(os.path.join(EXAMPLES, "swagger-ui-exposed.yaml"))
-    assert tpl.matchers_condition == "or"
+    assert tpl.matchers_condition == "and"
     mtypes = {m.mtype for m in tpl.matchers}
     assert "word" in mtypes and "status" in mtypes
     print("PASS test_parse_matchers_condition: %s %s" % (tpl.matchers_condition, mtypes))
