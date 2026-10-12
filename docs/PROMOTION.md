@@ -27,7 +27,7 @@
 - **供应链加固**：SLSA 构建来源证明 + 插件 Ed25519 强制验签 + OpenSSF Scorecard
 - **三种用法**：`pip install ruoyi-scan`（PyPI）/ 单文件 exe / Docker 一键部署，均内置签名靶场（仅本地绑定）
 - **在线文档站**：https://xiabai2008.github.io/ruoyi-scan/（mkdocs-material 全量文档）
-- MIT 开源，v1.4.3
+- MIT 开源，v1.5.0
 
 ### 通用 CTA（结尾模板）
 
@@ -332,7 +332,7 @@ Demo GIF in the README. Happy to discuss the architecture.
 | Topics 标签 | 已配置 20 个（ai / nuclei / ruoyi / cve / cnvd / waf-bypass 等） | ✅ 完成 |
 | README 演示动图 | `assets/demo-scan.gif` + 命令行真实运行截图 | ✅ 完成 |
 | 英文 README | `README_EN.md` 已存在（HN/Reddit 访客入口） | ✅ 完成 |
-| Release 发布 | 已发布至 v1.4.3，含 whl 资产、校验和与更新日志 | ✅ 完成 |
+| Release 发布 | 已发布至 v1.5.0，含 whl 资产、校验和与更新日志 | ✅ 完成 |
 | PyPI 发布 | `pip install ruoyi-scan`（OIDC 受信任发布，无需手动上传） | ✅ 完成 |
 | 桌面端单 exe | Releases 附单文件 exe，双击即用（无需 Python/Docker） | ✅ 完成 |
 | 在线文档站 | https://xiabai2008.github.io/ruoyi-scan/（mkdocs-material） | ✅ 完成 |
