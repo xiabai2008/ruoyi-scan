@@ -5,6 +5,7 @@ import { themeOf, type ThemeName } from "../tokens";
 function useChart(option: echarts.EChartsOption, theme: ThemeName) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts>();
+  const lastSig = useRef<string | null>(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -15,10 +16,15 @@ function useChart(option: echarts.EChartsOption, theme: ThemeName) {
     return () => {
       window.removeEventListener("resize", onResize);
       chart.dispose();
+      lastSig.current = null;
     };
   }, []);
 
   useEffect(() => {
+    // 父组件每次渲染都会重建 option 对象：签名一致时跳过 setOption，避免重复渲染开销
+    const sig = JSON.stringify(option);
+    if (sig === lastSig.current) return;
+    lastSig.current = sig;
     chartRef.current?.setOption(option, true);
   }, [option, theme]);
 
@@ -121,7 +127,7 @@ export function MixDonut({
         label: { show: false },
         labelLine: { show: false },
         itemStyle: { borderColor: "transparent", borderWidth: 0 },
-        data: data.map((d, i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i] } })),
+        data: data.map((d, i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i % colors.length] } })),
       },
     ],
   };
@@ -142,8 +148,8 @@ export function MixLegend({
   return (
     <div className="flex flex-1 flex-col gap-2.5">
       {data.map((d, i) => (
-        <div key={d.label} className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-sm" style={{ background: colors[i] }} />
+        <div key={`${i}-${d.label}`} className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-sm" style={{ background: colors[i % colors.length] }} />
           <div className="flex flex-col gap-0.5">
             <span className="text-[10.5px] text-legend">{d.label}</span>
             <span className="font-mono text-[11px] text-ink">

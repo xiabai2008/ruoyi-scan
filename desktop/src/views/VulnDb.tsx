@@ -7,7 +7,8 @@ import { api, sevToUi, type PluginMeta } from "../services/backend";
 
 const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
-const VULN_TYPE_LABEL: Record<string, string> = {
+/** p.category 的中文标签（后端 category: brute/recon/vuln/ruoyi/spring/common…） */
+const CATEGORY_LABEL: Record<string, string> = {
   brute: "爆破",
   recon: "信息收集",
   vuln: "漏洞利用",
@@ -20,14 +21,29 @@ export function VulnDb() {
   const [query, setQuery] = useState("");
   const [sevFilter, setSevFilter] = useState("all");
   const [detail, setDetail] = useState<PluginMeta | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!online) return;
+    let cancelled = false;
     setLoading(true);
     api.listPlugins()
-      .then((list) => setPlugins([...list].sort((a, b) => (SEV_ORDER[a.severity] ?? 3) - (SEV_ORDER[b.severity] ?? 3) || a.name.localeCompare(b.name))))
-      .catch(() => setPlugins([]))
-      .finally(() => setLoading(false));
+      .then((list) => {
+        if (cancelled) return;
+        setPlugins([...list].sort((a, b) => (SEV_ORDER[a.severity] ?? 3) - (SEV_ORDER[b.severity] ?? 3) || a.name.localeCompare(b.name)));
+        setError("");
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPlugins([]);
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [online]);
 
   const counts = useMemo(() => ({
@@ -65,7 +81,7 @@ export function VulnDb() {
   ];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <Topbar
         title="漏洞库 · VULN DB"
         sub={online ? `${counts.all} POC LOADED · ${counts.cve} CVE · LIVE FROM ENGINE` : "ENGINE OFFLINE"}
@@ -134,6 +150,8 @@ export function VulnDb() {
               <Empty text="引擎离线 —— 连接后端后加载插件库" />
             ) : loading ? (
               <Empty text="加载插件元数据中…" />
+            ) : error ? (
+              <Empty text={`插件库加载失败：${error}`} />
             ) : filtered.length === 0 ? (
               <Empty text="无匹配插件" />
             ) : (
@@ -146,7 +164,7 @@ export function VulnDb() {
                   <span className="w-[64px]"><SeverityText s={sevToUi(p.severity)} /></span>
                   <span className="flex-1 truncate text-[11.5px] text-ink" title={p.description}>{p.name}</span>
                   <span className="w-[150px] truncate font-mono text-[10.5px] text-ink-2">
-                    {p.cve ? <span style={{ color: "var(--c-accent-primary)" }}>{p.cve}</span> : VULN_TYPE_LABEL[p.category] || p.category}
+                    {p.cve ? <span style={{ color: "var(--c-accent-primary)" }}>{p.cve}</span> : CATEGORY_LABEL[p.category] || p.category}
                     {p.vuln_type ? <span className="ml-1.5 text-ink-3">{p.vuln_type}</span> : null}
                   </span>
                   <span className="w-[170px] truncate font-mono text-[10px] text-ink-3">{p.affected_versions || "—"}</span>

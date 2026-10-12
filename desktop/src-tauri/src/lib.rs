@@ -39,6 +39,50 @@ fn port_open(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
 }
 
+/// 廉价采样校验和（FNV-1a，约每 4KB 取 1 字节）：
+/// 版本戳只需识别“壳升级换引擎”，无需每次启动遍历整个引擎（几十~几百 MB）。
+fn sample_checksum(data: &[u8]) -> u64 {
+    const STRIDE: usize = 4096;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut i = 0;
+    while i < data.len() {
+        h ^= data[i] as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        i += STRIDE;
+    }
+    h ^ (data.len() as u64)
+}
+
+/// 端口被占用时进一步确认对方是不是本项目的引擎（GET /api/system/health），
+/// 避免把外来进程 / 未被 JobObject 回收的残留服务误当自己的后端。
+fn engine_healthy(port: u16) -> bool {
+    use std::io::{Read, Write};
+    let addr: SocketAddr = match format!("127.0.0.1:{}", port).parse() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let req = format!(
+        "GET /api/system/health HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+        port
+    );
+    if stream.write_all(req.as_bytes()).is_err() {
+        return false;
+    }
+    let mut buf = [0u8; 256];
+    match stream.read(&mut buf) {
+        Ok(n) if n > 0 => {
+            let head = String::from_utf8_lossy(&buf[..n]);
+            head.starts_with("HTTP/1.1 200") || head.starts_with("HTTP/1.0 200")
+        }
+        _ => false,
+    }
+}
+
 /// 引擎自解压目录：%LOCALAPPDATA%\Ruoyi-Scan\engine\
 #[cfg(windows)]
 fn engine_dir() -> PathBuf {
@@ -62,38 +106,48 @@ fn materialize_engine() -> Option<PathBuf> {
         return None;
     }
     let dir = engine_dir();
-    let exe = dir.join("ruoyi-scan-engine.exe");
+    // 平台区分：Windows 产物带 .exe；非 Windows 下 tie_to_job 为空实现，名字也不再误导
+    let exe = dir.join(if cfg!(windows) {
+        "ruoyi-scan-engine.exe"
+    } else {
+        "ruoyi-scan-engine"
+    });
     let stamp = dir.join(".engine-stamp");
 
-    // 以「字节数 + 简单校验和」作版本戳：壳升级换引擎时自动覆盖旧解压产物
-    let checksum: u64 = EMBEDDED_ENGINE.iter().map(|&b| b as u64).sum();
+    // 以「字节数 + 采样校验和」作版本戳：壳升级换引擎时自动覆盖旧解压产物
+    let checksum = sample_checksum(EMBEDDED_ENGINE);
     let expected = format!("{}\n{}\n", EMBEDDED_ENGINE.len(), checksum);
     let need_extract = match std::fs::read_to_string(&stamp) {
         Ok(prev) => prev != expected,
         Err(_) => true,
     };
     if need_extract {
-        std::fs::create_dir_all(&dir).ok()?;
-        // 先写临时文件再改名，避免写入中断留下残缺引擎
-        let tmp = dir.join(".engine.tmp");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("[ruoyi-scan-desktop] 引擎目录创建失败：{:?}（{}）", dir, e);
+            return None;
+        }
+        // 先写临时文件再改名，避免写入中断留下残缺引擎；
+        // 临时名带 PID，防止多个壳实例并发解压时互相写坏同一路径
+        let tmp = dir.join(format!(".engine.{}.tmp", std::process::id()));
         if std::fs::write(&tmp, EMBEDDED_ENGINE).is_err() {
             eprintln!("[ruoyi-scan-desktop] 引擎自解压失败（目录不可写？）：{:?}", dir);
             return None;
         }
-        // 旧引擎若正被运行中的进程锁定，remove/rename 会失败 → 此时若端口已开则复用现有引擎
-        if exe.exists() {
-            let _ = std::fs::remove_file(&exe);
-        }
+        // std::fs::rename 在 Windows 上等价 MOVEFILE_REPLACE_EXISTING，直接覆盖旧引擎即可；
+        // 若旧引擎正被运行中的进程锁定，rename 会失败 → 此时若端口已开则复用现有引擎
         if std::fs::rename(&tmp, &exe).is_err() {
             let _ = std::fs::remove_file(&tmp);
-            if port_open(API_PORT) {
+            if exe.exists() && port_open(API_PORT) {
                 eprintln!("[ruoyi-scan-desktop] 引擎文件被占用但服务已在线，复用现有引擎");
                 return Some(exe);
             }
             eprintln!("[ruoyi-scan-desktop] 引擎更新失败且服务离线");
             return None;
         }
-        std::fs::write(&stamp, expected).ok()?;
+        // 版本戳只是缓存提示：写失败仅告警，不影响已就位引擎的可用性
+        if let Err(e) = std::fs::write(&stamp, expected) {
+            eprintln!("[ruoyi-scan-desktop] 引擎版本戳写入失败（忽略）：{}", e);
+        }
         eprintln!("[ruoyi-scan-desktop] 引擎已释放：{:?}", exe);
     }
     Some(exe)
@@ -168,8 +222,15 @@ fn tie_to_job(_child: &Child) -> bool {
 
 fn spawn_backend() -> Option<Child> {
     if port_open(API_PORT) {
-        eprintln!("[ruoyi-scan-desktop] 后端已在 {} 端口运行，跳过拉起", API_PORT);
-        return None;
+        if engine_healthy(API_PORT) {
+            eprintln!("[ruoyi-scan-desktop] 后端已在 {} 端口运行，跳过拉起", API_PORT);
+            return None;
+        }
+        // 端口被占但健康检查不像本项目的引擎：不静默跳过，至少留下诊断并尝试拉起
+        eprintln!(
+            "[ruoyi-scan-desktop] {} 端口被非本项目服务占用（/api/system/health 未通过），仍尝试拉起引擎",
+            API_PORT
+        );
     }
     let cors = [
         "http://tauri.localhost",

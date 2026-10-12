@@ -18,6 +18,15 @@
 
 import os
 import sys
+from typing import List
+
+
+def _has_flag(argv: List[str], flag: str) -> bool:
+    """argv 中是否已显式给出该开关（同时匹配 `--flag` 与 `--flag=value` 两种写法）。
+
+    精确匹配 flag 本身或 `flag + "="` 前缀，避免 `--port` 误吞 `--ports`。
+    """
+    return any(a == flag or a.startswith(flag + "=") for a in argv)
 
 
 def _prepare_runtime() -> None:
@@ -28,24 +37,34 @@ def _prepare_runtime() -> None:
     # 可写根目录：%USERPROFILE%\Ruoyi-Scan（报告 / 任务库 / 用户数据）
     home = os.path.expanduser("~")
     scan_home = os.environ.get("RUOYI_SCAN_HOME") or os.path.join(home, "Ruoyi-Scan")
-    os.makedirs(scan_home, exist_ok=True)
+    reports_dir = os.path.join(scan_home, "reports")
+    try:
+        os.makedirs(scan_home, exist_ok=True)
+        os.makedirs(reports_dir, exist_ok=True)
+    except OSError as exc:
+        # 原始 traceback 对用户没有指导意义：指出具体目录与排查方向后非零退出
+        print(f"[engine] 无法创建可写目录 {scan_home}: {exc}", file=sys.stderr)
+        print(
+            "[engine] 请检查 RUOYI_SCAN_HOME 指向的路径是否存在且当前用户可写；"
+            "未设置时默认 %USERPROFILE%\\Ruoyi-Scan。",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     # config.settings 在 import 时求值 REPORT_DIR → 环境变量必须在 import 前落位
-    os.environ.setdefault(
-        "RUOYI_SCAN_REPORT_DIR", os.path.join(scan_home, "reports")
-    )
-    os.makedirs(os.path.join(scan_home, "reports"), exist_ok=True)
+    os.environ.setdefault("RUOYI_SCAN_REPORT_DIR", reports_dir)
 
     # 缺省参数注入：--serve 模式必填项与任务库路径
+    # 注意：用户显式传入的值优先（含 --flag=value 形式），仅在完全未给出时才补默认值
     argv = sys.argv[1:]
     if "--serve" not in argv:
         argv = ["--serve"] + argv
-    if "--host" not in argv:
+    if not _has_flag(argv, "--host"):
         argv += ["--host", "127.0.0.1"]
-    if "--port" not in argv:
+    if not _has_flag(argv, "--port"):
         argv += ["--port", "8123"]
     # SQLite 任务库放可写目录（exe 同目录不可写，相对路径 data/tasks.db 会失败）
-    if "--db-path" not in argv:
+    if not _has_flag(argv, "--db-path"):
         argv += ["--db-path", os.path.join(scan_home, "tasks.db")]
     sys.argv = [sys.argv[0]] + argv
 

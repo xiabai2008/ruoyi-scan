@@ -40,9 +40,25 @@ export function saveWidgetPrefs(p: WidgetPrefs) {
 
 type PosMap = Partial<Record<WidgetId, { x: number; y: number }>>;
 
+const WIDGET_IDS: WidgetId[] = ["findings", "engine", "progress"];
+
+/** 校验持久化坐标的形状并重新 clamp，防止脏数据/缩窗后把卡片放到屏幕外 */
+function sanitizePos(raw: unknown): { x: number; y: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { x, y } = raw as { x?: unknown; y?: unknown };
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return clampPos(x, y);
+}
+
 function loadPos(): PosMap {
   try {
-    return JSON.parse(localStorage.getItem(POS_KEY) || "{}") as PosMap;
+    const raw = JSON.parse(localStorage.getItem(POS_KEY) || "{}") as Record<string, unknown>;
+    const out: PosMap = {};
+    for (const id of WIDGET_IDS) {
+      const p = sanitizePos(raw[id]);
+      if (p) out[id] = p;
+    }
+    return out;
   } catch {
     return {};
   }
@@ -163,7 +179,8 @@ function DraggableCard({ id, pos, onMove }: { id: WidgetId; pos: { x: number; y:
   const [dragging, setDragging] = useState(false);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    // 捕获到卡片容器而非子元素：子节点在拖拽中被替换时捕获不会丢失
+    e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
     setDragging(true);
   };
@@ -172,7 +189,8 @@ function DraggableCard({ id, pos, onMove }: { id: WidgetId; pos: { x: number; y:
     const p = clampPos(e.clientX - drag.current.dx, e.clientY - drag.current.dy);
     onMove(id, p.x, p.y);
   };
-  const onPointerUp = () => {
+  // pointerup / pointercancel / 捕获丢失都走同一收尾，避免手势被取消后卡在 dragging 状态
+  const endDrag = () => {
     drag.current = null;
     setDragging(false);
   };
@@ -182,7 +200,9 @@ function DraggableCard({ id, pos, onMove }: { id: WidgetId; pos: { x: number; y:
     <div
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
       className="fixed z-50 select-none rounded-lg border bg-card p-2.5"
       style={{
         left: pos.x,
@@ -221,6 +241,22 @@ export function WidgetsLayer({ prefs }: { prefs: WidgetPrefs }) {
       return same ? prev : next;
     });
   }, [prefs.findings, prefs.engine, prefs.progress]);
+
+  // 窗口尺寸变化后重新 clamp 已保存坐标，避免卡片残留在可视区外
+  useEffect(() => {
+    const onResize = () => {
+      setPos((prev) => {
+        const next: PosMap = {};
+        for (const id of WIDGET_IDS) {
+          const p = prev[id];
+          if (p) next[id] = clampPos(p.x, p.y);
+        }
+        return next;
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const onMove = (id: WidgetId, x: number, y: number) => {
     setPos((prev) => {

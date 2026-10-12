@@ -38,26 +38,40 @@ export function saveVisual(p: VisualPrefs) {
   }
 }
 
-const loaded = loadVisual();
-
-/** 全局偏好单例（不走 context，Settings 与根组件直接读写） */
-let current: VisualPrefs = loaded;
+/** 全局偏好单例（不走 context，Settings 与根组件直接读写）。
+ *  懒加载：模块导入不触碰 localStorage（SSR/测试环境 import 安全），首次访问才读取。 */
+let current: VisualPrefs | null = null;
 const listeners = new Set<(p: VisualPrefs) => void>();
 
-export function getVisual(): VisualPrefs {
+function snapshot(): VisualPrefs {
+  if (!current) current = loadVisual();
   return current;
 }
 
+export function getVisual(): VisualPrefs {
+  return snapshot();
+}
+
 export function setVisual(patch: Partial<VisualPrefs>) {
-  current = { ...current, ...patch };
-  saveVisual(current);
-  applyVisual(current);
-  for (const fn of listeners) fn(current);
+  const next = { ...snapshot(), ...patch };
+  current = next;
+  saveVisual(next);
+  applyVisual(next);
+  for (const fn of listeners) {
+    // 单个订阅者异常不应饿死后续订阅者（状态已更新，观察方必须保持一致）
+    try {
+      fn(next);
+    } catch (e) {
+      console.error("[visual] 订阅者回调异常", e);
+    }
+  }
 }
 
 export function subscribeVisual(fn: (p: VisualPrefs) => void): () => void {
   listeners.add(fn);
-  return () => listeners.delete(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 /** 复古字体按需加载（mono 模式零开销） */
@@ -87,7 +101,7 @@ export function applyVisual(p: VisualPrefs) {
   const root = document.documentElement;
   root.dataset.crt = p.crt ? "on" : "off";
   if (p.fontMode !== "mono") void ensureFont(p.fontMode);
-  const stack = FONT_STACKS[p.fontMode];
+  const stack = FONT_STACKS[p.fontMode] ?? FONT_STACKS.mono;
   root.style.setProperty("--font-mono", stack);
   root.style.setProperty("--font-pixel", stack);
   root.style.setProperty("--font-crt", stack);
@@ -96,9 +110,9 @@ export function applyVisual(p: VisualPrefs) {
 
 /** 根组件挂载时调用一次：读偏好 + 监听后续变化 */
 export function useVisualBoot(): VisualPrefs {
-  const [prefs, setPrefs] = useState<VisualPrefs>(current);
+  const [prefs, setPrefs] = useState<VisualPrefs>(snapshot);
   useEffect(() => {
-    applyVisual(current);
+    applyVisual(snapshot());
     return subscribeVisual(setPrefs);
   }, []);
   return prefs;

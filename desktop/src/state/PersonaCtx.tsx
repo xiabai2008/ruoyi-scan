@@ -116,17 +116,16 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
       if (typeof picked !== "string" || !picked) return null;
       setCustomAvatarPath(picked);
       const url = personaUrl(picked);
-      setOperatorState((prev) => {
-        const c: OperatorConfig = {
-          ...prev,
-          id: "custom",
-          callsign: prev.callsign || "ME",
-          greet: prev.greet || "自定义操作员已就位",
-          avatar: url,
-        };
-        saveConfig(c);
-        return c;
-      });
+      const prev = operatorRef.current;
+      const c: OperatorConfig = {
+        ...prev,
+        id: "custom",
+        callsign: prev.callsign || "ME",
+        greet: prev.greet || "自定义操作员已就位",
+        avatar: url,
+      };
+      setOperatorState(c);
+      saveConfig(c);
       return url;
     } catch {
       // 浏览器 dev 模式 / 插件不可用：静默降级

@@ -77,11 +77,15 @@ export interface OperatorConfig {
 
 const DEF_CALLSIGN = "枚依";
 
+/** 通知/音效默认值：默认与预设两处工厂共享，避免切换预设时静默静音 */
+const OPERATOR_MEDIA_DEFAULTS = { speak: true, sound: true } as const;
+
 export function defaultOperator(): OperatorConfig {
   const m = OPERATORS[0];
-  return { id: m.id, callsign: DEF_CALLSIGN, greet: m.greet, avatar: "", speak: true, sound: true };
+  return { id: m.id, callsign: DEF_CALLSIGN, greet: m.greet, avatar: "", ...OPERATOR_MEDIA_DEFAULTS };
 }
 
+/** 按 id 取预设操作员（avatar 由调用方用 assetFor 填充） */
 export function operatorById(id: OperatorId): OperatorConfig | null {
   const m = OPERATORS.find((o) => o.id === id);
   if (!m) return null;
@@ -90,21 +94,16 @@ export function operatorById(id: OperatorId): OperatorConfig | null {
     callsign: m.name.startsWith(DEF_CALLSIGN) ? DEF_CALLSIGN : m.name,
     greet: m.greet,
     avatar: "",
-    speak: false,
-    sound: false,
+    ...OPERATOR_MEDIA_DEFAULTS,
   };
 }
 
-/** persona:// 协议 → 浏览器可直接 <img> 的 URL（自定义头像用） */
+/** persona:// 协议 → 浏览器可直接 <img> 的 URL（自定义头像用）；encodeURI 保留 / 与 :，其余特殊字符转义 */
 export function personaUrl(p: string): string {
-  return "persona://" + p.replace(/\\/g, "/");
+  return "persona://" + encodeURI(p.replace(/\\/g, "/"));
 }
 
-/** 生成自定义头像的默认称呼 */
-export function customCallsign(): string {
-  return DEF_CALLSIGN;
-}
-
+/** 预设操作员问候语；custom 不在 OPERATORS 中，返回空串 */
 export function operatorGreetLine(id: OperatorId): string {
-  return OPERATORS.find((o) => o.id === id)?.greet || "";
+  return operatorById(id)?.greet ?? "";
 }

@@ -116,12 +116,26 @@ export interface MetricsSnapshot {
 
 /* ---------- API 客户端 ---------- */
 
+/** localStorage 不可用（SSR / 沙箱 webview）时的会话内兜底，避免所有 API 调用在读取配置时直接抛错 */
+let memApiBase: string | null = null;
+
 export function getApiBase(): string {
-  return localStorage.getItem("ruoyi-scan.apiBase") || DEFAULT_API_BASE;
+  if (memApiBase) return memApiBase;
+  try {
+    return localStorage.getItem("ruoyi-scan.apiBase") || DEFAULT_API_BASE;
+  } catch {
+    return DEFAULT_API_BASE;
+  }
 }
 
 export function setApiBase(base: string) {
-  localStorage.setItem("ruoyi-scan.apiBase", base.replace(/\/+$/, ""));
+  const normalized = base.replace(/\/+$/, "");
+  memApiBase = normalized;
+  try {
+    localStorage.setItem("ruoyi-scan.apiBase", normalized);
+  } catch {
+    /* 存储不可用：地址仅在本会话生效，不向调用方抛错 */
+  }
 }
 
 export class ApiError extends Error {
@@ -135,8 +149,9 @@ export class ApiError extends Error {
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const url = getApiBase() + path;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
+    // headers 必须在 init 之后合并，否则调用方传入的 headers 会整体覆盖并丢掉 Content-Type
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
@@ -181,7 +196,7 @@ export const api = {
     http<{ task_id: string; formats: string[]; paths: string[] }>(`/api/report/${encodeURIComponent(id)}`),
   /** 报告下载走 <a href> 直下（FileResponse 带 Content-Disposition），不需要 fetch */
   reportDownloadUrl: (id: string, fmt: string) =>
-    `${getApiBase()}/api/report/${encodeURIComponent(id)}/${fmt}`,
+    `${getApiBase()}/api/report/${encodeURIComponent(id)}/${encodeURIComponent(fmt)}`,
 
   /* E9 定时扫描 */
   listSchedules: () => http<ScheduleJob[]>("/api/schedule"),
@@ -203,15 +218,20 @@ export async function fetchMetrics(): Promise<MetricsSnapshot> {
   const text = await res.text();
   const uptime = numOf(text, "ruoyi_scan_uptime_seconds");
   const active = numOf(text, "ruoyi_scan_tasks_active");
-  const storageTasks = numOf(text, "ruoyi_scan_storage_tasks");
+  const storageTasks = numOfOpt(text, "ruoyi_scan_storage_tasks");
   const tasks = seriesOf(text, "ruoyi_scan_tasks_total");
   const results = seriesOf(text, "ruoyi_scan_results_total");
   return { uptime, tasks, active, results, storageTasks };
 }
 
-function numOf(text: string, metric: string): number {
+/** 指标存在时返回值，缺失时返回 null —— 用于区分“后端未暴露该指标”与真实 0（如 storage 未启用） */
+function numOfOpt(text: string, metric: string): number | null {
   const m = text.match(new RegExp(`^${metric}\\s+([0-9.]+)$`, "m"));
-  return m ? Number(m[1]) : 0;
+  return m ? Number(m[1]) : null;
+}
+
+function numOf(text: string, metric: string): number {
+  return numOfOpt(text, metric) ?? 0;
 }
 
 function seriesOf(text: string, metric: string): Record<string, number> {
@@ -224,6 +244,8 @@ function seriesOf(text: string, metric: string): Record<string, number> {
 /* ---------- WebSocket 客户端 ---------- */
 
 export type WsState = "connecting" | "open" | "closed";
+
+const TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
 
 /**
  * 订阅某个任务的实时事件。服务端连接后会先补播历史事件、随后推送新事件，
@@ -258,11 +280,11 @@ export function openTaskSocket(
         const e = JSON.parse(msg.data as string) as WsEvent;
         onEvent(e);
         const d = e.data || {};
-        if (
-          e.type === "complete" ||
-          (e.type === "error") ||
-          (d.status && ["done", "failed", "cancelled"].includes(String(d.status)))
-        ) {
+        // 终态只通知一次：complete 之后常跟一条 status=done，重复触发会让消费方收到重复回调。
+        // error 帧仍视为终态 —— 服务端发出后必然关闭连接（任务不存在 / 任务异常），继续重连没有意义。
+        const terminal =
+          e.type === "complete" || e.type === "error" || TERMINAL_STATUSES.has(String(d.status));
+        if (terminal && !terminalSeen) {
           terminalSeen = true;
           onTerminal?.();
         }
@@ -295,8 +317,29 @@ export function openTaskSocket(
 
 /* ---------- 展示辅助 ---------- */
 
-const SEV_UI: Record<BackendSev, "HIGH" | "MED" | "LOW"> = { high: "HIGH", medium: "MED", low: "LOW" };
-export const sevToUi = (s: BackendSev | string): "HIGH" | "MED" | "LOW" => SEV_UI[s as BackendSev] || "LOW";
+const SEV_UI: Record<string, "CRITICAL" | "HIGH" | "MED" | "LOW"> = {
+  critical: "CRITICAL",
+  high: "HIGH",
+  medium: "MED",
+  low: "LOW",
+};
+
+const warnedSev = new Set<string>();
+
+/**
+ * 后端级别 → UI 级别。未知级别不静默降级为 LOW（会把潜在高危显示成低危）：
+ * 以中性 MED 呈现并打印一次告警，暴露后端契约漂移。
+ */
+export const sevToUi = (s: BackendSev | string): "CRITICAL" | "HIGH" | "MED" | "LOW" => {
+  const key = String(s).toLowerCase();
+  const ui = SEV_UI[key];
+  if (ui) return ui;
+  if (!warnedSev.has(key)) {
+    warnedSev.add(key);
+    console.warn(`[sevToUi] 未知严重级别 "${String(s)}"，按 MED 展示`);
+  }
+  return "MED";
+};
 
 export const MODE_LABEL: Record<ScanMode, string> = {
   u: "综合扫描 u",

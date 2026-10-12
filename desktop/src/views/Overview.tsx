@@ -55,6 +55,9 @@ export function Overview() {
     [tasks],
   );
 
+  // 图表轴标签与分桶共用同一参考时刻，避免两处各自的 “now” 产生边界漂移
+  const chartNow = Date.now();
+
   return (
     <div className="flex h-full flex-col">
       <Topbar
@@ -107,9 +110,9 @@ export function Overview() {
           <div className="min-h-0 flex-1">
             <TrendChart
               theme="bluewhite"
-              dates={trendDates(tasks)}
-              found={taskTrend(tasks, "running")}
-              total={taskTrend(tasks, "done")}
+              dates={trendDates(chartNow)}
+              found={taskTrend(tasks, "running", chartNow)}
+              total={taskTrend(tasks, "done", chartNow)}
               foundLabel="RUN"
               totalLabel="DONE"
             />
@@ -162,8 +165,11 @@ function RecentFindings({ tasks, online }: { tasks: ScanTask[]; online: boolean 
       return;
     }
     let alive = true;
-    // 最多聚合最近 3 个有结果的终态任务
-    const candidates = tasks.filter((t) => t.status === "done" && (t.result_count || 0) > 0).slice(0, 3);
+    // 最多聚合最近 3 个有结果的终态任务（按结束时间倒序，避免列表顺序变化时取到旧任务）
+    const candidates = tasks
+      .filter((t) => t.status === "done" && (t.result_count || 0) > 0)
+      .sort((a, b) => (b.finished_at || 0) - (a.finished_at || 0))
+      .slice(0, 3);
     Promise.all(
       candidates.map(async (t) => {
         let items: ScanResultItem[] = [];
@@ -231,16 +237,14 @@ function RecentFindings({ tasks, online }: { tasks: ScanTask[]; online: boolean 
 }
 
 /* ---------- 图表辅助（空数据时输出静态演示波形，避免 ECharts 空白突兀） ---------- */
-function trendDates(tasks: ScanTask[]) {
-  const now = new Date();
+function trendDates(now: number) {
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now.getTime() - (6 - i) * 86400000);
+    const d = new Date(now - (6 - i) * 86400000);
     return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
 }
 
-function taskTrend(tasks: ScanTask[], wanted: "running" | "done") {
-  const now = Date.now();
+function taskTrend(tasks: ScanTask[], wanted: "running" | "done", now: number) {
   const out: number[] = [];
   for (let i = 6; i >= 0; i--) {
     const from = now - (i + 1) * 86400000;

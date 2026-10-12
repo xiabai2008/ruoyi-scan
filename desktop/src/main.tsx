@@ -8,7 +8,10 @@ import "@fontsource/jetbrains-mono/700.css";
 import "@fontsource-variable/noto-sans-sc";
 import "./styles/theme.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("挂载点 #root 不存在：index.html 是否被修改？");
+
+ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,

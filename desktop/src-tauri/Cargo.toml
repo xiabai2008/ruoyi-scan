@@ -1,8 +1,11 @@
 [package]
 name = "ruoyi-scan-desktop"
-version = "1.4.1"
+version = "1.4.3"
 description = "Ruoyi-Scan 桌面端 · 枚依控制台"
 authors = ["XIABAI"]
+license = "MIT"
+repository = "https://github.com/xiabai2008/ruoyi-scan"
+rust-version = "1.77.2"
 edition = "2021"
 
 [lib]

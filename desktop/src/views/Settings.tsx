@@ -4,7 +4,7 @@ import { Toggle } from "../components/ui";
 import {
   THEME_META, THEME_ORDER, THEMES,
   CUSTOM_DRAFT_FIELDS, deriveCustomTheme, hasCustomTheme, loadCustomTheme, saveCustomTheme,
-  normalizeHex, type CustomThemeDraft, type ThemeName,
+  normalizeHex, type CustomThemeDraft, type Theme, type ThemeName, type TokenKey,
 } from "../tokens";
 import { OPERATORS } from "../persona";
 import { assetFor } from "../assets/avatars";
@@ -130,7 +130,8 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
     a.href = url;
     a.download = "ruoyi-scan-theme.json";
     a.click();
-    URL.revokeObjectURL(url);
+    // 立即 revoke 可能赶在浏览器启动下载前取消它；延后到下一个任务
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const importTheme = async () => {
@@ -142,16 +143,20 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
       if (!file) return;
       file.text().then((txt) => {
         try {
-          const parsed = JSON.parse(txt) as Record<string, string>;
-          const checked: Record<string, string> = {};
-          for (const [k, v] of Object.entries(parsed)) {
-            if (typeof v === "string" && normalizeHex(v)) checked[k] = v;
+          const parsed = JSON.parse(txt) as Record<string, unknown>;
+          // 按完整 token 集逐项校验（loadCustomTheme 缺任何一项都会整体失效），避免半截主题被"导入成功"
+          const out: Theme = { ...THEMES.bluewhite };
+          const missing: string[] = [];
+          for (const k of Object.keys(THEMES.bluewhite) as TokenKey[]) {
+            const hex = normalizeHex(typeof parsed[k] === "string" ? (parsed[k] as string) : "");
+            if (!hex) missing.push(k);
+            else out[k] = hex;
           }
-          if (Object.keys(checked).length < 20) {
-            setCustomHint("主题文件不完整（需 30 个 token），导入失败");
+          if (missing.length > 0) {
+            setCustomHint(`主题文件不完整（缺 ${missing.length} 项，需全部 30 个 token），导入失败`);
             return;
           }
-          saveCustomTheme(checked as never);
+          saveCustomTheme(out);
           onTheme("custom");
           playThemeTick();
           setCustomHint("主题已导入并启用");

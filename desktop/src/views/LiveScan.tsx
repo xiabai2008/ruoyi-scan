@@ -90,7 +90,9 @@ export function LiveScan() {
   );
   const console = useScanConsole(active, active?.task_id ?? "none");
   const boxRef = useRef<HTMLDivElement>(null);
-  const now = useNow(active && active.status === "running" ? active.started_at : null);
+  const now = useNow(
+    active && (active.status === "running" || active.status === "pending") ? active.started_at : null,
+  );
   const running = active && (active.status === "running" || active.status === "pending");
 
   // 到达页面时若从未选过任务，默认聚焦最新一个

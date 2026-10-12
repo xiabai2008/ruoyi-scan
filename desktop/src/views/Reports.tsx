@@ -77,7 +77,7 @@ export function Reports({ theme }: { theme: ThemeName }) {
     const total = Math.max(1, kpis.exports);
     return FMT_ALL
       .filter((f) => kpis.fmtTally[f])
-      .map((f) => ({ label: FMT_LABEL[f], value: kpis.fmtTally[f], pct: `${Math.round((kpis.fmtTally[f] / total) * 100)}%` }));
+      .map((f) => ({ fmt: f, label: FMT_LABEL[f], value: kpis.fmtTally[f], pct: `${Math.round((kpis.fmtTally[f] / total) * 100)}%` }));
   }, [kpis]);
 
   return (
@@ -158,9 +158,9 @@ export function Reports({ theme }: { theme: ThemeName }) {
               <span className="font-mono text-[10px] text-ink-3">暂无数据</span>
             ) : (
               donutData.map((d) => (
-                <div key={d.label} className="flex flex-col gap-1">
+                <div key={d.fmt} className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10.5px]" style={{ color: fmtColor[d.label.toLowerCase()] || "var(--c-text-secondary)" }}>
+                    <span className="font-mono text-[10.5px]" style={{ color: fmtColor[d.fmt] || "var(--c-text-secondary)" }}>
                       {d.label}
                     </span>
                     <span className="font-mono text-[11px] text-ink">{d.value} · {d.pct}</span>
@@ -168,7 +168,7 @@ export function Reports({ theme }: { theme: ThemeName }) {
                   <div className="h-[6px] overflow-hidden rounded-full" style={{ background: "var(--c-zebra)" }}>
                     <div
                       className="h-full rounded-full"
-                      style={{ width: d.pct, background: fmtColor[d.label.toLowerCase()] || "var(--c-accent-primary)" }}
+                      style={{ width: d.pct, background: fmtColor[d.fmt] || "var(--c-accent-primary)" }}
                     />
                   </div>
                 </div>

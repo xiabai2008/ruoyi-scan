@@ -28,6 +28,9 @@ interface ConsoleState {
   connectedAt: number;
 }
 
+/** 终端行缓冲上限：slice 保留 MAX-1 行 + 新增 1 行 = 恰好 MAX_LOG_LINES 行 */
+const MAX_LOG_LINES = 200;
+
 const empty: ConsoleState = {
   lines: [], status: "pending", fingerprint: "", waf: "",
   progress: { done: 0, total: 0, percent: 0 },
@@ -43,33 +46,38 @@ function verdictOf(s: string): Verdict {
 export function useScanConsole(task: ScanTask | null, key: string) {
   const taskId = task?.task_id ?? null;
   const [st, setSt] = useState<ConsoleState>(empty);
-  const idRef = useRef(0);
   const lastPctRef = useRef(-1);
   const tick = useRef(0);
+  // 列表轮询会替换 task 引用，而 WS 回调在异步消息里执行；
+  // 用 ref 让 handler 始终读到最新快照，避免闭包捕获过期 task（见 complete 分支的 target）
+  const taskRef = useRef<ScanTask | null>(task);
+  useEffect(() => {
+    taskRef.current = task;
+  }, [task]);
 
   useEffect(() => {
-    if (!taskId || !task) return;
+    if (!taskId) return;
+    const snapshot = taskRef.current;
+    if (!snapshot) return;
     const push = (level: LogLevel, text: string, ts?: number) => {
       const time = ts ? fmtClock(ts) : fmtClock(Date.now() / 1000);
       setSt((prev) => ({
         ...prev,
-        lines: [...prev.lines.slice(-200), { id: ++tick.current, time, level, text }],
+        lines: [...prev.lines.slice(-(MAX_LOG_LINES - 1)), { id: ++tick.current, time, level, text }],
       }));
     };
 
     // 初始化：任务快照（非空 task 一定在线，先重置）
-    idRef.current = 0;
     tick.current = 0;
     lastPctRef.current = -1;
     setSt((prev) => ({
       ...empty,
-      status: task.status,
-      fingerprint: task.fingerprint?.cms ? `${task.fingerprint.cms} ${task.fingerprint.variant || task.fingerprint.version || ""}`.trim() : "",
+      status: snapshot.status,
+      fingerprint: snapshot.fingerprint?.cms ? `${snapshot.fingerprint.cms} ${snapshot.fingerprint.variant || snapshot.fingerprint.version || ""}`.trim() : "",
       progress: { done: 0, total: 0, percent: 0 },
       wsState: "connecting",
     }));
-    const t0 = Date.now() / 1000;
-    push("info", `task ${task.task_id} · ${task.mode} mode · target ${task.target}`);
+    push("info", `task ${snapshot.task_id} · ${snapshot.mode} mode · target ${snapshot.target}`);
 
     const onEvent = (e: WsEvent) => {
       const d = (e.data || {}) as Record<string, unknown>;
@@ -138,7 +146,7 @@ export function useScanConsole(task: ScanTask | null, key: string) {
             resultCount: prev.resultCount + 1,
           }));
           if (v === "CONFIRMED") {
-            void import("./personaHooks").then((m) => m.fireConfirmAlert(String(d.name || "")));
+            void import("./personaHooks").then((m) => m.fireConfirmAlert(String(d.name || ""))).catch(() => { /* chunk 加载失败静默降级 */ });
           }
           break;
         }
@@ -154,20 +162,22 @@ export function useScanConsole(task: ScanTask | null, key: string) {
           }
           break;
         }
-        case "report":
-          push("info", `report: ${(d.paths as string[])?.join(", ") || "generated"}`, e.timestamp);
+        case "report": {
+          const paths = Array.isArray(d.paths) ? (d.paths as string[]) : [];
+          push("info", `report: ${paths.join(", ") || "generated"}`, e.timestamp);
           break;
+        }
         case "complete":
           push("meiyi", `complete: ${d.result_count} findings · ${d.confirmed_count} confirmed · duration ${(Number(d.duration) || 0).toFixed(1)}s`, e.timestamp);
           setSt((prev) => ({ ...prev, taskDone: true }));
           void import("./personaHooks").then((m) =>
             m.fireScanDone({
-              target: task?.target ?? "",
+              target: taskRef.current?.target ?? "",
               total: Number(d.result_count) || 0,
               confirmed: Number(d.confirmed_count) || 0,
               duration: Number(d.duration) || 0,
             }),
-          );
+          ).catch(() => { /* chunk 加载失败静默降级 */ });
           break;
         case "error": {
           const msg = String(d.error || "");
@@ -179,8 +189,6 @@ export function useScanConsole(task: ScanTask | null, key: string) {
           break;
         case "ping":
           break;
-        case "plugins_loaded":
-          break; // 已在上方处理（防御重复 case 警告）
         default: {
           // 未知事件类型也落一行，保证终端流不吞事件
           const brief = JSON.stringify(d);
@@ -192,7 +200,6 @@ export function useScanConsole(task: ScanTask | null, key: string) {
 
     const onTerminal = () => setSt((prev) => ({ ...prev, taskDone: true }));
     const close = openTaskSocket(taskId, onEvent, (s) => setSt((prev) => ({ ...prev, wsState: s })), onTerminal);
-    void t0;
     return close;
   }, [taskId, key]);
 

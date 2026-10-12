@@ -20,12 +20,12 @@ const ROOT = path.resolve(__dirname, "../..");
 const OUT = path.join(ROOT, "docs/images");
 
 const PAGES = [
-  { idx: 0, file: "desktop-01-overview.png", label: "总览" },
-  { idx: 1, file: "desktop-02-livescan.png", label: "扫描任务", expand: "结果明细" },
-  { idx: 2, file: "desktop-03-vulndb.png", label: "漏洞库" },
-  { idx: 3, file: "desktop-04-assets.png", label: "资产管理" },
-  { idx: 4, file: "desktop-05-reports.png", label: "报告中心" },
-  { idx: 5, file: "desktop-06-settings.png", label: "设置" },
+  { file: "desktop-01-overview.png", label: "总览" },
+  { file: "desktop-02-livescan.png", label: "扫描任务", expand: "结果明细" },
+  { file: "desktop-03-vulndb.png", label: "漏洞库" },
+  { file: "desktop-04-assets.png", label: "资产管理" },
+  { file: "desktop-05-reports.png", label: "报告中心" },
+  { file: "desktop-06-settings.png", label: "设置" },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,16 +51,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log(online ? "引擎已连接 ✓" : "⚠ 引擎未连接，截图可能显示离线状态");
 
     for (const p of PAGES) {
-      const clicked = await page.evaluate((i) => {
-        const btns = document.querySelectorAll("aside nav button");
-        if (!btns[i]) return false;
-        btns[i].click();
+      // 按可见文案选中导航项（nav 顺序/数量变化不会点错页面）
+      const clicked = await page.evaluate((label) => {
+        const btns = [...document.querySelectorAll("aside nav button")];
+        const btn = btns.find((b) => b.textContent.includes(label));
+        if (!btn) return false;
+        btn.click();
         return true;
-      }, p.idx);
+      }, p.label);
 
       if (!clicked) {
-        console.log(`FAIL  找不到导航项 #${p.idx} (${p.label})`);
-        continue;
+        // 缺少必需截图 = 产物不完整，直接失败而不是静默跳过
+        throw new Error(`找不到导航项「${p.label}」，无法生成 ${p.file}`);
       }
 
       // 等 ECharts 动画 / 页面切换完成
@@ -68,10 +70,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
       // 展开可折叠区块（让截图露出真实数据，而非收起状态）
       if (p.expand) {
-        await page.evaluate((txt) => {
+        const expanded = await page.evaluate((txt) => {
           const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.includes(txt));
-          btn?.click();
+          if (!btn) return false;
+          btn.click();
+          return true;
         }, p.expand);
+        if (!expanded) console.warn(`警告：未找到「${p.expand}」按钮，${p.file} 可能为收起状态`);
         await sleep(900);
       }
 

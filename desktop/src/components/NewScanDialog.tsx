@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../state/AppCtx";
 import { api, MODE_LABEL, type PluginMeta, type ScanMode, type ScanSubmitPayload } from "../services/backend";
 import { Toggle } from "./ui";
@@ -66,11 +66,31 @@ export function NewScanDialog() {
     setPicked(next);
   };
 
+  // 提交重入保护：disabled 只挡点击，Ctrl+Enter 会直接调 doSubmit（且 state 更新是异步的）
+  const busyRef = useRef(false);
+
   const doSubmit = async () => {
+    if (busyRef.current || submitting) return;
     const t = target.trim();
     if (!t) {
       setErr("目标 URL 不能为空");
       return;
+    }
+    const portTokens = ports.split(",").map((p) => p.trim()).filter(Boolean);
+    const badPorts = portTokens.filter((p) => !/^\d+$/.test(p) || Number(p) < 1 || Number(p) > 65535);
+    if (badPorts.length > 0) {
+      setErr(`端口格式无效（1-65535，逗号分隔）：${badPorts.join(", ")}`);
+      return;
+    }
+    const proxyUrl = proxy.trim();
+    if (proxyUrl) {
+      try {
+        const u = new URL(proxyUrl);
+        if (!/^(https?|socks[45]?):$/.test(u.protocol)) throw new Error("unsupported scheme");
+      } catch {
+        setErr("代理地址无效，需为完整 URL（如 http://127.0.0.1:7890）");
+        return;
+      }
     }
     setErr("");
     const payload: ScanSubmitPayload = {
@@ -85,16 +105,19 @@ export function NewScanDialog() {
       report_format: [...formats].join(","),
     };
     if (cms) payload.cms = cms;
-    if (proxy.trim()) payload.proxy = proxy.trim();
+    if (proxyUrl) payload.proxy = proxyUrl;
     if (ports.trim()) payload.ports = ports.trim();
     if (noDedup) payload.no_dedup = true;
     if (picked.size > 0) payload.plugins = [...picked];
+    busyRef.current = true;
     try {
       await submitScan(payload);
       setTarget("");
       setShowPlugins(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      busyRef.current = false;
     }
   };
 

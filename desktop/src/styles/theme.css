@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+/* ---- 基础主题兜底（bluewhite，与 tokens.ts THEMES.bluewhite 同步）----
+   applyTheme() 在 React useEffect（首帧之后）才写 --c-*，且 data-theme 缺失/拼错时
+   不会有任何取值：这里先声明一套合法默认值，保证首屏与异常路径永远有颜色。 */
+:root {
+  --c-bg-page: #F2F7FD;
+  --c-bg-sidebar: #FFFFFF;
+  --c-card: #FFFFFF;
+  --c-card-soft: #EDF4FC;
+  --c-zebra: #F6FAFE;
+  --c-deep: #DCE9F8;
+  --c-bubble-bg: #E4EEFC;
+  --c-active-nav: #DCE9F8;
+  --c-divider: #E2ECF6;
+  --c-border: #D5E3F2;
+  --c-border-soft: #C4D7EC;
+  --c-ghost-border: #AFC7E2;
+  --c-grid-line: #E4EEF8;
+  --c-text-primary: #17264E;
+  --c-text-secondary: #5B6C8F;
+  --c-text-muted: #93A3BD;
+  --c-bubble-text: #44619E;
+  --c-legend-text: #4A5C80;
+  --c-nav-num: #6E96F0;
+  --c-accent-primary: #2F6FED;
+  --c-accent-purple: #6C5CE0;
+  --c-accent-pink: #F25CA2;
+  --c-btn-text: #FFFFFF;
+  --c-sem-red: #E5484D;
+  --c-sem-red-tint: #FCE5E7;
+  --c-sem-green: #1FA971;
+  --c-sem-green-tint: #E0F5EB;
+  --c-sem-amber: #C77414;
+  --c-sem-amber-tint: #FBF0DC;
+  --c-alert-stroke: #F2B8BD;
+}
+
 /* ---- 设计 token → Tailwind 工具类映射（值随 data-theme 实时变化） ---- */
 @theme inline {
   --color-page: var(--c-bg-page);
@@ -95,11 +131,29 @@ html[data-crt="on"] .crt > * {
   background: transparent;
 }
 
-/* ---- 主题切换过渡 ---- */
-.theme-fade,
-.theme-fade * {
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease,
-    color 0.25s ease;
+/* ---- 主题切换过渡 ----
+   只挂到实际绘制背景/边框/文字的常见节点，避免 `.theme-fade *` 在密集表格/列表上
+   给上千节点维持 transition 状态；用户偏好减弱动效时整体禁用。 */
+@media (prefers-reduced-motion: no-preference) {
+  .theme-fade,
+  .theme-fade aside,
+  .theme-fade main,
+  .theme-fade nav,
+  .theme-fade section,
+  .theme-fade header,
+  .theme-fade button,
+  .theme-fade input,
+  .theme-fade a,
+  .theme-fade span,
+  .theme-fade p,
+  .theme-fade h1,
+  .theme-fade h2,
+  .theme-fade h3,
+  .theme-fade [class*="bg-"],
+  .theme-fade [class*="border-"] {
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.25s ease;
+  }
 }

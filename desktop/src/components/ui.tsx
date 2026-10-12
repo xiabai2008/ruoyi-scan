@@ -94,9 +94,11 @@ export function SectionCard({
   );
 }
 
-export function Toggle({ on, onChange }: { on: boolean; onChange?: (v: boolean) => void }) {
+export function Toggle({ on, onChange, label }: { on: boolean; onChange?: (v: boolean) => void; label?: string }) {
   return (
     <button
+      type="button"
+      aria-label={label ?? (on ? "已开启，点击关闭" : "已关闭，点击开启")}
       onClick={() => onChange?.(!on)}
       className="relative h-5 w-9 rounded-full transition-colors"
       style={{

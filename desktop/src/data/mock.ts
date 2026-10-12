@@ -14,8 +14,18 @@ export const NAV = [
 
 export type ViewId = (typeof NAV)[number]["id"];
 
+/** KPI 卡示意值：up=null 表示该指标无环比（渲染时省略趋势三角，见 ui.tsx KpiCard） */
+export interface MockKpi {
+  en: string;
+  value: string;
+  delta: string;
+  up: boolean | null;
+  tone: "green" | "accent" | "red" | "purple";
+  zh: string;
+}
+
 /* ---------- 01 总览 ---------- */
-export const overviewKpis = [
+export const overviewKpis: MockKpi[] = [
   { en: "TARGETS", value: "128", delta: "+12.3% WoW", up: true, tone: "green" as const, zh: "在管资产" },
   { en: "SCANS TODAY", value: "26", delta: "+3 DAILY", up: true, tone: "accent" as const, zh: "今日任务" },
   { en: "CONFIRMED", value: "17", delta: "+2 DAILY", up: true, tone: "red" as const, zh: "已确认漏洞" },
@@ -37,9 +47,16 @@ export interface Finding {
   name: string;
   plugin: string;
   verdict: Verdict;
+  /**
+   * 展示用时间串，语义随数据源而定（接口刻意保持宽松）：
+   * - recentFindings：当天时钟 "HH:mm:ss"（09:18:42）
+   * - pocs：漏洞入库日期 "MM-DD"（09-08）
+   * 消费方如需排序/计算，请勿解析该字段，改用任务时间戳。
+   */
   time: string;
 }
 
+// time = 当天时钟 "HH:mm:ss"
 export const recentFindings: Finding[] = [
   { sev: "CRITICAL", name: "若依默认口令 admin/admin123", plugin: "ruoyi/default-password", verdict: "CONFIRMED", time: "09:18:42" },
   { sev: "HIGH", name: "Druid 未授权访问", plugin: "common/druid-unauth", verdict: "CONFIRMED", time: "09:17:05" },
@@ -73,7 +90,7 @@ export const liveLogs: LogLine[] = [
   { time: "09:20:33", level: "meiyi", text: "MEIYI: Druid 未授权已确认，深挖数据源配置中…" },
   { time: "09:20:38", level: "safe", text: "SAFE      ruoyi/quartz-ldap -> connection refused" },
   { time: "09:20:44", level: "unknown", text: "UNKNOWN   common/fastjson-1232 -> dnslog no echo, retry 2/3" },
-  { time: "09:20:49", level: "safe", text: "SAFE      spring/cloud-gateway-spel -> patched" },
+  { time: "09:20:49", level: "safe", text: "SAFE      spring/gateway-spel -> patched" },
   { time: "09:20:55", level: "unknown", text: "UNKNOWN   jeecgboot/freemarker-sst -> echo blocked" },
   { time: "09:20:58", level: "route", text: "tally:   CONFIRMED 7 / SAFE 12 / UNKNOWN 4 (23 run)" },
   { time: "09:21:00", level: "info", text: "engine:  24/52 plugins · eta 00:09:12" },
@@ -100,6 +117,7 @@ export const verdictFilters = [
   { label: "UNKNOWN", count: 9, tone: "amber" as const },
 ];
 
+// time = 漏洞入库日期 "MM-DD"（与 recentFindings 的时钟串不同语义，见 Finding.time 注释）
 export const pocs: Finding[] = [
   { sev: "CRITICAL", name: "若依默认口令利用", plugin: "ruoyi/default-password", verdict: "CONFIRMED", time: "09-08" },
   { sev: "HIGH", name: "Druid 未授权访问", plugin: "common/druid-unauth", verdict: "CONFIRMED", time: "09-08" },
@@ -118,7 +136,7 @@ export const assetGroups = [
   { label: "边缘节点", count: 9 },
 ];
 
-export const assetKpis = [
+export const assetKpis: MockKpi[] = [
   { en: "TARGETS", value: "128", delta: "+3 WEEK", up: true, tone: "green" as const, zh: "在管资产" },
   { en: "ALIVE", value: "91", delta: "+5 DAILY", up: true, tone: "accent" as const, zh: "存活主机" },
   { en: "HIGH RISK", value: "9", delta: "2 CRITICAL", up: true, tone: "red" as const, zh: "高危资产" },
@@ -143,7 +161,7 @@ export const assets: Asset[] = [
 ];
 
 /* ---------- 05 报告中心 ---------- */
-export const reportKpis = [
+export const reportKpis: MockKpi[] = [
   { en: "REPORTS", value: "12", delta: "+2 MONTH", up: true, tone: "green" as const, zh: "本月报告" },
   { en: "EXPORTS", value: "49", delta: "+6 WEEK", up: true, tone: "accent" as const, zh: "累计导出" },
   { en: "AVG TIME", value: "8S", delta: "-1.2S MoM", up: false, tone: "accent" as const, zh: "平均耗时" },

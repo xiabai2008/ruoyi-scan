@@ -5,7 +5,7 @@
 <title>Ruoyi-Scan · Social Preview</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:1280px;height:640px;overflow:hidden}
+  html,body{min-width:1280px;min-height:640px;overflow:hidden}
   body{
     display:flex;align-items:center;gap:48px;
     padding:0 96px;
@@ -75,6 +75,9 @@
       RuoYi dedicated vulnerability scanner
     </div>
 
+    <!-- 数据说明：以下数字为宣传卡示意值，产品迭代（POC 数量 / 报告格式）时需同步更新，
+         并与右侧终端输出保持一致。报告格式当前共 7 种（html/json/csv/pdf/docx/xlsx/sarif），
+         终端只列其中 5 个示例。 -->
     <div class="states">
       <div class="st st-c"><b>12</b><span>CONFIRMED</span></div>
       <div class="st st-s"><b>38</b><span>SAFE</span></div>
@@ -82,16 +85,16 @@
     </div>
 
     <div class="tags">
-      <span>55 POC</span><span>WAF 绕过</span><span>漏洞利用链</span>
+      <span>51 POC</span><span>WAF 绕过</span><span>漏洞利用链</span>
       <span>7 种报告格式</span><span>Web API</span><span>单 exe 免安装</span>
     </div>
   </div>
 
-  <div class="term">
+  <div class="term" role="img" aria-label="终端演示：Ruoyi-Scan 输出 CONFIRMED、SAFE、UNKNOWN 三态判定结果并生成报告">
     <div class="term-bar">
-      <i class="dot" style="background:#FF5F57"></i>
-      <i class="dot" style="background:#FEBC2E"></i>
-      <i class="dot" style="background:#28C840"></i>
+      <i class="dot" style="background:#FF5F57" aria-hidden="true"></i>
+      <i class="dot" style="background:#FEBC2E" aria-hidden="true"></i>
+      <i class="dot" style="background:#28C840" aria-hidden="true"></i>
       <span class="term-title">ruoyi-scan</span>
     </div>
 <pre><span class="pk">$</span> ruoyi-scan -u http://target:8080/

@@ -13,7 +13,6 @@
     "@fontsource-variable/noto-sans-sc": "^5.2.5",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/press-start-2p": "^5.2.5",
-    "@fontsource/share-tech-mono": "^5.2.5",
     "@fontsource/silkscreen": "^5.2.5",
     "@fontsource/vt323": "^5.2.5",
     "@tauri-apps/api": "^2.11.1",

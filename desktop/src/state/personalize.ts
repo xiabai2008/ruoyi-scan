@@ -69,7 +69,9 @@ async function ensurePermission(): Promise<boolean> {
       perm = (await mod.requestPermission()) === "granted";
     }
     return perm;
-  } catch {
+  } catch (e) {
+    // 权限申请失败可见化：插件缺失/权限配置错误时不再无声无息
+    console.warn("[persona] 系统通知权限查询/申请失败", e);
     return false;
   }
 }
@@ -87,8 +89,9 @@ export async function notifyScanDone(
       title: `${who} · 扫描完成`,
       body: `${info.target} —— CONFIRMED ${info.confirmed} / SAFE ${info.safe} / UNKNOWN ${info.unknown}（共 ${info.total} 条）`,
     });
-  } catch {
-    /* 通知失败不影响主流程 */
+  } catch (e) {
+    // 通知发送失败不影响主流程，但必须留下诊断线索
+    console.warn("[persona] 系统通知发送失败", e);
   }
 }
 
@@ -101,18 +104,47 @@ export async function refreshAppIcon(_op: OperatorConfig) {
 
 /* ---------- persona:// → asset:// 转换（自定义头像展示） ---------- */
 
+/** 单个 persona:// img → asset://；非法 percent 编码（如 persona://%）跳过该图 */
+function rewritePersonaImg(el: HTMLImageElement, convertFileSrc: (p: string) => string) {
+  const src = el.getAttribute("src") || "";
+  if (!src.startsWith("persona://")) return;
+  try {
+    el.setAttribute("src", convertFileSrc(decodeURIComponent(src.slice("persona://".length))));
+  } catch {
+    /* URIError：保留原 src，不让异常冒泡到 MutationObserver 回调 */
+  }
+}
+
+/** 只扫描变更子树（新增节点 / 自身），避免每次 mutation 都全文档 querySelectorAll */
+function rewritePersonaTree(root: Node, convertFileSrc: (p: string) => string) {
+  if (!(root instanceof Element)) return;
+  if (root instanceof HTMLImageElement) rewritePersonaImg(root, convertFileSrc);
+  root
+    .querySelectorAll('img[src^="persona://"]')
+    .forEach((el) => rewritePersonaImg(el as HTMLImageElement, convertFileSrc));
+}
+
 export async function installPersonaProtocol() {
   if (!IS_TAURI) return;
   try {
     const { convertFileSrc } = await import("@tauri-apps/api/core");
-    const w = window as unknown as { __rsPersonaConvert?: (p: string) => string };
+    const w = window as unknown as {
+      __rsPersonaConvert?: (p: string) => string;
+      __rsPersonaObserver?: MutationObserver;
+    };
     w.__rsPersonaConvert = (p: string) => convertFileSrc(p);
-    // persona:// 前缀在 <img src> 上无法直接触发 JS —— MutationObserver 把它改写成 asset://
-    const observer = new MutationObserver(() => {
-      document.querySelectorAll('img[src^="persona://"]').forEach((el) => {
-        const raw = (el as HTMLImageElement).src.replace(/^.*persona:\/\//, "");
-        el.setAttribute("src", convertFileSrc(decodeURIComponent(raw)));
-      });
+    // 幂等：React StrictMode 双调用 / HMR 重复执行时复用已安装的 observer，避免观察器泄漏
+    if (w.__rsPersonaObserver) return;
+    // 首次安装补扫一次现有 DOM（挂载早于本函数时 <img> 已经渲染）
+    rewritePersonaTree(document.documentElement, convertFileSrc);
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "attributes") {
+          if (m.target instanceof HTMLImageElement) rewritePersonaImg(m.target, convertFileSrc);
+          continue;
+        }
+        m.addedNodes.forEach((n) => rewritePersonaTree(n, convertFileSrc));
+      }
     });
     observer.observe(document.documentElement, {
       childList: true,
@@ -120,6 +152,7 @@ export async function installPersonaProtocol() {
       attributes: true,
       attributeFilter: ["src"],
     });
+    w.__rsPersonaObserver = observer;
   } catch {
     /* noop */
   }

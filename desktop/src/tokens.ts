@@ -126,6 +126,24 @@ export const CUSTOM_DRAFT_FIELDS: { key: keyof CustomThemeDraft; label: string; 
 ];
 
 /** 从 6 个核心色派生完整 30 token（参考四套预设的配色关系） */
+/* ---------- 派生阈值 / 基色（调参集中在此，注释说明意图） ---------- */
+/** 底色明度低于此值 → 走深色系派生（浅色文字 + 加暗卡片） */
+const DARK_BG_LUMINANCE = 0.42;
+/** 强调色明度高于此值 → 按钮文字用深色，否则用白色 */
+const BTN_TEXT_CONTRAST = 0.62;
+/** 深色底语义 tint 透明度：红色稍强，绿/黄稍弱；浅色底统一 0.12 */
+const TINT_ALPHA_RED_DARK = 0.28;
+const TINT_ALPHA_WARM_DARK = 0.26;
+const TINT_ALPHA_LIGHT = 0.12;
+/** 告警描边透明度：深色底更实、浅色底更淡 */
+const ALERT_STROKE_ALPHA_DARK = 0.4;
+const ALERT_STROKE_ALPHA_LIGHT = 0.72;
+/** 主文字基色（不随 draft 变化）：浅色底深墨蓝 / 深色底浅灰紫 */
+const INK_LIGHT_BG = "#17264E";
+const INK_DARK_BG = "#E8E8F5";
+/** accentPurple 的混色基准（紫色点缀） */
+const ACCENT_PURPLE_BASE = "#7B5CE0";
+
 export function deriveCustomTheme(draft: CustomThemeDraft): Theme | null {
   const bg = normalizeHex(draft.bgPage);
   const accent = normalizeHex(draft.accentPrimary);
@@ -135,8 +153,8 @@ export function deriveCustomTheme(draft: CustomThemeDraft): Theme | null {
   const amber = normalizeHex(draft.semAmber);
   if (!bg || !accent || !pink || !red || !green || !amber) return null;
 
-  const dark = luminance(bg) < 0.42;
-  const textPrimary = dark ? "#E8E8F5" : "#17264E";
+  const dark = luminance(bg) < DARK_BG_LUMINANCE;
+  const textPrimary = dark ? INK_DARK_BG : INK_LIGHT_BG;
   const textSecondary = dark ? mix(bg, textPrimary, 0.55) : mix(bg, textPrimary, 0.62);
   const textMuted = dark ? mix(bg, textPrimary, 0.34) : mix(bg, textPrimary, 0.42);
   const card = dark ? mix(bg, "#000000", 0.18) : "#FFFFFF";
@@ -147,7 +165,9 @@ export function deriveCustomTheme(draft: CustomThemeDraft): Theme | null {
   const bubbleBg = dark ? mix(bg, accent, 0.16) : mix(bg, accent, 0.14);
   const border = dark ? mix(bg, "#FFFFFF", 0.11) : mix(bg, "#5B6C8F", 0.26);
   const divider = dark ? mix(border, bg, 0.25) : mix(border, "#FFFFFF", 0.45);
-  const btnText = luminance(accent) > 0.62 ? "#061018" : "#FFFFFF";
+  const btnText = luminance(accent) > BTN_TEXT_CONTRAST ? "#061018" : "#FFFFFF";
+  // 语义 tint 的衬底：深色底稍压暗，避免色块直接铺在页面上过亮
+  const tintBase = dark ? mix(bg, "#000000", 0.1) : bg;
 
   return {
     bgPage: bg,
@@ -169,16 +189,16 @@ export function deriveCustomTheme(draft: CustomThemeDraft): Theme | null {
     legendText: mix(bg, textPrimary, 0.72),
     accentPrimary: accent,
     btnText,
-    accentPurple: mix(accent, "#7B5CE0", 0.55),
+    accentPurple: mix(accent, ACCENT_PURPLE_BASE, 0.55),
     accentPink: pink,
     navNum: mix(accent, textPrimary, 0.18),
     semRed: red,
-    semRedTint: tintOf(red, dark ? mix(bg, "#000000", 0.1) : bg, dark ? 0.28 : 0.12),
+    semRedTint: tintOf(red, tintBase, dark ? TINT_ALPHA_RED_DARK : TINT_ALPHA_LIGHT),
     semGreen: green,
-    semGreenTint: tintOf(green, dark ? mix(bg, "#000000", 0.1) : bg, dark ? 0.26 : 0.12),
+    semGreenTint: tintOf(green, tintBase, dark ? TINT_ALPHA_WARM_DARK : TINT_ALPHA_LIGHT),
     semAmber: amber,
-    semAmberTint: tintOf(amber, dark ? mix(bg, "#000000", 0.1) : bg, dark ? 0.26 : 0.12),
-    alertStroke: tintOf(red, dark ? card : "#FFFFFF", dark ? 0.4 : 0.72),
+    semAmberTint: tintOf(amber, tintBase, dark ? TINT_ALPHA_WARM_DARK : TINT_ALPHA_LIGHT),
+    alertStroke: tintOf(red, dark ? card : "#FFFFFF", dark ? ALERT_STROKE_ALPHA_DARK : ALERT_STROKE_ALPHA_LIGHT),
     gridLine: mix(bg, textPrimary, dark ? 0.09 : 0.1),
   };
 }
@@ -200,7 +220,9 @@ export function loadCustomTheme(): Theme | null {
     const out = {} as Theme;
     for (const k of Object.keys(base) as TokenKey[]) {
       const v = parsed[k];
-      if (typeof v === "string" && normalizeHex(v)) out[k] = v;
+      // 存归一化后的 #RRGGBB：容忍手改/导入的 3 位缩写，避免下游 rgbOf 解出 NaN
+      const normalized = typeof v === "string" ? normalizeHex(v) : null;
+      if (normalized) out[k] = normalized;
       else return null;
     }
     return out;
@@ -214,17 +236,28 @@ export function hasCustomTheme(): boolean {
   return loadCustomTheme() !== null;
 }
 
+/** 解析主题名 → 实际生效的主题（custom 不存在时回退 bluewhite），applyTheme 与 themeOf 共用 */
+function resolveTheme(name: ThemeName): { applied: ThemeName; theme: Theme } {
+  if (name === "custom") {
+    const custom = loadCustomTheme();
+    if (custom) return { applied: "custom", theme: custom };
+    return { applied: "bluewhite", theme: THEMES.bluewhite };
+  }
+  return { applied: name, theme: THEMES[name] };
+}
+
 /** 把当前主题写到 <html data-theme> + --c-* CSS 变量上（custom 读 localStorage） */
 export function applyTheme(name: ThemeName) {
   const root = document.documentElement;
-  root.dataset.theme = name;
-  const t = name === "custom" ? loadCustomTheme() ?? THEMES.bluewhite : THEMES[name];
-  for (const [k, v] of Object.entries(t)) {
+  const { applied, theme } = resolveTheme(name);
+  // data-theme 反映真正生效的调色板：custom 缺失时是 bluewhite，而不是留下无法解析的 "custom"
+  root.dataset.theme = applied;
+  for (const [k, v] of Object.entries(theme)) {
     root.style.setProperty(`--c-${kebab(k)}`, v);
   }
 }
 
 /** ECharts 等需要具体色值的场景直接取 token */
 export function themeOf(name: ThemeName): Theme {
-  return name === "custom" ? loadCustomTheme() ?? THEMES.bluewhite : THEMES[name];
+  return resolveTheme(name).theme;
 }

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, MODE_LABEL, type ScheduleJob, type ScanMode } from "../services/backend";
 import { useApp } from "../state/AppCtx";
+
+/** 调度列表轮询间隔（ms） */
+const POLL_MS = 10_000;
 
 const CRON_PRESETS = [
   { label: "每 5 分钟", cron: "*/5 * * * *" },
@@ -24,17 +27,17 @@ export function SchedulePanel() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!online) return;
     api.listSchedules().then(setJobs).catch(() => setJobs([]));
-  };
+  }, [online]);
 
   useEffect(() => {
     load();
     if (!online) return;
-    const t = setInterval(load, 10000);
+    const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
-  }, [online]);
+  }, [online, load]);
 
   const create = async () => {
     const t = target.trim();
@@ -109,7 +112,10 @@ export function SchedulePanel() {
           <select
             className="h-[26px] rounded-sm border border-edge bg-card px-2 font-mono text-[10px] text-ink outline-none"
             value={CRON_PRESETS.some((p) => p.cron === cron) ? cron : "custom"}
-            onChange={(e) => { if (e.target.value !== "custom") setCron(e.target.value); }}
+            onChange={(e) => {
+              // 选「自定义」→ 清空为占位，下方自定义输入框才会出现（空值提交仍会被必填校验拦下）
+              setCron(e.target.value === "custom" ? "" : e.target.value);
+            }}
           >
             {CRON_PRESETS.map((p) => (
               <option key={p.cron} value={p.cron}>{p.label}（{p.cron}）</option>

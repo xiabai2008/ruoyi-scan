@@ -6,7 +6,8 @@
 }
 @keyframes mei-breathe {
   0%, 100% { box-shadow: 0 0 0 0 var(--c-accent-tint, rgba(47, 111, 237, 0.28)); }
-  50% { box-shadow: 0 0 0 8px rgba(47, 111, 237, 0); }
+  /* 透明端用配套变量表达同一强调色（仅 alpha=0），主题改 --c-accent-tint 时不会闪回固定蓝 */
+  50% { box-shadow: 0 0 0 8px var(--c-accent-tint-0, rgba(47, 111, 237, 0)); }
 }
 .mei-bubble {
   animation: mei-pop 0.45s cubic-bezier(0.22, 1.2, 0.36, 1) both;

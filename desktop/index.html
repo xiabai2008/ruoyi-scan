@@ -5,11 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ruoyi-Scan</title>
     <style>
-      html { background: #F2F7FD; }
+      /* 首屏底色：优先取主题 token（applyTheme 写到 <html>），CSS 未加载时退回 bluewhite 默认值 */
+      html { background: var(--c-bg-page, #F2F7FD); }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p style="margin: 16px; font-family: 'Microsoft YaHei', system-ui, sans-serif; font-size: 13px; color: #17264E">
+        Ruoyi-Scan 前端需要启用 JavaScript 才能运行，请在浏览器/WebView 设置中启用后重试。
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

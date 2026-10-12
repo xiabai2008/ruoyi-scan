@@ -1,8 +1,10 @@
 """生成 Tauri 应用图标 app-icon.png（1024x1024，纯 stdlib）
 
 图形 = 画布 Logo 盾标放大版：深空圆角底 + 青色姬发式盾描边 + 盾内品红扫描线 + 青色圆点
+仅图标资源变更时手动运行一次（不参与构建/CI）；纯 Python 逐像素渲染，单次约十几秒。
 """
 import math
+import os
 import struct
 import zlib
 
@@ -25,7 +27,8 @@ def poly_dist(px, py, poly):
         x2, y2 = poly[(i + 1) % n]
         dx, dy = x2 - x1, y2 - y1
         L2 = dx * dx + dy * dy
-        t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / L2))
+        # 相邻顶点重合（手工改坐标列表时可能出现）→ 投影无定义，按起点退化处理
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / L2))
         dmin = min(dmin, math.hypot(x1 + t * dx - px, y1 + t * dy - py))
     return dmin
 
@@ -97,8 +100,13 @@ def render() -> bytes:
     )
 
 
-import os
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app-icon.png")
-with open(out, "wb") as f:
-    f.write(render())
-print("written:", out)
+def main() -> None:
+    """生成并写出 app-icon.png（仅显式执行本文件时运行，import 无副作用）"""
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app-icon.png")
+    with open(out, "wb") as f:
+        f.write(render())
+    print("written:", out)
+
+
+if __name__ == "__main__":
+    main()

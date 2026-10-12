@@ -2,7 +2,7 @@
 
 export function ShieldLogo({ size = 22 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 22 22" fill="none">
+    <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 22 22" fill="none">
       <path d="M4 6L11 3L18 6V12C18 17 14 19.5 11 21C8 19.5 4 17 4 12V6Z" stroke="var(--c-accent-primary)" strokeWidth="1.5" />
       <path d="M4 6L6 1.5L9 4.2" stroke="var(--c-accent-primary)" strokeWidth="1.5" />
       <path d="M13 4.2L16 1.5L18 6" stroke="var(--c-accent-primary)" strokeWidth="1.5" />
@@ -12,10 +12,14 @@ export function ShieldLogo({ size = 22 }: { size?: number }) {
   );
 }
 
-/** 看板娘「柒遂枚依」姬发式 chibi 头像（画布同款矢量） */
+/**
+ * 看板娘「柒遂枚依」姬发式 chibi 头像（画布同款矢量）。
+ * 配色为固定美术色（与 assets/avatars 的 JPG 保持一致），刻意不随主题 token 走；
+ * 仅外框背景 bg 可主题化。调整配色时需同步画布设计稿。
+ */
 export function MeiYi({ width = 160, height = 110, bg = "var(--c-deep)" }: { width?: number; height?: number; bg?: string }) {
   return (
-    <svg width={width} height={height} viewBox="0 0 160 110" style={{ background: bg, borderRadius: 4, display: "block" }}>
+    <svg aria-hidden="true" focusable="false" width={width} height={height} viewBox="0 0 160 110" style={{ background: bg, borderRadius: 4, display: "block" }}>
       <path d="M28 58 C24 18 52 6 80 6 C108 6 136 18 132 58 L134 104 L26 104 Z" fill="#221C36" />
       <path d="M40 14 C52 8 66 6 78 6 L76 14 C64 14 52 18 44 24 Z" fill="#6C5CE7" opacity="0.55" />
       <path d="M116 20 C112 12 104 8 96 7 L98 15 C106 16 112 20 116 26 Z" fill="#4FD1C5" opacity="0.5" />
@@ -44,7 +48,8 @@ export function MeiYi({ width = 160, height = 110, bg = "var(--c-deep)" }: { wid
   );
 }
 
-const dot = (r: number, color: string, glow = false) => (
+/** 状态点（viewBox 8×8，固定中心 4,4）：glow 时半径 2，否则 2.6 */
+const dot = (color: string, glow = false) => (
   <>
     {glow && <circle cx="4" cy="4" r="4" fill={color} opacity="0.25" />}
     <circle cx="4" cy="4" r={glow ? 2 : 2.6} fill={color} />
@@ -53,15 +58,15 @@ const dot = (r: number, color: string, glow = false) => (
 
 export function StatusDot({ color = "var(--c-sem-green)", glow = true, size = 8 }: { color?: string; glow?: boolean; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 8 8" fill="none">
-      {dot(2, color, glow)}
+    <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 8 8" fill="none">
+      {dot(color, glow)}
     </svg>
   );
 }
 
 export function PulseDot({ color = "var(--c-accent-pink)" }: { color?: string }) {
   return (
-    <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
+    <svg aria-hidden="true" focusable="false" width="6" height="6" viewBox="0 0 6 6" fill="none">
       <circle cx="3" cy="3" r="3" fill={color} opacity="0.3" />
       <circle cx="3" cy="3" r="1.6" fill={color} />
     </svg>
@@ -70,7 +75,7 @@ export function PulseDot({ color = "var(--c-accent-pink)" }: { color?: string })
 
 export function TrendTri({ dir, color }: { dir: "up" | "down"; color: string }) {
   return (
-    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ transform: dir === "down" ? "rotate(180deg)" : undefined }}>
+    <svg aria-hidden="true" focusable="false" width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ transform: dir === "down" ? "rotate(180deg)" : undefined }}>
       <path d="M4 1L7.5 7H0.5L4 1Z" fill={color} />
     </svg>
   );
@@ -78,7 +83,7 @@ export function TrendTri({ dir, color }: { dir: "up" | "down"; color: string }) 
 
 export function SearchIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <svg aria-hidden="true" focusable="false" width="14" height="14" viewBox="0 0 14 14" fill="none">
       <circle cx="6" cy="6" r="4.5" stroke="var(--c-text-muted)" strokeWidth="1.5" />
       <path d="M9.5 9.5L13 13" stroke="var(--c-text-muted)" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
@@ -87,7 +92,7 @@ export function SearchIcon() {
 
 export function PlayIcon({ color = "var(--c-btn-text)" }: { color?: string }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+    <svg aria-hidden="true" focusable="false" width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="M3 2L10.5 6L3 10V2Z" fill={color} />
     </svg>
   );
@@ -95,7 +100,7 @@ export function PlayIcon({ color = "var(--c-btn-text)" }: { color?: string }) {
 
 export function PlusIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+    <svg aria-hidden="true" focusable="false" width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="M6 1.5V10.5M1.5 6H10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
@@ -103,7 +108,7 @@ export function PlusIcon() {
 
 export function PauseIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+    <svg aria-hidden="true" focusable="false" width="10" height="10" viewBox="0 0 10 10" fill="none">
       <rect x="1" y="1" width="3" height="8" fill="var(--c-text-secondary)" />
       <rect x="6" y="1" width="3" height="8" fill="var(--c-text-secondary)" />
     </svg>
@@ -112,7 +117,7 @@ export function PauseIcon() {
 
 export function StopIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+    <svg aria-hidden="true" focusable="false" width="10" height="10" viewBox="0 0 10 10" fill="none">
       <rect x="1" y="1" width="8" height="8" rx="1" fill="var(--c-sem-red)" />
     </svg>
   );
@@ -123,27 +128,27 @@ export function StatIcon({ kind }: { kind: string }) {
   switch (kind) {
     case "target":
       return (
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20" fill="none">
           <circle cx="10" cy="10" r="7" stroke="var(--c-sem-red)" strokeWidth="2" />
           <circle cx="10" cy="10" r="2.5" fill="var(--c-sem-red)" />
         </svg>
       );
     case "check":
       return (
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20" fill="none">
           <circle cx="10" cy="10" r="7" stroke="var(--c-sem-green)" strokeWidth="2" />
           <path d="M6.5 10.5L9 13L14 7.5" stroke="var(--c-sem-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "diamond":
       return (
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20" fill="none">
           <rect x="5.8" y="5.8" width="8.4" height="8.4" rx="1.5" transform="rotate(45 10 10)" stroke="var(--c-sem-amber)" strokeWidth="2" />
         </svg>
       );
     default:
       return (
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20" fill="none">
           <path d="M11 2L5 11H9.5L8.5 18L15 8.5H10.5L11 2Z" fill="var(--c-accent-purple)" />
         </svg>
       );

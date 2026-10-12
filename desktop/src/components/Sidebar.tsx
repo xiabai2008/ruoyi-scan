@@ -6,16 +6,23 @@ import { usePersona, operatorAvatarSrc } from "../state/PersonaCtx";
 export function Sidebar() {
   const { view, setView, online, engine, tasks } = useApp();
   const { operator } = usePersona();
-  const running = tasks.filter((t) => t.status === "running" || t.status === "pending").length;
+  const running = tasks.filter((t) => t.status === "running").length;
+  const queued = tasks.filter((t) => t.status === "pending").length;
+  const activeCount = running + queued;
   const nav = (id: ViewId) => setView(id);
 
-  const base = !online
-    ? "引擎未连接，先到设置页检查后端。"
-    : running > 0
-      ? `${running} 个任务扫描中，保持节奏！`
-      : view === "livescan"
-        ? "扫描队列已就绪，随时可以开工！"
-        : "引擎在线，随时可以开工！";
+  let base: string;
+  if (!online) base = "引擎未连接，先到设置页检查后端。";
+  else if (activeCount > 0) base = `${activeCount} 个任务进行中，保持节奏！`;
+  else if (view === "livescan") base = "扫描队列已就绪，随时可以开工！";
+  else base = "引擎在线，随时可以开工！";
+
+  let engineStatus: string;
+  if (!online) engineStatus = "OFFLINE";
+  else if (running > 0) engineStatus = `${running} RUNNING`;
+  else if (queued > 0) engineStatus = `${queued} QUEUED`;
+  else engineStatus = "IDLE";
+
   const greeting = operator.greet ? `${base}${base.endsWith("。") ? "" : ""} ${operator.greet}！` : base;
 
   return (
@@ -67,7 +74,7 @@ export function Sidebar() {
               <span className={`text-[13px] ${active ? "font-medium text-ink" : "text-ink-2"}`}>
                 {item.label}
               </span>
-              {item.id === "livescan" && running > 0 ? (
+              {item.id === "livescan" && activeCount > 0 ? (
                 <span className="ml-auto h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
               ) : null}
             </button>
@@ -83,7 +90,7 @@ export function Sidebar() {
             {online ? "ENGINE ONLINE" : "ENGINE OFFLINE"}
           </span>
         </div>
-        <span className="font-mono text-[9px] text-ink-3">{online ? (running ? `${running} RUNNING` : "IDLE") : "OFFLINE"}</span>
+        <span className="font-mono text-[9px] text-ink-3">{engineStatus}</span>
       </div>
     </aside>
   );

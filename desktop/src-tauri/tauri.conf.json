@@ -22,15 +22,15 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8123 ws://127.0.0.1:8123 http: https: ws: wss:; object-src 'none'; base-uri 'self'",
+      "devCsp": "default-src 'self' http://localhost:5173; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data: http://localhost:5173; connect-src 'self' ipc: http://ipc.localhost http: https: ws: wss:",
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$HOME/**",
-          "$PICTURE/**",
-          "$DESKTOP/**",
-          "$DOWNLOAD/**",
-          "$DOCUMENT/**"
+          "$PICTURE/**/*",
+          "$DESKTOP/**/*",
+          "$DOWNLOAD/**/*",
+          "$DOCUMENT/**/*"
         ]
       }
     }

@@ -6,9 +6,10 @@
  *  3. 修改代号 → 侧边栏实时更新
  *  4. LiveScan 页 MEIYI SUPPORT 卡 → 代号化标题 + 人格头像
  *  5. 派发 rs:scan-done 桥事件 → 播报浮条出现（音效/通知在浏览器里静默降级）
- *  6. 扫描任务真实完成（等 d7fc080d08d2 done）→ taskDone 兜底 tally
+ *  6. 扫描任务真实完成（动态取最新 running/pending 任务，等 done）→ taskDone 兜底 tally
  *  7. 控制台零错误（过滤资源 404/401 等噪音）
  */
+const path = require("path");
 const puppeteer = require("C:/Users/HZR/AppData/Roaming/npm/node_modules/puppeteer");
 
 const CHROME = "C:/Program Files/Google/Chrome/Application/chrome.exe";
@@ -17,6 +18,7 @@ const results = [];
 const ok = (name, cond, extra = "") => {
   results.push(`${cond ? "PASS" : "FAIL"} ${name}${extra ? " | " + extra : ""}`);
 };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
   // 前置预检：引擎必须在线且 CORS 放行 5173，否则后续 4/5/6 必挂，快速失败并给出原因
@@ -46,7 +48,12 @@ const ok = (name, cond, extra = "") => {
   });
 
   await page.goto(URL, { waitUntil: "networkidle2", timeout: 30000 });
-  await new Promise((r) => setTimeout(r, 2500));
+  // 页内助手：人格板块的查找逻辑只定义一次，各步骤共用，避免选择器/文案变化时多处漂移
+  await page.evaluate(() => {
+    window.__rsFindPersonaSection = () =>
+      [...document.querySelectorAll("section")].find((s) => s.textContent.includes("操作员人格")) || null;
+  });
+  await wait(2500);
 
   // ---- 1. 设置页人格板块 ----
   await page.evaluate(() => {
@@ -54,12 +61,10 @@ const ok = (name, cond, extra = "") => {
     const settings = btns.find((b) => b.textContent.includes("设置"));
     if (settings) settings.click();
   });
-  await new Promise((r) => setTimeout(r, 900));
-  await page.evaluate(() => window.scrollBy(0, 0));
+  await wait(900);
 
   const personaBoard = await page.evaluate(() => {
-    const sections = [...document.querySelectorAll("section")];
-    const sec = sections.find((s) => s.textContent.includes("操作员人格"));
+    const sec = window.__rsFindPersonaSection();
     if (!sec) return null;
     const imgs = [...sec.querySelectorAll("img")].length;
     const customPlus = sec.textContent.includes("自定义");
@@ -77,8 +82,8 @@ const ok = (name, cond, extra = "") => {
   ok("1c. 代号/口头禅输入存在", !!(personaBoard && personaBoard.hasCallsign && personaBoard.hasGreet));
   ok("1d. 播报/音效/试听存在", !!(personaBoard && personaBoard.hasNotify && personaBoard.hasSound && personaBoard.hasTry));
 
-  // 截图：设置页人格板块
-  await page.screenshot({ path: "D:/HZR_PROJECTS/ruoyi-scan/desktop/scripts/persona-settings.png" });
+  // 截图：设置页人格板块（产物落在脚本同目录，不依赖具体机器的绝对路径）
+  await page.screenshot({ path: path.join(__dirname, "persona-settings.png") });
 
   // ---- 2. 点第 3 个预设（注视）→ 侧边栏变化 ----
   const before = await page.evaluate(() => {
@@ -86,12 +91,11 @@ const ok = (name, cond, extra = "") => {
     return aside ? aside.textContent : "";
   });
   await page.evaluate(() => {
-    const sections = [...document.querySelectorAll("section")];
-    const sec = sections.find((s) => s.textContent.includes("操作员人格"));
-    const avatars = sec.querySelectorAll("button");
-    avatars[2].click(); // 第 3 个 = v04_gaze
+    const sec = window.__rsFindPersonaSection();
+    const avatars = sec ? sec.querySelectorAll("button") : [];
+    avatars[2]?.click(); // 第 3 个 = v04_gaze（找不到时留给断言给出干净 FAIL）
   });
-  await new Promise((r) => setTimeout(r, 700));
+  await wait(700);
   const after = await page.evaluate(() => {
     const aside = document.querySelector("aside");
     const ls = localStorage.getItem("rs.operator");
@@ -103,21 +107,19 @@ const ok = (name, cond, extra = "") => {
   // ---- 3. 修改代号 ----
   const newCallsign = "测试瑞";
   await page.evaluate((cs) => {
-    const sections = [...document.querySelectorAll("section")];
-    const sec = sections.find((s) => s.textContent.includes("操作员人格"));
-    const inputs = [...sec.querySelectorAll("input")];
-    const input = inputs[0];
+    const sec = window.__rsFindPersonaSection();
+    const input = sec ? [...sec.querySelectorAll("input")][0] : null;
+    if (!input) return;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
     setter.call(input, cs);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }, newCallsign);
   await page.evaluate(() => {
-    const sections = [...document.querySelectorAll("section")];
-    const sec = sections.find((s) => s.textContent.includes("操作员人格"));
-    const saveBtn = [...sec.querySelectorAll("button")].find((b) => b.textContent.trim() === "保存");
-    saveBtn.click();
+    const sec = window.__rsFindPersonaSection();
+    const saveBtn = sec ? [...sec.querySelectorAll("button")].find((b) => b.textContent.trim() === "保存") : null;
+    saveBtn?.click();
   });
-  await new Promise((r) => setTimeout(r, 700));
+  await wait(700);
   const sideAfter = await page.evaluate(() => {
     const aside = document.querySelector("aside");
     return aside ? aside.textContent : "";
@@ -130,34 +132,48 @@ const ok = (name, cond, extra = "") => {
     const live = btns.find((b) => b.textContent.includes("扫描任务"));
     if (live) live.click();
   });
-  await new Promise((r) => setTimeout(r, 1500));
+  await wait(1500);
   const supportCard = await page.evaluate(() => {
     const span = [...document.querySelectorAll("span")].find((s) => /SUPPORT/.test(s.textContent));
     if (!span) return null;
     const card = span.closest("div.flex");
-    const img = card.querySelector("img");
+    const img = card ? card.querySelector("img") : null;
     return { label: span.textContent.trim(), hasImg: !!img, imgSrc: img ? img.src.slice(-40) : "" };
   });
   ok("4. SUPPORT 卡标签人格化", !!supportCard && supportCard.label === `${newCallsign} SUPPORT`, supportCard ? supportCard.label : "not-found");
   ok("4a. SUPPORT 卡头像存在", !!(supportCard && supportCard.hasImg), supportCard ? supportCard.imgSrc : "");
 
   // ---- 5. 派发 scan-done 桥事件 → 播报浮条 ----
-  await page.evaluate(() => {
-    window.dispatchEvent(new CustomEvent("rs:scan-done", { detail: { target: "http://127.0.0.1:18081/", total: 3, confirmed: 1, duration: 5.2 } }));
-  });
-  await new Promise((r) => setTimeout(r, 1200));
-  const toast = await page.evaluate(() => {
+  const doneFixture = { target: "http://127.0.0.1:18081/", total: 3, confirmed: 1, duration: 5.2 };
+  await page.evaluate((detail) => {
+    window.dispatchEvent(new CustomEvent("rs:scan-done", { detail }));
+  }, doneFixture);
+  await wait(1200);
+  const toast = await page.evaluate((confirmed) => {
     const els = [...document.querySelectorAll("p")];
-    const t = els.find((p) => p.textContent.includes("发现 1 个已确认问题"));
+    // 断言稳定文案 + fixture 计数变量，不绑定完整句子（措辞变化不误报）
+    const t = els.find((p) => p.textContent.includes("扫描完成") && p.textContent.includes(`发现 ${confirmed} 个已确认问题`));
     return t ? { text: t.textContent } : null;
-  });
+  }, doneFixture.confirmed);
   ok("5. scan-done → 枚依播报浮条", !!toast, toast ? toast.text : "not-found");
-  await page.screenshot({ path: "D:/HZR_PROJECTS/ruoyi-scan/desktop/scripts/persona-livescan.png" });
+  await page.screenshot({ path: path.join(__dirname, "persona-livescan.png") });
 
-  // ---- 6. 等真实任务终态 ----
+  // ---- 6. 等真实任务终态（动态发现最新任务，不硬编码 fixture id；可用 RS_SCAN_ID 覆盖） ----
+  const targetTaskId = process.env.RS_SCAN_ID || (await page.evaluate(async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8123/api/scan");
+      const list = await res.json();
+      if (!Array.isArray(list) || list.length === 0) return null;
+      const sorted = [...list].sort((a, b) => (b.started_at || 0) - (a.started_at || 0));
+      const fresh = sorted.find((t) => t.status === "running" || t.status === "pending");
+      return (fresh || sorted[0]).task_id || null;
+    } catch {
+      return null;
+    }
+  }));
   let real = null;
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
+  for (let i = 0; i < 40 && targetTaskId; i++) {
+    await wait(2000);
     real = await page.evaluate(async (id) => {
       try {
         const res = await fetch(`http://127.0.0.1:8123/api/scan/${id}`);
@@ -165,10 +181,14 @@ const ok = (name, cond, extra = "") => {
       } catch {
         return null;
       }
-    }, "d7fc080d08d2");
+    }, targetTaskId);
     if (real && real.status === "done") break;
   }
-  ok("6. 真实扫描任务完成", !!real && real.status === "done", real ? real.status : "no-task");
+  ok(
+    "6. 真实扫描任务完成",
+    !!real && real.status === "done",
+    real ? `${targetTaskId} ${real.status}` : targetTaskId ? "no-task" : "no-scan-found",
+  );
 
   // ---- 7. 控制台错误过滤 ----
   const fatal = errors.filter((e) => !e.includes("Failed to load resource") && !e.includes("the server responded with a status"));

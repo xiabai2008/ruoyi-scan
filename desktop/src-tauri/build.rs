@@ -11,15 +11,36 @@ fn main() {
         .join("../engine/dist/ruoyi-scan-engine.exe");
 
     if engine.is_file() {
-        std::fs::copy(&engine, &embedded).expect("failed to copy engine into OUT_DIR");
-        let size = std::fs::metadata(&engine).map(|m| m.len()).unwrap_or(0);
-        println!("cargo:warning=嵌入引擎 {} ({} MB)", engine.display(), size / 1024 / 1024);
+        // 半成品 / 被截断的产物（例如中断的 PyInstaller 构建）绝不能静默嵌入：
+        // 校验最小体积，并核对实际复制字节数，短拷贝直接让构建失败。
+        const MIN_ENGINE_BYTES: u64 = 1_000_000;
+        let src_len = std::fs::metadata(&engine)
+            .expect("failed to stat engine artifact")
+            .len();
+        if src_len < MIN_ENGINE_BYTES {
+            panic!(
+                "引擎产物疑似不完整（{} 字节 < {} 字节），请重新构建 {}",
+                src_len,
+                MIN_ENGINE_BYTES,
+                engine.display()
+            );
+        }
+        let copied = std::fs::copy(&engine, &embedded).expect("failed to copy engine into OUT_DIR");
+        if copied != src_len {
+            panic!("引擎复制不完整：{} / {} 字节", copied, src_len);
+        }
+        println!("cargo:warning=嵌入引擎 {} ({} MB)", engine.display(), src_len / 1024 / 1024);
     } else {
         std::fs::write(&embedded, b"").expect("failed to write placeholder");
         println!(
             "cargo:warning=未找到引擎产物（desktop/engine/dist/ruoyi-scan-engine.exe），开发模式构建（不嵌入引擎）"
         );
     }
-    println!("cargo:rerun-if-changed={}", engine.display());
+    // 跟踪引擎所在目录而非文件本身：开发模式下产物不存在时，Cargo 会把不存在的
+    // rerun-if-changed 目标视为“始终变化”，导致本脚本每次构建都无谓重跑。
+    println!(
+        "cargo:rerun-if-changed={}",
+        engine.parent().expect("engine path has a parent").display()
+    );
     tauri_build::build()
 }

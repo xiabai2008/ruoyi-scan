@@ -62,15 +62,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const apiBase = useMemo(getApiBase, []);
   const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 健康检查序号：4s 轮询可能重叠，过期响应直接丢弃，避免乱序结果互相覆盖
+  const healthSeq = useRef(0);
 
   const refreshHealth = useCallback(async () => {
+    const seq = ++healthSeq.current;
     try {
-      const h = await api.health();
+      // health 与 version 一起取，避免 health 成功而 version 失败时 online 状态自相矛盾
+      const [h, v] = await Promise.all([api.health(), api.version()]);
+      if (seq !== healthSeq.current) return;
       setOnline(h.status === "ok");
-      const v = await api.version();
       setEngine(v);
       setLastError("");
     } catch (e) {
+      if (seq !== healthSeq.current) return;
       setOnline(false);
       setLastError(e instanceof Error ? e.message : String(e));
     }

@@ -23,7 +23,7 @@ const ok = (name, cond, extra = "") => {
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push("console: " + m.text().slice(0, 160));
+    if (m.type() === "error") errors.push("console: " + m.text());
   });
 
   await page.goto(URL, { waitUntil: "networkidle2", timeout: 30000 });
@@ -91,6 +91,7 @@ const ok = (name, cond, extra = "") => {
   // 导出 JSON（验证下载触发不崩溃即可，headless 拦截）
   const cdp = await page.createCDPSession();
   await cdp.send("Browser.setDownloadBehavior", { behavior: "deny" });
+  const errCountBeforeExport = errors.length;
   await page.evaluate(() => {
     const sections = [...document.querySelectorAll("section")];
     const sec = sections.find((s) => s.textContent.includes("主题包"));
@@ -98,7 +99,10 @@ const ok = (name, cond, extra = "") => {
     btn.click();
   });
   await new Promise((r) => setTimeout(r, 600));
-  ok("A9. 导出不崩溃", (await page.evaluate(() => true)) === true);
+  // 断言导出后页面仍可交互，且没有新增未捕获异常（导出 handler 抛错会落到 pageerror）
+  const a9Alive = await page.evaluate(() => document.querySelectorAll("section").length > 0);
+  const a9NewPageErrors = errors.slice(errCountBeforeExport).filter((e) => e.startsWith("pageerror:"));
+  ok("A9. 导出不崩溃", a9Alive && a9NewPageErrors.length === 0, a9NewPageErrors.slice(0, 2).join(" || "));
 
   // ===== B. 视觉签名 =====
   const visBoard = await page.evaluate(() => {
@@ -126,7 +130,6 @@ const ok = (name, cond, extra = "") => {
   const crtState = await page.evaluate(() => ({
     attr: document.documentElement.dataset.crt,
     saved: localStorage.getItem("rs.visual"),
-    style: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").slice(0, 30),
   }));
   ok("B3. CRT 开关生效", crtState.attr === "on", JSON.stringify(crtState));
   ok("B4. rs.visual 持久化含 crt:true", crtState.saved.includes('"crt":true'), crtState.saved);
@@ -141,7 +144,6 @@ const ok = (name, cond, extra = "") => {
   await new Promise((r) => setTimeout(r, 900));
   const fontState = await page.evaluate(() => ({
     mono: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").slice(0, 30),
-    saved: localStorage.getItem("rs.visual"),
   }));
   ok("B5. 像素字体栈切换", fontState.mono.includes("Silkscreen"), JSON.stringify(fontState));
 
@@ -156,7 +158,6 @@ const ok = (name, cond, extra = "") => {
       hasFindings: sec.textContent.includes("发现数"),
       hasEngine: sec.textContent.includes("引擎状态"),
       hasProgress: sec.textContent.includes("任务进度"),
-      toggles: [...sec.querySelectorAll("button")].filter((b) => b.getAttribute("aria-pressed") !== null).length,
     };
   });
   ok("C1. Widgets 板块三卡开关", !!wdBoard && wdBoard.hasFindings && wdBoard.hasEngine && wdBoard.hasProgress, wdBoard ? JSON.stringify(wdBoard) : "");
@@ -203,10 +204,26 @@ const ok = (name, cond, extra = "") => {
     const r = card.getBoundingClientRect();
     return { x: r.left, y: r.top, saved: localStorage.getItem("rs.widgets.pos") };
   });
+  // 持久化半段：rs.widgets.pos 里必须有一条坐标与观察到的落点吻合（±2px）
+  let savedMatches = false;
+  try {
+    const saved = JSON.parse(afterPos.saved || "{}");
+    savedMatches = Object.values(saved).some(
+      (p) =>
+        p &&
+        typeof p === "object" &&
+        typeof p.x === "number" &&
+        typeof p.y === "number" &&
+        Math.abs(p.x - afterPos.x) <= 2 &&
+        Math.abs(p.y - afterPos.y) <= 2,
+    );
+  } catch {
+    /* savedMatches 保持 false */
+  }
   ok(
     "C4. 拖拽位移 + 位置持久化",
-    Math.abs(afterPos.x - beforePos.x) > 300 && Math.abs(afterPos.y - beforePos.y) > 150,
-    `before(${beforePos.x},${beforePos.y}) after(${afterPos.x},${afterPos.y})`,
+    Math.abs(afterPos.x - beforePos.x) > 300 && Math.abs(afterPos.y - beforePos.y) > 150 && savedMatches,
+    `before(${beforePos.x},${beforePos.y}) after(${afterPos.x},${afterPos.y}) saved=${afterPos.saved}`,
   );
 
   // 关掉全部 → 浮窗消失（同样逐个点）
@@ -228,7 +245,9 @@ const ok = (name, cond, extra = "") => {
   ok("C5. 全关 → 浮窗消失", wdGone === 0, `left=${wdGone}`);
 
   // ===== 控制台错误过滤 =====
-  const fatal = errors.filter((e) => !e.includes("Failed to load resource") && !e.includes("the server responded with a status"));
+  // 只放行 Chrome 稳定的资源加载错误前缀（消息完整保留，不做长度截断）；
+  // 其余任何错误——即使恰好包含相同字样——一律视为致命。
+  const fatal = errors.filter((e) => !e.startsWith("console: Failed to load resource:"));
   ok("D1. 控制台零致命错误", fatal.length === 0, fatal.slice(0, 3).join(" || "));
 
   console.log(results.join("\n"));

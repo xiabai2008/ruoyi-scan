@@ -30,6 +30,13 @@ function hostOf(url: string): string {
   }
 }
 
+/** 资产分组键：分组树与过滤共用同一套规则，避免两处实现漂移 */
+function groupKeyOf(a: AssetRow, mode: "host" | "status" | "cms"): string {
+  if (mode === "host") return hostOf(a.target);
+  if (mode === "status") return statusLabel[a.lastStatus] || a.lastStatus;
+  return a.cms || "未识别";
+}
+
 export function Assets() {
   const { tasks, online, setView, selectTask } = useApp();
   const [groupMode, setGroupMode] = useState<"host" | "status" | "cms">("host");
@@ -58,7 +65,10 @@ export function Assets() {
         if (t.started_at > prev.lastScanAt) {
           prev.lastScanAt = t.started_at;
           prev.lastStatus = t.status;
-          prev.cms = cms || prev.cms;
+          // 指纹以最近一次「已完成」扫描为准：运行中/排队中的新任务还没识别时可保留旧值，
+          // 已完成但没有指纹说明目标已变化 → 清空，避免把陈旧指纹挂在最新扫描上
+          const inFlight = t.status === "running" || t.status === "pending";
+          prev.cms = inFlight ? cms || prev.cms : cms;
           prev.lastTaskId = t.task_id;
         }
       }
@@ -70,10 +80,7 @@ export function Assets() {
   const groups = useMemo(() => {
     const tally = new Map<string, number>();
     for (const a of assets) {
-      const key =
-        groupMode === "host" ? hostOf(a.target)
-          : groupMode === "status" ? statusLabel[a.lastStatus] || a.lastStatus
-            : a.cms || "未识别";
+      const key = groupKeyOf(a, groupMode);
       tally.set(key, (tally.get(key) || 0) + 1);
     }
     const list = [...tally.entries()].sort((a, b) => b[1] - a[1]);
@@ -82,11 +89,7 @@ export function Assets() {
 
   const visible = useMemo(() => {
     if (selectedGroup === "all") return assets;
-    return assets.filter((a) => {
-      if (groupMode === "host") return hostOf(a.target) === selectedGroup;
-      if (groupMode === "status") return (statusLabel[a.lastStatus] || a.lastStatus) === selectedGroup;
-      return (a.cms || "未识别") === selectedGroup;
-    });
+    return assets.filter((a) => groupKeyOf(a, groupMode) === selectedGroup);
   }, [assets, selectedGroup, groupMode]);
 
   const kpis = useMemo(() => {
@@ -96,6 +99,7 @@ export function Assets() {
     return { hosts, assets: assets.length, identified, confirmedTasks };
   }, [assets, tasks]);
 
+  /** 任务时间戳为 Unix 秒（后端 started_at 来自 time.time()，见 api/models/schemas.py），×1000 转毫秒 */
   const fmtTime = (ts: number) => {
     if (!ts) return "—";
     const d = new Date(ts * 1000);
