@@ -16,7 +16,6 @@
 # LLM 不可用时降级规则分类（evidence 关键字匹配），闭环不依赖外网。
 import json
 import os
-import re
 from typing import Any, Callable, Dict, List, Optional
 
 from common.logger import get_logger
@@ -100,9 +99,10 @@ def triage_unknowns(
         if llm_fn is not None:
             label, reason = _llm_classify_group(plugin, items, llm_fn)
         if label is None:
-            # 规则降级：组内逐条规则分类，取多数
+            # 规则降级：组内逐条规则分类，取多数；
+            # 按 TRIAGE_LABELS 固定枚举顺序比票，平票结果不受 PYTHONHASHSEED 影响
             labels = [_rule_classify(it["evidence"]) for it in items]
-            label = max(set(labels), key=labels.count)
+            label = max(TRIAGE_LABELS, key=labels.count)
             reason = "规则匹配（LLM 不可用）"
         if label not in TRIAGE_LABELS:
             label = "needs_manual_review"
@@ -116,6 +116,28 @@ def triage_unknowns(
         "summary": {"total_unknown": sum(g["count"] for g in out_groups), "labels": label_counts},
         "groups": out_groups,
     }
+
+
+def _extract_json_object(raw: str) -> Optional[Dict[str, Any]]:
+    """从 LLM 输出中提取首个 JSON 对象（容忍 markdown 包裹与嵌套花括号）"""
+    if not raw:
+        return None
+    try:
+        # 优先直接解析（覆盖纯 JSON 情况）
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (ValueError, TypeError):
+        pass
+    start = raw.find("{")
+    if start < 0:
+        return None
+    try:
+        # raw_decode 支持嵌套 JSON 与含 '}' 的字段值
+        # （原正则 \{[^{}]+\} 会在首个 } 处截断导致解析失败）
+        data, _ = json.JSONDecoder().raw_decode(raw[start:])
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _llm_classify_group(plugin: str, items: List[Dict[str, Any]], llm_fn: Callable[[str], str]) -> tuple:
@@ -133,18 +155,19 @@ def _llm_classify_group(plugin: str, items: List[Dict[str, Any]], llm_fn: Callab
     )
     try:
         raw = llm_fn(prompt)
-        # 容错解析：提取首个 JSON 对象
-        m = re.search(r"\{[^{}]+\}", raw, re.S)
-        if not m:
-            return None, ""
-        data = json.loads(m.group(0))
-        label = str(data.get("label", ""))
-        if label not in TRIAGE_LABELS:
-            return None, ""
-        return label, str(data.get("reason", ""))[:200]
     except Exception as e:
-        logger.debug("LLM 归类失败，降级规则: %s", e)
+        # LLM 调用失败（网络/鉴权/超时）属预期降级路径
+        logger.warning("LLM 归类调用失败，降级规则: %s", e)
         return None, ""
+    data = _extract_json_object(raw)
+    if data is None:
+        # 解析失败与调用失败分开记录，避免 AI 路径的真实缺陷被静默掩盖
+        logger.warning("LLM 归类输出无法解析为 JSON 对象，降级规则")
+        return None, ""
+    label = str(data.get("label", ""))
+    if label not in TRIAGE_LABELS:
+        return None, ""
+    return label, str(data.get("reason", ""))[:200]
 
 
 def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:

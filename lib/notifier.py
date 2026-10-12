@@ -46,31 +46,36 @@ def parse_notify_arg(notify_args: List[str]) -> List[Dict[str, str]]:
         [{'type': 'webhook', 'target': 'https://x'}, {'type': 'email', 'target': 'y@z.com'}]
     """
     notifications = []
+    known_channels = ("webhook", "dingtalk", "wechat", "feishu", "email")
     for arg in notify_args:
         arg = arg.strip()
         if not arg:
             continue
-        # 支持 type=target 格式
+        # 仅当前缀是已知渠道名时才按 type=target 拆分：
+        # 否则带查询串的裸 URL（如 https://x/hook?token=abc）会被误拆成 channel/target 而丢弃
         if "=" in arg:
-            channel, _, target = arg.partition("=")
-            channel = channel.strip().lower()
-            target = target.strip()
-            if not target:
+            prefix, _, rest = arg.partition("=")
+            prefix = prefix.strip().lower()
+            if prefix in known_channels:
+                target = rest.strip()
+                if target:
+                    notifications.append({"type": prefix, "target": target})
                 continue
-            if channel in ("webhook", "dingtalk", "wechat", "feishu", "email"):
-                notifications.append({"type": channel, "target": target})
-                continue
-            # channel 不在已知类型中，尝试从 target 识别
-            if target.startswith("http"):
-                notifications.append({"type": "webhook", "target": target})
-            elif "@" in target:
-                notifications.append({"type": "email", "target": target})
-        else:
-            # 无 = 格式，自动识别 URL 或邮箱
-            if arg.startswith("http"):
-                notifications.append({"type": "webhook", "target": arg})
-            elif "@" in arg:
-                notifications.append({"type": "email", "target": arg})
+        # 整串 URL / 邮箱自动识别（优先于 = 拆分，兼容裸 webhook URL）
+        if arg.startswith("http"):
+            notifications.append({"type": "webhook", "target": arg})
+            continue
+        if "@" in arg and "=" not in arg:
+            notifications.append({"type": "email", "target": arg})
+            continue
+        if "=" in arg:
+            # 前缀不是已知渠道：兼容旧行为，尝试从 target 段识别
+            _, _, rest = arg.partition("=")
+            rest = rest.strip()
+            if rest.startswith("http"):
+                notifications.append({"type": "webhook", "target": rest})
+            elif "@" in rest:
+                notifications.append({"type": "email", "target": rest})
     return notifications
 
 
@@ -179,6 +184,22 @@ def _build_markdown_message(msg: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _redact_url_for_log(url: str) -> str:
+    """日志脱敏：Webhook 端点常把访问凭证放在查询串（access_token/key）或路径末段（hook token），输出前抹除"""
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<invalid-url>"
+    if parts.query:
+        parts = parts._replace(query="***")
+    if parts.path:
+        # 长路径段（如飞书 hook 路径 token）按凭证处理
+        parts = parts._replace(path="/".join("***" if len(seg) > 12 else seg for seg in parts.path.split("/")))
+    return urlunsplit(parts)
+
+
 def send_webhook(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
     """发送通用 Webhook 通知
 
@@ -200,7 +221,7 @@ def send_webhook(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code < 400:
             if verbose:
-                emit(f"  [+]Webhook 通知已发送: {url[:50]}...")
+                emit(f"  [+]Webhook 通知已发送: {_redact_url_for_log(url)[:50]}...")
             return True
         else:
             if verbose:
@@ -308,7 +329,7 @@ def send_email(to_addr: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM
     """
     smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_port = int(os.environ.get("SMTP_PORT", "465"))
+    smtp_port_raw = os.environ.get("SMTP_PORT", "465")
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASS", "")
     smtp_from = os.environ.get("SMTP_FROM", smtp_user)
@@ -316,6 +337,14 @@ def send_email(to_addr: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
     if not smtp_host or not smtp_user:
         if verbose:
             emit("  [!]邮件通知跳过: 未配置 SMTP 环境变量（SMTP_HOST/SMTP_USER/SMTP_PASS）")
+        return False
+
+    # 端口解析放在异常保护内：SMTP_PORT 非数字时跳过本渠道而非中断整个通知流程
+    try:
+        smtp_port = int(smtp_port_raw)
+    except ValueError:
+        if verbose:
+            emit(f"  [!]邮件通知跳过: SMTP_PORT 配置非法（{smtp_port_raw!r}），应为数字端口")
         return False
 
     try:
@@ -333,15 +362,25 @@ def send_email(to_addr: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         html_content = _build_email_html(msg)
         mime.attach(MIMEText(html_content, "html", "utf-8"))
 
-        # 发送
-        if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
-        else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-            server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.sendmail(smtp_from, [to_addr], mime.as_string())
-        server.quit()
+        # 发送（try/finally 保证 starttls/login/sendmail 异常路径也关闭连接，避免 socket 泄漏）
+        server = None
+        try:
+            if smtp_port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_from, [to_addr], mime.as_string())
+        finally:
+            if server is not None:
+                try:
+                    server.quit()
+                except Exception:
+                    try:
+                        server.close()
+                    except Exception:
+                        pass
 
         if verbose:
             emit(f"  [+]邮件通知已发送: {to_addr}")
@@ -430,13 +469,8 @@ def send_notifications(notifications: List[Dict[str, str]], report_builder, verb
     for n in notifications:
         sender = senders.get(n["type"])
         if sender:
-            # email 类型的 target 是邮箱地址，其他类型的 target 是 URL
-            if n["type"] == "email":
-                if sender(n["target"], msg, verbose):
-                    success_count += 1
-            else:
-                if sender(n["target"], msg, verbose):
-                    success_count += 1
+            if sender(n["target"], msg, verbose):
+                success_count += 1
 
     if verbose:
         emit(f"[*]通知发送完成: {success_count}/{len(notifications)} 成功")

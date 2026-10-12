@@ -180,7 +180,7 @@ jobs:
 
       - name: Run Ruoyi-Scan
         env:
-          SCAN_TARGET: ${{{{ secrets.SCAN_TARGET }}}}
+          SCAN_TARGET: ${{ secrets.SCAN_TARGET }}
         run: |
           python main.py --ci -u "$SCAN_TARGET" \\
             --report reports/ \\
@@ -215,8 +215,6 @@ security-scan:
     when: always
     paths:
       - reports/
-    reports:
-      junit: reports/report.json
   variables:
     SCAN_TARGET: "http://target.example.com/"
   only:

@@ -1,4 +1,5 @@
 # 降误报判定工具：正向关键字 + 负向排除联合判定（见 agents.md §5）
+import re
 
 
 def match_positive(text, positives, negatives=None):
@@ -45,13 +46,10 @@ def match_php_eval_response(text):
     # phpinfo() 调用痕迹（部分环境仅输出 phpinfo() 错误或部分内容）
     if "phpinfo()" in text and "PHP" in text:
         return True
-    # phpversion() 输出：短字符串 7.x.x / 8.x.x 格式
-    # 真实 phpversion 输出通常 < 50 字节，形如 '7.2.34' 或 '8.1.0'
-    if len(text) < 50 and any(p in text for p in ["7.", "8."]) and "." in text:
-        # 排除常见误报：'7.' 单独出现可能是页码、时间等
-        # phpversion 输出是纯版本号，不含 HTML/JSON 标记
-        if "<" not in text and "{" not in text:
-            return True
+    # phpversion() 输出：纯版本号短字符串（如 '7.2.34' / '8.1.0'）
+    # 用整串版本号正则而非子串 "7."/"8."：避免 file7.txt、'Page 7.' 之类误命中
+    if len(text) < 50 and re.match(r"^\d+\.\d+(\.\d+)*$", text.strip()):
+        return True
     return False
 
 
@@ -179,14 +177,14 @@ def match_spring4shell_response(text):
     真实成功响应特征：
     - JSON 含 "status":200 或 "status": 200（Spring Boot 标准成功响应）
     - JSON 含 "timestamp"（Spring Boot 标准响应格式）
-    - 空响应体（部分 Tomcat 直接返回 200 空体）
 
     排除的失败响应特征：
     - "Bad Request" / "error" / "Whitelabel Error Page" / "status":400
+    - 空响应体：200 + 空体在各类服务/网关中极常见，不足以作为成功证据（防误报）
     """
     if not text:
-        # 空响应体 + 200 状态码（由插件保证）= 成功利用
-        return True
+        # 空响应体不构成成功证据（调用方 200 + 空体极常见，不能据此判 CONFIRMED）
+        return False
     # 排除失败响应特征
     fail_indicators = [
         "Bad Request",
@@ -203,7 +201,8 @@ def match_spring4shell_response(text):
     if any(ind in text for ind in fail_indicators):
         return False
     # 真实成功响应特征：JSON 含 "status":200 / "timestamp"
-    success_indicators = ['"status":200', '"status": 200', '"timestamp"', "message"]
+    # （"message" 过于通用，404/参数校验错误 JSON 也常带，已移除以防误报）
+    success_indicators = ['"status":200', '"status": 200', '"timestamp"']
     return any(ind in text for ind in success_indicators)
 
 
@@ -241,8 +240,10 @@ def match_cloud_function_spel(text):
     # SpEL 命令执行结果回显（短输出）
     if "uid=" in text and "gid=" in text:
         return True  # id 命令输出
-    if "root" in text and ":" in text and len(text) < 100:
-        return True  # /etc/passwd 读取结果
+    # /etc/passwd 读取结果：必须命中 root 账户行特征（root:...:0:0:），
+    # 否则 "root: permission denied" 之类的普通报错会被误判
+    if len(text) < 100 and re.search(r"root:.*:0:0:", text):
+        return True
     return False
 
 

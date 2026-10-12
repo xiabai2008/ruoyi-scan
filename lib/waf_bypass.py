@@ -14,11 +14,15 @@
 #   - 假 SAFE（被拦）尝试绕过，成功→CONFIRMED，失败→原状态+标记
 #   - UNKNOWN 尝试绕过，成功→CONFIRMED，失败→UNKNOWN+标记（不降级）
 #   - 绕过异常→原状态+UNKNOWN 兜底（绝不判 SAFE）
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List
+from urllib.parse import urlencode
 
+from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, ScanResult
+from core.http import host_of
 from lib.tamper import (
     between_replace,
     double_urlencode,
@@ -29,6 +33,8 @@ from lib.tamper import (
     split_for_chunked,
     url_encode,
 )
+
+logger = get_logger(__name__)
 
 # === 上下文 ===
 
@@ -325,7 +331,7 @@ class StrategyRegistry:
         self._register_defaults()
 
     def _register_defaults(self):
-        """注册默认策略集（11 个）"""
+        """注册默认策略集（11 条内置策略）"""
         strategies = [
             # 通用兜底策略（priority 低，优先执行）
             RandomCaseStrategy(),
@@ -459,6 +465,21 @@ class BypassStatsTracker:
 # === BypassSession: SessionManager 的轻量包装 ===
 
 
+# 解挑战共享锁：挂载在基础会话上的锁属性名 + 全局兜底主锁/兜底锁
+_PRIME_LOCK_ATTR = "_scrapling_prime_lock"
+_PRIME_LOCK_MASTER = threading.Lock()
+_PRIME_LOCK_FALLBACK = threading.Lock()
+
+# 分块传输的单块大小（字节）
+_CHUNK_SIZE = 1024
+
+
+def _iter_chunked_body(body: bytes):
+    """把完整 body 包装成块迭代器，requests 以此为流式 body 时才会真正分块发送"""
+    for i in range(0, len(body), _CHUNK_SIZE):
+        yield body[i : i + _CHUNK_SIZE]
+
+
 class BypassSession:
     """绕过会话：包装 SessionManager，透明应用传输层变换
 
@@ -480,6 +501,84 @@ class BypassSession:
         self._transport = transport_config or {}
         self._origin_url = origin_url
         self._extra_headers = self._transport.get("headers", {})
+        # 方案 A：可选对抗传输引擎。默认 'requests'（零行为变化）；
+        # 'scrapling' 时把请求委托给 lib.scrapling_transport.ScraplingTransport。
+        self._engine = self._transport.get("engine", "requests")
+        self._engine_transport = None  # 懒加载
+        # 方案 A：cf_clearance 复用。为 True 时先用浏览器解一次挑战、把 Cookie+UA 注入
+        # 基础 SessionManager，之后所有请求（含 POST）走快速 requests 路径（见 _ensure_clearance）。
+        self._engine_reuse = bool(self._transport.get("scrapling_reuse", False))
+        self._primed_host = ""  # 已解挑战的 host（按域复用）
+        self._http_version_warned = False  # HTTP/1.0 不可用仅告警一次，避免刷屏
+
+    def _resolve_engine(self):
+        """惰性构造对抗传输引擎（缺依赖时在首次请求处抛出，由编排器兜底为 UNKNOWN）"""
+        if self._engine_transport is None:
+            from lib.scrapling_transport import ScraplingTransport
+
+            self._engine_transport = ScraplingTransport(mode=self._transport.get("scrapling_mode", "stealth"))
+        return self._engine_transport
+
+    def _prime_lock(self):
+        """获取基础会话级解挑战锁（首次访问时挂载，跨 BypassSession 实例共享）
+
+        ScanEngine.run 在 threads>1 时并发执行插件，且所有插件/策略共享同一个
+        SessionManager；「读标记 → 解挑战 → 写标记」必须互斥，否则同一 host
+        会被并发解挑战多次（单次约 20s）。
+        """
+        lock = getattr(self._session, _PRIME_LOCK_ATTR, None)
+        if lock is not None:
+            return lock
+        with _PRIME_LOCK_MASTER:
+            lock = getattr(self._session, _PRIME_LOCK_ATTR, None)
+            if lock is None:
+                lock = threading.Lock()
+                try:
+                    setattr(self._session, _PRIME_LOCK_ATTR, lock)
+                except Exception:  # noqa: BLE001 - 会话不支持挂载属性时退化为全局兜底锁
+                    return _PRIME_LOCK_FALLBACK
+            return lock
+
+    def _ensure_clearance(self, url: str) -> None:
+        """engine=scrapling + reuse 时：首次请求前用浏览器解挑战并注入 cf_clearance
+
+        仅按 host 解一次；成功后基础 SessionManager 携带 Cookie+UA，后续请求
+        （GET/POST/PUT…）全部走 requests 快速路径。任何异常向上抛出 → 编排器兜底 UNKNOWN。
+
+        去重维度是「基础会话」而非本 BypassSession 实例：一次扫描中每个策略尝试、
+        每个插件都会各自 new 一个 BypassSession，但它们共享同一个 SessionManager。
+        若只在实例上记忆，则每个策略/插件都会重新拉起一次隐身浏览器解挑战（实测
+        单次解挑战 ~20s），多插件扫描下会成倍放大。故把「已解挑战的 host」写回
+        基础会话对象，使整轮扫描对同一 host 只解一次。
+
+        并发安全：检查-解挑战-写标记是 check-then-act，须经基础会话级锁互斥
+        （见 _prime_lock），并在锁内 double-check。
+        """
+        if not self._engine_reuse:
+            return
+        host = host_of(url)
+        if not host:
+            return
+        if host == self._primed_host:
+            return
+        # 基础会话级标记：跨策略/跨插件复用同一份 cf_clearance
+        if getattr(self._session, "_scrapling_primed_host", "") == host:
+            self._primed_host = host
+            return
+        with self._prime_lock():
+            # double-check：其他线程/实例可能已解开该 host
+            if getattr(self._session, "_scrapling_primed_host", "") == host:
+                self._primed_host = host
+                return
+            engine = self._resolve_engine()
+            engine.prime(url)  # 隐身浏览器解挑战 + 收割 Cookie/UA
+            engine.apply_clearance(self._session)  # 注入基础 requests 会话
+            self._primed_host = host
+            try:
+                # SessionManager 非 __slots__，可安全挂载标记；失败则退化为实例级去重
+                setattr(self._session, "_scrapling_primed_host", host)
+            except Exception:  # noqa: BLE001 - 标记失败不影响功能
+                pass
 
     def _apply_transform(self, url, kwargs):
         """应用传输层变换"""
@@ -492,6 +591,26 @@ class BypassSession:
         headers = {**headers, **self._extra_headers}
         if headers:
             kwargs["headers"] = headers
+        # L3 分块传输：仅设置 Transfer-Encoding 头而 body 为普通字符串/字节时，
+        # requests 仍会计算 Content-Length，服务端按 chunked 解析必然失败；
+        # 把 body 转为流式迭代器才会真正分块发送（scrapling 引擎不支持此变换）
+        if self._transport.get("chunked") and (self._engine != "scrapling" or self._engine_reuse):
+            data = kwargs.get("data")
+            if data is not None and "json" not in kwargs and isinstance(data, (str, bytes, dict)):
+                if isinstance(data, str):
+                    body = data.encode("utf-8")
+                elif isinstance(data, dict):
+                    body = urlencode(data, doseq=True).encode("utf-8")
+                else:
+                    body = data
+                kwargs["data"] = _iter_chunked_body(body)
+        # HTTP/1.0 降级在当前 requests/urllib3 传输栈上无法按请求强制生效：
+        # 显式告警一次，避免策略"看似生效实则静默无效"
+        if self._transport.get("http_version") == "1.0" and not self._http_version_warned:
+            logger.warning(
+                "当前传输引擎不支持按请求强制 HTTP/1.0（http_version=1.0 被忽略，仅 Connection: close 生效）"
+            )
+            self._http_version_warned = True
         return url, kwargs
 
     def _replace_host(self, url, origin_url):
@@ -513,23 +632,53 @@ class BypassSession:
         )
 
     def get(self, url, **kwargs):
+        if self._engine == "scrapling":
+            if self._engine_reuse:
+                self._ensure_clearance(url)
+                url, kwargs = self._apply_transform(url, kwargs)
+                return self._session.get(url, **kwargs)
+            # 非复用：同样先应用传输层变换（源站 IP 直连 / 注入 headers）再委托引擎
+            url, kwargs = self._apply_transform(url, kwargs)
+            return self._resolve_engine().get(url, **kwargs)
         url, kwargs = self._apply_transform(url, kwargs)
         return self._session.get(url, **kwargs)
 
     def post(self, url, **kwargs):
+        if self._engine == "scrapling":
+            if self._engine_reuse:
+                self._ensure_clearance(url)
+                url, kwargs = self._apply_transform(url, kwargs)
+                return self._session.post(url, **kwargs)
+            # 非复用：同样先应用传输层变换再委托引擎
+            url, kwargs = self._apply_transform(url, kwargs)
+            return self._resolve_engine().post(url, **kwargs)
         url, kwargs = self._apply_transform(url, kwargs)
         return self._session.post(url, **kwargs)
 
     def request(self, method, url, **kwargs):
+        if self._engine == "scrapling":
+            if self._engine_reuse:
+                self._ensure_clearance(url)
+                url, kwargs = self._apply_transform(url, kwargs)
+                return self._session.request(method, url, **kwargs)
+            # 非复用：同样先应用传输层变换再委托引擎
+            url, kwargs = self._apply_transform(url, kwargs)
+            return self._resolve_engine().request(method, url, **kwargs)
         url, kwargs = self._apply_transform(url, kwargs)
         return self._session.request(method, url, **kwargs)
 
     @property
     def request_count(self):
+        # 非复用：真实流量走引擎，取引擎计数；复用：流量走基础会话，取会话计数
+        if self._engine == "scrapling" and not self._engine_reuse and self._engine_transport is not None:
+            return self._engine_transport.request_count
         return self._session.request_count
 
     def close(self):
-        self._session.close()
+        # 只释放本包装创建的引擎资源；基础 SessionManager 由扫描入口统一拥有/关闭，
+        # 且被所有策略/插件共享——此处关闭会中断整轮扫描
+        if self._engine_transport is not None:
+            self._engine_transport.close()
 
 
 # === WafBypassCoordinator: 编排器 ===
@@ -558,6 +707,7 @@ class WafBypassCoordinator:
         origin_ip: str = "",
         registry: StrategyRegistry = None,
         stats_tracker: "BypassStatsTracker" = None,
+        enable_engine_fallback: bool = False,
     ):
         """初始化编排器
 
@@ -566,11 +716,27 @@ class WafBypassCoordinator:
             origin_ip: 预探测的源站 IP（L4 策略使用，可为空）
             registry: 策略注册表（None 则使用默认）
             stats_tracker: 策略成功率追踪器（D7.4，None 则不追踪）
+            enable_engine_fallback: 方案 A：是否启用引擎级对抗传输兜底（默认 False，
+                零行为变化）。开启时会把 L5 引擎策略（Scrapling）追加到尝试序列末尾，
+                保证 JS 挑战型 WAF 下唯一有效手段不被 attempts 截断。需已安装
+                scrapling（pip install 'ruoyi-scan[adversarial]'），否则该策略会在
+                执行时抛异常并被兜底为 UNKNOWN。
         """
         self.waf_type = waf_type
         self.origin_ip = origin_ip
         self.registry = registry or StrategyRegistry()
         self.stats_tracker = stats_tracker  # D7.4: 策略成功率追踪
+        self.enable_engine_fallback = enable_engine_fallback
+        if enable_engine_fallback:
+            # 显式开启时才注册 L5 引擎策略（避免默认改变行为）
+            try:
+                from lib.scrapling_transport import ScraplingStealthStrategy
+
+                self.registry.register(ScraplingStealthStrategy())
+            except ImportError:
+                # 可选依赖缺失（未安装 scrapling）：降级但不影响其余策略；
+                # 其余异常（接线/循环导入等）向上抛出，避免"看似启用实则静默禁用"
+                logger.debug("scrapling 引擎策略不可用（缺可选依赖），已降级", exc_info=True)
 
     def maybe_bypass(self, plugin, target, session, original_result) -> ScanResult:
         """主入口：原 verify 结果非 CONFIRMED 时尝试绕过
@@ -606,10 +772,20 @@ class WafBypassCoordinator:
         max_attempts = getattr(plugin, "bypass_max_attempts", 3)
         # 尝试次数取两者较小值：不超过插件上限，也不超过可用策略数
         attempts = min(max_attempts, len(strategies))
+        # 引擎级策略（L5，对抗传输）保底（方案 A，仅 enable_engine_fallback 时生效）：
+        # JS 挑战型 WAF 下 payload 变形必然无效，唯一有效手段是引擎级绕过；但纯按
+        # priority 排序时 L5 会被挤出 attempts 窗口（实测 cloudflare/sqli 下 BP-ENG-1
+        # 排第 5，而 attempts=3，永不触发）。**追加**而非替换——保留窗口内全部廉价
+        # 策略，把引擎策略作为额外的最后兜底（不占用 bypass_max_attempts 配额）。
+        selected = list(strategies[:attempts])
+        if self.enable_engine_fallback:
+            engine = next((s for s in strategies if getattr(s, "layer", "") == "L5"), None)
+            if engine is not None and engine not in selected:
+                selected.append(engine)
+        attempts = len(selected)
 
         # 尝试每个策略
-        for i in range(attempts):
-            strategy = strategies[i]
+        for i, strategy in enumerate(selected):
             ctx = BypassContext(
                 waf_type=self.waf_type,
                 vuln_type=vuln_type,
@@ -621,6 +797,7 @@ class WafBypassCoordinator:
                 strategy=strategy,  # 供插件调用 strategy.tamper_payload()
             )
 
+            bypass_session = None
             try:
                 # 构建绕过会话
                 transport = strategy.apply_transport(ctx)
@@ -664,11 +841,17 @@ class WafBypassCoordinator:
                 continue
 
             except Exception:
-                # 绕过异常，尝试下一策略（绝不降级为 SAFE）
+                # 绕过异常，尝试下一策略（绝不降级为 SAFE）；记录堆栈便于定位接线/属性错误
+                logger.debug("WAF 绕过策略 %s 执行异常", strategy.strategy_id, exc_info=True)
                 # D7.4: 记录失败
                 if self.stats_tracker:
                     self.stats_tracker.record_result(strategy.strategy_id, False)
                 continue
+            finally:
+                # 本次尝试创建的包装会话（可能已懒加载浏览器引擎）必须释放，
+                # 否则每次绕过尝试都会泄漏引擎资源；基础 SessionManager 由扫描入口持有
+                if bypass_session is not None:
+                    bypass_session.close()
 
         # 所有策略均失败，返回原结果 + 标记
         if not original_result.extra:

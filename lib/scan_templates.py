@@ -18,7 +18,10 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from common.logger import get_logger
 from lib.reporter import emit
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -142,6 +145,21 @@ def list_templates() -> List[ScanTemplate]:
     return list(TEMPLATES.values())
 
 
+def _cli_explicitly_set(key: str) -> bool:
+    """检测 sys.argv 中是否显式出现该参数对应的命令行选项
+
+    仅比较 args 值与 parser 默认值，无法区分「显式传入等于默认值的参数」与
+    「未指定」，这里用原始 argv 补齐（库/测试场景 argv 无该选项，行为不变）。
+    """
+    import sys
+
+    long_forms = {"--" + key.replace("_", "-"), "--" + key}
+    for token in sys.argv[1:]:
+        if token in long_forms or any(token.startswith(f + "=") for f in long_forms):
+            return True
+    return False
+
+
 def apply_template(args, template_name: str, verbose: bool = True) -> Optional[ScanTemplate]:
     """将模板默认参数应用到 args 对象
 
@@ -172,8 +190,9 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
     for key, tmpl_value in tmpl.default_args.items():
         current_value = getattr(args, key, None)
         default_value = parser_defaults.get(key)
-        # 当前值与默认值相同 → 用户未显式指定 → 应用模板值
-        if current_value == default_value:
+        # 当前值与默认值相同且 argv 未显式指定 → 用户未指定 → 应用模板值
+        # （argv 判定保证 --threads 3 这类"显式传入默认值"的参数不被模板覆盖）
+        if current_value == default_value and not _cli_explicitly_set(key):
             setattr(args, key, tmpl_value)
             if verbose:
                 emit(f"      {key}: {current_value} → {tmpl_value}")
@@ -194,17 +213,21 @@ def filter_plugins(plugins: List, template: ScanTemplate) -> List:
         return plugins
 
     filtered = []
+    dropped = []
     for cls in plugins:
+        cls_name = getattr(cls, "__name__", str(cls))
         # 按严重度过滤
         if template.severity_filter:
             severity = getattr(cls, "severity", "")
             if severity not in template.severity_filter:
+                dropped.append(f"{cls_name}(severity={severity!r})")
                 continue
 
         # 按类别过滤
         if template.category_filter:
             category = getattr(cls, "category", "")
             if category not in template.category_filter:
+                dropped.append(f"{cls_name}(category={category!r})")
                 continue
 
         # 按合规映射过滤
@@ -220,9 +243,15 @@ def filter_plugins(plugins: List, template: ScanTemplate) -> List:
                     matched = True
                     break
             if not matched:
+                dropped.append(f"{cls_name}(compliance={compliance!r})")
                 continue
 
         filtered.append(cls)
+
+    if dropped:
+        # 属性缺失（如 category/compliance 为空）导致的过滤会让模板结果不完整，
+        # 记录被丢弃的插件便于排查"为什么某插件没跑"
+        logger.info("模板 %s 过滤 %d 个插件: %s", template.name, len(dropped), ", ".join(dropped))
 
     return filtered
 
@@ -252,8 +281,11 @@ def _get_parser_defaults() -> Dict[str, Any]:
         parser = _main.build_parser()
         _parser_defaults_cache = dict(vars(parser.parse_args([])))
     except Exception:
-        # 回退：空映射（所有参数视为"未显式指定"）
-        _parser_defaults_cache = {}
+        # 获取失败不缓存降级结果（下次调用可重试，避免一次瞬时失败永久禁用模板合并）；
+        # 返回空映射时 default_value=None 与 args 实际值不同，模板默认值会被保守跳过，
+        # 不会误盖用户显式参数——故此处不缓存 {}，并显式暴露错误便于排查
+        logger.warning("获取 argparse 默认值失败，本次跳过模板参数填充", exc_info=True)
+        return {}
 
     return _parser_defaults_cache
 

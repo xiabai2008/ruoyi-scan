@@ -16,7 +16,7 @@ import sys
 from typing import IO, Optional
 
 from lib.colors import GREEN, RESET, SEPARATOR, YELLOW
-from lib.reporter import emit
+from lib.reporter import emit, is_quiet
 
 # 仓库地址（star / issue / 文档 同址，统一出口，便于后续改域名只改一处）
 REPO_URL = "https://github.com/xiabai2008/ruoyi-scan"
@@ -84,7 +84,9 @@ def print_star_cta(
     if stream is None:
         for line in lines:
             emit(line)
-    else:
-        for line in lines:
-            print(line, file=out)
+        # emit 在静默模式（服务/测试）下是 no-op：返回值必须反映实际是否输出，
+        # 否则测试断言与调用方会被"已输出"的假象误导
+        return not is_quiet()
+    for line in lines:
+        print(line, file=out)
     return True

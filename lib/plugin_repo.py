@@ -26,6 +26,11 @@ from common.logger import get_logger
 
 logger = get_logger(__name__)
 
+# 远程仓库包体 / 解压上限（防 zip bomb / 巨型包耗尽内存与磁盘）
+MAX_REPO_ZIP_BYTES = 50 * 1024 * 1024
+MAX_REPO_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+MAX_REPO_ENTRIES = 5000
+
 
 # 用户插件安装目录（~/.ruoyi-scan/plugins/）
 def user_plugin_dir() -> str:
@@ -133,7 +138,9 @@ def export_plugins(out_dir: str) -> Dict[str, str]:
                     m = inst.meta()
                     m["module"] = "%s.%s" % (pkg_name, cls.__module__.rsplit(".", 1)[-1])
                     meta_data[m["name"]] = m
-        except Exception:
+        except Exception as e:
+            # 单个插件包坏掉/缺少 name 字段不应静默：否则导出结果无声缺项
+            logger.warning("导出插件包 %s 元信息失败: %s", pkg_name, e, exc_info=True)
             continue
     with open(meta_file, "w", encoding="utf-8") as f:
         json.dump(meta_data, f, ensure_ascii=False, indent=2)
@@ -200,7 +207,9 @@ def _load_or_create_key(path: str):
         _sync_default_pub(path, key)
         return key
     key = Ed25519PrivateKey.generate()
-    with open(path, "wb") as f:
+    # 私钥以 0o600 创建：同机其他用户不可读，否则可伪造任意插件仓库签名
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
         f.write(
             key.private_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -244,6 +253,16 @@ def _sync_default_pub(key_path: str, key) -> None:
             )
 
 
+def _signing_payload(manifest: dict) -> bytes:
+    """构造签名载荷：整个 manifest（排除 signature 字段）的规范化 JSON
+
+    签名必须覆盖 version/schema/generated_at 等全部元数据，否则签名仓库可被
+    改标签/降级而不破坏签名；签名与验签两侧必须使用同一构造。
+    """
+    data = {k: v for k, v in manifest.items() if k != "signature"}
+    return json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
+
+
 def _sign_manifest(manifest: dict, sign_key_path: str = "") -> str:
     """签名 manifest（无 cryptography / 无密钥 → 空串）
 
@@ -258,7 +277,7 @@ def _sign_manifest(manifest: dict, sign_key_path: str = "") -> str:
     key = _load_or_create_key(sign_key_path)
     if key is None:
         return ""
-    payload = json.dumps(manifest["files"], sort_keys=True, ensure_ascii=False).encode("utf-8")
+    payload = _signing_payload(manifest)
     return key.sign(payload).hex()
 
 
@@ -307,12 +326,17 @@ def verify_manifest(
         try:
             from cryptography.hazmat.primitives import serialization
         except ImportError:
-            errors.append("无法验签：未安装 cryptography 库（pip install cryptography）")
+            # 仅强制验签场景视为致命：本地自校验（require_signature=False）应跳过验签，
+            # 否则「已签名但未装 cryptography」会被误报失败
+            if require_signature:
+                errors.append("无法验签：未安装 cryptography 库（pip install cryptography）")
+            else:
+                logger.warning("未安装 cryptography，跳过签名验证（本地自校验）")
             return errors
         try:
             with open(pubkey_path, "rb") as f:
                 pub = serialization.load_pem_public_key(f.read())
-            payload = json.dumps(manifest["files"], sort_keys=True, ensure_ascii=False).encode("utf-8")
+            payload = _signing_payload(manifest)
             pub.verify(bytes.fromhex(manifest["signature"]), payload)
         except Exception as e:
             errors.append("签名验证失败: %s" % e)
@@ -385,11 +409,23 @@ def download_and_install(
     if resp is None:
         raise ValueError("仓库下载失败: %s" % last_err)
 
+    # 包体大小上限（requests 已完整缓冲响应，此处兜底拒绝超大包裹）
+    content = resp.content
+    if len(content) > MAX_REPO_ZIP_BYTES:
+        raise ValueError("仓库包超过大小上限（%d 字节），拒绝安装" % MAX_REPO_ZIP_BYTES)
+
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_repo_")
     try:
-        # 解压（zip-slip 防护：先校验所有成员名，拒绝绝对路径 / .. 穿越）
+        # 解压（zip-slip 防护：先校验所有成员名，拒绝绝对路径 / .. 穿越；
+        # 同时限制成员数与解压总大小，防 zip bomb 在 manifest 校验前耗尽磁盘）
         try:
-            with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                infos = zf.infolist()
+                if len(infos) > MAX_REPO_ENTRIES:
+                    raise ValueError("仓库包文件数超过上限（%d），拒绝解压" % MAX_REPO_ENTRIES)
+                total_size = sum(i.file_size for i in infos)
+                if total_size > MAX_REPO_UNCOMPRESSED_BYTES:
+                    raise ValueError("仓库包解压后大小超过上限（%d 字节），拒绝解压" % MAX_REPO_UNCOMPRESSED_BYTES)
                 for name in zf.namelist():
                     if not _is_safe_rel(name):
                         raise ValueError("仓库包包含非法路径成员: %s" % name)

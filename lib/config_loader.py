@@ -79,6 +79,24 @@ def load_yaml_config(filepath: str) -> Dict[str, Any]:
         return _simple_yaml_parse(content)
 
 
+def _strip_inline_comment(value: str) -> str:
+    """去除值尾部的行内注释（# 前有空白，且不在引号内）
+
+    示例：'http://example.com/        # 目标 URL' → 'http://example.com/'
+    URL 片段（如 http://x/#/path）中的 # 前无空白，不受影响。
+    """
+    quote = ""
+    for i, ch in enumerate(value):
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch == "#" and (i == 0 or value[i - 1] in " \t"):
+            return value[:i].rstrip()
+    return value
+
+
 def _simple_yaml_parse(content: str) -> Dict[str, Any]:
     """简易 YAML 解析器（无 PyYAML 时回退）
 
@@ -101,6 +119,9 @@ def _simple_yaml_parse(content: str) -> Dict[str, Any]:
         key, _, value = line.partition(":")
         key = key.strip()
         value = value.strip()
+        # 去行内注释：create_example_config 等文件在值后带 "  # 注释"，
+        # 不剥离会把注释并进值（如 target 变成 "http://x/  # 目标 URL"）
+        value = _strip_inline_comment(value)
         # 去引号
         if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
             value = value[1:-1]
@@ -219,6 +240,21 @@ def normalize_config_keys(config: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _cli_explicitly_set(key: str) -> bool:
+    """检测 sys.argv 中是否显式出现该参数对应的命令行选项
+
+    仅比较 args 值与 parser 默认值，无法区分「显式传入等于默认值的参数」与
+    「未指定」，这里用原始 argv 补齐（库/测试场景 argv 无该选项，行为不变）。
+    """
+    import sys
+
+    long_forms = {"--" + key.replace("_", "-"), "--" + key}
+    for token in sys.argv[1:]:
+        if token in long_forms or any(token.startswith(f + "=") for f in long_forms):
+            return True
+    return False
+
+
 def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
     """将配置文件值合并到 argparse args
 
@@ -244,8 +280,9 @@ def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str,
             continue
         current_value = getattr(args, key, None)
         default_value = defaults.get(key)
-        # 当前值与默认值相同 → CLI 未指定 → 用配置文件值覆盖
-        if current_value == default_value:
+        # 当前值与默认值相同且 argv 未显式指定 → CLI 未指定 → 用配置文件值覆盖
+        # （argv 判定保证 --threads 5（等于默认值）这类显式参数不被配置文件覆盖）
+        if current_value == default_value and not _cli_explicitly_set(key):
             setattr(args, key, config_value)
             overridden.append(key)
 
@@ -272,7 +309,10 @@ def _get_parser_defaults() -> Dict[str, Any]:
         # 空参数解析得到各参数默认值，作为"CLI 是否显式指定"的参照
         _parser_defaults_cache = dict(vars(parser.parse_args([])))
     except Exception:
-        _parser_defaults_cache = {}
+        # 获取失败不缓存降级结果：一次瞬时失败不应在进程内永久禁用配置合并；
+        # 返回空映射时无法判定"显式指定"，保守跳过覆盖而非误盖 CLI 参数
+        logger.warning("获取 argparse 默认值失败，本次跳过配置文件合并", exc_info=True)
+        return {}
 
     return _parser_defaults_cache
 

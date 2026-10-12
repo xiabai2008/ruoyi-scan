@@ -16,10 +16,25 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from common.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _mask_url_credentials(url: str) -> str:
+    """统计/日志输出前抹除 URL 内嵌凭据（scheme://user:pass@host → scheme://***@host）"""
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            host = parsed.hostname or ""
+            port = f":{parsed.port}" if parsed.port else ""
+            return f"{parsed.scheme}://***@{host}{port}"
+    except ValueError:
+        # 畸形 URL（如非法端口）无法解析：不猜测，原样返回交给调用方处理
+        pass
+    return url
 
 
 @dataclass
@@ -98,8 +113,9 @@ class ProxyPool:
                     line = line.strip()
                     if line and not line.startswith("#"):
                         proxies.append(line)
-        except FileNotFoundError:
-            logger.debug("代理文件未找到，使用空代理列表", exc_info=True)
+        except (OSError, UnicodeDecodeError):
+            # 文件缺失、权限不足、是目录或编码错误都统一降级为空代理列表
+            logger.debug("代理文件读取失败，使用空代理列表", exc_info=True)
         return cls(proxies, strategy)
 
     def add(self, proxy_url: str):
@@ -128,10 +144,15 @@ class ProxyPool:
                 return None
 
             if self._strategy == "random":
-                return random.choice(available).url
+                chosen = random.choice(available)
+                chosen.last_used = now
+                return chosen.url
             elif self._strategy == "least-fail":
-                # 优先用失败率最低的
-                return min(available, key=lambda s: s.fail_rate).url
+                # 失败率优先；同失败率时按（成功次数少 → 最近未使用）打破平局，
+                # 避免第一个未使用/刚恢复的代理被持续饿死
+                chosen = min(available, key=lambda s: (s.fail_rate, s.success_count, s.last_used))
+                chosen.last_used = now
+                return chosen.url
             else:  # round-robin（默认）
                 # 取模保证轮询索引不越界（可用代理数会因剔除/重试而动态变化）
                 idx = self._round_robin_idx % len(available)
@@ -152,23 +173,27 @@ class ProxyPool:
                 self._stats[proxy_url] = ProxyStats(url=proxy_url)
 
             stats = self._stats[proxy_url]
-            stats.last_check = time.time()
             if success:
                 stats.success_count += 1
                 stats.consecutive_fails = 0
+                # 迟到的成功上报（如并发请求在剔除后返回成功）应使代理恢复可用，
+                # 否则会留下 disabled=True 且 consecutive_fails=0 的不一致状态
+                stats.disabled = False
             else:
                 stats.fail_count += 1
                 stats.consecutive_fails += 1
-                # 连续失败超过阈值，自动剔除
+                # 连续失败超过阈值，自动剔除；last_check 记录"剔除时刻"，
+                # 后续失败上报不再刷新，避免无限推迟 get() 的复检时间
                 if stats.consecutive_fails >= self.DISABLE_THRESHOLD:
                     stats.disabled = True
+                    stats.last_check = time.time()
 
     def get_stats(self) -> List[dict]:
         """获取所有代理统计"""
         with self._lock:
             return [
                 {
-                    "url": s.url,
+                    "url": _mask_url_credentials(s.url),
                     "success": s.success_count,
                     "fail": s.fail_count,
                     "fail_rate": round(s.fail_rate, 2),

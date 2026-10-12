@@ -39,6 +39,22 @@ from lib.reporter import emit
 
 logger = get_logger(__name__)
 
+
+def _redact_redis_url(url: str) -> str:
+    """日志/报错输出前抹除 Redis URL 内嵌凭据（redis://:pass@host → redis://***@host）"""
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(url)
+        if parts.username or parts.password:
+            host = parts.hostname or ""
+            port = f":{parts.port}" if parts.port else ""
+            parts = parts._replace(netloc="***@" + host + port)
+        return urlunsplit(parts)
+    except ValueError:
+        return "<invalid-redis-url>"
+
+
 # ============================================================
 # Redis 连接（延迟导入，避免未安装时报错）
 # ============================================================
@@ -66,7 +82,7 @@ def get_redis_client(redis_url: str = "redis://127.0.0.1:6379"):
     try:
         client.ping()
     except redis.ConnectionError:
-        raise ConnectionError(f"无法连接 Redis: {redis_url}")
+        raise ConnectionError(f"无法连接 Redis: {_redact_redis_url(redis_url)}")
     return client
 
 
@@ -84,6 +100,8 @@ class ScanTask:
         self.target = target
         self.mode = mode  # full/vuln/dir/brute
         self.config = config or {}
+        # 预留字段：当前 DistributedTaskQueue 为 FIFO（LPUSH/BRPOP），
+        # priority 仅随任务序列化，不影响出队顺序
         self.priority = priority
         self.created_at = datetime.datetime.now().isoformat()
         self.status = "pending"  # pending/running/completed/failed
@@ -250,6 +268,7 @@ class DistributedRateLimiter:
         self._worker_id = worker_id or f"worker_{id(self)}"
         self._local_timestamps: List[float] = []  # 本地退化令牌桶
         self._local_lock = threading.Lock()
+        self._redis_degraded = False  # Redis 退化告警只打一次，避免刷屏
 
     @property
     def rate(self) -> int:
@@ -274,8 +293,13 @@ class DistributedRateLimiter:
 
         try:
             self._acquire_redis()
-        except Exception:
-            # Redis 不可用时退化到本地
+            self._redis_degraded = False
+        except Exception as e:
+            # Redis 不可用时退化到本地：必须告警，避免全局速率保证静默失效
+            # （N 个 Worker 各自本地限速 → 实际总速率 N × rate）
+            if not self._redis_degraded:
+                logger.warning("Redis 全局限速不可用，已退化到本地限速（跨 Worker 全局速率保证失效）: %s", e)
+                self._redis_degraded = True
             self._acquire_local()
 
     def _acquire_redis(self) -> None:
@@ -334,7 +358,8 @@ class DistributedRateLimiter:
 class DistributedTaskQueue:
     """分布式任务队列
 
-    基于 Redis list 实现的轻量级任务队列。
+    基于 Redis list 实现的轻量级 FIFO 任务队列（LPUSH 入队 + BRPOP 出队）。
+    注：ScanTask.priority 为预留字段，当前不参与出队排序。
     """
 
     def __init__(self, redis_url: str = "redis://127.0.0.1:6379"):
@@ -779,8 +804,8 @@ def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = No
         0 表示成功
     """
     redis_url = getattr(args, "redis_url", None) or "redis://127.0.0.1:6379"
-    # 该表达式恒为 "full"（保留原写法，便于未来按 -u 目标类型扩展不同模式）
-    mode = getattr(args, "u", None) and "full" or "full"
+    # 当前仅支持 full 模式（原写法 getattr(args, "u", None) and "full" or "full" 恒为 "full"）
+    mode = "full"
 
     try:
         master = MasterNode(redis_url)
@@ -852,7 +877,7 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
     rate_limiter = None
     if distributed_rate > 0:
         rate_limiter = DistributedRateLimiter(worker.queue.redis, rate=distributed_rate)
-        emit(f"[*]全局限速: {distributed_rate} req/s（{redis_url}）")
+        emit(f"[*]全局限速: {distributed_rate} req/s（{_redact_redis_url(redis_url)}）")
 
     try:
         worker.run(scan_fn, max_tasks=max_tasks, rate_limiter=rate_limiter)

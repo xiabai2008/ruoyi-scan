@@ -124,14 +124,14 @@ def normalize_link(base: str, link: str) -> Optional[str]:
     link = link.strip()
     if not link or link.startswith("#"):
         return None
-    # javascript: / mailto: / data: 等非 HTTP 协议跳过
-    # 含 ":" 视为带协议：协议相对 URL（//host）单独补 scheme，其余伪协议直接丢弃
-    if ":" in link and not link.startswith(("http://", "https://")):
-        # 处理 protocol-relative URL（//host/path）
-        if link.startswith("//"):
-            scheme = urlparse(base).scheme or "http"
-            link = f"{scheme}:{link}"
-        else:
+    if link.startswith("//"):
+        # protocol-relative URL（//host/path）补 scheme
+        scheme = urlparse(base).scheme or "http"
+        link = f"{scheme}:{link}"
+    elif not link.startswith(("http://", "https://")):
+        # 仅拒绝 javascript:/mailto:/data: 等带伪协议的链接；
+        # 相对路径/查询串中的冒号（如 /x?id=1:2、/search?t=12:30）必须保留
+        if urlparse(link).scheme:
             return None
     # 拼接为绝对 URL
     absolute = urljoin(base, link)
@@ -195,20 +195,31 @@ class Crawler:
         Returns:
             所有抓取到的 URL 列表（含起始 URL，按访问顺序）
         """
+        # 支持实例复用：重置上一轮状态，否则 visited 残留会让第二次 crawl() 直接返回空结果
+        with self._lock:
+            self.visited.clear()
+            self.discarded.clear()
+            self.errors.clear()
+
         # 规范化起始 URL
         start_url = normalize_link("", start_url) or start_url
         if not start_url:
             return []
 
-        # BFS 队列：(url, depth)
+        # BFS 队列：(url, depth)；pending 记录队列中待访问 URL，去重 O(1)
+        # （逐项扫描 deque 判重是 O(n²)，页面链接多时开销显著）
         queue = deque([(start_url, 1)])
+        pending = {start_url}
         results: List[str] = []
 
         while queue and len(results) < self.max_pages:
             url, depth = queue.popleft()
-            if url in self.visited:
-                continue
-            self.visited.add(url)
+            pending.discard(url)
+            # 加锁保证 visited 的「检查-写入」原子性：两个线程同时 pop 到同一 URL 时只有一方继续抓取
+            with self._lock:
+                if url in self.visited:
+                    continue
+                self.visited.add(url)
 
             # 抓取页面
             html_text = ""
@@ -268,7 +279,7 @@ class Crawler:
                 if not absolute:
                     continue
                 # 去重
-                if absolute in self.visited or any(absolute == q[0] for q in queue):
+                if absolute in self.visited or absolute in pending:
                     continue
                 # 同 host 限制
                 if self.same_host_only and not is_same_host(start_url, absolute):
@@ -278,6 +289,7 @@ class Crawler:
                     with self._lock:
                         self.discarded.append(absolute)
                     continue
+                pending.add(absolute)
                 queue.append((absolute, depth + 1))
 
             if self.delay:
@@ -339,5 +351,11 @@ def extract_links_from_html(html_text: str, base_url: str = "") -> List[str]:
     parser = LinkExtractor()
     parser.feed(html_text)
     if base_url:
-        return [normalize_link(base_url, link) for link in parser.links if normalize_link(base_url, link)]
+        # 每个链接只规范化一次（在过滤条件里重复调用会白白多解析一遍）
+        links: List[str] = []
+        for link in parser.links:
+            absolute = normalize_link(base_url, link)
+            if absolute:
+                links.append(absolute)
+        return links
     return parser.links

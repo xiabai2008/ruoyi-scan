@@ -16,17 +16,40 @@
 #   python main.py --cache-clear                          # 清除缓存
 import datetime
 import hashlib
+import inspect
 import json
 import os
 import sqlite3
 import threading
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
 from lib.reporter import emit
 
 # ============================================================
 # 缓存键生成
 # ============================================================
+
+
+def _normalize_target(target: str) -> str:
+    """标准化目标 URL：去除尾部斜杠；仅 scheme/host 小写
+
+    路径与查询串大小写敏感（如 /Admin 与 /admin、?A=1 与 ?a=1 是不同资源），
+    不能整体 lower()，否则不同目标会共用同一缓存键。
+    """
+    trimmed = target.rstrip("/")
+    parsed = urlparse(trimmed)
+    if not (parsed.scheme and parsed.netloc):
+        # 无 scheme/host 的裸字符串（如纯主机名）：沿用整体小写，保持原有兼容行为
+        return trimmed.lower()
+    netloc = parsed.netloc
+    if "@" in netloc:
+        # userinfo（user:pass@）大小写敏感，仅小写 host:port 部分
+        userinfo, _, hostport = netloc.rpartition("@")
+        netloc = "%s@%s" % (userinfo, hostport.lower())
+    else:
+        netloc = netloc.lower()
+    return urlunparse(parsed._replace(scheme=parsed.scheme.lower(), netloc=netloc))
 
 
 def generate_cache_key(target: str, plugin_config: Dict = None, scan_mode: str = "") -> str:
@@ -40,17 +63,17 @@ def generate_cache_key(target: str, plugin_config: Dict = None, scan_mode: str =
         scan_mode: 扫描模式
 
     Returns:
-        16 位十六进制缓存键
+        32 位十六进制缓存键（保留 128 bit 摘要，避免截断过短导致碰撞）
     """
-    # 标准化目标 URL（去除尾部斜杠、小写化域名）
-    normalized_target = target.rstrip("/").lower()
+    # 标准化目标 URL（去尾部斜杠、仅小写 scheme/host）
+    normalized_target = _normalize_target(target)
 
     # 序列化配置
     config_str = json.dumps(plugin_config or {}, sort_keys=True, ensure_ascii=False)
 
     # 组合生成哈希
     combined = f"{normalized_target}|{scan_mode}|{config_str}"
-    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:32]
 
 
 def generate_plugin_cache_key(target: str, plugin_name: str, plugin_config: Dict = None) -> str:
@@ -62,12 +85,12 @@ def generate_plugin_cache_key(target: str, plugin_name: str, plugin_config: Dict
         plugin_config: 插件配置
 
     Returns:
-        16 位十六进制缓存键
+        32 位十六进制缓存键（与 generate_cache_key 保持一致的摘要长度）
     """
-    normalized_target = target.rstrip("/").lower()
+    normalized_target = _normalize_target(target)
     config_str = json.dumps(plugin_config or {}, sort_keys=True, ensure_ascii=False)
     combined = f"{normalized_target}|{plugin_name}|{config_str}"
-    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:32]
 
 
 # ============================================================
@@ -331,6 +354,8 @@ class ScanCache:
         self.ttl = ttl
         self._hit_count = 0
         self._miss_count = 0
+        # 会话级计数可能被多个扫描线程并发递增（读-改-写非原子），需加锁保护
+        self._stats_lock = threading.Lock()
 
     @property
     def hit_count(self) -> int:
@@ -342,8 +367,10 @@ class ScanCache:
 
     @property
     def hit_rate(self) -> float:
-        total = self._hit_count + self._miss_count
-        return round(self._hit_count / total, 2) if total > 0 else 0
+        with self._stats_lock:
+            hits, misses = self._hit_count, self._miss_count
+        total = hits + misses
+        return round(hits / total, 2) if total > 0 else 0
 
     def get_scan_result(self, target: str, scan_mode: str = "", plugin_config: Dict = None) -> Optional[Dict[str, Any]]:
         """查询扫描结果缓存
@@ -359,9 +386,11 @@ class ScanCache:
         cache_key = generate_cache_key(target, plugin_config, scan_mode)
         result = self.storage.get(cache_key)
         if result is not None:
-            self._hit_count += 1
+            with self._stats_lock:
+                self._hit_count += 1
         else:
-            self._miss_count += 1
+            with self._stats_lock:
+                self._miss_count += 1
         return result
 
     def set_scan_result(
@@ -480,9 +509,19 @@ def cached_scan(cache: ScanCache, target_arg: str = "target", plugin_name: str =
     """
 
     def decorator(fn):
+        # 解析 target_arg 在函数签名中的位置：位置参数回退只能取对应形参，
+        # 不能盲取 args[0]（如 def detect(session, url) 会把 session 当目标，缓存串号）
+        try:
+            _params = list(inspect.signature(fn).parameters)
+            _target_index = _params.index(target_arg)
+        except (TypeError, ValueError):
+            _target_index = -1
+
         def wrapper(*args, **kwargs):
             # 目标参数可能在 kwargs 也可能在位置参数，兼容两种调用约定
-            target = kwargs.get(target_arg) or (args[0] if args else "")
+            target = kwargs.get(target_arg)
+            if target is None and 0 <= _target_index < len(args):
+                target = args[_target_index]
             if not target:
                 return fn(*args, **kwargs)
 

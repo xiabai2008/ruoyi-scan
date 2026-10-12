@@ -6,9 +6,8 @@
 # 检测类型：
 #   1. IDOR（不安全直接对象引用）：水平/垂直越权访问
 #   2. 权限提升：普通用户访问管理接口
-#   4. 批量操作滥用：绕过单次限制
-#   5. 价格/数量篡改：订单参数修改
-#   6. 并发竞争：重复提交、余额双花
+#   3. 价格/数量篡改：订单参数修改
+#   4. 并发竞争：重复提交、余额双花
 #
 # 依赖：
 #   - D26 认证扫描（lib/auth_scan.py）：提供认证状态
@@ -17,10 +16,15 @@
 # 使用方式：
 #   python main.py -u http://target/ --logic-scan --auth-login admin:password
 #   python main.py -u http://target/ --logic-scan --auth-file cookies.txt
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
+
+from common.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ============================================================
 # 数据模型
@@ -97,6 +101,22 @@ ID_PARAM_PATTERNS = [
 ]
 
 
+def _looks_like_id_param(name: str) -> bool:
+    """参数名是否像对象引用 ID
+
+    仅接受明确后缀：camelCase（xxxId/xxxID）、分隔后缀（xxx_id、id、123id），
+    避免 valid/grid/void 等普通单词被误判为 ID 参数而触发无意义 IDOR 测试。
+    """
+    low = name.lower()
+    if low in ID_PARAM_PATTERNS:
+        return True
+    # camelCase 后缀：大写 I 明确指示 ID 单词（userId/userID）
+    if re.search(r"[A-Za-z0-9](?:Id|ID)$", name):
+        return True
+    # 分隔后缀：ID 之前不是小写字母（user_id / id / 123id）
+    return bool(re.search(r"(?<![a-z])id$", low))
+
+
 class IDORDetector:
     """IDOR（不安全直接对象引用）检测器
 
@@ -129,7 +149,7 @@ class IDORDetector:
         """
         id_params = []
         for p in params:
-            if p.lower() in ID_PARAM_PATTERNS or re.search(r"(id|Id|ID)$", p):
+            if _looks_like_id_param(p):
                 id_params.append(p)
         return id_params
 
@@ -162,6 +182,8 @@ class IDORDetector:
             baseline_text = baseline_resp.text or ""
             baseline_size = len(baseline_text)
         except Exception:
+            # 记录失败原因，避免把「会话/网络异常」误读为「检测完成且无漏洞」
+            logger.debug("IDOR 基线请求失败：%s", endpoint.url, exc_info=True)
             return None
 
         # 测试其他 ID
@@ -173,6 +195,7 @@ class IDORDetector:
                 resp_size = len(resp_text)
                 resp_code = resp.status_code
             except Exception:
+                logger.debug("IDOR 测试请求失败：%s", test_url, exc_info=True)
                 continue
 
             # 判定逻辑：
@@ -332,6 +355,8 @@ class PrivilegeEscalationDetector:
                     if not any(kw in text.lower() for kw in login_keywords):
                         found.append(url)
             except Exception:
+                # 记录失败原因，避免把「会话/网络异常」误读为「端点不存在」
+                logger.debug("管理端点探测失败：%s", url, exc_info=True)
                 continue
 
         return found
@@ -354,6 +379,7 @@ class PrivilegeEscalationDetector:
             resp_text = resp.text or ""
             resp_size = len(resp_text)
         except Exception:
+            logger.debug("权限提升测试请求失败：%s", url, exc_info=True)
             return None
 
         # 普通用户能 200 访问管理接口
@@ -401,8 +427,8 @@ class ParameterTamperingDetector:
     检测价格/数量等关键参数是否可被客户端篡改。
     """
 
-    # 价格/数量相关参数
-    PRICE_PARAMS = ["price", "amount", "totalPrice", "total", "fee", "cost", "payment"]
+    # 价格/数量相关参数（统一小写，与 a.lower() 后的参数名比对）
+    PRICE_PARAMS = ["price", "amount", "totalprice", "total", "fee", "cost", "payment"]
     QUANTITY_PARAMS = ["quantity", "count", "num", "qty"]
 
     def __init__(self, session=None, auth_info: Optional[Dict] = None):
@@ -449,12 +475,23 @@ class ParameterTamperingDetector:
             resp_code = resp.status_code
             resp_text = resp.text or ""
         except Exception:
+            logger.debug("参数篡改测试请求失败：%s", test_url, exc_info=True)
             return None
 
         # 如果服务端接受篡改值（200 + 成功响应），判定为参数篡改
         if resp_code == 200:
-            success_keywords = ["成功", "success", "ok", "completed", "已完成", "订单"]
-            if any(kw in resp_text.lower() for kw in success_keywords):
+            # 成功判定：优先看 JSON 响应包络（success/code），再回退中英文成功关键字。
+            # 注意：不把裸 "ok" 计入关键字——它在 token/base64/无关文本中高频出现，会大量误报
+            success_keywords = ["成功", "success", "completed", "已完成"]
+            confirmed = any(kw in resp_text.lower() for kw in success_keywords)
+            if not confirmed:
+                try:
+                    payload = json.loads(resp_text)
+                except (ValueError, TypeError):
+                    payload = None
+                if isinstance(payload, dict):
+                    confirmed = payload.get("success") is True or payload.get("code") in (0, 200, "0", "200")
+            if confirmed:
                 return LogicVuln(
                     vuln_type="parameter_tampering",
                     name=f"参数篡改 - {param} 可被客户端修改",
@@ -530,8 +567,14 @@ class RaceConditionDetector:
         self.concurrency = concurrency
         self.results: List[LogicVuln] = []
 
+    # 幂等方法：并发重放不产生状态副作用，对正常端点必然返回 200，无竞争判定意义
+    IDEMPOTENT_METHODS = ("GET", "HEAD", "OPTIONS")
+
     def test_race_condition(self, endpoint: EndpointInfo, expected_success_count: int = 1) -> Optional[LogicVuln]:
-        """测试竞争条件
+        """测试竞争条件（仅针对非幂等操作）
+
+        幂等请求（GET/HEAD/OPTIONS）并发重放对任何健康端点都会成功，
+        success_count 必然接近并发数，属必然误报，直接跳过。
 
         Args:
             endpoint: 端点信息
@@ -545,12 +588,16 @@ class RaceConditionDetector:
         if not self.session:
             return None
 
+        method = (endpoint.method or "GET").upper()
+        if method in self.IDEMPOTENT_METHODS:
+            return None
+
         results = []
         lock = threading.Lock()
 
         def send_request():
             try:
-                resp = self.session.get(endpoint.url)
+                resp = self.session.request(method, endpoint.url)
                 with lock:
                     results.append(
                         {
@@ -559,6 +606,7 @@ class RaceConditionDetector:
                         }
                     )
             except Exception as e:
+                logger.debug("竞争条件请求失败：%s", endpoint.url, exc_info=True)
                 with lock:
                     results.append({"error": str(e)})
 
@@ -575,6 +623,12 @@ class RaceConditionDetector:
         for t in threads:
             t.join(timeout=10)
 
+        # join 超时后线程可能仍在运行，此时 results 不完整：判定不可靠，放弃本次检测
+        stuck = [t for t in threads if t.is_alive()]
+        if stuck:
+            logger.warning("竞争条件检测：%d/%d 个请求线程超时未结束，跳过判定", len(stuck), len(threads))
+            return None
+
         # 分析结果
         success_count = sum(1 for r in results if r.get("code") == 200)
 
@@ -584,7 +638,7 @@ class RaceConditionDetector:
                 name=f"竞争条件 - {endpoint.url} 可被并发利用",
                 severity="high",
                 url=endpoint.url,
-                method="GET",
+                method=method,
                 evidence=f"并发 {self.concurrency} 次请求，{success_count} 次成功"
                 f"（应仅 {expected_success_count} 次成功）",
                 fix="使用数据库事务 + 行锁/乐观锁，确保操作的原子性",
@@ -664,6 +718,13 @@ class LogicScanner:
                     vuln = self.tamper_detector.test_parameter_tampering(ep, param)
                     if vuln:
                         results.append(vuln)
+
+        # 竞争条件检测（仅非幂等操作生效，幂等 GET 由检测器内部跳过，避免必然误报）
+        if endpoints:
+            for ep in endpoints:
+                vuln = self.race_detector.test_race_condition(ep)
+                if vuln:
+                    results.append(vuln)
 
         return results
 

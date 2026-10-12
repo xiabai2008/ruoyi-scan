@@ -20,16 +20,21 @@ from dataclasses import dataclass, field
 from typing import List, Set
 from urllib.parse import urlparse
 
+from common.logger import get_logger
+
+logger = get_logger(__name__)
+
 # 正则模式：路径样式（/word/word...，至少 2 段以降低噪声）
 # 例：/api/user、/admin/list、/prod-api/system/user
 PATH_PATTERN = re.compile(r'["\'`](/(?:[a-zA-Z0-9_\-]+/){1,6}[a-zA-Z0-9_\-]+)["\'`]')
 
-# 正则模式：绝对 URL
-URL_PATTERN = re.compile(r'["\'`](https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+)["\'`]')
+# 正则模式：绝对 URL（URL 体排除引号/反引号/空白，避免回溯跨相邻字符串合并成畸形端点）
+URL_PATTERN = re.compile(r'["\'`](https?://[^"\'`\s]+)["\'`]')
 
-# 正则模式：fetch/axios 调用
+# 正则模式：fetch/axios 调用（捕获被调用方法名，方法识别只看匹配到的调用而非整行）
 FETCH_PATTERN = re.compile(
-    r'(?:fetch|axios\.(?:get|post|put|delete|patch|request)|\$\.ajax)\s*\(\s*["\'`]([^"\'`]+)["\'`]', re.IGNORECASE
+    r'(fetch|axios\.(?:get|post|put|delete|patch|request)|\$\.ajax)\s*\(\s*["\'`]([^"\'`]+)["\'`]',
+    re.IGNORECASE,
 )
 
 # 第三方库噪声路径前缀（这些不是真正的 API 端点）
@@ -84,8 +89,9 @@ class JSExtractor:
 
         Args:
             min_path_segments: 最小路径段数（/api/x 是 2 段，过滤 /a 这种噪声）
-            include_noise: 是否包含已知噪声路径（默认 False）
-            include_third_party: 是否包含第三方库路径（默认 False）
+            include_noise: 是否包含已知噪声路径（默认 False）；为 True 时包含
+                node_modules 等第三方库前缀（优先于 include_third_party）
+            include_third_party: 是否包含第三方库路径（默认 False，仅 include_noise=False 时生效）
         """
         self.min_path_segments = min_path_segments
         self.include_noise = include_noise
@@ -125,24 +131,23 @@ class JSExtractor:
 
             # 2. fetch/axios 调用（高置信度，标注方法）
             for match in FETCH_PATTERN.finditer(line):
-                url = match.group(1)
+                url = match.group(2)
                 if self._is_noise(url):
                     continue
-                # 识别方法（fetch 默认 GET，axios.X 用 X）
+                # 从匹配到的调用推导方法（fetch 默认 GET；axios.X 取 X；$.ajax 无法从调用处确定）
+                callee = (match.group(1) or "").lower()
                 method = "GET"
-                if "axios.post" in line.lower():
-                    method = "POST"
-                elif "axios.put" in line.lower():
-                    method = "PUT"
-                elif "axios.delete" in line.lower():
-                    method = "DELETE"
-                elif "axios.patch" in line.lower():
-                    method = "PATCH"
+                if callee.startswith("axios."):
+                    verb = callee.split(".", 1)[1]
+                    if verb in ("get", "post", "put", "delete", "patch"):
+                        method = verb.upper()
                 key = f"{url}|{source_url}"
                 if key in seen:
-                    # 已存在则补 method
+                    # 已存在则补 method（URL_PATTERN 先命中时记录的 method 为空）
                     for ep in endpoints:
                         if ep.url == url and ep.source == source_url:
+                            if method and not ep.method:
+                                ep.method = method
                             if method and method not in ep.contexts:
                                 ep.contexts.append(f"fetch:{method}")
                             break
@@ -198,29 +203,36 @@ class JSExtractor:
                     continue
                 endpoints = self.extract_from_text(resp.text, source_url=js_url)
                 all_endpoints.extend(endpoints)
-            except Exception:
+            except Exception as e:
+                # 下载/解析失败不应静默：至少留下 js_url 便于排查（网络/超时/API 不匹配）
+                logger.debug("下载或解析 JS 失败: %s (%s)", js_url, e)
                 continue
         return all_endpoints
 
     def _is_noise(self, url_or_path: str) -> bool:
-        """判断是否为噪声路径（应跳过）"""
+        """判断是否为噪声路径（应跳过）
+
+        sourcemap 与 data: URI 不是可请求端点，任何选项下都过滤；
+        include_noise 为总开关（True 时保留第三方库等噪声），
+        include_third_party 仅在 include_noise=False 时细分第三方库前缀。
+        """
         if not url_or_path:
             return True
         lower = url_or_path.lower()
-        # 用户已选择包含噪声
+        # 排除 sourcemap（.map 是构建产物，不是可请求的 API 端点）
+        if lower.endswith(".map"):
+            return True
+        # 排除 data: URI（内联内容，不是端点）
+        if lower.startswith("data:"):
+            return True
+        # 用户已选择包含噪声（含第三方库前缀）
         if self.include_noise:
             return False
-        # 排除已知噪声前缀
+        # 排除已知第三方库噪声前缀
         if not self.include_third_party:
             for prefix in NOISE_PREFIXES:
                 if prefix in lower:
                     return True
-        # 排除 sourcemap
-        if lower.endswith(".map"):
-            return True
-        # 排除 data: URI
-        if lower.startswith("data:"):
-            return True
         return False
 
     def filter_by_host(self, endpoints: List[Endpoint], host: str) -> List[Endpoint]:

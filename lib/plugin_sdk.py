@@ -26,7 +26,10 @@ import pkgutil
 import re
 from typing import Any, Dict, List, Tuple
 
+from common.logger import get_logger
 from core.loader import discover_plugin_packages
+
+logger = get_logger(__name__)
 
 # ============================================================
 # 插件模板
@@ -209,11 +212,17 @@ def init_plugin_file(name: str, category: str = "common", output_dir: str = None
 
 
 def _to_filename(name: str) -> str:
-    """将插件名转为文件名（下划线小写）"""
+    """将插件名转为文件名（下划线小写）
+
+    同时做路径安全清洗：去除目录分隔符与 .. 片段，防止 AI/用户可控名称
+    逃逸出 plugins/<category>/ 目标目录（或触发 FileNotFoundError）。
+    """
     # 中文保留，英文转下划线
     result = re.sub(r"([A-Z])", r"_\1", name).lower().lstrip("_")
     result = re.sub(r"\s+", "_", result)
-    return result
+    result = re.sub(r"[\\/]+", "_", result)
+    result = result.replace("..", "_").strip("._")
+    return result or "plugin"
 
 
 # ============================================================
@@ -248,8 +257,8 @@ def check_plugin(filepath: str) -> Tuple[bool, List[str], List[str]]:
             errors.append(f"缺少必需属性: {attr}")
 
     # 检查 verify 方法
-    # 兼容带空格与不带空格两种 verify 签名写法，避免格式差异导致误判
-    if "def verify(self, target, session):" not in source and "def verify(self,target,session):" not in source:
+    # 兼容空格差异与返回类型注解（如 -> ScanResult），避免格式差异导致误判
+    if not re.search(r"def\s+verify\s*\(\s*self\s*,\s*target\s*,\s*session\s*\)\s*(->\s*[^:]+)?:", source):
         errors.append("缺少 verify(self, target, session) 方法")
 
     # 检查 ScanResult 导入
@@ -263,7 +272,8 @@ def check_plugin(filepath: str) -> Tuple[bool, List[str], List[str]]:
     # 建议的属性（警告）
     recommended_attrs = ["cve", "cvss_vector", "compliance", "fix_detail", "reproduce"]
     for attr in recommended_attrs:
-        pattern = rf'^\s*{attr}\s*=\s*[\'"].*[\'"]'
+        # 兼容单行字符串与多行括号赋值（SDK 模板的 fix_detail = ( ... ) 即多行形式）
+        pattern = rf"^\s*{attr}\s*=\s*[^\s=]"
         if not re.search(pattern, source, re.MULTILINE):
             warnings.append(f"建议填写属性: {attr}")
 
@@ -389,11 +399,14 @@ def list_all_plugins() -> List[Dict[str, Any]]:
                                         "has_reproduce": bool(getattr(instance, "reproduce", "")),
                                     }
                                 )
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("插件类 %s 实例化失败，已跳过: %s", an, e)
                                 continue
-                except Exception:
+                except Exception as e:
+                    logger.debug("插件模块 %s 导入失败，已跳过: %s", mn, e)
                     continue
-        except Exception:
+        except Exception as e:
+            logger.debug("插件包 %s 扫描失败，已跳过: %s", pkg_name, e)
             continue
 
     return plugins
@@ -460,6 +473,11 @@ def generate_plugin_docs(output_path: str) -> str:
 def generate_plugin_template(name, category="ruoyi"):
     """生成简易插件模板文件（直接写入 plugins/<category>/ 目录）
 
+    .. deprecated::
+        历史遗留的第二套模板生成器：与 generate_plugin/PLUGIN_TEMPLATE 约定不一致
+        （category 默认值、类名归一化、输出目录基准不同），新代码请统一使用
+        generate_plugin + init_plugin_file，避免两套模板继续漂移。
+
     Args:
         name: 插件名称（下划线命名，用于文件名与类名）
         category: 插件类别（ruoyi/spring/common）
@@ -471,15 +489,16 @@ def generate_plugin_template(name, category="ruoyi"):
         ValueError: 不支持的类别
         FileExistsError: 目标文件已存在
     """
-    import os as _os
-
     if category not in ("ruoyi", "spring", "common"):
         raise ValueError(f"unsupported category: {category}")
-    target_dir = _os.path.join("plugins", category)
-    _os.makedirs(target_dir, exist_ok=True)
+    # 路径安全：名称不可含目录分隔符或 ..，防止写出 plugins/<category>/
+    if not name or "/" in name or "\\" in name or ".." in name:
+        raise ValueError(f"unsupported plugin name: {name!r}")
+    target_dir = os.path.join("plugins", category)
+    os.makedirs(target_dir, exist_ok=True)
     filename = f"{name}.py"
-    filepath = _os.path.join(target_dir, filename)
-    if _os.path.exists(filepath):
+    filepath = os.path.join(target_dir, filename)
+    if os.path.exists(filepath):
         raise FileExistsError(f"plugin file exists: {filepath}")
     class_name = "".join(w.capitalize() for w in name.split("_")) + "Plugin"
 

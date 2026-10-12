@@ -45,6 +45,9 @@ class AsyncScanEngine:
         self.max_workers = max_workers
         self._executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
         self._lock = threading.Lock()
+        # 统计计数器专用锁：与 _lock 分离——stop() 持 _lock 等待 shutdown(wait=True) 时，
+        # 工作线程会在 _wrap_task 里改计数，若共用同一把锁会死锁
+        self._stats_lock = threading.Lock()
         self._stats = {
             "submitted": 0,
             "completed": 0,
@@ -78,11 +81,12 @@ class AsyncScanEngine:
     @property
     def stats(self) -> Dict[str, Any]:
         """获取统计信息"""
-        return dict(self._stats)
+        with self._stats_lock:
+            return dict(self._stats)
 
     def reset_stats(self) -> None:
         """重置统计"""
-        with self._lock:
+        with self._stats_lock:
             self._stats = {
                 "submitted": 0,
                 "completed": 0,
@@ -103,23 +107,27 @@ class AsyncScanEngine:
         if not self._executor:
             self.start()
 
-        self._stats["submitted"] += 1
+        with self._stats_lock:
+            self._stats["submitted"] += 1
         # 统一经 _wrap_task 包装，自动累计成功/失败/耗时统计
         future = self._executor.submit(self._wrap_task, fn, *args, **kwargs)
         return future
 
     def _wrap_task(self, fn: Callable, *args, **kwargs):
-        """包装任务，记录统计"""
+        """包装任务，记录统计（工作线程并发执行，计数须加锁）"""
         start = time.time()
         try:
             result = fn(*args, **kwargs)
-            self._stats["completed"] += 1
+            with self._stats_lock:
+                self._stats["completed"] += 1
             return result
         except Exception:
-            self._stats["failed"] += 1
+            with self._stats_lock:
+                self._stats["failed"] += 1
             raise
         finally:
-            self._stats["total_duration"] += time.time() - start
+            with self._stats_lock:
+                self._stats["total_duration"] += time.time() - start
 
     def map(self, fn: Callable, iterable: List[Any]) -> List[Any]:
         """批量提交任务并等待全部完成
@@ -136,12 +144,14 @@ class AsyncScanEngine:
 
         futures = []
         for item in iterable:
-            self._stats["submitted"] += 1
+            with self._stats_lock:
+                self._stats["submitted"] += 1
             future = self._executor.submit(self._wrap_task, fn, item)
             futures.append(future)
 
+        # 按提交顺序取结果（文档约定结果与输入一致），而非按完成顺序
         results = []
-        for f in concurrent.futures.as_completed(futures):
+        for f in futures:
             try:
                 results.append(f.result())
             except Exception:
@@ -157,8 +167,9 @@ class AsyncScanEngine:
         if not self._executor:
             self.start()
 
-        loop = asyncio.get_event_loop()
-        self._stats["submitted"] += 1
+        loop = asyncio.get_running_loop()
+        with self._stats_lock:
+            self._stats["submitted"] += 1
         # lambda 闭包携带参数：run_in_executor 只调无参 callable，参数须经闭包传入
         return await loop.run_in_executor(self._executor, lambda: self._wrap_task(fn, *args, **kwargs))
 
@@ -177,20 +188,12 @@ class AsyncScanEngine:
 
         tasks = []
         for item in iterable:
-            self._stats["submitted"] += 1
+            # submitted/completed/failed 统计统一由 submit_async → _wrap_task 累计，此处不可重复计数
             task = self.submit_async(fn, item)
             tasks.append(task)
 
-        # return_exceptions=True：单个任务异常不中断整体，失败在下方循环统一计数
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        # 统计
-        for r in results:
-            if isinstance(r, Exception):
-                self._stats["failed"] += 1
-            else:
-                self._stats["completed"] += 1
-
-        return results
+        # return_exceptions=True：单个任务异常不中断整体，失败已在 _wrap_task 内统一计数
+        return await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # ============================================================
@@ -283,8 +286,23 @@ def scan_plugins_concurrent(
 # ============================================================
 
 
+def _ssl_context(verify_ssl: bool = True):
+    """构造 aiohttp 用 SSL 上下文
+
+    默认开启证书校验；仅当显式 verify_ssl=False（自签名证书靶场）时关闭
+    check_hostname / 证书校验。
+    """
+    import ssl
+
+    ssl_ctx = ssl.create_default_context()
+    if not verify_ssl:
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+    return ssl_ctx
+
+
 async def async_http_get(
-    url: str, headers: Dict = None, timeout: float = 10.0, verify_ssl: bool = False
+    url: str, headers: Dict = None, timeout: float = 10.0, verify_ssl: bool = True
 ) -> Dict[str, Any]:
     """异步 HTTP GET 请求（使用 aiohttp）
 
@@ -294,7 +312,7 @@ async def async_http_get(
         url: 请求 URL
         headers: 请求头
         timeout: 超时秒数
-        verify_ssl: 是否验证 SSL 证书
+        verify_ssl: 是否验证 SSL 证书（默认 True 安全校验；自签名靶场显式传 False 关闭）
 
     Returns:
         {'status_code': int, 'text': str, 'headers': dict, 'url': str}
@@ -304,15 +322,7 @@ async def async_http_get(
     except ImportError:
         raise ImportError("异步 HTTP 需要安装 aiohttp：pip install aiohttp")
 
-    import ssl
-
-    ssl_ctx = ssl.create_default_context()
-    # 默认不校验 SSL 证书：靶场/自签名证书场景可正常抓取
-    if not verify_ssl:
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+    connector = aiohttp.TCPConnector(ssl=_ssl_context(verify_ssl))
     timeout_cfg = aiohttp.ClientTimeout(total=timeout)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout_cfg) as http_session:
@@ -327,17 +337,27 @@ async def async_http_get(
 
 
 async def async_http_post(
-    url: str, data: Dict = None, json_data: Dict = None, headers: Dict = None, timeout: float = 10.0
+    url: str,
+    data: Dict = None,
+    json_data: Dict = None,
+    headers: Dict = None,
+    timeout: float = 10.0,
+    verify_ssl: bool = True,
 ) -> Dict[str, Any]:
-    """异步 HTTP POST 请求"""
+    """异步 HTTP POST 请求
+
+    Args:
+        verify_ssl: 是否验证 SSL 证书（默认 True 安全校验；自签名靶场显式传 False 关闭）
+    """
     try:
         import aiohttp
     except ImportError:
         raise ImportError("异步 HTTP 需要安装 aiohttp：pip install aiohttp")
 
+    connector = aiohttp.TCPConnector(ssl=_ssl_context(verify_ssl))
     timeout_cfg = aiohttp.ClientTimeout(total=timeout)
 
-    async with aiohttp.ClientSession(timeout=timeout_cfg) as http_session:
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout_cfg) as http_session:
         kwargs = {}
         if data:
             kwargs["data"] = data

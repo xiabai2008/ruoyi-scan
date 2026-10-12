@@ -23,6 +23,15 @@
 import html as html_module
 from typing import Any, Dict, List
 
+# 已知严重度集合：未知/空值统一回退为 low，保证统计与卡片渲染一致
+KNOWN_SEVERITIES = ("high", "medium", "low")
+
+
+def normalize_severity(value: Any) -> str:
+    """归一化严重度值（未知或空值回退 low，同时阻止任意字符串进入 HTML 属性/样式）"""
+    sev = str(value or "").strip().lower()
+    return sev if sev in KNOWN_SEVERITIES else "low"
+
 
 def build_wiki_data(plugins: List[Dict[str, Any]]) -> Dict[str, Any]:
     """构建知识库数据
@@ -41,14 +50,15 @@ def build_wiki_data(plugins: List[Dict[str, Any]]) -> Dict[str, Any]:
     with_reproduce = 0
 
     for p in plugins:
-        # 严重度统计
-        sev = p.get("severity", "")
-        if sev in by_severity:
-            by_severity[sev] += 1
+        # 严重度统计（先归一化，未识别值计入 low，保证三个卡片之和等于 total）
+        sev = normalize_severity(p.get("severity", ""))
+        by_severity[sev] += 1
 
-        # 类别统计
-        cat = p.get("category", "")
-        by_category[cat] = by_category.get(cat, 0) + 1
+        # 类别统计：空/缺失类别不计入（避免渲染 `: N` 空徽标），
+        # 统一转为字符串防止 None 与 str 混排导致 sorted 抛 TypeError
+        cat = str(p.get("category", "") or "").strip()
+        if cat:
+            by_category[cat] = by_category.get(cat, 0) + 1
 
         # 合规统计
         compliance = p.get("compliance", "") or ""
@@ -96,7 +106,7 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
     # 漏洞卡片 HTML
     cards = []
     for p in plugins:
-        sev = p.get("severity", "low")
+        sev = normalize_severity(p.get("severity", "low"))
         sev_color = {"high": "#d9534f", "medium": "#f0ad4e", "low": "#5cb85c"}.get(sev, "#999")
         cve = p.get("cve", "") or "N/A"
         cve_display = cve if cve != "N/A" else "—"
@@ -177,7 +187,8 @@ def render_wiki_html(plugins: List[Dict[str, Any]]) -> str:
     # 类别统计
     category_stats = ""
     for cat, count in sorted(stats["by_category"].items()):
-        category_stats += f'<span class="cat-badge">{cat}: {count}</span>'
+        # cat 来自插件元数据，转义后再拼入 HTML，防止注入标记
+        category_stats += f'<span class="cat-badge">{html_module.escape(str(cat))}: {count}</span>'
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -361,14 +372,15 @@ def generate_wiki(output_path: str, formats: List[str] = None) -> List[str]:
         import os
 
         # 按 output_path 是文件还是目录推导 JSON 输出路径，兼容 HTML 文件/目录两种传参
-        json_dir = os.path.dirname(output_path) or "."
-        os.makedirs(json_dir, exist_ok=True)
         if output_path.endswith(".html"):
             json_path = output_path.replace(".html", ".json")
-        elif os.path.isdir(output_path):
-            json_path = os.path.join(output_path, "vuln_wiki.json")
+        elif output_path.endswith(".json"):
+            json_path = output_path
         else:
-            json_path = output_path if output_path.endswith(".json") else output_path + ".json"
+            # 非 .json 后缀视为目录（与上方 HTML 分支行为一致）：
+            # 目录不存在时也写入该目录，而不是退回 output_path+'.json'
+            json_path = os.path.join(output_path, "vuln_wiki.json")
+        os.makedirs(os.path.dirname(json_path) or ".", exist_ok=True)
         with open(json_path, "w", encoding="utf-8") as f:
             f.write(json_content)
         generated.append(json_path)

@@ -96,7 +96,8 @@ def randomcase(payload, keywords=None):
     result = payload
     for kw in keywords:
         # 查找所有匹配（忽略大小写），逐个替换为随机大小写
-        pattern = re.compile(re.escape(kw), re.IGNORECASE)
+        # \b 整词匹配 + re.escape：避免把 OR/AND/SELECT 等子串（如 ORDER/COMMAND/SELECTED）误变形
+        pattern = re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
 
         def _randomize(match):
             word = match.group(0)
@@ -121,8 +122,9 @@ def between_replace(payload):
         value = match.group(2)
         return f"{field} BETWEEN {value} AND {value}"
 
-    # 匹配 标识符=值（数字或字符串）
-    return re.sub(r"(\w+)=([^\s&|<>]+)", _replace, payload)
+    # 匹配 标识符=值（数字或字符串）。(?!=) 负向先行断言：跳过 ==，避免把比较运算
+    # 误替换成 BETWEEN（如 a==b 不应匹配）
+    return re.sub(r"(\w+)=(?!=)([^\s&|<>]+)", _replace, payload)
 
 
 def url_encode(payload):
@@ -187,7 +189,10 @@ def hpp_duplicate(payload, param_name="id"):
     """HPP 参数污染（HTTP Parameter Pollution）
 
     在 payload 中追加重复参数，利用后端参数解析差异绕过 WAF。
-    例: 'id=1 UNION SELECT' → 'id=1&id=UNION SELECT'
+    含 '=' 时按第一个 '=' 拆出参数名，整段值重复一次（第二个键用 param_name）：
+        例: 'id=1 UNION SELECT' → 'id=1 UNION SELECT&id=1 UNION SELECT'
+        例: hpp_duplicate('a=b', param_name='x') → 'a=b&x=b'
+    不含 '=' 时在末尾追加 param_name=payload。
     """
     if not payload:
         return payload

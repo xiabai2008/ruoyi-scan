@@ -140,6 +140,12 @@ class SubdomainEnumerator:
         if not domain:
             return []
 
+        # 实例可复用：重置上一次枚举的结果/来源/错误，避免跨域结果混入
+        with self._lock:
+            self.found.clear()
+            self.sources.clear()
+        self.errors.clear()
+
         # 加入主域名本身
         self._add(domain, "root")
 
@@ -149,7 +155,7 @@ class SubdomainEnumerator:
 
         # 2. 字典枚举
         if self.use_dictionary:
-            self._enumerate_dictionary(domain, session)
+            self._enumerate_dictionary(domain)
 
         return sorted(self.found)
 
@@ -172,25 +178,29 @@ class SubdomainEnumerator:
         subdomain = subdomain.lower().strip(".")
         if not subdomain:
             return
+        notify = False
         with self._lock:
             if subdomain not in self.found:
                 self.found.add(subdomain)
                 self.sources[subdomain] = [source]
-                if self.on_found:
-                    try:
-                        self.on_found(subdomain)
-                    except Exception:
-                        logger.debug("执行子域名发现回调失败", exc_info=True)
+                notify = True
             else:
                 if source not in self.sources.get(subdomain, []):
                     self.sources[subdomain].append(source)
+        # 回调在锁外执行：锁不可重入，回调重入或阻塞会死锁并串行化其他线程
+        if notify and self.on_found:
+            try:
+                self.on_found(subdomain)
+            except Exception:
+                logger.debug("执行子域名发现回调失败", exc_info=True)
 
     def _enumerate_crtsh(self, domain: str, session=None):
         """从 crt.sh 查询证书透明日志"""
         url = self.CRT_SH_URL.format(domain=domain)
         try:
             if session is not None:
-                resp = session.get(url)
+                # 透传构造参数中的 timeout：SessionManager.get 会把 kwargs 交给 requests
+                resp = session.get(url, timeout=self.timeout)
             else:
                 import requests as _requests
 
@@ -217,8 +227,8 @@ class SubdomainEnumerator:
         except Exception as e:
             self.errors.append(f"crt.sh -> {type(e).__name__}: {e}")
 
-    def _enumerate_dictionary(self, domain: str, session=None):
-        """字典枚举：尝试常见子域前缀"""
+    def _enumerate_dictionary(self, domain: str):
+        """字典枚举：尝试常见子域前缀（纯 DNS 校验，不发 HTTP 请求，故不需要 session）"""
         for word in self.word_list:
             subdomain = f"{word}.{domain}"
             # 验证 DNS（可选）
@@ -230,9 +240,17 @@ class SubdomainEnumerator:
                 self._add(subdomain, "dict")
 
     def _dns_resolve(self, hostname: str) -> bool:
-        """DNS 解析验证"""
+        """DNS 解析验证（IPv4 优先，AAAA-only 主机回退 getaddrinfo 补判）"""
         try:
             socket.gethostbyname(hostname)
+            return True
+        except socket.gaierror:
+            pass
+        except Exception:
+            return False
+        # gethostbyname 只查 A 记录：仅存 AAAA 的主机在此回退查询（AF_UNSPEC）
+        try:
+            socket.getaddrinfo(hostname, None)
             return True
         except Exception:
             return False

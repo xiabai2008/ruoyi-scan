@@ -18,7 +18,10 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from common.logger import get_logger
 from lib.diff_scan import DiffEntry, diff_reports, load_report
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -46,15 +49,24 @@ class RemediationReport:
 
     @property
     def remediation_rate(self) -> float:
-        """整改完成率 = 已闭环 / (已闭环 + 未整改)；基线为零漏洞时视为 100%"""
+        """整改完成率 = 已闭环 / (已闭环 + 未整改)
+
+        基线为零漏洞时无可整改项：复测也无新发现视为 100%（无遗留），
+        但复测有新发现时不上报 100%——避免无基线场景高估整改效果。
+        """
         denominator = self.total_closed + self.total_open
         if denominator == 0:
-            return 100.0
+            return 100.0 if self.total_new == 0 else 0.0
         return round(self.total_closed / denominator * 100.0, 1)
 
     @property
     def conclusion(self) -> str:
         """整改结论（安服报告结论段用语）"""
+        if self.total_closed == 0 and self.total_open == 0:
+            # 基线为空：无"已整改/未整改"之分，不能声称"基线漏洞全部复现/已闭环"
+            if self.total_new:
+                return f"基线无漏洞，复测新发现 {self.total_new} 项"
+            return "基线无漏洞，复测未发现新漏洞"
         if self.total_open == 0 and self.total_new == 0:
             return "整改完成，全部漏洞已闭环，复测无新发现"
         if self.total_closed > 0:
@@ -127,8 +139,9 @@ def render_remediation_docx(rep: RemediationReport, out_path: str) -> str:
         table = doc.add_table(rows=1, cols=4)
         try:
             table.style = "Table Grid"
-        except Exception:
-            pass
+        except Exception as e:
+            # 样式缺失/损坏不影响表格内容，记录原因便于排查版式问题
+            logger.debug("整改报告表格样式 Table Grid 设置失败: %s", e)
         header = ["漏洞名称", "严重度", "URL", "备注"]
         for j, h in enumerate(header):
             cell = table.rows[0].cells[j]
@@ -199,5 +212,10 @@ def run_remediation(args, builder: Any) -> List[str]:
         outputs.append(docx_path)
     except ImportError:
         pass  # python-docx 未安装，JSON 交付物仍然可用
+    except Exception as e:
+        # 保存失败（OSError）或 python-docx 运行期错误不应中断流程：JSON 已落盘
+        from common.logger import get_logger
+
+        get_logger(__name__).warning("整改报告 docx 生成失败（JSON 交付物仍可用）: %s", e, exc_info=True)
 
     return outputs

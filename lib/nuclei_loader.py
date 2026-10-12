@@ -14,7 +14,7 @@
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
@@ -25,11 +25,18 @@ logger = get_logger(__name__)
 # 支持的协议白名单（其他协议一律跳过）
 SUPPORTED_PROTOCOLS = {"http"}
 
+# nuclei 协议键：顶层出现其中之一即声明了对应协议，用于发现白名单外的协议
+PROTOCOL_KEYS = ("http", "tcp", "dns", "ssl", "file", "code", "javascript", "websocket", "headless")
+
 # 严重度映射：nuclei critical → high（本工具无 critical 级）
 SEVERITY_MAP = {"critical": "high", "high": "high", "medium": "medium", "low": "low", "info": "low"}
 
 # 支持变量
 _VAR_PATTERN = re.compile(r"\{\{([A-Za-z0-9_-]+)\}\}")
+
+# regex matcher 扫描的最大响应长度：模板正则为外部输入，截断输入以降低
+# 灾难性回溯（ReDoS）拖挂扫描线程的风险
+_MAX_REGEX_SCAN_BYTES = 2 * 1024 * 1024
 
 
 def _try_import_yaml():
@@ -96,8 +103,9 @@ class NucleiTemplate:
 def _parse_simple_yaml(content: str) -> dict:
     """简易 YAML 解析器（无 PyYAML 时回退，支持缩进嵌套的扁平子集）
 
-    支持：顶层 key: value；列表项 '- key: value'；
-    不支持：复杂锚点/多行块。回退失败时抛出 ValueError。
+    支持：顶层 key: value；列表项标量 '- value'；内联列表 [a, b]；
+    不支持：复杂锚点/多行块、列表项下的字典（- key: value，会被丢弃）。
+    回退失败时抛出 ValueError。
     """
     result: dict = {}
     stack: List[tuple] = []  # (indent, dict_ref)
@@ -130,10 +138,7 @@ def _parse_simple_yaml(content: str) -> dict:
         if value:
             parent[key] = _infer_scalar(value)
         else:
-            # 嵌套：先建 dict（若是列表上下文则特殊处理）
-            if isinstance(parent, list) and parent and isinstance(parent[-1], dict):
-                # 列表项下的嵌套字典
-                pass
+            # 嵌套：先建 dict 占位；栈中只压入 dict，parent 恒为 dict
             new_dict: dict = {}
             parent[key] = new_dict
             stack.append((indent, new_dict))
@@ -209,17 +214,9 @@ def parse_nuclei_template(filepath: str) -> NucleiTemplate:
             tpl.metadata = meta
 
     # 协议白名单校验（不支持的协议 → 返回空 requests）
-    if (
-        data.get("tcp")
-        or data.get("dns")
-        or data.get("ssl")
-        or data.get("file")
-        or data.get("code")
-        or data.get("javascript")
-        or data.get("websocket")
-        or data.get("headless")
-    ):
-        logger.debug("模板 %s 含不支持协议，跳过: %s", filepath, list(data.keys()))
+    declared_protocols = [k for k in PROTOCOL_KEYS if data.get(k)]
+    if any(p not in SUPPORTED_PROTOCOLS for p in declared_protocols):
+        logger.debug("模板 %s 含不支持协议，跳过: %s", filepath, declared_protocols)
         return tpl
 
     http_block = data.get("http") or []
@@ -254,7 +251,9 @@ def parse_nuclei_template(filepath: str) -> NucleiTemplate:
         if mtype not in ("status", "word", "regex", "dsl"):
             continue
         values = m.get("status") or m.get("words") or m.get("regex") or m.get("dsl") or []
-        if isinstance(values, str):
+        # 非列表标量统一归一为单元素列表：int（status: 200）直接迭代会抛 TypeError，
+        # str（regex: foo(.*)）逐字符迭代会产生一堆单字符伪模式
+        if not isinstance(values, (list, tuple)):
             values = [values]
         tpl.matchers.append(
             NucleiMatcher(
@@ -344,21 +343,57 @@ def _resolve_vars(tpl: NucleiTemplate, target: str, session=None) -> NucleiTempl
 # eval 使用空 builtins（任何名字解析失败 → False）
 _DSL_SAFE_RE = re.compile(r"^[0-9<>=!&\s|()a-zA-Z]+$")
 
+# dsl 中的 contains(part, 'needle') 调用（part 仅允许 body/header 两个参数名）
+_DSL_CONTAINS_RE = re.compile(r"contains\(\s*(\w+)\s*,\s*['\"]([^'\"]*)['\"]\s*\)")
+
+
+def _dsl_replace_contains(expr: str, truthy: Callable[[str, str], bool]) -> Optional[str]:
+    """把 contains(part, 'needle') 替换为 "True"/"False"
+
+    truthy(part, needle) 返回布尔：求值路径按实际响应内容判断，校验路径恒 True。
+    part 不在 body/header 白名单，或替换后仍残留无法识别的 contains 调用 → 返回 None。
+    """
+    result = expr
+    for m in _DSL_CONTAINS_RE.finditer(expr):
+        part, needle = m.group(1), m.group(2)
+        if part not in ("body", "header"):
+            return None
+        result = result.replace(m.group(0), "True" if truthy(part, needle) else "False", 1)
+    if "contains(" in result:
+        return None
+    return result
+
+
+def _dsl_normalize_ops(expr: str) -> str:
+    """nuclei DSL 逻辑运算符 → Python 语法（! 仅替换非 != 的否定符）"""
+    expr = expr.replace("&&", " and ").replace("||", " or ")
+    return re.sub(r"(?<![=!])!(?!=)", " not ", expr)
+
+
+def _dsl_expr_supported(expr: str) -> bool:
+    """dsl 表达式结构白名单校验（与 _eval_dsl 共用同一归一化路径）
+
+    模板加载前无法预知响应内容，contains(...) 统一替换为 True 做结构检查；
+    含下划线/点号等白名单外字符（如 __import__）或非法 contains 参数一律拒绝。
+    """
+    if not isinstance(expr, str) or not expr:
+        return False
+    # status_code 求值时会替换为实际数字，校验时用固定数字占位
+    replaced = _dsl_replace_contains(expr.replace("status_code", "200"), lambda _p, _n: True)
+    if replaced is None:
+        return False
+    return bool(_DSL_SAFE_RE.fullmatch(_dsl_normalize_ops(replaced)))
+
 
 def _eval_dsl(expr: str, status_code: int, body: str, headers_str: str) -> bool:
     """dsl matcher 白名单求值：仅支持 status_code 数字比较 + contains(body/header, 'x')"""
     expr = expr.replace("status_code", str(status_code))
-    # 逐个替换 contains 调用（白名单：仅 body/header 两个参数名）
-    expr2 = expr
-    for m in re.finditer(r"contains\(\s*(\w+)\s*,\s*['\"]([^'\"]*)['\"]\s*\)", expr):
-        part, needle = m.group(1), m.group(2)
-        if part not in ("body", "header"):
-            return False
-        hay = body if part == "body" else headers_str
-        expr2 = expr2.replace(m.group(0), "True" if needle in hay else "False", 1)
-    # nuclei DSL 逻辑运算符 → Python 语法（! 仅替换非 != 的否定符）
-    expr2 = expr2.replace("&&", " and ").replace("||", " or ")
-    expr2 = re.sub(r"(?<![=!])!(?!=)", " not ", expr2)
+    expr2 = _dsl_replace_contains(
+        expr, lambda part, needle: needle in (body if part == "body" else headers_str)
+    )
+    if expr2 is None:
+        return False
+    expr2 = _dsl_normalize_ops(expr2)
     if not _DSL_SAFE_RE.fullmatch(expr2):
         return False
     try:
@@ -381,7 +416,19 @@ def _matcher_match(m: NucleiMatcher, status_code: int, body: str, headers_str: s
         hay = body
         if m.part in ("header", "all"):
             hay += "\n" + headers_str
-        hit = any(re.search(p, hay) for p in m.values if p)
+        if len(hay) > _MAX_REGEX_SCAN_BYTES:
+            hay = hay[:_MAX_REGEX_SCAN_BYTES]
+        for p in m.values:
+            if not p:
+                continue
+            try:
+                if re.search(p, hay):
+                    hit = True
+                    break
+            except re.error:
+                # 单个非法模式只跳过该 matcher，不允许异常逃出匹配循环
+                logger.debug("matcher 正则非法，已跳过: %s", p)
+                continue
     elif m.mtype == "dsl":
         hit = any(_eval_dsl(expr, status_code, body, headers_str) for expr in m.values)
     return (not hit) if m.negative else hit
@@ -590,7 +637,7 @@ def validate_template(filepath: str) -> List[str]:
     for i, m in enumerate(tpl.matchers):
         if m.mtype == "dsl":
             for expr in m.values:
-                if not _DSL_SAFE_RE.fullmatch(expr.replace("status_code", "200")) and "contains(" not in expr:
+                if not _dsl_expr_supported(expr):
                     errors.append("matcher[%d] dsl 表达式超出白名单: %s" % (i, expr))
     return errors
 

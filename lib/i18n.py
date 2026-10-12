@@ -243,6 +243,11 @@ def localize_report_dict(report_dict: Dict[str, Any], lang: str = DEFAULT_LANG) 
         本地化后的报告字典
     """
     if lang == DEFAULT_LANG:
+        # 中文分支不改字段名，但同样补齐 status_cn（to_dict 只注入了 severity_cn），
+        # 保证中英文报告字段集合一致，下游消费者不会按语言取到不同 schema
+        for r in report_dict.get("results", []):
+            if "status" in r:
+                r["status_cn"] = get_status_cn(r["status"], lang)
         return report_dict  # 中文不需转换
 
     import copy

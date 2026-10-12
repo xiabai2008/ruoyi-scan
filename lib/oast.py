@@ -22,7 +22,7 @@ import socket
 import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
 from lib.reporter import emit
@@ -149,14 +149,14 @@ class CallbackHTTPHandler(BaseHTTPRequestHandler):
             "raw": f"{self.command} {self.path}",
         }
 
-        if interaction_id:
-            _store.record(interaction_id, callback)
-
-        # 读取 body（POST 等）
+        # 先读完 body 再登记，避免 poller 看到 has_callback()==True 时记录仍缺 body 字段
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length > 0:
             body = self.rfile.read(content_length)
             callback["body"] = body.decode("utf-8", errors="replace")[:1024]
+
+        if interaction_id:
+            _store.record(interaction_id, callback)
 
         # 返回 200 OK
         self.send_response(200)
@@ -180,11 +180,11 @@ class CallbackHTTPHandler(BaseHTTPRequestHandler):
 class OASTServer:
     """本地 OAST 回调服务器
 
-    启动一个 HTTP 服务器监听回调请求，支持多线程处理。
+    启动一个 HTTP 服务器监听回调请求，使用 ThreadingHTTPServer 支持多线程处理。
     """
 
-    # 允许端口复用（避免测试时 TIME_WAIT 状态导致端口占用）
-    allow_reuse_address = True
+    # 注：http.server.HTTPServer 已默认 allow_reuse_address=1（避免 TIME_WAIT 占用端口），
+    # 无需再声明类属性或在 bind 之后赋值（后者对已创建的 socket 无效）。
 
     def __init__(self, host: str = "127.0.0.1", port: int = 5555):
         """初始化本地回调服务器
@@ -195,7 +195,7 @@ class OASTServer:
         """
         self.host = host
         self.port = port
-        self._server: Optional[HTTPServer] = None
+        self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
 
@@ -206,8 +206,8 @@ class OASTServer:
             True 表示启动成功，False 表示端口被占用或失败
         """
         try:
-            self._server = HTTPServer((self.host, self.port), CallbackHTTPHandler)
-            self._server.allow_reuse_address = True
+            # ThreadingHTTPServer：每个回调请求独立线程处理，避免并发回调被串行阻塞
+            self._server = ThreadingHTTPServer((self.host, self.port), CallbackHTTPHandler)
             # 使用 serve_forever 替代 handle_request 循环，确保请求被及时处理
             self._thread = threading.Thread(
                 target=self._server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True
@@ -217,11 +217,6 @@ class OASTServer:
             return True
         except OSError:
             return False
-
-    def _serve_loop(self):
-        """服务循环（保留向后兼容，实际由 serve_forever 替代）"""
-        while self._running:
-            self._server.handle_request()
 
     def stop(self) -> None:
         """停止服务器"""
@@ -449,6 +444,8 @@ def run_oast_mode(args) -> int:
             time.sleep(1)
     except KeyboardInterrupt:
         emit("\n[*]停止 OAST 服务器")
+    finally:
+        # 无论正常退出、Ctrl+C 还是其他异常，都必须释放监听 socket 与守护线程
         server.stop()
 
     return 0

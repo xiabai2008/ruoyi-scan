@@ -85,8 +85,12 @@ def _llm_complete(messages: List[Dict[str, str]], model: str, api_key: str, base
         resp.raise_for_status()
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        raise ValueError("LLM 调用失败: %s" % e)
+    except requests.RequestException as e:
+        # 网络/HTTP 错误属预期失败，转 ValueError 供上层降级
+        raise ValueError("LLM 调用失败: %s" % e) from e
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        # 响应结构与 OpenAI 兼容格式不符：同样降级，但用 from e 保留原始 traceback
+        raise ValueError("LLM 调用失败: %s" % e) from e
 
 
 # === 规则降级模式 ===
@@ -204,7 +208,7 @@ def generate_ai_plugin(
     Returns:
         (文件路径, 是否通过验证, 验证错误列表)
     """
-    from lib.plugin_sdk import check_plugin, init_plugin_file
+    from lib.plugin_sdk import check_plugin
 
     api_key = api_key or AI_API_KEY
     source = None
@@ -212,6 +216,7 @@ def generate_ai_plugin(
     # 用户显式覆盖了 base_url（如 http://127.0.0.1:11434/v1）时，无 Key 也走 LLM 主路径
     used_llm = bool(api_key) or base_url != AI_BASE_URL
     errors = []
+    llm_failed = False  # LLM 调用异常（降级规则模板），区别于重试耗尽的验证失败
 
     if used_llm:
         # LLM 主路径 + 自验证回灌循环
@@ -234,35 +239,27 @@ def generate_ai_plugin(
             try:
                 source = _llm_complete(messages, model=model, api_key=api_key, base_url=base_url)
             except ValueError as e:
-                # LLM 调用失败 → 降级规则模板
+                # LLM 调用失败 → 降级规则模板（不能返回空错误的伪失败结果）
                 logger.debug("LLM 调用失败，降级规则模板: %s", e)
-                source = _rule_fallback(description, name, category)
-                used_llm = False
+                llm_failed = True
                 break
             # 清洗 markdown 代码块
             source = _clean_code(source)
-            # 写临时文件验证（同一会话内允许覆盖重试产物）
-            filepath = _write_source(name, category, source, output_dir, overwrite=True)
+            # 写临时文件验证：首轮不覆盖已有插件（防误伤同名手写插件），重试轮允许覆盖本会话产物
+            filepath = _write_source(name, category, source, output_dir, overwrite=attempt > 0)
             ok, errors, _warnings = check_plugin(filepath)
             if ok:
                 return filepath, True, []
-        # 重试耗尽：保留最后一次输出（标注未通过验证）
-        if source:
+        if source and not llm_failed:
+            # 重试耗尽：保留最后一次输出（标注未通过验证）
             filepath = _write_source(name, category, source, output_dir, overwrite=True)
             return filepath, False, errors
-        # LLM 完全失败
-        source = _rule_fallback(description, name, category)
-        used_llm = False
-    else:
-        # 规则降级路径
-        source = _rule_fallback(description, name, category)
 
     # 规则模式落盘（生成带 TODO 骨架，验证应通过——TODO 不阻塞 check）
-    try:
-        filepath = init_plugin_file(name, category=category, output_dir=output_dir, description=description)
-        return filepath, True, []
-    except FileExistsError as e:
-        raise FileExistsError(str(e))
+    # 直接写入 _rule_fallback 的结果：保留关键词匹配出的 severity/CVSS/合规与探测建议 TODO
+    source = _rule_fallback(description, name, category)
+    filepath = _write_source(name, category, source, output_dir, overwrite=False)
+    return filepath, True, []
 
 
 def _clean_code(source: str) -> str:

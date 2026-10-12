@@ -34,7 +34,10 @@ import hashlib
 import uuid
 from typing import Any, Optional
 
+from common.logger import get_logger
 from core.http import join_url
+
+logger = get_logger(__name__)
 
 # 单次基线探测的随机路径前缀，避免与真实目录命名冲突
 _PROBE_PREFIX = "__ruoyi_scan_soft404_probe__"
@@ -71,7 +74,7 @@ class Soft404Baseline:
     @property
     def is_catch_all(self) -> bool:
         """站点是否存在兜底路由（随机不存在路径也返回 2xx 且有内容）"""
-        return self.reachable and 200 <= self.status_code < 400 and self.length > 0
+        return self.reachable and 200 <= self.status_code < 300 and self.length > 0
 
     def looks_like_real_file(self, resp: Optional[Any]) -> bool:
         """判断响应是否指向一个独立文件（而非兜底页）
@@ -85,7 +88,8 @@ class Soft404Baseline:
         if resp is None:
             return False
         code = getattr(resp, "status_code", 0)
-        if not (200 <= code < 400):
+        # 仅 2xx 视为「有响应体返回」：3xx（重定向到登录/错误页）不构成文件存在的证据
+        if not (200 <= code < 300):
             return False
         body = getattr(resp, "content", None) or b""
         if not body:
@@ -126,6 +130,9 @@ class Soft404Baseline:
         try:
             resp = session.get(join_url(target, probe_path))
         except Exception:
+            # 记录失败原因：degraded 后 looks_like_real_file() 会退化为纯状态码判定，
+            # 必须让操作者能区分「站点无兜底路由」与「基线探测本身失败」
+            logger.warning("软 404 基线探测失败（%s），退化为纯状态码判定", probe_path, exc_info=True)
             return cls(reachable=False, probe_path=probe_path)
         body = getattr(resp, "content", None) or b""
         return cls(

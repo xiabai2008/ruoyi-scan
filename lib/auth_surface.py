@@ -132,6 +132,16 @@ def _looks_denied(status_code: int, body: str) -> bool:
     return any(kw in body_lower for kw in DENY_KEYWORDS)
 
 
+def _looks_like_html_document(body: str) -> bool:
+    """判定响应体是否为 HTML 文档（SPA 兜底页/登录页）而非业务数据
+
+    前端路由未命中或未登录时同样返回 200 + index.html，SPA 兜底页不能作为
+    "高权可达 / 越权" 的证据，否则会产生误报。
+    """
+    head = (body or "").lstrip()[:100].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html")
+
+
 def _candidate_paths(variant: str = "") -> List[str]:
     """生成字典候选路径（按变体加前缀，全部去重保序）"""
     prefixes = [""]
@@ -297,10 +307,19 @@ class AuthSurfaceScanner:
     # ── 越权矩阵 ──
 
     def _anon_session(self):
-        """构造干净匿名会话（无任何凭证头/cookie）"""
+        """构造干净匿名会话（无任何凭证头/cookie）
+
+        代理/超时/调试等网络配置从高权会话透传：需要代理出网的环境下，
+        匿名探测若直连失败会把本可复现的越权误判为 UNKNOWN（漏报）。
+        """
         from core.session import SessionManager
 
-        return SessionManager()
+        return SessionManager(
+            proxy=getattr(self.admin_session, "proxy", None),
+            timeout=getattr(self.admin_session, "timeout", None),
+            debug=getattr(self.admin_session, "debug", False),
+            proxy_pool=getattr(self.admin_session, "proxy_pool", None),
+        )
 
     def authz_matrix(self, assets: List[SurfaceAsset]) -> Tuple[List[SurfaceAsset], List[LogicVuln]]:
         """越权矩阵：匿名重放（未授权访问）+ 低权重放（垂直越权）
@@ -321,7 +340,8 @@ class AuthSurfaceScanner:
                 asset.anon_code = code
                 if _looks_denied(code, body):
                     verdicts.append("safe")
-                elif code == 200 and len(body) > 0:
+                elif code == 200 and len(body) > 0 and not _looks_like_html_document(body):
+                    # 200 且为业务数据（排除 SPA 兜底页/登录页 HTML）才判 CONFIRMED
                     verdicts.append("confirmed")
                     vulns.append(
                         LogicVuln(
@@ -357,7 +377,8 @@ class AuthSurfaceScanner:
                     asset.low_code = code
                     if _looks_denied(code, body):
                         verdicts.append("safe")
-                    elif code == 200 and len(body) > 0:
+                    elif code == 200 and len(body) > 0 and not _looks_like_html_document(body):
+                        # 200 且为业务数据（排除 SPA 兜底页/登录页 HTML）才判 CONFIRMED
                         verdicts.append("confirmed")
                         vulns.append(
                             LogicVuln(
@@ -474,51 +495,56 @@ def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[Su
 
     # 1. 高权会话登录
     admin_session = SessionManager(proxy=proxy, debug=debug, timeout=timeout)
-    user_pass = getattr(args, "auth_login", None)
-    if not user_pass:
-        logger.warning("--auth-surface 需要 --auth-login user:pass 提供高权凭证")
-        return [], []
-    username, _, password = user_pass.partition(":")
-    ok, reason = _login(target, admin_session, username, password)
-    if not ok:
-        logger.warning("高权登录失败（%s），认证后深度扫描终止", reason)
-        return [], []
-
-    # 2. 低权会话登录（可选，多个取第一个成功的）
     low_session = None
-    for account in getattr(args, "surface_account", None) or []:
-        low_user, _, low_pass = account.partition(":")
-        s = SessionManager(proxy=proxy, debug=debug, timeout=timeout)
-        ok_low, _ = _login(target, s, low_user, low_pass)
-        if ok_low:
-            low_session = s
-            break
+    try:
+        user_pass = getattr(args, "auth_login", None)
+        if not user_pass:
+            logger.warning("--auth-surface 需要 --auth-login user:pass 提供高权凭证")
+            return [], []
+        username, _, password = user_pass.partition(":")
+        ok, reason = _login(target, admin_session, username, password)
+        if not ok:
+            logger.warning("高权登录失败（%s），认证后深度扫描终止", reason)
+            return [], []
 
-    # 3. 扫描
-    scanner = AuthSurfaceScanner(
-        target,
-        admin_session,
-        low_session=low_session,
-        use_crawler=bool(getattr(args, "crawl", False)),
-    )
-    assets, vulns = scanner.run(variant=variant)
+        # 2. 低权会话登录（可选，多个取第一个成功的）
+        for account in getattr(args, "surface_account", None) or []:
+            low_user, _, low_pass = account.partition(":")
+            s = SessionManager(proxy=proxy, debug=debug, timeout=timeout)
+            ok_low, _ = _login(target, s, low_user, low_pass)
+            if ok_low:
+                low_session = s
+                break
+            # 登录失败的低权会话立即释放，避免连接池/Cookie 泄漏
+            s.close()
 
-    # 4. 资产清单落盘（可选）
-    output_path = getattr(args, "surface_output", None)
-    if output_path:
-        import json
-        import os
+        # 3. 扫描
+        scanner = AuthSurfaceScanner(
+            target,
+            admin_session,
+            low_session=low_session,
+            use_crawler=bool(getattr(args, "crawl", False)),
+        )
+        assets, vulns = scanner.run(variant=variant)
 
-        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(
-                {"target": target, "variant": variant, "assets": [a.to_dict() for a in assets]},
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
+        # 4. 资产清单落盘（可选）
+        output_path = getattr(args, "surface_output", None)
+        if output_path:
+            import json
+            import os
 
-    admin_session.close()
-    if low_session is not None:
-        low_session.close()
-    return assets, vulns
+            os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"target": target, "variant": variant, "assets": [a.to_dict() for a in assets]},
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+        return assets, vulns
+    finally:
+        # 提前返回（凭证缺失/登录失败）与 scanner.run() 异常路径也必须释放会话
+        admin_session.close()
+        if low_session is not None:
+            low_session.close()

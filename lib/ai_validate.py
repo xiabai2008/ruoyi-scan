@@ -17,9 +17,11 @@
 # 用法：
 #   python main.py --ai "检测若依任意文件读取" --ai-validate
 #   python main.py --ai-validate plugins/ruoyi/xxx.py   # 对已有插件独立验证
+import hashlib
 import importlib.util
 import os
 import sys
+import threading
 from typing import Any, Dict, List, Optional
 
 from common.logger import get_logger
@@ -34,6 +36,10 @@ if PROJECT_ROOT not in sys.path:
 VERDICT_PASS = "pass"
 VERDICT_FAIL = "fail"
 VERDICT_UNVERIFIED = "unverified"
+
+# MODE 是 lab.server 的进程级全局量，并发验证会互相翻转 vuln/safe 模式导致判定不可复现；
+# 用模块级锁串行化「切换模式 + 执行插件」段（不改变 lab 本身的接口）
+_LAB_MODE_LOCK = threading.Lock()
 
 
 class _LabHandle:
@@ -52,7 +58,10 @@ class _LabHandle:
 
         self._t = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._t.start()
-        self._wait_healthy()
+        if not self._wait_healthy():
+            # 靶场未就绪：释放资源并显式失败，避免对未就绪靶场跑出伪三态判定
+            self.close()
+            raise RuntimeError("签名靶场未在超时时间内就绪（端口 %d）" % self.port)
 
     def _wait_healthy(self, timeout: float = 5.0) -> bool:
         import time as _time
@@ -80,13 +89,20 @@ def load_plugin_classes(filepath: str) -> List[type]:
     """动态加载插件文件中的 PluginBase 子类（AI 生成插件的落盘前验证）"""
     from plugins.base import PluginBase
 
-    mod_name = "ai_generated_" + os.path.splitext(os.path.basename(filepath))[0]
+    # 模块名取绝对路径哈希：不同目录的同名插件不再共享 sys.modules 键而互相覆盖
+    digest = hashlib.md5(os.path.abspath(filepath).encode("utf-8")).hexdigest()[:12]
+    mod_name = "ai_generated_" + digest
     spec = importlib.util.spec_from_file_location(mod_name, filepath)
     if spec is None or spec.loader is None:
         raise ImportError(f"无法加载插件文件: {filepath}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        # 加载完即移出 sys.modules：避免反复验证累积模块，
+        # 类对象仍持有模块全局字典引用，不影响后续实例化/执行
+        sys.modules.pop(mod_name, None)
 
     classes = []
     for attr in dir(module):
@@ -110,7 +126,9 @@ def _run_plugin_on_lab(plugin_cls: type, target: str) -> Optional[Any]:
         session = SessionManager(timeout=5)
         return inst.verify(target, session)
     except Exception as e:
-        logger.debug("插件在靶场执行异常: %s", e, exc_info=True)
+        # 执行异常（插件自身 bug/导入失败/网络错误）不可与「未命中」混同：
+        # 提升到 warning 暴露问题，调用方按 ERROR 状态转入 unverified 人工复核
+        logger.warning("插件在靶场执行异常: %s", e, exc_info=True)
         return None
 
 
@@ -143,17 +161,30 @@ def validate_ai_plugin(filepath: str, port: int = 0) -> Dict[str, Any]:
         }
     plugin_cls = classes[0]
 
-    lab = _LabHandle(port=port)
+    try:
+        lab = _LabHandle(port=port)
+    except RuntimeError as e:
+        # 靶场启动失败：不做三态判定，按 unverified 隔离处理并给出原因
+        return {
+            "verdict": VERDICT_UNVERIFIED,
+            "plugin": getattr(plugin_cls, "name", plugin_cls.__name__),
+            "vuln_status": "ERROR",
+            "safe_status": "ERROR",
+            "reasons": ["签名靶场启动失败: %s" % e],
+        }
+
     reasons: List[str] = []
     try:
-        # 1. vuln 模式：期望 CONFIRMED（存在性验证命中签名）
-        lab.set_mode("vuln")
-        vuln_res = _run_plugin_on_lab(plugin_cls, f"http://127.0.0.1:{lab.port}/")
-        vuln_status = getattr(vuln_res, "status", "ERROR")
-        # 2. safe 模式：绝不 CONFIRMED（误报红线）
-        lab.set_mode("safe")
-        safe_res = _run_plugin_on_lab(plugin_cls, f"http://127.0.0.1:{lab.port}/")
-        safe_status = getattr(safe_res, "status", "ERROR")
+        # MODE 是 lab 模块全局量：并发验证会互相翻转模式，整段持锁保证三态结论可复现
+        with _LAB_MODE_LOCK:
+            # 1. vuln 模式：期望 CONFIRMED（存在性验证命中签名）
+            lab.set_mode("vuln")
+            vuln_res = _run_plugin_on_lab(plugin_cls, f"http://127.0.0.1:{lab.port}/")
+            vuln_status = getattr(vuln_res, "status", "ERROR")
+            # 2. safe 模式：绝不 CONFIRMED（误报红线）
+            lab.set_mode("safe")
+            safe_res = _run_plugin_on_lab(plugin_cls, f"http://127.0.0.1:{lab.port}/")
+            safe_status = getattr(safe_res, "status", "ERROR")
     finally:
         lab.close()
 
@@ -216,27 +247,28 @@ def run_ai_validate_mode(args) -> int:
     return 2
 
 
-def validate_generated_source(name: str, category: str, source: str, max_retries: int = 3) -> Dict[str, Any]:
+def validate_generated_source(name: str, category: str, source: str) -> Dict[str, Any]:
     """生成即验证闭环：把 LLM 源码写入临时文件 → 靶场三态验证 → 返回结论与目标路径
 
     供 run_ai_generate_mode 接入：pass 落正式目录 / unverified 落隔离目录 / fail 不落盘。
     """
     import tempfile
 
-    tmpdir = tempfile.mkdtemp(prefix="ai_plugin_validate_")
     from lib.plugin_sdk import _to_filename
 
-    tmp_path = os.path.join(tmpdir, _to_filename(name) + ".py")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(source)
-
-    report = validate_ai_plugin(tmp_path)
-    report["generated"] = True
-    target_path = decide_install_path(tmp_path, category, report["verdict"])
-    report["install_path"] = target_path
-
-    if target_path:
-        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        with open(target_path, "w", encoding="utf-8") as f:
+    # TemporaryDirectory 上下文管理器保证任何 return/异常路径都清理临时目录
+    with tempfile.TemporaryDirectory(prefix="ai_plugin_validate_") as tmpdir:
+        tmp_path = os.path.join(tmpdir, _to_filename(name) + ".py")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(source)
-    return report
+
+        report = validate_ai_plugin(tmp_path)
+        report["generated"] = True
+        target_path = decide_install_path(tmp_path, category, report["verdict"])
+        report["install_path"] = target_path
+
+        if target_path:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(source)
+        return report

@@ -15,12 +15,16 @@ import os
 from typing import Dict, List
 
 from common.logger import get_logger
-from common.models import SEVERITY_CN, STATUS_CONFIRMED
+from common.models import SEVERITY_CN, SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
 
 # 与 ai_generator 共用 LLM 配置
 from lib.ai_generator import AI_API_KEY, AI_BASE_URL, AI_MODEL, _llm_complete
 
 logger = get_logger(__name__)
+
+# 严重度排序权重（高→中→低）：中文排序无严重度语义，必须用显式 rank；
+# 未知/缺失严重度取 rank 3，排到最后而非最前
+_SEVERITY_RANK = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
 
 _ANALYSIS_PROMPT = """你是资深安全分析师。根据 Ruoyi-Scan 的扫描 JSON 报告，输出一份简洁的中文/英文
 漏洞分析摘要，包含：
@@ -94,8 +98,12 @@ def _template_summary(report_dict: dict, lang: str) -> str:
     confirmed = [r for r in report_dict.get("results", []) if r.get("status") == STATUS_CONFIRMED]
     confirmed_sorted = sorted(
         confirmed,
-        # 排序：中文严重度升序优先，cvss_score 取负实现同级别内降序
-        key=lambda r: (SEVERITY_CN.get(r.get("severity", ""), ""), -float(r.get("cvss_score", 0) or 0)),
+        # 排序：按显式严重度 rank 升序（高→中→低），同级别内 cvss_score 降序；
+        # 未知严重度 rank=3 排最后（中文串排序无严重度语义，切勿直接比较）
+        key=lambda r: (
+            _SEVERITY_RANK.get(str(r.get("severity", "")).lower(), 3),
+            -float(r.get("cvss_score", 0) or 0),
+        ),
     )
     if confirmed_sorted:
         lines.append("")
@@ -178,6 +186,9 @@ def run_ai_report_mode(report_dir: str, report_dict: dict, lang: str = "zh") -> 
         分析文件路径
     """
     analysis = generate_analysis(report_dict, lang=lang)
+    # 防御性创建：本函数作为公开入口被独立调用时目录可能尚不存在
+    if report_dir:
+        os.makedirs(report_dir, exist_ok=True)
     out_path = os.path.join(report_dir, "report.analysis.%s.md" % lang)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(analysis)

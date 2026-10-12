@@ -42,6 +42,14 @@ def build_scalar_values(builder: Any) -> Dict[str, str]:
     dist = builder.risk_distribution()
     summary = getattr(builder, "summary", None) or {}
     results = builder._effective_results()
+    # 耗时兜底：summary 可能来自 JSON（字符串/None），与 core/report_docx.py、report_xlsx.py
+    # 的 isinstance 守卫一致，非数值时降级为 0 而不是让整份模板渲染失败
+    duration = summary.get("duration", 0)
+    if not isinstance(duration, (int, float)):
+        try:
+            duration = float(duration)
+        except (TypeError, ValueError):
+            duration = 0
     status_count: Dict[str, int] = {"CONFIRMED": 0, "UNKNOWN": 0, "SAFE": 0}
     for r in results:
         status = getattr(r, "status", "")
@@ -51,7 +59,7 @@ def build_scalar_values(builder: Any) -> Dict[str, str]:
         "target": str(getattr(builder, "target", "") or ""),
         "scan_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "mode": str(summary.get("mode", "") or ""),
-        "duration": "%.2f" % float(summary.get("duration", 0) or 0),
+        "duration": "%.2f" % duration,
         "request_count": str(summary.get("request_count", 0) or 0),
         "total": str(dist.get("total", 0)),
         "confirmed": str(status_count["CONFIRMED"]),
@@ -127,9 +135,7 @@ def _fill_block_vuln_table(paragraph, doc, builder: Any) -> None:
     table = doc.add_table(rows=1, cols=len(header))
     _style_table(table, header, rows)
     paragraph._p.addnext(table._tbl)
-    # 清空占位符文本（段落保留作为表格后间距）
-    for run in paragraph.runs:
-        run.text = ""
+    # 占位符文本已由调用方移除（段落保留作为表格后间距）
 
 
 def _fill_block_vuln_details(paragraph, doc, builder: Any) -> None:
@@ -149,17 +155,16 @@ def _fill_block_vuln_details(paragraph, doc, builder: Any) -> None:
     if not blocks:
         blocks = ["（本次扫描未发现已确认漏洞）"]
 
-    # 从尾部构造段落链后整体插到占位符前（保持顺序：addprevious 逆序插入）
+    # 逐个 addprevious 插到占位符前：正序遍历才能保持块顺序（逆序会得到反序输出）
     anchor = paragraph._p
-    for text in reversed(blocks):
+    for text in blocks:
         new_p = anchor.makeelement("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p", {})
         anchor.addprevious(new_p)
         # 用 python-docx 的 Paragraph 包装写入文本（继承文档默认样式）
         from docx.text.paragraph import Paragraph
 
         Paragraph(new_p, paragraph._parent).text = text
-    for run in paragraph.runs:
-        run.text = ""
+    # 占位符文本已由调用方移除，段落保留作为块后间距
 
 
 def render_docx_template(
@@ -185,7 +190,12 @@ def render_docx_template(
         logger.warning("报告模板不存在: %s（跳过模板渲染）", template_path)
         return None
 
-    doc = Document(template_path)
+    try:
+        doc = Document(template_path)
+    except Exception as e:
+        # 模板损坏/非 docx（PackageNotFoundError 等）不应中断流程：降级默认报告
+        logger.warning("报告模板加载失败: %s（跳过模板渲染）: %s", template_path, e)
+        return None
     scalars = build_scalar_values(builder)
 
     unresolved: List[str] = []
@@ -195,18 +205,26 @@ def render_docx_template(
             text = paragraph.text
             if "{{" not in text:
                 continue
-            # 块占位符优先（占位符段通常为纯 {{key}}）
-            m = _PLACEHOLDER.search(text)
-            if m and m.group(1) in _BLOCK_KEYS:
-                key = m.group(1)
-                if key == "vuln_table":
-                    _fill_block_vuln_table(paragraph, doc, builder)
-                elif key == "vuln_details":
-                    _fill_block_vuln_details(paragraph, doc, builder)
+            # 一段内可能有多个占位符：先替换标量，再逐个渲染出现的块占位符
+            # （只看第一个占位符会漏渲染 {{high}} {{vuln_table}} 之类的组合段）
+            block_keys = [k for k in _PLACEHOLDER.findall(text) if k in _BLOCK_KEYS]
+            if block_keys:
+                _replace_in_paragraph(paragraph, scalars)
+                for key in dict.fromkeys(block_keys):
+                    # 仅移除当前块占位符文本，保留同段其余已替换内容
+                    _replace_in_paragraph(paragraph, {key: ""})
+                    if key == "vuln_table":
+                        _fill_block_vuln_table(paragraph, doc, builder)
+                    elif key == "vuln_details":
+                        _fill_block_vuln_details(paragraph, doc, builder)
+                if fail_on_unresolved:
+                    for m2 in _PLACEHOLDER.finditer(paragraph.text):
+                        unresolved.append(m2.group(1))
                 continue
             still = _replace_in_paragraph(paragraph, scalars)
             if still and fail_on_unresolved:
-                for m2 in _PLACEHOLDER.finditer(text):
+                # 基于替换后的文本统计残留占位符（替换前的 text 会误报已解析项）
+                for m2 in _PLACEHOLDER.finditer(paragraph.text):
                     unresolved.append(m2.group(1))
 
     _process_paragraphs(doc.paragraphs)

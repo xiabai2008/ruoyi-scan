@@ -24,6 +24,7 @@
 #   - changed（变化）：状态/严重度变化 → 漏洞状态改变
 import json
 import os
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -32,17 +33,50 @@ from typing import Any, Dict, List
 class VulnFingerprint:
     """漏洞指纹（用于对比两次扫描中的同一漏洞）
 
-    指纹由 name + url 路径组成，不包含 status/severity（这些是比较维度）
+    指纹由 name + url（路径 + 非易变查询参数）组成，不包含 status/severity（这些是比较维度）
     """
+
+    # 易变查询参数（时间戳/随机数/令牌等）：每次扫描都会变化，保留会制造大量假"新增/修复"
+    _VOLATILE_QUERY_PARAMS = {
+        "_",
+        "_t",
+        "t",
+        "ts",
+        "time",
+        "timestamp",
+        "nonce",
+        "rand",
+        "random",
+        "token",
+        "csrf",
+        "cb",
+    }
 
     name: str
     url: str
 
     def key(self) -> str:
-        """生成唯一 key"""
-        # URL 去除查询参数中的随机 token（保留路径结构）
-        url = self.url.split("?")[0]  # 去查询参数
-        return f"{self.name}|{url}"
+        """生成唯一 key
+
+        保留非易变查询参数：参数化端点（?id=1 与 ?id=2）或同一路径的不同注入点
+        不应被合并为同一条；仅剔除时间戳/随机数一类每次扫描都变化的参数。
+        """
+        parsed = urllib.parse.urlparse(self.url)
+        if not parsed.query:
+            return f"{self.name}|{self.url.split('?')[0]}"
+
+        kept = []
+        for pair in parsed.query.split("&"):
+            if not pair:
+                continue
+            param = pair.split("=", 1)[0].lower()
+            if param in self._VOLATILE_QUERY_PARAMS:
+                continue
+            kept.append(pair)
+        # 排序保证参数顺序不同但集合相同视为同一端点
+        query = "&".join(sorted(kept))
+        base = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, ""))
+        return f"{self.name}|{base}"
 
 
 @dataclass
@@ -117,7 +151,7 @@ class DiffReport:
         """转为 HTML 差异报告"""
         import html as html_module
 
-        def render_entries(entries: List[DiffEntry], color: str, icon: str) -> str:
+        def render_entries(entries: List[DiffEntry]) -> str:
             """渲染某分类（new/fixed/persisted/changed）的差异表格行；名称/URL 经 HTML 转义防注入"""
             if not entries:
                 return '<tr><td colspan="5" class="empty">无</td></tr>'
@@ -172,51 +206,55 @@ class DiffReport:
 <h2>🆕 新增漏洞（{self.total_new}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.new_vulns, "new", "🆕")}
+{render_entries(self.new_vulns)}
 </table>
 
 <h2>✅ 已修复漏洞（{self.total_fixed}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.fixed_vulns, "fixed", "✅")}
+{render_entries(self.fixed_vulns)}
 </table>
 
 <h2>⚠️ 状态变化（{self.total_changed}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.changed_vulns, "changed", "⚠️")}
+{render_entries(self.changed_vulns)}
 </table>
 
 <h2>⏳ 未变漏洞（{self.total_persisted}）</h2>
 <table>
 <tr><th>漏洞名称</th><th>URL</th><th>旧状态</th><th>新状态</th><th>CVE</th></tr>
-{render_entries(self.persisted_vulns, "persisted", "⏳")}
+{render_entries(self.persisted_vulns)}
 </table>
 </body>
 </html>"""
 
 
-def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _extract_vulns(report_data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
     """从报告字典中提取漏洞，以指纹 key 为键
 
-    仅提取 CONFIRMED 状态的漏洞（SAFE/UNKNOWN 不计入差异对比）
+    仅提取 CONFIRMED 状态的漏洞（SAFE/UNKNOWN 不计入差异对比）。
+    value 为列表：同一指纹可能对应多条结果（同一路径的多个注入点/参数），
+    若按单条存储会相互覆盖，导致总数低估并把仍存在的漏洞误判为 fixed。
     """
     from common.models import STATUS_CONFIRMED
 
-    vulns = {}
+    vulns: Dict[str, List[Dict[str, Any]]] = {}
     results = report_data.get("results", [])
     for r in results:
         if r.get("status") != STATUS_CONFIRMED:
             # SAFE/UNKNOWN 多为探测过程态、复现波动大，计入差异会制造大量假新增/假修复
             continue
         fp = VulnFingerprint(name=r.get("name", ""), url=r.get("url", ""))
-        vulns[fp.key()] = {
-            "name": r.get("name", ""),
-            "url": r.get("url", ""),
-            "status": r.get("status", ""),
-            "severity": r.get("severity", ""),
-            "cve": r.get("cve", ""),
-        }
+        vulns.setdefault(fp.key(), []).append(
+            {
+                "name": r.get("name", ""),
+                "url": r.get("url", ""),
+                "status": r.get("status", ""),
+                "severity": r.get("severity", ""),
+                "cve": r.get("cve", ""),
+            }
+        )
     return vulns
 
 
@@ -242,8 +280,9 @@ def diff_reports(old_report: Dict[str, Any], new_report: Dict[str, Any]) -> Diff
         old_scan_time=old_report.get("scan_time", ""),
         new_scan_time=new_report.get("scan_time", ""),
         target=new_report.get("target", old_report.get("target", "")),
-        old_total=len(old_vulns),
-        new_total=len(new_vulns),
+        # 按实际命中条数统计：同一指纹下的多条结果不再相互覆盖
+        old_total=sum(len(v) for v in old_vulns.values()),
+        new_total=sum(len(v) for v in new_vulns.values()),
     )
 
     # 先转成集合再求差集/交集，把三类对比从嵌套循环降为线性扫描
@@ -252,62 +291,88 @@ def diff_reports(old_report: Dict[str, Any], new_report: Dict[str, Any]) -> Diff
 
     # 新增漏洞：新有旧无
     for key in new_keys - old_keys:
-        v = new_vulns[key]
-        report.new_vulns.append(
-            DiffEntry(
-                diff_type="new",
-                name=v["name"],
-                url=v["url"],
-                new_status=v["status"],
-                new_severity=v["severity"],
-                cve=v.get("cve", ""),
+        for v in new_vulns[key]:
+            report.new_vulns.append(
+                DiffEntry(
+                    diff_type="new",
+                    name=v["name"],
+                    url=v["url"],
+                    new_status=v["status"],
+                    new_severity=v["severity"],
+                    cve=v.get("cve", ""),
+                )
             )
-        )
 
     # 已修复漏洞：旧有新无
     for key in old_keys - new_keys:
-        v = old_vulns[key]
-        report.fixed_vulns.append(
-            DiffEntry(
-                diff_type="fixed",
-                name=v["name"],
-                url=v["url"],
-                old_status=v["status"],
-                old_severity=v["severity"],
-                cve=v.get("cve", ""),
-            )
-        )
-
-    # 对比共有的漏洞
-    for key in old_keys & new_keys:
-        old_v = old_vulns[key]
-        new_v = new_vulns[key]
-        # 状态或严重度变化
-        if old_v["status"] != new_v["status"] or old_v["severity"] != new_v["severity"]:
-            report.changed_vulns.append(
+        for v in old_vulns[key]:
+            report.fixed_vulns.append(
                 DiffEntry(
-                    diff_type="changed",
-                    name=new_v["name"],
-                    url=new_v["url"],
-                    old_status=old_v["status"],
-                    new_status=new_v["status"],
-                    old_severity=old_v["severity"],
-                    new_severity=new_v["severity"],
-                    cve=new_v.get("cve", ""),
+                    diff_type="fixed",
+                    name=v["name"],
+                    url=v["url"],
+                    old_status=v["status"],
+                    old_severity=v["severity"],
+                    cve=v.get("cve", ""),
                 )
             )
-        else:
-            # 未变
-            report.persisted_vulns.append(
+
+    # 对比共有的指纹：按出现次序一一配对，多出的条目按新增/已修复处理
+    for key in old_keys & new_keys:
+        old_items = old_vulns[key]
+        new_items = new_vulns[key]
+        pairs = min(len(old_items), len(new_items))
+        for i in range(pairs):
+            old_v = old_items[i]
+            new_v = new_items[i]
+            # 状态或严重度变化
+            if old_v["status"] != new_v["status"] or old_v["severity"] != new_v["severity"]:
+                report.changed_vulns.append(
+                    DiffEntry(
+                        diff_type="changed",
+                        name=new_v["name"],
+                        url=new_v["url"],
+                        old_status=old_v["status"],
+                        new_status=new_v["status"],
+                        old_severity=old_v["severity"],
+                        new_severity=new_v["severity"],
+                        cve=new_v.get("cve", ""),
+                    )
+                )
+            else:
+                # 未变
+                report.persisted_vulns.append(
+                    DiffEntry(
+                        diff_type="persisted",
+                        name=new_v["name"],
+                        url=new_v["url"],
+                        old_status=old_v["status"],
+                        new_status=new_v["status"],
+                        old_severity=old_v["severity"],
+                        new_severity=new_v["severity"],
+                        cve=new_v.get("cve", ""),
+                    )
+                )
+        for v in new_items[pairs:]:
+            report.new_vulns.append(
                 DiffEntry(
-                    diff_type="persisted",
-                    name=new_v["name"],
-                    url=new_v["url"],
-                    old_status=old_v["status"],
-                    new_status=new_v["status"],
-                    old_severity=old_v["severity"],
-                    new_severity=new_v["severity"],
-                    cve=new_v.get("cve", ""),
+                    diff_type="new",
+                    name=v["name"],
+                    url=v["url"],
+                    new_status=v["status"],
+                    new_severity=v["severity"],
+                    cve=v.get("cve", ""),
+                )
+            )
+        for v in old_items[pairs:]:
+            report.fixed_vulns.append(
+                DiffEntry(
+                    diff_type="fixed",
+                    name=v["name"],
+                    url=v["url"],
+                    old_status=v["status"],
+                    old_severity=v["severity"],
+                    cve=v.get("cve", ""),
                 )
             )
 

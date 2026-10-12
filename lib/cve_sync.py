@@ -21,6 +21,7 @@
 #   python main.py --cve-lookup CVE-2024-1234
 #
 # GHSA 提速（可选）：环境变量 RUOYI_SCAN_GHSA_TOKEN=<GitHub PAT>（60/h → 5000/h）
+import copy
 import datetime
 import json
 import os
@@ -190,9 +191,13 @@ class CVEInfo:
 # ============================================================
 
 
+# CVE ID 安全白名单：仅允许字母/数字/连字符/下划线，防路径穿越（如 --cve-id ../../x）
+_CVE_ID_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
+
+
 def get_cache_path(cve_id: str) -> str:
-    """获取 CVE 缓存文件路径"""
-    safe_id = cve_id.replace("-", "_")
+    """获取 CVE 缓存文件路径（ID 经白名单清洗，确保不逃出 CACHE_DIR）"""
+    safe_id = _CVE_ID_UNSAFE.sub("_", cve_id or "").replace("-", "_")
     return os.path.join(CACHE_DIR, f"{safe_id}.json")
 
 
@@ -275,6 +280,7 @@ def query_nvd_api(cve_id: str, timeout: int = 10, api_key: str = None) -> Option
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
+        logger.debug("NVD API 查询失败: %s", cve_id, exc_info=True)
         return None
 
     return parse_nvd_response(data)
@@ -384,12 +390,14 @@ def query_ghsa(cve_id: str, timeout: int = 10, token: str = None) -> Optional[CV
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
+        logger.debug("GHSA 查询失败: %s", cve_id, exc_info=True)
         return None
     # 按 cve_id 过滤返回列表（API 可能返回同编号相关的多条 advisory）
     if not isinstance(data, list):
         return None
     for advisory in data:
-        if isinstance(advisory, dict) and advisory.get("cve_id", "").upper() == cve_id.upper():
+        # advisory["cve_id"] 可能为 null，先兜底再 upper，避免 AttributeError
+        if isinstance(advisory, dict) and (advisory.get("cve_id") or "").upper() == cve_id.upper():
             return parse_ghsa_response(advisory)
     return None
 
@@ -486,10 +494,15 @@ def lookup_offline(cve_id: str) -> Optional[CVEInfo]:
     entry = _load_offline().get(cve_id.upper())
     if not entry:
         return None
+    # cvss 来自随包 JSON，可能为 null/非数字：解析失败按 0.0 处理，保证离线兜底不中断
+    try:
+        cvss_score = float(entry.get("cvss") or 0.0)
+    except (TypeError, ValueError):
+        cvss_score = 0.0
     return CVEInfo(
         cve_id=entry.get("id", cve_id),
         description=entry.get("description", ""),
-        cvss_score=float(entry.get("cvss", 0.0)),
+        cvss_score=cvss_score,
         severity=entry.get("severity", ""),
         references=[],
         cwe=[],
@@ -522,7 +535,7 @@ def query_cnvd(keyword: str, timeout: int = 10) -> Optional[CVEInfo]:
     """从 CNVD（国家信息安全漏洞共享平台）查询漏洞信息
 
     注意：CNVD 无官方公开 REST API，本实现基于官网漏洞列表页抓取（best-effort），
-    反爬/网络不可达时静默返回 None（不阻断查询链）。
+    反爬/网络不可达时返回 None（debug 日志记录原因，不阻断查询链）。
 
     Args:
         keyword: CVE/CNVD 编号或关键字
@@ -541,6 +554,7 @@ def query_cnvd(keyword: str, timeout: int = 10) -> Optional[CVEInfo]:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception:
+        logger.debug("CNVD 查询失败: %s", keyword, exc_info=True)
         return None
     return parse_cnvd_response(html, keyword=keyword)
 
@@ -599,7 +613,14 @@ def lookup_cve(cve_id: str, use_cache: bool = True, api_key: str = None) -> Opti
         cve = lookup_offline(cve_id)
 
     if cve:
-        save_to_cache(cve)
+        # 回退源（CNVD/离线库）返回的是源自身编号（如 CNVD-...），缓存键必须使用
+        # 请求的 CVE 编号，否则该 CVE 下次仍会缓存未命中并重复请求网络
+        if cve.cve_id and cve.cve_id != cve_id:
+            cached = copy.copy(cve)
+            cached.cve_id = cve_id
+            save_to_cache(cached)
+        else:
+            save_to_cache(cve)
 
     return cve
 

@@ -1,10 +1,10 @@
 # 源站真实 IP 探测（D7 阶段，标准库 + 免费 API，零依赖）
 #
-# 探测顺序：
-#   1. SSL 证书 SAN（crt.sh 免费查询，无 API key）
-#   2. DNS 历史记录（本地缓存/常见记录，不依赖第三方 API）
-#   3. 响应头泄漏（X-Originating-IP / X-Cache / Via / CF-RAY）
-#   4. 子域名直连（www/mail/dev 等常未挂 CDN）
+# 探测顺序（与 find_origin_ip 实现一致，结果为按优先级去重排序）：
+#   1. 响应头泄漏（X-Originating-IP / X-Forwarded-For / X-Cache / Via / CF-RAY）
+#   2. 子域名直连（www/mail/dev 等常未挂 CDN，DNS 解析）
+#   3. SSL 证书 SAN（crt.sh 免费查询，无 API key）
+#   4. DNS 直接解析（兜底，排除 CDN IP 段）
 #
 # 注意：本模块仅用于授权安全测试，源站 IP 信息敏感，结果不写入报告。
 import json
@@ -65,34 +65,40 @@ class OriginIPFinder:
             session: SessionManager 实例（用于 HTTP 探测，None 则仅用 DNS）
 
         Returns:
-            去重后的源站 IP 列表（可能为空）
+            源站 IP 列表（按探测优先级去重排序：响应头 > 子域名 > SSL SAN > DNS）
         """
-        ips = set()
+        # 列表 + seen 集合：保留探测优先级顺序（文档约定 ips[0] 为最高置信度候选），
+        # 同时完成去重
+        ips: List[str] = []
+        seen = set()
+
+        def _add(candidates: List[str]) -> None:
+            for ip in candidates:
+                if ip not in seen:
+                    seen.add(ip)
+                    ips.append(ip)
 
         # 1. 响应头泄漏（最可靠且无副作用）
         if session:
-            header_ips = self._check_response_headers(domain, session)
-            ips.update(header_ips)
+            _add(self._check_response_headers(domain, session))
 
         # 2. 子域名直连（DNS 解析，无 HTTP 请求）
-        subdomain_ips = self._check_subdomains(domain)
-        ips.update(subdomain_ips)
+        _add(self._check_subdomains(domain))
 
         # 3. SSL 证书 SAN（crt.sh 免费 API）
         if session:
-            san_ips = self._check_ssl_san(domain, session)
-            ips.update(san_ips)
+            _add(self._check_ssl_san(domain, session))
 
         # 4. DNS 直接解析（兜底）
         try:
             direct_ip = socket.gethostbyname(domain)
             # 排除常见 CDN IP 段（粗略过滤）
             if not self._is_cdn_ip(direct_ip):
-                ips.add(direct_ip)
+                _add([direct_ip])
         except Exception:
             logger.debug("DNS 直接解析域名失败", exc_info=True)
 
-        return list(ips)
+        return ips
 
     def _check_response_headers(self, domain: str, session) -> List[str]:
         """检查响应头中的源站 IP 泄漏
@@ -120,9 +126,8 @@ class OriginIPFinder:
             for header in headers_to_check:
                 value = resp.headers.get(header, "")
                 if value:
-                    # 提取 IP 地址
-                    found = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", value)
-                    for ip in found:
+                    # 提取 IP 地址（校验每段 0-255，避免 999.999.999.999 这类伪 IP）
+                    for ip in self._extract_ips(value):
                         if not self._is_cdn_ip(ip):
                             ips.append(ip)
         except Exception:
@@ -168,14 +173,22 @@ class OriginIPFinder:
             for entry in data:
                 # SAN 字段可能含多个名称（逗号分隔），统一用正则提取其中出现的 IP
                 name_value = entry.get("name_value", "")
-                # 从 SAN 中提取 IP
-                found = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", name_value)
-                for ip in found:
+                # 从 SAN 中提取 IP（校验每段 0-255，避免版本号/构建号被当作 IP）
+                for ip in self._extract_ips(name_value):
                     if not self._is_cdn_ip(ip):
                         ips.append(ip)
         except Exception:
             logger.debug("查询 crt.sh 获取 SSL 证书 SAN 失败", exc_info=True)
         return list(set(ips))
+
+    @staticmethod
+    def _extract_ips(text: str) -> List[str]:
+        """从文本中提取合法 IPv4 地址（每段 0-255；正则本身允许 1-3 位数字，需二次校验）"""
+        ips = []
+        for ip in re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", text or ""):
+            if all(0 <= int(part) <= 255 for part in ip.split(".")):
+                ips.append(ip)
+        return ips
 
     def _is_cdn_ip(self, ip: str) -> bool:
         """粗略判断是否为 CDN IP 段（基于常见 CDN IP 前缀）
@@ -217,10 +230,14 @@ class OriginIPFinder:
             直连 URL（如 http://1.2.3.4/path?query=1）
         """
         parsed = urllib.parse.urlparse(original_url)
-        # 保留端口
+        # 保留端口；非法端口（如 http://host:abc/）解析为 None 而非抛 ValueError
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
         netloc = origin_ip
-        if parsed.port:
-            netloc = f"{origin_ip}:{parsed.port}"
+        if port:
+            netloc = f"{origin_ip}:{port}"
         elif parsed.scheme == "https":
             netloc = f"{origin_ip}:443"
         elif parsed.scheme == "http":

@@ -16,7 +16,7 @@
   - **CLI 模式（默认）**：原样写 stdout，保留 ANSI 颜色与 `[*]` / `[/]` 前缀，
     CLI 观感与迁移前完全一致。
   - **静默模式**：不写 stdout；内容去除 ANSI 后以 DEBUG 级别交给 logging。
-    由于 loguru 配置默认为 WARNING 级别，静默模式下默认完全无输出；
+    由于标准 logging 默认为 WARNING 级别（common/logger.py），静默模式下默认完全无输出；
     需要排查时用 `--debug` 或环境变量 `RUOYI_SCAN_DEBUG=1` 打开。
 
 用法
@@ -88,11 +88,12 @@ def emit(*args: Any, sep: str = " ", end: str = "\n") -> None:
     行为：
       - CLI 模式：等价于 `print(*args, sep=sep, end=end)`
       - 静默模式：不写 stdout；DEBUG 级别开启时把去 ANSI 的文本交给 logging
+        （日志按行记录，`end` 在此模式下不生效；`sep` 仅用于拼接日志文本）
 
     Args:
         *args: 待输出内容（通常为单个已由 lib.colors 着色/加前缀的字符串）
-        sep: 多参数分隔符，同 print
-        end: 行尾，同 print
+        sep: 多参数分隔符，同 print（静默模式下用于拼接日志文本）
+        end: 行尾，同 print（仅 CLI 模式生效，静默模式忽略）
     """
     if not _quiet:
         print(*args, sep=sep, end=end)

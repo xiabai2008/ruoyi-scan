@@ -20,8 +20,9 @@
 #   python main.py -u http://target/ --siem-export ecs,cef --siem-output reports/
 import datetime
 import json
+import re
 import socket
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from common.logger import get_logger
 
@@ -171,6 +172,21 @@ def render_ecs(results, target: str = "", scan_time: str = "") -> str:
 # ============================================================
 
 
+def _cef_escape_value(value: Any) -> str:
+    """转义 CEF 扩展字段值：\\ / = / | / 换行
+
+    值中的 = 或换行不转义会破坏扩展串结构，甚至注入额外扩展键/事件。
+    """
+    s = str(value)
+    return s.replace("\\", "\\\\").replace("=", "\\=").replace("|", "\\|").replace("\r", "\\r").replace("\n", "\\n")
+
+
+def _cef_escape_header(value: Any) -> str:
+    """转义 CEF 头字段（Name 等）：\\ 与 |"""
+    s = str(value)
+    return s.replace("\\", "\\\\").replace("|", "\\|")
+
+
 def to_cef_event(result, target: str = "") -> str:
     """将单个 ScanResult 转换为 CEF 事件字符串
 
@@ -207,17 +223,17 @@ def to_cef_event(result, target: str = "") -> str:
         extensions["cs4"] = ";".join(f"{k}:{v}" for k, v in compliance.items())
         extensions["cs4Label"] = "Compliance"
 
-    # 证据
+    # 证据（截断控制单事件体积；转义在拼接扩展串时统一处理）
     if result.evidence:
-        # CEF 值中的特殊字符需转义
-        evidence = result.evidence.replace("\\", "\\\\").replace("=", "\\=").replace("|", "\\|")
-        extensions["cn1"] = evidence[:500]
+        extensions["cn1"] = result.evidence[:500]
         extensions["cn1Label"] = "Evidence"
 
-    ext_str = " ".join(f"{k}={v}" for k, v in extensions.items() if v)
+    # 所有扩展值统一转义（= / | / 换行 / 反斜杠），防注入
+    ext_str = " ".join(f"{k}={_cef_escape_value(v)}" for k, v in extensions.items() if v)
 
-    # 名称中的特殊字符转义
-    name = (result.name or "").replace("\\", "\\\\").replace("|", "\\|")
+    # 头字段（SignatureID/Name）转义
+    cve_id = _cef_escape_header(cve_id)
+    name = _cef_escape_header(result.name or "")
 
     return f"CEF:0|shengtou-tools|Ruoyi-Scan|2.0|{cve_id}|{name}|{severity_num}|{ext_str}"
 
@@ -238,7 +254,7 @@ def render_cef(results, target: str = "", scan_time: str = "") -> str:
 def to_leef_event(result, target: str = "") -> str:
     """将单个 ScanResult 转换为 LEEF 事件字符串
 
-    LEEF 格式：LEEF:Version|Vendor|Product|Version|EventID|key=value<tab>key=value...
+    LEEF 格式：LEEF:Version|Vendor|Product|Version|EventID|key=value^key=value...
     """
     cve_id = getattr(result, "cve", "") or "N/A"
     severity_str = SEVERITY_TO_LEEF.get(result.severity, "Minor")
@@ -260,8 +276,8 @@ def to_leef_event(result, target: str = "") -> str:
     if compliance:
         fields["compliance"] = ";".join(f"{k}:{v}" for k, v in compliance.items())
 
-    # 用 tab 分隔
-    fields_str = "\t".join(f"{k}={v}" for k, v in fields.items() if v)
+    # 用 ^ 分隔（与头部声明的分隔符一致；含 ^ 的值做替换避免破坏属性结构）
+    fields_str = "^".join(f"{k}={str(v).replace('^', ' ')}" for k, v in fields.items() if v)
 
     return f"LEEF:2.0|shengtou-tools|Ruoyi-Scan|2.0|{cve_id}|^{fields_str}"
 
@@ -438,7 +454,8 @@ def send_to_syslog(events: List[str], host: str, port: int = 514, protocol: str 
             sent += 1
 
     except OSError:
-        logger.debug("发送事件到 Syslog 服务器失败", exc_info=True)
+        # 连接失败/中途发送失败必须可见：调用方会展示 sent 计数，静默 debug 会伪装成成功
+        logger.warning("发送事件到 Syslog 服务器失败（已发送 %d/%d）", sent, len(events), exc_info=True)
     finally:
         if sock:
             sock.close()
@@ -463,8 +480,46 @@ def send_results_to_syslog(
         成功发送的事件数
     """
     content = render_siem(results, format, target)
-    events = content.split("\n")
+    # 空结果渲染为 ""，直接 split("\n") 会得到 [''] 并把一条空事件发给 SIEM
+    if not content:
+        return 0
+    events = [line for line in content.split("\n") if line]
     return send_to_syslog(events, host, port, protocol)
+
+
+def _parse_syslog_target(target: str) -> Tuple[Optional[str], Optional[int]]:
+    """解析 --siem-syslog 的 host:port
+
+    支持 [IPv6]:port 与裸 IPv6（如 ::1，此时用默认端口）；
+    非数字/越界端口或空主机返回 (None, None)，由调用方给出干净的报错。
+    """
+    target = (target or "").strip()
+    if not target:
+        return None, None
+
+    host = ""
+    port = 514
+    if target.startswith("["):
+        m = re.match(r"^\[([^\]]+)\](?::(\d+))?$", target)
+        if not m:
+            return None, None
+        host = m.group(1)
+        if m.group(2):
+            port = int(m.group(2))
+    elif target.count(":") > 1:
+        # 裸 IPv6 地址不拆分端口（rsplit(':', 1) 会把 ::1 误拆成 host=':'）
+        host = target
+    elif ":" in target:
+        host, _, port_str = target.rpartition(":")
+        if not port_str.isdigit():
+            return None, None
+        port = int(port_str)
+    else:
+        host = target
+
+    if not host or not 0 < port < 65536:
+        return None, None
+    return host, port
 
 
 # ============================================================
@@ -494,13 +549,11 @@ def run_siem_export_mode(args, results, target: str = "", scan_time: str = "") -
     # 导出 Syslog
     syslog_target = getattr(args, "siem_syslog", None)
     if syslog_target:
-        # 解析 host:port
-        if ":" in syslog_target:
-            host, port_str = syslog_target.rsplit(":", 1)
-            port = int(port_str)
-        else:
-            host = syslog_target
-            port = 514
+        # 解析 host:port（非法值给出干净报错，不抛 ValueError / 不误拆 IPv6）
+        host, port = _parse_syslog_target(syslog_target)
+        if host is None:
+            emit(f"[!]--siem-syslog 格式非法（应为 host:port，IPv6 用 [addr]:port）: {syslog_target}")
+            return 1
 
         protocol = getattr(args, "siem_protocol", "udp") or "udp"
         emit(f"[*]发送 {len(results)} 个事件到 Syslog {host}:{port} ({protocol})")
@@ -509,6 +562,8 @@ def run_siem_export_mode(args, results, target: str = "", scan_time: str = "") -
         for fmt in formats:
             sent = send_results_to_syslog(results, host, port, fmt, protocol, target)
             emit(f"[+]格式 {fmt}: 已发送 {sent} 个事件")
+            if results and sent < len(results):
+                emit(f"[!]格式 {fmt}: 部分事件发送失败（{sent}/{len(results)}），请检查 Syslog 服务器可达性")
 
         return 0
 

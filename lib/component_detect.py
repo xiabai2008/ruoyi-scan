@@ -30,13 +30,14 @@ def _load_cve_map() -> Dict[str, list]:
     global _CVE_MAP, _CVE_MAP_LOADED
     if _CVE_MAP_LOADED:
         return _CVE_MAP
-    _CVE_MAP_LOADED = True
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "component_cve_map.json")
     try:
         with open(path, "r", encoding="utf-8") as f:
             _CVE_MAP = json.load(f)
+        _CVE_MAP_LOADED = True
     except Exception:
-        logger.debug("组件 CVE 映射加载失败", exc_info=True)
+        # 失败时不写入加载标记：避免一次瞬时失败在进程内永久禁用 CVE 匹配
+        logger.warning("组件 CVE 映射加载失败", exc_info=True)
     return _CVE_MAP
 
 
@@ -136,13 +137,12 @@ def detect_fastjson(target: str, session, ruoyi_version: str = "") -> ComponentV
                 evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, inferred),
                 url=url,
             )
+        note = fallback_note("fastjson")
         return ComponentVersionResult(
             component="fastjson",
             status=STATUS_UNKNOWN,
-            evidence="%s，版本无法识别（建议人工确认 pom.xml）" % evidence,
+            evidence="%s，版本无法识别（建议人工确认 pom.xml）%s" % (evidence, "（%s）" % note if note else ""),
             url=url,
-            # 语义：无论有无兜底提示，fix_version 都是假值（None/""），to_scan_result 不会输出修复建议
-            fix_version=fallback_note("fastjson") and None,
         )
     # 2. 若依版本推断（无关键字泄漏时）
     inferred = _infer_from_ruoyi_version("fastjson", ruoyi_version)
@@ -228,6 +228,8 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
                 if "Whitelabel Error Page" in text404:
                     url = join_url(target, "/nonexistent-e2e-probe-404")
                     evidence = "404 触发 Whitelabel Error Page"
+                    # 版本提取必须基于实际命中的 404 响应体，而非根路径响应
+                    text = text404
                 else:
                     return ComponentVersionResult(
                         component="spring-boot", status=STATUS_UNKNOWN, evidence="未探测到 Spring Boot 特征"
@@ -261,12 +263,12 @@ def detect_spring_boot(target: str, session, ruoyi_version: str = "") -> Compone
             evidence="%s，版本 %s 不在已知 CVE 区间" % (evidence, version),
             url=url,
         )
+    note = fallback_note("spring-boot")
     return ComponentVersionResult(
         component="spring-boot",
         status=STATUS_UNKNOWN,
-        evidence="%s，版本无法识别" % evidence,
+        evidence="%s，版本无法识别%s" % (evidence, "（%s）" % note if note else ""),
         url=url,
-        fix_version=fallback_note("spring-boot") and None,
     )
 
 
@@ -333,12 +335,12 @@ def detect_nacos(target: str, session, ruoyi_version: str = "") -> ComponentVers
                     url=state_url,
                     evidence="Nacos %s 不在已知 CVE 区间" % version,
                 )
+            note = fallback_note("nacos")
             return ComponentVersionResult(
                 component="nacos",
                 status=STATUS_UNKNOWN,
                 url=state_url,
-                evidence="Nacos 存在但版本无法识别",
-                fix_version=fallback_note("nacos") and None,
+                evidence="Nacos 存在但版本无法识别%s" % ("（%s）" % note if note else ""),
             )
         # 2. /nacos/ 控制台页面
         console_url = join_url(target, "/nacos/")
@@ -351,13 +353,33 @@ def detect_nacos(target: str, session, ruoyi_version: str = "") -> ComponentVers
                 if m:
                     version = m.group(1)
                     break
+            if version:
+                # 控制台页面泄漏版本同样必须走 CVE 比对，不能直接判 SAFE
+                m = match_cve("nacos", version)
+                if m:
+                    return ComponentVersionResult(
+                        component="nacos",
+                        detected_version=version,
+                        status=STATUS_CONFIRMED,
+                        cve=m.get("cve", ""),
+                        fix_version=m.get("fix", ""),
+                        url=console_url,
+                        evidence="Nacos 控制台存在，版本 %s" % version,
+                        cvss_score=float(m.get("cvss", 0)),
+                    )
+                return ComponentVersionResult(
+                    component="nacos",
+                    detected_version=version,
+                    status=STATUS_SAFE,
+                    url=console_url,
+                    evidence="Nacos 控制台存在，版本 %s 不在已知 CVE 区间" % version,
+                )
+            note = fallback_note("nacos")
             return ComponentVersionResult(
                 component="nacos",
-                detected_version=version,
-                status=STATUS_UNKNOWN if not version else STATUS_SAFE,
+                status=STATUS_UNKNOWN,
                 url=console_url,
-                evidence="Nacos 控制台存在%s" % ("，版本 %s" % version if version else "，版本无法识别"),
-                fix_version=fallback_note("nacos") and None,
+                evidence="Nacos 控制台存在，版本无法识别%s" % ("（%s）" % note if note else ""),
             )
         return ComponentVersionResult(component="nacos", status=STATUS_SAFE, evidence="未检测到 Nacos")
     except Exception as e:

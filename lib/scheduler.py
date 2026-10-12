@@ -122,6 +122,12 @@ class ScanScheduler:
                 logger.debug("定时任务落库失败: %s", e)
         if self._running:
             self._schedule_job(job_id, job)
+            # _schedule_job 在锁外执行：期间可能已被并发 remove_job/shutdown 撤销，
+            # 复查后清理刚注册的触发器，避免已删除任务仍触发一次与 timer 泄漏
+            with self._lock:
+                alive = self._running and job_id in self._jobs
+            if not alive:
+                self._unschedule_job(job_id)
         return job_id
 
     def remove_job(self, job_id: str):
@@ -130,21 +136,24 @@ class ScanScheduler:
             job = self._jobs.pop(job_id, None)
         if job is None:
             return
-        # 停止 timer
-        timer = self._timers.pop(job_id, None)
-        if timer:
-            timer.cancel()
-        # APScheduler job
-        if self._apscheduler is not None and job.get("aps_job_id"):
-            try:
-                self._apscheduler.remove_job(job["aps_job_id"])
-            except Exception:
-                pass
+        self._unschedule_job(job_id)
         if self.storage:
             try:
                 self.storage.delete_schedule(job_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("删除持久化定时任务失败 %s: %s", job_id, e)
+
+    def _unschedule_job(self, job_id: str):
+        """取消任务已注册的 timer / APScheduler 触发器（幂等，失败仅记录不抛出）"""
+        timer = self._timers.pop(job_id, None)
+        if timer:
+            timer.cancel()
+        if self._apscheduler is not None:
+            try:
+                # cron 注册时以 job_id 作为 APScheduler 任务 id；任务不存在属预期
+                self._apscheduler.remove_job(job_id)
+            except Exception as e:
+                logger.debug("移除 APScheduler 任务失败 %s: %s", job_id, e)
 
     def list_jobs(self) -> List[Dict[str, Any]]:
         """列出任务"""
@@ -170,7 +179,13 @@ class ScanScheduler:
         # 恢复持久化任务
         if self.storage:
             try:
-                for rec in self.storage.list_schedules():
+                schedules = self.storage.list_schedules()
+            except Exception as e:
+                logger.debug("读取持久化定时任务失败: %s", e)
+                schedules = []
+            for rec in schedules:
+                # 单条记录损坏（cron 非法/字段缺失）只跳过该条，不阻断其余任务恢复
+                try:
                     jid = rec["job_id"]
                     # 内存中已有的任务（启动前手动添加）不重复恢复，以内存为准
                     if jid in self._jobs:
@@ -182,8 +197,8 @@ class ScanScheduler:
                         "payload": rec.get("payload") or {},
                         "parsed": parse_schedule_expr(rec["cron"]),
                     }
-            except Exception as e:
-                logger.debug("恢复定时任务失败: %s", e)
+                except Exception as e:
+                    logger.debug("跳过无法恢复的定时任务 %s: %s", rec, e)
         with self._lock:
             job_ids = list(self._jobs.keys())
         for jid in job_ids:
@@ -233,9 +248,17 @@ class ScanScheduler:
                         timer.start()
                         self._timers[job_id] = timer
 
-        timer = threading.Timer(seconds, _tick)
-        timer.daemon = True
+        # 同一 job_id 重复注册（add_job 复用 id / cron 降级重入）时先取消旧 timer，
+        # 否则旧的自调度链失去引用仍按旧节奏触发，造成重复执行
         with self._lock:
+            # 并发 remove_job/shutdown 可能已撤销任务：不再为已撤销任务启动新 timer
+            if job_id not in self._jobs:
+                return
+            old_timer = self._timers.get(job_id)
+            if old_timer is not None:
+                old_timer.cancel()
+            timer = threading.Timer(seconds, _tick)
+            timer.daemon = True
             self._timers[job_id] = timer
         timer.start()
 
@@ -250,7 +273,8 @@ class ScanScheduler:
         try:
             from apscheduler.triggers.cron import CronTrigger
 
-            trigger = CronTrigger.from_crontab(cron_expr)
+            # 显式传入与 BackgroundScheduler 一致的时区，避免触发时间落到宿主机本地时区
+            trigger = CronTrigger.from_crontab(cron_expr, timezone="Asia/Shanghai")
             aps_job = sched.add_job(
                 lambda: self._trigger(job_id, job),
                 trigger=trigger,

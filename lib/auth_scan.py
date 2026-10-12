@@ -51,6 +51,7 @@ def parse_auth_arg(auth_args: List[str]) -> Dict[str, Any]:
         "headers": {},
         "type": None,
     }
+    types_seen = set()
 
     for arg in auth_args:
         # 跳过不含 "=" 的无效项（空值/描述文本），避免误解析
@@ -64,28 +65,39 @@ def parse_auth_arg(auth_args: List[str]) -> Dict[str, Any]:
 
         if auth_type == "cookie":
             # Cookie 格式：name1=value1; name2=value2
-            config["type"] = "cookie"
+            types_seen.add("cookie")
             for pair in value.split(";"):
                 pair = pair.strip()
                 if "=" in pair:
                     k, _, v = pair.partition("=")
                     config["cookies"][k.strip()] = v.strip()
         elif auth_type == "bearer":
-            config["type"] = "bearer"
+            types_seen.add("bearer")
             config["headers"]["Authorization"] = f"Bearer {value}"
         elif auth_type == "header":
             # 自定义头格式：Header-Name: value
             if ":" in value:
                 hname, _, hval = value.partition(":")
-                config["type"] = "header"
+                types_seen.add("header")
                 config["headers"][hname.strip()] = hval.strip()
+            else:
+                # 无冒号的值会被静默丢弃，用户却以为已配置 → 明确告警
+                logger.warning("--auth header 格式错误（应为 'Header-Name: value'）: %s", value)
+                emit(f"  [!]--auth header 格式错误（应为 'Header-Name: value'）: {value}")
         elif auth_type == "basic":
             # Basic 认证：username:password
-            config["type"] = "basic"
+            types_seen.add("basic")
             import base64
 
             encoded = base64.b64encode(value.encode("utf-8")).decode("ascii")
             config["headers"]["Authorization"] = f"Basic {encoded}"
+
+    # 多类型混用时 type 取最后一次赋值会与已注入的凭据不符：显式标记 mixed 并告警
+    if len(types_seen) > 1:
+        logger.warning("--auth 同时指定了多种认证类型 %s，凭据将全部注入，type 标记为 mixed", sorted(types_seen))
+        config["type"] = "mixed"
+    elif types_seen:
+        config["type"] = next(iter(types_seen))
 
     return config
 
@@ -159,7 +171,14 @@ def load_auth_file(filepath: str) -> Dict[str, Any]:
 
 
 def auto_login(
-    target: str, username: str, password: str, login_url: str = "", login_type: str = "form", verbose: bool = True
+    target: str,
+    username: str,
+    password: str,
+    login_url: str = "",
+    login_type: str = "form",
+    username_field: str = "username",
+    password_field: str = "password",
+    verbose: bool = True,
 ) -> Dict[str, Any]:
     """自动登录获取认证信息
 
@@ -167,8 +186,10 @@ def auto_login(
         target: 目标 URL
         username: 用户名
         password: 密码
-        login_url: 登录接口 URL（为空时自动推断）
+        login_url: 登录接口 URL（为空时按 RuoYi 约定推断 /login）
         login_type: 登录类型 form/json
+        username_field: 用户名字段名（非 RuoYi 应用可自行指定）
+        password_field: 密码字段名（非 RuoYi 应用可自行指定）
         verbose: 是否打印日志
     Returns:
         认证配置字典（含 cookies 和 headers）
@@ -182,7 +203,7 @@ def auto_login(
 
     # 推断登录 URL
     if not login_url:
-        # RuoYi 默认登录接口
+        # RuoYi 默认登录接口（其他应用请通过 login_url 参数显式指定）
         parsed = urlparse(target)
         base = f"{parsed.scheme}://{parsed.netloc}"
         login_url = urljoin(base, "/login")
@@ -194,19 +215,25 @@ def auto_login(
         session = requests.Session()
         # 先访问首页获取 cookie（如 JSESSIONID）
         session.get(target, timeout=10)
+        # 记录预登录 Cookie：GET 首页下发的会话 Cookie 不能作为登录成功依据
+        pre_login_cookies = dict(session.cookies)
 
         if login_type == "json":
             # JSON 登录
-            payload = {"username": username, "password": password}
+            payload = {username_field: username, password_field: password}
             resp = session.post(login_url, json=payload, timeout=10)
         else:
             # 表单登录
-            payload = {"username": username, "password": password}
+            payload = {username_field: username, password_field: password}
             resp = session.post(login_url, data=payload, timeout=10)
+
+        # 登录成功判据：POST 后新增/变更的 Cookie（排除预登录 GET 已下发的会话 Cookie）
+        post_login_cookies = dict(session.cookies)
+        new_cookies = {k: v for k, v in post_login_cookies.items() if pre_login_cookies.get(k) != v}
 
         # 检查登录是否成功
         config = {
-            "cookies": dict(session.cookies),
+            "cookies": post_login_cookies,
             "headers": {},
             "type": "cookie",
         }
@@ -224,16 +251,21 @@ def auto_login(
         except Exception:
             logger.debug("从登录响应中提取 Token 失败", exc_info=True)
 
-        if config["cookies"] and not config["headers"].get("Authorization"):
-            if verbose:
-                emit(f"  [+]登录成功，获取到 {len(config['cookies'])} 个 Cookie")
-        elif not config["cookies"] and not config["headers"].get("Authorization"):
-            if verbose:
-                emit("  [!]登录可能失败，未获取到认证信息")
-            return {"cookies": {}, "headers": {}, "type": None}
+        if not config["headers"].get("Authorization"):
+            # 无 token 时以「HTTP 非错误 + 出现新 Cookie」作为登录成功信号，
+            # 预登录 GET 已下发的 Cookie 不再被误当作认证成功凭据
+            if resp.status_code < 400 and new_cookies:
+                if verbose:
+                    emit(f"  [+]登录成功，获取到 {len(new_cookies)} 个新 Cookie")
+            else:
+                if verbose:
+                    emit(f"  [!]登录可能失败（HTTP {resp.status_code}），未获取到新认证信息")
+                return {"cookies": {}, "headers": {}, "type": None}
 
         return config
-    except Exception as e:
+    except requests.RequestException as e:
+        # 仅兜底网络/HTTP 层异常并记录堆栈；其余异常向上抛出，避免真实配置错误被静默吞掉
+        logger.exception("自动登录请求异常: %s", e)
         if verbose:
             emit(f"  [!]自动登录异常: {e}")
         return {"cookies": {}, "headers": {}, "type": None}
@@ -252,12 +284,10 @@ def apply_auth_to_session(session, auth_config: Dict[str, Any]):
     # 注入 Cookie
     cookies = auth_config.get("cookies", {})
     if cookies:
+        # 仅写 cookie jar：requests 发请求时会由 jar 重建 Cookie 头；
+        # 再手工设置 Cookie 头会造成重复注入并可能覆盖 jar 的真实匹配结果
         for name, value in cookies.items():
             session.session.cookies.set(name, value)
-        # 同时设置 Cookie 头（部分场景需要）
-        cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
-        if cookie_str:
-            session.session.headers["Cookie"] = cookie_str
 
     # 注入自定义头
     headers = auth_config.get("headers", {})
