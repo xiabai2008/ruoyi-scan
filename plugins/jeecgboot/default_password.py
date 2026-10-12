@@ -6,8 +6,43 @@ import requests
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import parse_json_body
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+
+def _is_login_success(resp):
+    """判定响应是否为登录成功（严格解析 JSON，非子串匹配）
+
+    正向证据要求：
+    - 能解析为 JSON 对象
+    - token 为非空字符串（兼容顶层 token 与 JeecgBoot result.token 两种结构）
+    - 业务码成立：code 为 200/0 或缺失，或 success 为真
+    - msg 不含登录失败词（错误/失败/error）
+    """
+    # 统一走 parse_json_body：优先 .json()，失败回退解析 text（兼容测试桩/老版本客户端）
+    body = parse_json_body(resp)
+    if not isinstance(body, dict):
+        return False
+
+    # 顶层 token 优先；缺失时回退取 result.token（JeecgBoot 常见嵌套结构）
+    token = body.get("token")
+    if not token and isinstance(body.get("result"), dict):
+        token = body["result"].get("token")
+    if not isinstance(token, str) or not token.strip():
+        return False
+
+    code = body.get("code")
+    code_ok = code in (200, 0, None)
+    success_ok = body.get("success") is True
+    if not (code_ok or success_ok):
+        return False
+
+    msg = str(body.get("msg", ""))
+    failure_kw = ["错误", "失败", "error"]
+    if any(kw in msg for kw in failure_kw):
+        return False
+    return True
 
 
 class JeecgDefaultPasswordPlugin(PluginBase):

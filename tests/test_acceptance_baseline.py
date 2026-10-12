@@ -37,6 +37,39 @@ def test_baseline_confirmed_matches_plugins():
     print("PASS test_baseline_confirmed_matches_plugins: %d 项全部匹配" % len(vuln["expected_confirmed"]))
 
 
+def test_baseline_covers_all_applicable_ruoyi_plugins():
+    """vuln 基线必须登记所有「非变体限定」的 ruoyi 插件
+
+    为什么要这条看门狗：插件加入了插件包却漏登记基线时，它在靶场上的 CONFIRMED 会以
+    「误报」（unexpected）形态呈现并阻塞 nightly。历史事故：CVE-2025-46174 / CVE-2025-70986
+    于 2026-09-19 起连续 16 天阻塞 nightly，根因只是漏登记两行；而同期 job 恒为绿，
+    没有任何红色信号，只能靠人工翻 issue 列表才看得见。
+    有了这条断言，漏登记在单测阶段就暴露，不必等 nightly 跑完。
+
+    变体限定插件（variant 非空，如 ruoyi-plus）由 router 按 variant 过滤，不参与标准靶场
+    路由，故豁免。
+    """
+    from core.loader import load_plugins
+
+    with open(_baseline_path(), encoding="utf-8") as f:
+        baseline = json.load(f)
+    vuln = [t for t in baseline["targets"] if t["mode"] == "vuln"][0]
+    registered = set(vuln["expected_confirmed"]) | set(vuln["allowed_confirmed"])
+
+    unregistered = []
+    for cls in load_plugins("plugins.ruoyi"):
+        if getattr(cls, "variant", ""):
+            continue
+        name = getattr(cls, "name", "")
+        if name and name not in registered:
+            unregistered.append("%s (%s)" % (name, cls.__name__))
+    assert not unregistered, (
+        "以下 ruoyi 插件既不在 expected_confirmed 也不在 allowed_confirmed，"
+        "其命中靶场后会被判为误报并阻塞 nightly：\n  - " + "\n  - ".join(unregistered)
+    )
+    print("PASS test_baseline_covers_all_applicable_ruoyi_plugins")
+
+
 def test_baseline_safe_zero():
     """safe 基线开启零误报门禁"""
     with open(_baseline_path(), encoding="utf-8") as f:
@@ -80,6 +113,7 @@ def test_check_target_logic():
 if __name__ == "__main__":
     test_baseline_schema()
     test_baseline_confirmed_matches_plugins()
+    test_baseline_covers_all_applicable_ruoyi_plugins()
     test_baseline_safe_zero()
     test_check_target_logic()
     print("ALL_F4_TESTS_PASS")

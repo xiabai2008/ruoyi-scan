@@ -46,6 +46,10 @@ class LogicVuln:
     reproduce: str = ""  # 复现命令
     description: str = ""  # 漏洞描述
     compliance: str = "等保2.0:8.1.4;OWASP:A01:2021"
+    # 未测试标记：置位表示该条目并非“真实漏洞”，而是“端点未能测成”的显式占位。
+    # 旧实现缺陷：基准请求异常时 detector 直接返回 None，调用方把 None 当“无漏洞/安全”，
+    # 导致一个端点都没测成功却呈现为“扫完没发现”。调用方据此统计并输出“⚠ N 个端点未能测试”。
+    untested: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """转为字典（供报告/JSON 输出）"""
@@ -61,6 +65,7 @@ class LogicVuln:
             "reproduce": self.reproduce,
             "description": self.description,
             "compliance": self.compliance,
+            "untested": self.untested,
         }
 
 
@@ -187,8 +192,13 @@ class IDORDetector:
             return None
 
         # 测试其他 ID
+        # 旧实现缺陷：单个 test_id 请求异常即 continue，若全部 test_id 都异常则该端点
+        # 一个 ID 都没测成，却与“测了确实无漏洞”同为 None，无法区分。故显式计数。
+        attempted = 0
+        errored = 0
         for test_id in test_ids:
             test_url = self._replace_param(endpoint.url, target_param, test_id)
+            attempted += 1
             try:
                 resp = self.session.get(test_url)
                 resp_text = resp.text or ""
@@ -246,6 +256,20 @@ class IDORDetector:
                             ),
                             description="通过修改 URL 中的 ID 参数可访问其他用户的资源",
                         )
+
+        # 所有 test_id 都请求异常 → 端点判“未测试”而非“安全”（旧实现会静默返回 None）
+        if attempted > 0 and errored == attempted:
+            logger.warning("IDOR 全部测试 ID 请求失败，端点标记为未测试：%s", endpoint.url)
+            return LogicVuln(
+                vuln_type="idor",
+                name=f"IDOR 未测试 - 全部 ID 请求失败（{target_param}）",
+                severity="info",
+                url=endpoint.url,
+                method="GET",
+                evidence=f"{errored}/{attempted} 个测试 ID 请求异常，端点未能完成 IDOR 测试",
+                description="全部测试 ID 请求失败，无法判定该端点是否存在 IDOR，需人工复核",
+                untested=True,
+            )
 
         return None
 

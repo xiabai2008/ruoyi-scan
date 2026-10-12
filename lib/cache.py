@@ -265,7 +265,9 @@ class CacheStorage:
         """获取缓存统计"""
         with self._lock:
             conn = self._get_conn()
-            conn.row_factory = sqlite3.Row
+            # 旧实现缺陷：此处重复设置 conn.row_factory = sqlite3.Row，修改的是共享持久连接
+            # 的全局状态（_get_conn 初始化时已设一次），并发路径下给其他调用方造成隐式副作用。
+            # 去掉该行，保持 _get_conn 的唯一设置点。
 
             # 总条目数
             total = conn.execute("SELECT COUNT(*) FROM cache_entries").fetchone()[0]

@@ -473,7 +473,7 @@ def _login(target: str, session, username: str, password: str) -> Tuple[bool, st
     return RuoYiAuthChain(target, session, username=username, password=password).login()
 
 
-def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[SurfaceAsset], List[LogicVuln]]:
+def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[SurfaceAsset], List[LogicVuln], str]:
     """认证后深度扫描模式入口（--auth-surface）
 
     登录编排：高权凭证取 --auth-login（user:pass，双路自动登录）；
@@ -485,7 +485,9 @@ def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[Su
         variant: 若依变体标识（可选）
 
     Returns:
-        (资产清单, 漏洞列表)；高权登录失败返回 ([], [])
+        (资产清单, 漏洞列表, status)；status 取值：
+          "login_failed" —— 未提供凭证或高权登录失败（旧实现返回 ([], [])，与“扫完无结果”无法区分）
+          "ok"           —— 登录成功并完成扫描（assets/vulns 可能为空，即真的没发现）
     """
     from core.session import SessionManager
 
@@ -494,6 +496,8 @@ def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[Su
     timeout = getattr(args, "timeout", None)
 
     # 1. 高权会话登录
+    # 旧实现缺陷：密码为空/登录失败直接 return [] ，且 admin_session 未关闭 → 连接泄漏；
+    # 现用 try/finally 保证关闭，并用 status 第三返回值区分“登录失败”与“扫完无结果”。
     admin_session = SessionManager(proxy=proxy, debug=debug, timeout=timeout)
     low_session = None
     try:

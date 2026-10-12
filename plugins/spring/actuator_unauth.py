@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import match_spring_actuator_env
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -96,7 +97,7 @@ class SpringActuatorUnauthPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url_env,
-                evidence="/actuator/env 可匿名访问，泄露环境变量与配置属性",
+                evidence="/actuator/env 可匿名访问且返回真实 env 结构（propertySources/activeProfiles）",
                 fix=self.fix,
             )
         emit(no("不存在 Spring Boot Actuator 未授权（/actuator/env 需认证）"))

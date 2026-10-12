@@ -38,6 +38,12 @@ updates:
     # 与 pip 保持一致：minor/patch 合并为单个 PR，避免一批 Actions 小版本各自开 PR
     # 挤占 open-pull-requests-limit 配额（major 仍单独开 PR 供人工评估）
     groups:
+      # codeql-action 的 init / analyze / upload-sarif 必须同主版本：混用会在 analyze
+      # 阶段报 "CodeQL job status was configuration error"。不带分组时 Dependabot 会把
+      # 动作路径拆成多个 PR，各自只升半边、双双 CI 失败
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
       actions-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]

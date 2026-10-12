@@ -1,4 +1,5 @@
 # 端口扫描 + 服务 Banner 识别（纯 socket 实现，不依赖 nmap）
+import errno
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -233,8 +234,9 @@ class PortScanner:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             # connect_ex 不抛异常而是返回 errno（0=连接成功），比 connect 省一层 try/except
-            if sock.connect_ex((host, port)) != 0:
-                return PortResult(port=port, state="closed")
+            ret = sock.connect_ex((host, port))
+            if ret != 0:
+                return PortResult(port=port, state=self._classify_connect_error(ret, port))
             # 端口开放，识别服务名
             service = PORT_SERVICE_MAP.get(port, "unknown")
             banner = self._grab_banner(sock, service)
@@ -246,6 +248,17 @@ class PortScanner:
         finally:
             if sock is not None:
                 sock.close()
+
+    @staticmethod
+    def _classify_connect_error(errno_code: Optional[int], port: int) -> str:
+        """按 errno 判定端口状态（closed / filtered），无法判定时保守判 filtered"""
+        if errno_code == errno.ECONNREFUSED:
+            return "closed"
+        if errno_code in (errno.ETIMEDOUT, errno.EHOSTUNREACH, errno.ENETUNREACH):
+            return "filtered"
+        # 无法判定：记 debug 后保守判 filtered（丢包/未知错误绝不能臆断为 closed）
+        logger.debug("端口 %d 连接错误无法归类（errno=%s），保守判 filtered", port, errno_code)
+        return "filtered"
 
     def _grab_banner(self, sock: socket.socket, service: str) -> str:
         """尝试抓取 Banner（发探测包 → 接收响应）"""

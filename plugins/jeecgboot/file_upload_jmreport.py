@@ -8,6 +8,26 @@ from lib.reporter import emit
 from plugins.base import PluginBase
 
 
+def _is_upload_success_json(resp):
+    """判定响应是否为上传成功 JSON（结构成立，而非仅含 url/fileName 泛词）
+
+    正向证据要求：
+    - 能解析为 JSON 对象（失败 → 未命中）
+    - fileName 为非空字符串
+    - url 为非空字符串 或 code == 200
+    """
+    body = parse_json_body(resp)
+    if not isinstance(body, dict):
+        return False
+    file_name = body.get("fileName")
+    if not isinstance(file_name, str) or not file_name.strip():
+        return False
+    url = body.get("url")
+    has_url = isinstance(url, str) and url.strip()
+    code_ok = body.get("code") == 200
+    return bool(has_url or code_ok)
+
+
 class JeecgFileUploadJmreportPlugin(PluginBase):
     name = "JeecgBoot jmreport 文件上传"
     cve = "CNVD-2021-27656"

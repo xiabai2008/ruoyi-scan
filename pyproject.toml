@@ -49,7 +49,7 @@ dependencies = [
 report = [
     "reportlab>=4.0",
     "python-docx>=1.1",
-    "openpyxl>=3.1",
+    "openpyxl>=3.1.5",
 ]
 # Web API 服务：FastAPI + WebSocket
 serve = [
@@ -70,7 +70,7 @@ yaml = [
 ]
 # 靶场环境（lab/）
 lab = [
-    "flask>=2.3",
+    "flask>=3.1.3",
 ]
 # 对抗型传输层（方案 A）：Scrapling 指纹伪装 / 隐身浏览器绕过 CF Turnstile
 # 刻意不并入 all：本依赖会拉入 playwright/patchright/curl_cffi 并需另打浏览器二进制
@@ -84,26 +84,26 @@ adversarial = [
 all = [
     "reportlab>=4.0",
     "python-docx>=1.1",
-    "openpyxl>=3.1",
+    "openpyxl>=3.1.5",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
     "redis>=4.5",
     "aiohttp>=3.8",
     "pyyaml>=6.0",
-    "flask>=2.3",
+    "flask>=3.1.3",
 ]
 # 开发/测试依赖
 dev = [
     "pytest>=7.4",
     "httpx2",  # starlette.testclient 需要（test_metrics.py）
-    "pytest-timeout>=2.2",
+    "pytest-timeout>=2.4.0",
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.21",
     "pytest-benchmark>=4.0",
     # lint 工具固定版本（与 .github/workflows/ci.yml 一致）：
     # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移
-    "ruff==0.16.2",
-    "mypy==2.1.0",
+    "ruff==0.16.10",
+    "mypy==2.4.0",
 ]
 
 # CLI 入口点：安装后可直接 ruoyi-scan -p http://target/

@@ -21,10 +21,10 @@ jobs:
       contents: read
       issues: write  # 失败时自动建 issue
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
           cache: pip  # pip 缓存：nightly 免去重复下载依赖，降低 PyPI 抖动影响
@@ -94,3 +94,16 @@ jobs:
 
           $(cat acceptance.json 2>/dev/null || echo 'acceptance.json 未生成（靶场启动阶段即失败）')
           "
+
+      - name: Enforce acceptance gate
+        # 必须放在最后：上面「Run acceptance comparison」用 set +e 吞掉了退出码（为了把
+        # 报告写进 issue 正文），「Create issue on failure」又只建 issue 不置败——两者都
+        # 成功收尾，job 恒为绿。结果就是验收连续失败 16 天（2026-09-19 ~ 10-04）却没有任何
+        # 红色信号，只能靠人工翻 issue 列表发现。此 step 把失败重新暴露为 run 失败。
+        if: always()
+        run: |
+          if [ "${{ steps.acceptance.outputs.exit }}" != "0" ]; then
+            echo "::error::Nightly 验收未通过（run_acceptance.py 退出码 '${{ steps.acceptance.outputs.exit }}'）"
+            exit 1
+          fi
+          echo "验收通过"

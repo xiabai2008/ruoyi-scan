@@ -12,7 +12,7 @@
 | **可选能力集，缺失只降级** | 报告/服务/分布式/异步/YAML 都是 optional extra，未安装时功能降级而非崩溃 |
 | **能用标准库就不引三方** | CVSS 算法内联、零依赖 YAML 解析器、Ed25519 缺库时 fail-closed 而非自动装库 |
 
-第三条尤其明显：[requirements.txt](../../requirements.txt) 头部写"核心依赖（零系统依赖，必装）"，而它下面列的报告、Web API 分组都带"缺时自动降级"的注释。
+第三条尤其明显：[requirements.txt](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/requirements.txt) 头部写"核心依赖（零系统依赖，必装）"，而它下面列的报告、Web API 分组都带"缺时自动降级"的注释。
 
 ---
 
@@ -68,7 +68,7 @@
 | `api/` | `common/`、`core/`、`lib.reporter` | 不做扫描逻辑 |
 | `main.py` | `common/console`、`common/logger`、`config.settings`、`lib.colors` | 保持极轻——启动就要快 |
 
-`config/`（仅 [settings.py](../../config/settings.py)）是被所有层读取的全局配置，不算依赖环。
+`config/`（仅 [settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py)）是被所有层读取的全局配置，不算依赖环。
 
 ### 2.3 真实依赖矩阵
 
@@ -95,7 +95,7 @@
 
 **① 函数内导入（最常用，占绝大多数）**
 
-[core/orchestrator.py](../../core/orchestrator.py) 里 11 处：
+[core/orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py) 里 11 处：
 
 ```python
 def _run_recon(self): ...
@@ -127,7 +127,7 @@ if TYPE_CHECKING:
 
 **③ CLI 分发层的延迟导入（兼具"可选依赖不阻断启动"作用）**
 
-[cli/dispatcher.py](../../cli/dispatcher.py) 中每个工具模式都是函数内导入：
+[cli/dispatcher.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py) 中每个工具模式都是函数内导入：
 
 ```python
 if args.oast:        from lib.oast import run_oast_mode
@@ -170,8 +170,8 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 
 两处声明，需保持一致：
 
-- [pyproject.toml](../../pyproject.toml) `[project.optional-dependencies].dev`
-- [requirements-dev.txt](../../requirements-dev.txt)（CI 实际使用，`-r requirements.txt` 起头）
+- [pyproject.toml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/pyproject.toml) `[project.optional-dependencies].dev`
+- [requirements-dev.txt](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/requirements-dev.txt)（CI 实际使用，`-r requirements.txt` 起头）
 
 | 包 | 用途 |
 |----|------|
@@ -184,11 +184,11 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 
 > `ruff format` 输出随版本演进，不固定会造成 CI 与本地格式漂移
 
-同一组版本号也出现在 [ci.yml](../../.github/workflows/ci.yml)（`pip install ruff==0.16.2 mypy==2.1.0`）与 [CHANGELOG.md](../../CHANGELOG.md) 的「CI lint 转绿」条目中，三处需保持一致——CI 注释已明确提醒"升级时需本地重跑 ruff format 并同步此处与 pyproject dev 依赖"。
+同一组版本号也出现在 [ci.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/ci.yml)（`pip install ruff==0.16.2 mypy==2.1.0`）与 [CHANGELOG.md](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/CHANGELOG.md) 的「CI lint 转绿」条目中，三处需保持一致——CI 注释已明确提醒"升级时需本地重跑 ruff format 并同步此处与 pyproject dev 依赖"。
 
 ### 3.4 `cryptography`：可选但 fail-closed
 
-[lib/plugin_repo.py](../../lib/plugin_repo.py) 的 `cryptography` **不在任何 extra 分组里**，属"要用才装"：
+[lib/plugin_repo.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_repo.py) 的 `cryptography` **不在任何 extra 分组里**，属"要用才装"：
 
 - **签名（本地打包）**：无 `cryptography` → 签名为空串，仍可生成 manifest。
 - **验签（远程安装）**：无 `cryptography` → **直接拒绝安装**，并提示 `pip install cryptography`。
@@ -204,11 +204,11 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 
 | 功能 | 常规做法 | 本项目 | 收益 |
 |------|---------|--------|------|
-| CVSS v3.1 评分 | 引入 `cvss` 库 | [plugins/base.py](../../plugins/base.py) 内联 `_CVSS_WEIGHTS` / `_CVSS_PR_SC` 与六步算法 | 零依赖、可审计、可按需微调 |
-| YAML 解析（nuclei 模板） | 强制 `pyyaml` | [lib/nuclei_loader.py](../../lib/nuclei_loader.py) 先试 `import yaml`，失败则用 `_parse_simple_yaml()` | 不装 pyyaml 也能跑 nuclei 模板 |
+| CVSS v3.1 评分 | 引入 `cvss` 库 | [plugins/base.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/plugins/base.py) 内联 `_CVSS_WEIGHTS` / `_CVSS_PR_SC` 与六步算法 | 零依赖、可审计、可按需微调 |
+| YAML 解析（nuclei 模板） | 强制 `pyyaml` | [lib/nuclei_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/nuclei_loader.py) 先试 `import yaml`，失败则用 `_parse_simple_yaml()` | 不装 pyyaml 也能跑 nuclei 模板 |
 | Ed25519 验签 | 强制 `cryptography` | 缺库时拒绝而非降级（见 3.4） | 安全等级不因依赖缺失而下降 |
 
-再加上整个项目**没有系统级依赖**（无编译工具、无字体包、无数据库驱动），PDF 报告改用 `reportlab` 内置的 STSong-Light CJK 字体——[Dockerfile](../../Dockerfile) 因此可以在 `python:3.11-slim` 上直接跑。
+再加上整个项目**没有系统级依赖**（无编译工具、无字体包、无数据库驱动），PDF 报告改用 `reportlab` 内置的 STSong-Light CJK 字体——[Dockerfile](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/Dockerfile) 因此可以在 `python:3.11-slim` 上直接跑。
 
 ---
 
@@ -251,11 +251,11 @@ data = ["*.txt", "*.json"]        # 字典与 CVE 数据必须随包分发
 my-plugin = "my_plugin_pkg:plugin_list"
 ```
 
-安装后即被 [core/loader.py](../../core/loader.py) 自动发现——这是[插件发现五条路径](04-plugins-chains.md)中的第四条。
+安装后即被 [core/loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/loader.py) 自动发现——这是[插件发现五条路径](04-plugins-chains.md)中的第四条。
 
 ### 4.3 发布流水线
 
-**Python 包**（[release.yml](../../.github/workflows/release.yml)）：
+**Python 包**（[release.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/release.yml)）：
 
 ```
 tag v* 推送
@@ -280,7 +280,7 @@ tag v* 推送
 
 注释中还留了 PyPI 侧配置指引的引用块（Workflow name / Environment name / PyPI 项目设置），减少发布者的试错。
 
-**桌面端**（[desktop-release.yml](../../.github/workflows/desktop-release.yml)）：
+**桌面端**（[desktop-release.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/desktop-release.yml)）：
 
 ```
 1. PyInstaller 打引擎 exe → smoke test 引擎
@@ -302,7 +302,7 @@ tag v* 推送
 | nuclei 模板包 zip | `release.yml` | 配合 nuclei 使用 |
 | Windows 单 exe | `desktop-release.yml` | 非技术用户 |
 | NSIS 安装包 | `desktop-release.yml` | Windows 常规安装 |
-| Docker 镜像 | [Dockerfile](../../Dockerfile) | 服务端部署 |
+| Docker 镜像 | [Dockerfile](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/Dockerfile) | 服务端部署 |
 
 ---
 

@@ -6,6 +6,9 @@ from lib.matcher import match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
+# 复用同目录 dict_unauth 的分页列表结构判定（records/rows + total/success + code==200）
+from plugins.jeecgboot.dict_unauth import _is_dict_list_json
+
 
 class JeecgJmreportListUnauthPlugin(PluginBase):
     name = "JeecgBoot 报表未授权"

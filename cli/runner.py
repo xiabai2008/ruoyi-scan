@@ -517,11 +517,15 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         from lib.auth_surface import run_auth_surface_mode
 
         print(f"{YELLOW}[*]认证后深度扫描：登录态资产盘点 + 越权矩阵...{RESET}")
-        surface_assets, surface_vulns = run_auth_surface_mode(args, target_normalized)
-        print(
-            f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
-            f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
-        )
+        surface_assets, surface_vulns, surface_status = run_auth_surface_mode(args, target_normalized)
+        if surface_status == "login_failed":
+            # 登录失败与“扫完无结果”语义已由 status 区分，避免误报“0 资产 0 漏洞”为扫描完成
+            print(f"{RED}[!]认证后深度扫描未执行：高权登录失败（检查 --auth-login）{RESET}")
+        else:
+            print(
+                f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
+                f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
+            )
         if getattr(args, "surface_output", None) and surface_assets:
             print(f"{GREEN}[*]资产清单已输出：{args.surface_output}{RESET}")
         # 漏洞并入统一结果集（CONFIRMED 语义已在扫描器内保证，UNKNOWN 仅记录资产不产漏洞）
@@ -572,7 +576,8 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     """
     from lib.async_engine import scan_batch_targets
 
-    # 每个目标的结果单独留存：scan_batch_targets 只返回扁平列表，无法再把结果按目标还原
+    # 每个目标的结果单独留存（按目标重建报告时与 scan_batch_targets 的返回值解耦，
+    # 单目标失败也不影响其他目标的留存）
     results_by_target: dict = {}
     results_lock = threading.Lock()
 
@@ -628,6 +633,11 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
             print(f"{GREEN}[*]批量报告：{p}{RESET}")
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
+    # 显式列出失败/无结果目标，杜绝“99 个目标静默显示 0 漏洞”的观感
+    if failed_targets:
+        print(f"{YELLOW}[!]以下 {len(failed_targets)} 个目标无结果（扫描失败或未发现漏洞）：{RESET}")
+        for ft in failed_targets:
+            print(f"    {YELLOW}- {ft}{RESET}")
     # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
     if not getattr(args, "ci", False):
         print_star_cta(explicit_off=getattr(args, "no_cta", False))

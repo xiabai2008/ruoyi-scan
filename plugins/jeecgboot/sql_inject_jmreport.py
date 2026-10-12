@@ -10,6 +10,35 @@ from lib.reporter import emit
 from plugins.base import PluginBase
 
 
+def _has_sql_result_echo(resp):
+    """判定响应体中的 SQL 字段是否回显了 select user() 的执行结果（正向证据）
+
+    关键约束：证据必须位于 JSON 的 `result` 键内，而非任意文本。
+    这样任意 HTML 页面（如含"当前版本 4.7.8"）都不可能命中——它们没有 result 字段。
+    仅"响应含通用键 code/result"不算证据；必须是 result 内出现 SQL 函数返回值：
+      - user() 形态：user@host（如 root@localhost）
+      - @@version 数字形态：如 5.7.34 / 8.0.32（含可选 -log/-debug 后缀）
+      - database() 返回值：短裸标识符（合法库名）
+    """
+    body = parse_json_body(resp)
+    if not isinstance(body, dict) or "result" not in body:
+        return False
+    result = body.get("result")
+    # result 可能是字符串、list（多行结果）或 dict；统一转成文本再匹配
+    result_text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+    # user() 回显：user@host（要求 host 段非数字，避免误匹配邮件/路径片段）
+    if re.search(r"\b[a-zA-Z_][a-zA-Z0-9_.-]*@[a-zA-Z][a-zA-Z0-9_.-]*\b", result_text):
+        return True
+    # @@version 数字形态：x.y.z（版本号特征，需在 result 内）
+    if re.search(r"(?<![\w.])\d+\.\d+\.\d+(-log|-debug)?(?![\w.])", result_text):
+        return True
+    # database() 返回值：result 为合法库名（字母/下划线起头，不含空格与标点）
+    if isinstance(result, str) and re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]{0,63}", result.strip()):
+        return True
+    return False
+
+
 class JeecgSqlInjectJmreportPlugin(PluginBase):
     name = "JeecgBoot jmreport SQL注入"
     cve = "CNVD-2022-30348"

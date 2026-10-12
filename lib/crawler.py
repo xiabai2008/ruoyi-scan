@@ -181,6 +181,9 @@ class Crawler:
         self.on_page = on_page
         # 统计信息
         self.visited: Set[str] = set()
+        # 旧实现缺陷：BFS 去重靠 `any(absolute == q[0] for q in queue)` 线性扫描整个 deque，
+        # 每次发现新链接都是 O(n)，整体 O(n²)。改用 set 记录已入队 URL，查询/插入均 O(1)。
+        self._queued: Set[str] = set()
         self.discarded: List[str] = []  # 被过滤的链接
         self.errors: List[str] = []
         self._lock = threading.Lock()

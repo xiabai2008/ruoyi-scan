@@ -13,6 +13,7 @@ import requests
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import parse_json_body
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)

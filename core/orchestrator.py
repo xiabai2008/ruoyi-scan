@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
 from config import settings
+from core.cache import FingerprintCache
 from core.engine import ScanEngine
 from core.fingerprint import detect_cms, detect_waf
 from core.http import normalize_target
@@ -308,6 +309,12 @@ class ScanOrchestrator:
                 if event_type in ("status", "fingerprint", "waf", "complete"):
                     self.registry.update_task_dict(task.task_id, task.to_dict())
 
+        # 资源泄漏防护（#3）：session 在 try 块内创建，旧实现只在正常路径 (:651)
+        # 调用 session.close()；一旦其后的任意步骤抛异常走 except 直接 return，session
+        # 永不关闭，连接池与 keep-alive socket 泄漏。这里提前置 None，由 finally 统一关闭
+        # （finally 在本方法唯一出口处执行，覆盖正常返回与异常返回两条路径）。
+        session: Optional[SessionManager] = None
+
         try:
             task.status = "running"
             _emit("status", {"status": "running", "task_id": task.task_id})
@@ -366,10 +373,16 @@ class ScanOrchestrator:
                     )
 
             # 2. 会话创建
+            # 连接池尺寸必须与线程数挂钩（性能 P0）：旧实现不传 pool_size，session.py 里
+            # _pool = max(pool_size or settings.THREADS or 10, 10)，而 settings.THREADS=1
+            # 且从不被 --threads 写回 → 连接池恒为 10（pool_maxsize=20）。--threads 50 时
+            # 引擎开 50 线程但池只有 20，30 个线程每次请求都新建 TCP 连接，keep-alive
+            # 复用率崩掉。这里显式把 pool_size 设为线程数，使池与并发匹配。
             session = SessionManager(
                 proxy=req.proxy or None,
                 debug=req.debug,
                 timeout=req.timeout,
+                pool_size=req.threads,
             )
             engine = ScanEngine(threads=req.threads, rate=req.rate)
 
@@ -402,12 +415,17 @@ class ScanOrchestrator:
             session.password_dict = selected_password_dict
 
             # 4. 指纹识别
+            # 性能（P1-C）：自建 FingerprintCache 交给 detect_cms，事后复用给 detect_waf，
+            # 使根路径响应在两者间共享（旧实现 detect_waf 会对根路径重发一次请求，
+            # 单目标至少 3 次根路径请求）。req.cms 手动指定时无 detect_cms，缓存不建。
             router = Router()
+            fp_cache: Optional[FingerprintCache] = None
             if req.cms:
                 fp_result = FingerprintResult(cms=req.cms, version="", confidence=1.0, matched=["manual"])
                 all_plugins = router.resolve_by_name(req.cms)
             else:
-                fp_result = detect_cms(target, session)
+                fp_cache = FingerprintCache(session)
+                fp_result = detect_cms(target, session, cache=fp_cache)
                 all_plugins = router.resolve(fp_result)
 
             task.fingerprint = fp_result
@@ -424,7 +442,8 @@ class ScanOrchestrator:
             )
 
             # 5. WAF 探测 + 绕过协调器
-            waf_result = detect_waf(target, session)
+            # 传入 fp_cache 复用 detect_cms 已缓存的根响应（未命中才发请求，向后兼容）
+            waf_result = detect_waf(target, session, cache=fp_cache)
             task.waf_info = waf_result
             _emit(
                 "waf",
@@ -484,6 +503,8 @@ class ScanOrchestrator:
                 )
 
             # 通用漏洞检测包
+            # ⚠ 旧实现只记 debug（生产默认 WARNING 级不可见）：plugins.common 加载失败时
+            # 用户只看到「已加载 N 个插件」，少掉的十几个通用 POC 无从得知 → 升为 warning。
             try:
                 common_plugins = load_plugins("plugins.common")
                 all_plugins = all_plugins + common_plugins
@@ -491,8 +512,8 @@ class ScanOrchestrator:
                     "plugins_loaded",
                     {"common_count": len(common_plugins), "total_count": len(all_plugins), "task_id": task.task_id},
                 )
-            except Exception:
-                logger.debug("通用插件加载失败", exc_info=True)
+            except Exception as e:
+                logger.warning("通用插件包 plugins.common 加载失败：%s", e, exc_info=True)
 
             # P0: 外部插件加载（--plugin-path）
             if req.plugin_paths:
@@ -525,8 +546,10 @@ class ScanOrchestrator:
                             "task_id": task.task_id,
                         },
                     )
-            except Exception:
-                logger.debug("用户插件目录加载失败", exc_info=True)
+            except Exception as e:
+                # 用户安装插件（~/.ruoyi-scan/plugins/）加载失败升为 warning：用户装完插件
+                # 却看不到 POC，唯一线索就是这条日志，debug 级不可见。
+                logger.warning("用户安装插件目录加载失败（~/.ruoyi-scan/plugins/）：%s", e, exc_info=True)
 
             # P1: entry_points 注册的第三方插件（pip install 自动发现）
             try:
@@ -543,8 +566,10 @@ class ScanOrchestrator:
                             "task_id": task.task_id,
                         },
                     )
-            except Exception:
-                logger.debug("entry_points 插件加载失败", exc_info=True)
+            except Exception as e:
+                # entry_points 注册的第三方插件加载失败升为 warning（pip 安装的插件包
+                # 依赖/入口配置错误时用户需可见，否则静默少了整批插件）。
+                logger.warning("entry_points 第三方插件加载失败：%s", e, exc_info=True)
 
             # E4: nuclei YAML 模板（--nuclei）
             if req.nuclei_paths:
@@ -568,7 +593,9 @@ class ScanOrchestrator:
                             },
                         )
                 except Exception as e:
-                    logger.debug("nuclei 模板加载失败", exc_info=True)
+                    # nuclei 模板加载失败升为 warning 并带上路径：用户指定了 --nuclei 却
+                    # 一个模板没跑时，需能从日志看出是路径/模板语法问题。事件仍照发。
+                    logger.warning("nuclei 模板加载失败（路径=%s）：%s", req.nuclei_paths, e, exc_info=True)
                     _emit("nuclei_error", {"error": str(e), "task_id": task.task_id})
 
             # 指定插件过滤（API 可指定插件子集）
@@ -861,10 +888,12 @@ class ScanOrchestrator:
                 from lib.js_extractor import JSExtractor
 
                 # 创建临时 session（避免与主 session 状态污染）
+                # 同样显式传 pool_size 与线程数匹配（#4）：爬虫/JS 提取的并发也依赖连接池复用。
                 recon_session = SessionManager(
                     proxy=req.proxy or None,
                     debug=req.debug,
                     timeout=req.timeout,
+                    pool_size=req.threads,
                 )
 
                 _emit(

@@ -6,6 +6,29 @@ from lib.reporter import emit
 from plugins.base import PluginBase
 
 
+def _is_dict_list_json(resp):
+    """判定响应是否为 JeecgBoot 字典/分页列表业务 JSON（结构成立，而非仅含通用键）
+
+    正向证据要求（全部满足）：
+    - 能解析为 JSON 对象（解析失败 → 未命中）
+    - code == 200（若 code 是 int；缺省或非 int 时跳过此约束）
+    - records 或 rows 为 list（真实分页数据的载体）
+    - 存在 total 或 success 之一（分页/业务成功标志）
+    """
+    body = parse_json_body(resp)
+    if not isinstance(body, dict):
+        # 非 JSON 响应（HTML 拦截页/网关错误页）一律不命中
+        return False
+    code = body.get("code")
+    if isinstance(code, int) and code != 200:
+        return False
+    records = body.get("records")
+    rows = body.get("rows")
+    if not (isinstance(records, list) or isinstance(rows, list)):
+        return False
+    return ("total" in body) or ("success" in body)
+
+
 class JeecgDictUnauthPlugin(PluginBase):
     name = "JeecgBoot 字典越权"
     cve = "CVE-2023-1454"

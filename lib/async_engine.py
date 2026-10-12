@@ -201,12 +201,42 @@ class AsyncScanEngine:
 # ============================================================
 
 
+def flatten(results_by_target: Dict[str, List[Any]]) -> List[Any]:
+    """把 {target: results} 按 target 顺序扁平化为单个列表。
+
+    供 scan_batch_targets 的返回值消费方使用：旧调用点直接 `flatten(scan_batch_targets(...))`
+    即可拿到与旧扁平静态一致的结果，无需改动业务逻辑。
+    """
+    flat: List[Any] = []
+    for lst in results_by_target.values():
+        if lst:
+            flat.extend(lst)
+    return flat
+
+
+def group_by_target(targets: List[str], flat_results: List[Any]) -> Dict[str, List[Any]]:
+    """把旧式扁平结果按 target 顺序切分回 {target: results}。
+
+    仅对“每个 target 恰好返回 List”的调用方有效（如 --async 批量：_scan_single 必返回 list）。
+    现实中扁平列表本身不携带归属信息，故切分长度不足以覆盖全部 target 时，剩余 target
+    保持为空列表（宁可标 0 也不猜归属）。新调用点应直接用 scan_batch_targets 的 dict 返回值。
+    """
+    grouped: Dict[str, List[Any]] = {t: [] for t in targets}
+    pos = 0
+    for t in targets:
+        seg = flat_results[pos : pos + 1]
+        if seg and isinstance(seg[0], list):
+            grouped[t] = seg[0]
+        pos += 1
+    return grouped
+
+
 def scan_batch_targets(
     scan_fn: Callable[[str], List[Any]],
     targets: List[str],
     max_workers: int = 10,
     progress_callback: Optional[Callable] = None,
-) -> List[Any]:
+) -> Dict[str, List[Any]]:
     """批量扫描多个目标
 
     Args:
@@ -216,9 +246,14 @@ def scan_batch_targets(
         progress_callback: 进度回调 fn(completed, total, current_target)
 
     Returns:
-        所有目标的扫描结果（扁平化）
+        {target: 该目标的扫描结果列表}
+
+    旧实现缺陷：返回扁平的 all_results，丢失了每个结果的 target 归属，导致调用方
+    （cli/runner.py `_run_batch_async`）无法按目标重建报告，只能把全部结果硬塞给第一个
+    目标，其余目标报告显示 0 漏洞（高危数据丢失）。改为按 target 归位的字典后根除该问题。
+    需要旧扁平行为的调用方用模块级 `flatten()` 转换即可，无需逐个改签名。
     """
-    all_results = []
+    results_by_target: Dict[str, List[Any]] = {t: [] for t in targets}
     total = len(targets)
 
     with AsyncScanEngine(max_workers=max_workers) as engine:
@@ -232,15 +267,16 @@ def scan_batch_targets(
             idx, target = futures[future]
             try:
                 results = future.result()
+                # 显式写回对应 target，避免归属丢失；扫描函数抛异常时该 target 保持空列表
                 if results:
-                    all_results.extend(results)
+                    results_by_target[target] = list(results)
             except Exception:
-                logger.debug("批量扫描获取任务结果失败", exc_info=True)
+                logger.warning("批量扫描目标 %s 失败，该目标无结果", target, exc_info=True)
             completed += 1
             if progress_callback:
                 progress_callback(completed, total, target)
 
-    return all_results
+    return results_by_target
 
 
 # ============================================================
@@ -404,9 +440,9 @@ def benchmark_sync_vs_async(sync_fn: Callable, targets: List[str], max_workers: 
             logger.debug("基准测试同步执行失败", exc_info=True)
     sync_duration = time.time() - start
 
-    # 异步执行
+    # 异步执行（scan_batch_targets 现返回 {target: results}，用 flatten 还原为扁平计数）
     start = time.time()
-    async_results = scan_batch_targets(sync_fn, targets, max_workers=max_workers)
+    async_results = flatten(scan_batch_targets(sync_fn, targets, max_workers=max_workers))
     async_duration = time.time() - start
 
     # 防御 async_duration 为 0（空目标列表）导致的除零
@@ -443,6 +479,7 @@ def run_async_scan_mode(
         progress_callback: 进度回调
 
     Returns:
-        扫描结果列表
+        扫描结果列表（保持扁平，向后兼容旧调用方）
     """
-    return scan_batch_targets(scan_fn, targets, max_workers, progress_callback)
+    # scan_batch_targets 现返回 {target: results}，此处 flatten 维持本函数原有的扁平返回契约
+    return flatten(scan_batch_targets(scan_fn, targets, max_workers, progress_callback))

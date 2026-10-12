@@ -125,7 +125,7 @@ class TestAsyncEngineBenchmark:
         """基准：4 目标并发扫描（模拟 IO）"""
         import time
 
-        from lib.async_engine import scan_batch_targets
+        from lib.async_engine import flatten, scan_batch_targets
 
         def slow_scan(target):
             time.sleep(0.05)  # 模拟 50ms 网络请求
@@ -134,7 +134,8 @@ class TestAsyncEngineBenchmark:
         targets = ["http://a.com/", "http://b.com/", "http://c.com/", "http://d.com/"]
 
         def run_batch():
-            return scan_batch_targets(scan_fn=slow_scan, targets=targets, max_workers=4)
+            # 新契约返回 {target: results}，用 flatten 还原为扁平列表计数
+            return flatten(scan_batch_targets(scan_fn=slow_scan, targets=targets, max_workers=4))
 
         results = benchmark(run_batch)
         assert len(results) == 4
