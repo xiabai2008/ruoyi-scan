@@ -1,18 +1,4 @@
-# lab 靶场镜像构建忽略（阶段七）：仅需 *.py 靶场脚本，排除遗留实验产物
-*.log
-build*.log
-*.md
-README.md
-REAL-RUOYI.md
-VULN-REINTRODUCE.md
-maven388.tar.gz
-real-ruoyi/
-tools/
-docker-compose.yml
-run-ruoyi.bat
-safe-baseline.log
-scan-vuln*.log
-ruoyi-vuln*.log
-ruoyi-run.log
-__pycache__/
-*.pyc
+# lab 靶场镜像构建忽略（阶段七）：白名单——仅放行靶场脚本 *.py
+# 其余（日志/文档/压缩包/子目录/本地凭据等）一律不进入构建上下文，避免 COPY . /app 烘焙机密
+*
+!*.py

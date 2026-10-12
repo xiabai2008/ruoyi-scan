@@ -29,8 +29,13 @@ def load_baseline(path: str) -> dict:
         baseline = json.load(f)
     if baseline.get("schema") != "ruoyi-scan-acceptance-baseline":
         raise ValueError("基线文件 schema 不匹配（应为 ruoyi-scan-acceptance-baseline）")
-    if not baseline.get("targets"):
+    targets = baseline.get("targets")
+    if not targets:
         raise ValueError("基线缺少 targets")
+    # 逐条校验 target schema：字段缺失在此给出明确报错，而不是扫描时抛 KeyError
+    for i, t in enumerate(targets):
+        if not isinstance(t, dict) or not t.get("url"):
+            raise ValueError("基线 targets[%d] 缺少 url 字段" % i)
     return baseline
 
 
@@ -46,8 +51,11 @@ def scan_target(url: str, scan_mode: str = "u") -> list:
         no_dedup=True,
     )
     orch = ScanOrchestrator()
-    results = orch.run_sync(req, on_event=None)
-    orch.shutdown()
+    try:
+        results = orch.run_sync(req, on_event=None)
+    finally:
+        # run_sync 抛异常（网络错误/插件崩溃/超时）时也必须回收线程池，避免线程泄漏
+        orch.shutdown()
     # 只取 CONFIRMED（确认存在）结果：suspected 视为未坐实，不进入对拍门禁
     return [r.name for r in results if r.status == STATUS_CONFIRMED]
 
@@ -81,6 +89,19 @@ def check_target(target_cfg: dict, actual_confirmed: list) -> dict:
     }
 
 
+def write_report(report: dict, output_path: str) -> bool:
+    """写出对拍报告；失败仅告警不抛出（避免掩盖原始错误与退出码），返回是否写成功"""
+    if not output_path:
+        return True
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        return True
+    except OSError as e:
+        print("[!] 对拍报告写入失败: %s" % e)
+        return False
+
+
 def run_acceptance(baseline_path: str, targets: list = None, output_path: str = "") -> int:
     """执行验收
 
@@ -92,13 +113,18 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
     Returns:
         退出码：0=通过 / 1=漏报或误报 / 2=执行错误
     """
-    baseline = load_baseline(baseline_path)
-    target_cfgs = list(baseline["targets"])
-    if targets is not None:
-        # 仅校验指定 URL（按 URL 匹配基线配置）
-        target_cfgs = [t for t in target_cfgs if t["url"] in targets]
-        if not target_cfgs:
-            raise ValueError("指定目标不在基线中: %s" % targets)
+    try:
+        baseline = load_baseline(baseline_path)
+        target_cfgs = list(baseline["targets"])
+        if targets is not None:
+            # 仅校验指定 URL（按 URL 匹配基线配置）
+            target_cfgs = [t for t in target_cfgs if t["url"] in targets]
+            if not target_cfgs:
+                raise ValueError("指定目标不在基线中: %s" % targets)
+    except (OSError, ValueError, KeyError) as e:
+        # 基线缺失/损坏/schema 不符/指定目标不在基线 → 配置错误映射退出码 2（与门禁失败 1 区分）
+        print("[!] 验收配置错误: %s" % e)
+        return 2
 
     report = {
         "schema": "ruoyi-scan-acceptance",
@@ -107,11 +133,32 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
         "targets": [],
         "passed": True,
     }
+    had_error = False
     try:
         for cfg in target_cfgs:
             print("[*] 对拍目标: %s (%s)" % (cfg["url"], cfg.get("mode", "")))
-            actual = scan_target(cfg["url"], cfg.get("scan_mode", "u"))
-            result = check_target(cfg, actual)
+            try:
+                actual = scan_target(cfg["url"], cfg.get("scan_mode", "u"))
+                result = check_target(cfg, actual)
+            except Exception as e:
+                # 单个目标异常不中断整体验收：记录错误项后继续扫描剩余目标，
+                # 一次报告呈现全部结果（执行失败最终以退出码 2 反映）
+                print("[!] 目标 %s 执行异常: %s" % (cfg.get("url", ""), e))
+                had_error = True
+                report["passed"] = False
+                report["targets"].append(
+                    {
+                        "name": cfg.get("name", cfg.get("url", "")),
+                        "url": cfg.get("url", ""),
+                        "mode": cfg.get("mode", ""),
+                        "passed": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "missing": [],
+                        "unexpected": [],
+                        "actual_confirmed": [],
+                    }
+                )
+                continue
             # 单个目标判定失败不中断循环：继续扫描剩余目标，一次报告呈现全部漏报/误报
             report["targets"].append(result)
             if result["passed"]:
@@ -124,16 +171,15 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
                     print("    [X] 误报: %s" % ", ".join(result["unexpected"]))
     except Exception as e:
         print("[!] 验收执行异常: %s" % e)
-        if output_path:
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
+        # 报告写入失败不得冒出 handler：否则掩盖原始错误并丢失退出码 2
+        write_report(report, output_path)
         # 执行异常映射为退出码 2：与判定失败（1）区分，便于 CI 区分环境故障与门禁失败
         return 2
 
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+    write_ok = write_report(report, output_path)
     print("[*] 验收结果: %s" % ("全部通过" if report["passed"] else "存在失败项"))
+    if had_error or not write_ok:
+        return 2
     return 0 if report["passed"] else 1
 
 

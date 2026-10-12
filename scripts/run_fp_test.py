@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# D5 误报率测试：启动 10 个非若依靶场，扫描并断言假阳率 <5%
+# D5 误报率测试：启动 11 个非若依靶场，扫描并断言假阳率 <5%
 #
 # 运行：python scripts/run_fp_test.py
 #
@@ -7,7 +7,7 @@
 #   - 指纹识别误判为 ruoyi → 假阳（False Positive）
 #   - 即使误判为 ruoyi，POC CONFIRMED → 严重假阳
 #   - 假阳率 = 假阳靶场数 / 总靶场数
-#   - 目标：假阳率 <5%（10 个靶场最多 0 个假阳）
+#   - 目标：假阳率 <5%（11 个靶场最多 0 个假阳）
 import os
 import subprocess
 import sys
@@ -85,10 +85,10 @@ def scan_target(target_url):
 
 def main():
     print("=" * 70)
-    print("D5 误报率测试：10 个非若依靶场")
+    print("D5 误报率测试：11 个非若依靶场")
     print("=" * 70)
 
-    # 启动 10 个靶场（端口 8501-8510）
+    # 启动全部靶场（端口 8501 起，数量随 TARGETS 变化）
     procs = []
     port_base = 8501
     targets = list(TARGETS.items())

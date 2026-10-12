@@ -473,6 +473,7 @@
                     <button class="btn-sm" @click="downloadReport('csv')">CSV</button>
                     <button class="btn-sm" @click="downloadReport('pdf')">PDF</button>
                     <button class="btn-sm" @click="downloadReport('docx')">Word</button>
+                    <button class="btn-sm" @click="downloadReport('xlsx')">Excel</button>
                 </div>
             </div>
 
@@ -528,12 +529,14 @@ function scanApp() {
 
         // WebSocket
         ws: null,
+        // 任务列表轮询句柄（destroy 时清理，避免重复 init 叠加定时器）
+        refreshTimer: null,
 
         async init() {
             await this.loadVersion();
             await this.loadTasks();
             // 定时刷新任务列表
-            setInterval(() => this.loadTasks(), 5000);
+            this.refreshTimer = setInterval(() => this.loadTasks(), 5000);
         },
 
         async loadVersion() {
@@ -556,13 +559,17 @@ function scanApp() {
         async loadTasks() {
             try {
                 const resp = await fetch('/api/scan');
+                // 先校验状态：4xx/5xx 的 JSON 错误体若赋给 tasks，x-for/tasks.length 会静默渲染异常
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
                 this.tasks = data;
             } catch (e) { console.error('加载任务失败', e); }
         },
 
         async submitScan() {
-            if (!this.form.target) return;
+            // Enter 键直接调用本方法，绕过按钮的 :disabled 守卫——必须自查 scanning，
+            // 否则连续回车会重复 POST /api/scan，生成重复任务
+            if (!this.form.target || this.scanning) return;
             this.scanning = true;
             this.results = [];
             this.events = [];
@@ -576,8 +583,14 @@ function scanApp() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(this.form),
                 });
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status} ${(await resp.text().catch(() => '')).trim()}`.trim());
+                }
                 const data = await resp.json();
                 this.selectedTaskId = data.task_id;
+                // 右侧面板由 currentTask 控制：必须先从提交响应填充，
+                // 否则统计/结果/报告区不显示，handleEvent 的状态事件也会被丢弃
+                this.currentTask = { task_id: data.task_id, status: data.status || 'pending' };
                 this.connectWS(data.task_id);
                 await this.loadTasks();
             } catch (e) {
@@ -594,17 +607,29 @@ function scanApp() {
             }
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${location.host}/ws/scan/${taskId}`;
-            this.ws = new WebSocket(wsUrl);
+            const socket = new WebSocket(wsUrl);
+            this.ws = socket;
 
-            this.ws.onmessage = (e) => {
-                const event = JSON.parse(e.data);
+            socket.onmessage = (e) => {
+                // 忽略被新连接取代的旧连接残留消息
+                if (this.ws !== socket) return;
+                let event;
+                try {
+                    event = JSON.parse(e.data);
+                } catch (err) {
+                    // 非 JSON 帧（代理注入/截断）不得让 onmessage 抛出，否则后续事件全部丢失
+                    console.error('忽略非法 WebSocket 消息', err, e.data);
+                    return;
+                }
                 this.handleEvent(event);
             };
-            this.ws.onclose = () => {
+            socket.onclose = () => {
+                // 旧连接的 onclose 异步触发时不得清空/覆盖新连接引用
+                if (this.ws !== socket) return;
                 this.ws = null;
                 this.loadTasks();
             };
-            this.ws.onerror = (e) => {
+            socket.onerror = (e) => {
                 console.error('WebSocket 错误', e);
             };
         },
@@ -657,10 +682,14 @@ function scanApp() {
             this.results = [];
             this.events = [];
             this.progress = { done: 0, total: 0, percent: 0 };
+            // 指纹/WAF 必须一并清零：任务详情缺这两个字段时，旧任务的判断结果会泄漏到新视图
+            this.fingerprint = { cms: '', confidence: 0 };
+            this.wafInfo = { waf: '', display: '' };
 
             // 获取任务详情
             try {
                 const resp = await fetch(`/api/scan/${taskId}`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 this.currentTask = await resp.json();
 
                 if (this.currentTask.fingerprint) {
@@ -674,17 +703,39 @@ function scanApp() {
             // 获取已有结果
             try {
                 const resp = await fetch(`/api/scan/${taskId}/results`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 this.results = await resp.json();
             } catch (e) { console.error('获取结果失败', e); }
 
             // 连接 WebSocket（如果任务还在运行）
             if (this.currentTask && ['pending', 'running'].includes(this.currentTask.status)) {
                 this.connectWS(taskId);
+            } else if (this.ws) {
+                // 切换到已结束的任务：断开旧连接，避免继续接收旧任务事件
+                this.ws.onclose = null;
+                this.ws.close();
+                this.ws = null;
+            }
+        },
+
+        destroy() {
+            // 组件销毁（页面卸载）时关闭连接，避免悬挂 socket
+            if (this.ws) {
+                this.ws.onclose = null;
+                this.ws.close();
+                this.ws = null;
+            }
+            // 清理轮询定时器：重复 init（HMR/多 Alpine 根）不得叠加 5s 轮询
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+                this.refreshTimer = null;
             }
         },
 
         downloadReport(fmt) {
-            if (!this.selectedTaskId) return;
+            // 仅允许后端支持的报告格式（防调用方传入未支持值拼出意外 URL）
+            const supported = ['html', 'json', 'csv', 'pdf', 'docx', 'xlsx'];
+            if (!this.selectedTaskId || !supported.includes(fmt)) return;
             window.open(`/api/report/${this.selectedTaskId}/${fmt}`, '_blank');
         },
 

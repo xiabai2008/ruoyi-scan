@@ -72,10 +72,10 @@ def actuator_links():
     """标准 Spring Boot Actuator HAL JSON（指纹识别强特征 + actuator_unauth 第一关）"""
     return {
         "_links": {
-            "self": {"href": "http://localhost:PORT/actuator", "templated": False},
-            "health": {"href": "http://localhost:PORT/actuator/health", "templated": False},
-            "env": {"href": "http://localhost:PORT/actuator/env", "templated": False},
-            "heapdump": {"href": "http://localhost:PORT/actuator/heapdump", "templated": False},
+            "self": {"href": f"http://localhost:{PORT}/actuator", "templated": False},
+            "health": {"href": f"http://localhost:{PORT}/actuator/health", "templated": False},
+            "env": {"href": f"http://localhost:{PORT}/actuator/env", "templated": False},
+            "heapdump": {"href": f"http://localhost:{PORT}/actuator/heapdump", "templated": False},
         }
     }
 

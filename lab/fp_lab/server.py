@@ -1,4 +1,4 @@
-# D5 误报率测试靶场：10 个非若依站点模拟
+# D5 误报率测试靶场：11 个非若依站点模拟
 #
 # 通过 FP_TARGET 环境变量切换返回不同页面（每个靶场一个端口，由 run_fp_test.py 启动多个实例）
 # 所有靶场都"确定不是若依"，扫描后断言：
@@ -6,11 +6,11 @@
 #   2. 即使误判，POC 不应 CONFIRMED
 import os
 
-from flask import Flask, Response
+from flask import Flask, Response, abort
 
 app = Flask(__name__)
 
-# 10 个靶场定义：(target_id, description)
+# 11 个靶场定义：(target_id, description)
 # 每个 target_id 对应一个非若依站点的特征页面
 TARGETS = {
     "blank": "纯空白页面",
@@ -31,6 +31,10 @@ def render(target_id):
     """返回指定靶场的响应内容"""
     if target_id == "blank":
         return "", "text/html"
+
+    if target_id == "soft_404":
+        # 软404靶场：根路径与非根路径都返回通用首页内容（由 index/subpath_handler 添加通配行为）
+        target_id = "generic_html"
 
     if target_id == "generic_html":
         return (
@@ -119,7 +123,9 @@ def render(target_id):
             "</body></html>"
         ), "text/html"
 
-    return "<html>404</html>", "text/html"
+    # 未知 target_id（拼写错误 / TARGETS 新增但 render 未同步）→ 显式 404 而非静默 200 页面：
+    # 200 会污染误报断言（"404" 文本页被当作正常站点内容），也与 subpath_handler 的 404 行为不一致
+    abort(404)
 
 
 @app.route("/")

@@ -263,7 +263,7 @@ MODE_CATEGORIES = {
 
 ### 6.2 指纹回流给报告
 
-`runner.py` 里有一个模块级变量 `_LAST_DETECTED_FINGERPRINT`，通过 `_cli_event_handler()` 在收到 `fingerprint` 事件时捕获。作用：CLI 报告要写明"目标是什么 CMS / 什么版本"，而这个信息由 `core/orchestrator` 在扫描早期产生，需要跨层带到报告阶段。
+`runner.py` 在每次 `run_mode()` 调用内用闭包变量（`detected_fingerprint`）捕获指纹，由 `_cli_event_handler()` 在收到 `fingerprint` 事件时写入。作用：CLI 报告要写明"目标是什么 CMS / 什么版本"，而这个信息由 `core/orchestrator` 在扫描早期产生，需要跨层带到报告阶段。
 
 ---
 

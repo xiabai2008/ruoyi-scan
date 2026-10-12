@@ -57,25 +57,29 @@
 .md-typeset .rs-tri .confirmed {
   background: rgba(244, 67, 54, 0.15);
   border: 1px solid rgba(244, 67, 54, 0.6);
-  color: #e53935;
+  color: #c62828; /* 浅色底加深红：原 #e53935 对比度不足 WCAG AA */
 }
 .md-typeset .rs-tri .safe {
   background: rgba(76, 175, 80, 0.12);
   border: 1px solid rgba(76, 175, 80, 0.55);
-  color: #43a047;
+  color: #2e7d32; /* 浅色底加深绿：原 #43a047 对比度不足 WCAG AA */
 }
 .md-typeset .rs-tri .unknown {
   background: rgba(158, 158, 158, 0.12);
   border: 1px solid rgba(158, 158, 158, 0.55);
-  color: #9e9e9e;
+  /* 主题自适应变量：暗色底上自动取浅色前景，避免固定灰色不可读 */
+  color: var(--md-default-fg-color--light);
+}
+
+/* 暗色主题（Material slate）：浅色底用的深色在深底上对比度不足，改用高亮色系 */
+[data-md-color-scheme="slate"] .md-typeset .rs-tri .confirmed {
+  color: #ef9a9a;
+}
+[data-md-color-scheme="slate"] .md-typeset .rs-tri .safe {
+  color: #a5d6a7;
 }
 
 /* 代码块圆角微调 */
 .md-typeset .highlight pre {
   border-radius: 0.4rem;
-}
-
-/* Windows 提示避免 material 警告色冲突 */
-.md-typeset table:not([class]) th {
-  min-width: 4rem;
 }

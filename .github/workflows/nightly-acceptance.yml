@@ -27,6 +27,8 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
+          cache: pip  # pip 缓存：nightly 免去重复下载依赖，降低 PyPI 抖动影响
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
@@ -56,9 +58,13 @@ jobs:
           python lab/run_acceptance.py \
             --baseline data/acceptance_baseline.json \
             --output acceptance.json
-          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          gate=$?
+          echo "exit=$gate" >> "$GITHUB_OUTPUT"
           set -e
           cat acceptance.json
+          # 门禁失败必须让本 step/job 变红：否则最后一条 cat 成功会吞掉退出码，
+          # 工作流显示绿色、不触发 failure 通知（只有建 issue 一条信号）。
+          exit $gate
 
       - name: Upload acceptance report
         if: always()
@@ -75,6 +81,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create acceptance --color D93F0B --description "Nightly 验收失败" --force
+          # 去重：同一持续失败只保留一个 open issue，避免每晚刷屏
+          existing=$(gh issue list --label acceptance --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "已存在 open issue #$existing，跳过创建"
+            exit 0
+          fi
           gh issue create \
             --title "Nightly 验收失败（$(date -u +%Y-%m-%d)）" \
             --label "acceptance" \

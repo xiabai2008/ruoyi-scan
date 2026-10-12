@@ -33,8 +33,10 @@ jobs:
           echo "等待提交 ${sha} 的 CI 运行结果..."
           run_id=""
           for i in $(seq 1 40); do  # 最多 10 分钟等待 CI 出现
+            # 在 jq 内取第一个匹配项：`| head -n1` 会在多条运行时提前关闭管道，
+            # 触发 pipefail 使整段 errexit 失败（强推 tag 产生第二次 CI 运行时会命中）
             run_id=$(gh api "repos/${repo}/actions/runs?head_sha=${sha}" \
-              --jq '.workflow_runs[] | select(.name == "Ruoyi-Scan CI") | .id' | head -n1)
+              --jq '[.workflow_runs[] | select(.name == "Ruoyi-Scan CI") | .id][0] // empty')
             [ -n "$run_id" ] && break
             sleep 15
           done

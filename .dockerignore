@@ -2,28 +2,46 @@
 .git/
 .gitignore
 .trae-cn/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
+
+# Python 缓存/字节码（**/ 前缀匹配任意层级；裸模式仅匹配构建上下文根）
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/*.egg-info/
 
 # 报告输出目录（运行时由 volume 挂载）
 reports/
 reports_phase6/
 
-# lab 靶场与遗留实验产物（scanner 不需要）
-lab/
-lab/Dockerfile
-lab/docker-compose.yml
-lab/requirements.txt
-lab/*.log
-lab/build*.log
-lab/maven388.tar.gz
-lab/real-ruoyi/
-lab/tools/
-lab/*.md
+# lab 靶场与遗留实验产物：整树排除，仅保留 lib/ai_validate.py 进程内验证所需的 lab/server.py
+# （--ai-validate 在镜像内 import lab.server；其 flask 依赖已包含在 requirements.txt 中）
+lab/*
+!lab/server.py
+
+# 本地机密/凭据（防御性排除：避免 COPY . . 把机密烘焙进镜像层）
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.p12
+**/*credentials*
+**/id_rsa*
+
+# 本地依赖目录/前端产物（镜像内由 pip 重新安装依赖，无需复制）
+**/.venv/
+**/venv/
+**/env/
+**/node_modules/
+
+# 运行时/本地产物
+**/*.log
+**/*.tmp
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
 
 # 临时文件
-*.tmp
 COMMIT_*.txt

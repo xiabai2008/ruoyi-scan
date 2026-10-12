@@ -69,6 +69,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 # ── 路径常量 ────────────────────────────────────────────────────
 HERE = Path(__file__).resolve().parent
@@ -292,7 +293,8 @@ def stage_check(args) -> None:
     """确认各版本配置结构一致、且运行时可被命令行覆盖。
 
     设计决策：**不把端口与数据库凭据改写进 jar**，改为启动时用 Spring Boot 命令行
-    参数覆盖（命令行优先级高于 application.yml）。好处：
+    参数覆盖端口/URL/账号，密码单独经环境变量 SPRING_DATASOURCE_DRUID_MASTER_PASSWORD
+    传入（优先级同样高于 application.yml，且不会出现在进程列表）。好处：
       - 凭据变化无需重新编译（编译是全流程最慢的一步）；
       - 各版本源码保持原样，便于对照与复现；
       - 4 个版本共用同一份编译产物形态。
@@ -315,7 +317,7 @@ def stage_check(args) -> None:
 
 
 # ── 阶段 3：Maven 编译 ──────────────────────────────────────────
-def find_jar(tag: str) -> Path:
+def find_jar(tag: str) -> Optional[Path]:
     root = SRC_DIR / tag
     jars = sorted((root / "ruoyi-admin/target").glob("ruoyi-admin*.jar"))
     jars = [j for j in jars if not j.name.endswith(".original")]
@@ -461,18 +463,22 @@ def stage_dbstart(args) -> None:
         )
     log(f"启动独立 MySQL（端口 {LOCAL_DB_PORT}）...")
     logf = open(LOG_DIR / "mysql.console.log", "a", encoding="utf-8", errors="replace")
-    subprocess.Popen(
-        [
-            str(MYSQLD_BIN),
-            f"--datadir={MYSQL_DATA_DIR}",
-            f"--basedir={MYSQLD_BIN.parent.parent}",
-            f"--port={LOCAL_DB_PORT}",
-            "--bind-address=127.0.0.1",
-            "--console",
-        ],
-        stdout=logf,
-        stderr=subprocess.STDOUT,
-    )
+    try:
+        subprocess.Popen(
+            [
+                str(MYSQLD_BIN),
+                f"--datadir={MYSQL_DATA_DIR}",
+                f"--basedir={MYSQLD_BIN.parent.parent}",
+                f"--port={LOCAL_DB_PORT}",
+                "--bind-address=127.0.0.1",
+                "--console",
+            ],
+            stdout=logf,
+            stderr=subprocess.STDOUT,
+        )
+    finally:
+        # 子进程持有自己的句柄副本；父进程句柄立即关闭，避免调用方泄漏 fd
+        logf.close()
     deadline = time.time() + 120
     while time.time() < deadline:
         if _pid_listening_on(LOCAL_DB_PORT):
@@ -522,21 +528,29 @@ def stage_start(args) -> None:
             raise SystemExit(f"{v['tag']} 无编译产物，请先执行 build")
         jdk_home = JDK_ROOT / v["jdk"]
         log(f"{v['tag']}: 启动（port={v['port']}, db={v['db']}）")
-        # 端口与数据源均在命令行覆盖：优先级高于 application.yml，无需重新编译 jar
+        # 端口/URL/账号走命令行覆盖；密码不走命令行（进程列表可见）——
+        # 经 SPRING_DATASOURCE_DRUID_MASTER_PASSWORD 环境变量传入，由 Spring Boot 绑定
         overrides = [
             f"--server.port={v['port']}",
             f"--spring.datasource.druid.master.url={jdbc_url(args, v)}",
             f"--spring.datasource.druid.master.username={args.db_user}",
-            f"--spring.datasource.druid.master.password={args.db_password}",
         ]
         logf = open(LOG_DIR / f"{v['tag']}.app.log", "a", encoding="utf-8", errors="replace")
-        proc = subprocess.Popen(
-            [str(jdk_home / "bin/java.exe"), "-jar", str(jar), *overrides],
-            cwd=str(SRC_DIR / v["tag"]),
-            env={**os.environ, "JAVA_HOME": str(jdk_home)},
-            stdout=logf,
-            stderr=subprocess.STDOUT,
-        )
+        try:
+            proc = subprocess.Popen(
+                [str(jdk_home / "bin/java.exe"), "-jar", str(jar), *overrides],
+                cwd=str(SRC_DIR / v["tag"]),
+                env={
+                    **os.environ,
+                    "JAVA_HOME": str(jdk_home),
+                    "SPRING_DATASOURCE_DRUID_MASTER_PASSWORD": args.db_password,
+                },
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+            )
+        finally:
+            # 父进程不再需要该句柄（子进程持有自己的副本），立即关闭避免 fd 泄漏
+            logf.close()
         pid_file(v["tag"]).write_text(str(proc.pid), encoding="utf-8")
 
         deadline = time.time() + args.start_timeout
@@ -612,7 +626,7 @@ def stage_matrix(args) -> None:
     rows = []
     per_version = {}
 
-    for v in VERSIONS:
+    for v in select_versions(args):
         rep = load_report(v["tag"])
         if rep is None:
             log(f"{v['tag']}: 无扫描报告，跳过")

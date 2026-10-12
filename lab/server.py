@@ -7,6 +7,7 @@
 # 用于验证扫描器「匹配逻辑」是否正确，不属于真实攻击环境。
 import json
 import os
+import threading
 import time
 
 from flask import Flask, Response, request
@@ -34,8 +35,11 @@ DRUID_OK_PASSWORDS = {"ruoyi", "123456", "admin123", "druid"}
 
 # /monitor/job 的有状态存储：job_invoke_target 插件的判定流程是
 # 「读列表 → 写 edit → 回读确认写入生效 → 还原 → 二次确认」，
-# 靶场必须跨请求记住 invokeTarget/status，回读才能反映写入结果（模拟服务端持久化）
+# 靶场必须跨请求记住 invokeTarget/status，回读才能反映写入结果（模拟服务端持久化）。
+# Flask 开发服务器默认多线程，所有访问都在 _JOB_LOCK 内串行化，避免两个并发
+# 扫描的读-改-写交错；跨请求的「写→回读」序列仍需扫描器侧串行（共享同一存储）。
 _JOB_STORE = {"invokeTarget": "ryTask.ryParams('ruoyi')", "status": "0"}
+_JOB_LOCK = threading.Lock()
 
 # Step 8 POC 签名 marker 已于 D4 改造（2026-07-18）删除：
 # nacos_unauth / file_read_path 改为真实响应特征判定，不再依赖魔法常量
@@ -315,15 +319,10 @@ def dispatch(path, method):
 
     # 任意文件读取（file_read + file_read_time 读取落地文件 2.txt）
     # Step 8 新增 file_read_path：resource 参数以 ../ 开头（相对路径穿越探针）
-    #   按 resource 查询参数分流：../ 前缀 → 路径穿越签名；其余 → 原 /etc/passwd 特征
-    #   注意：query 参数不影响 request.path 路径匹配，需在端点内读取 request.args 区分
+    #   三个探针共用此端点，响应体一致（含 root 与 :/ 的真实 /etc/passwd 特征），
+    #   resource 查询参数不影响判定，无需分流
     if path == "/common/download/resource":
         if vuln:
-            resource = request.args.get("resource", "")
-            if resource.startswith("../"):
-                # D4 改造：file_read_path 探针返回真实 /etc/passwd 内容（含 root + 系统账户）
-                return Response(PASSWD, mimetype="text/plain; charset=utf-8")
-            # file_read / file_read_time 探针：返回含 root 与 :/ 的 /etc/passwd 特征
             return Response(PASSWD, mimetype="text/plain; charset=utf-8")
         return whitelabel_404()
 
@@ -331,16 +330,17 @@ def dispatch(path, method):
     if path == "/monitor/job/list":
         if vuln:
             # job_invoke_target 的判定依赖「写入后回读可见」，故回传有状态存储
-            rows = [
-                {
-                    "jobId": 1,
-                    "jobName": "系统默认备份任务",
-                    "jobGroup": "DEFAULT",
-                    "invokeTarget": _JOB_STORE["invokeTarget"],
-                    "cronExpression": "0/10 * * * * ?",
-                    "status": _JOB_STORE["status"],
-                }
-            ]
+            with _JOB_LOCK:
+                rows = [
+                    {
+                        "jobId": 1,
+                        "jobName": "系统默认备份任务",
+                        "jobGroup": "DEFAULT",
+                        "invokeTarget": _JOB_STORE["invokeTarget"],
+                        "cronExpression": "0/10 * * * * ?",
+                        "status": _JOB_STORE["status"],
+                    }
+                ]
             return json_body({"code": 200, "rows": rows, "total": len(rows)})
         return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/monitor/job/edit":
@@ -349,8 +349,9 @@ def dispatch(path, method):
             # job_invoke_target 的判据是「载荷被接受且回读可见」——白名单缺失即漏洞本身。
             auth = request.headers.get("Authorization", "")
             if auth.startswith("Bearer ") and auth[7:]:
-                _JOB_STORE["invokeTarget"] = request.form.get("invokeTarget", _JOB_STORE["invokeTarget"])
-                _JOB_STORE["status"] = request.form.get("status", _JOB_STORE["status"])
+                with _JOB_LOCK:
+                    _JOB_STORE["invokeTarget"] = request.form.get("invokeTarget", _JOB_STORE["invokeTarget"])
+                    _JOB_STORE["status"] = request.form.get("status", _JOB_STORE["status"])
                 return json_body({"code": 200, "msg": "操作成功"})
             # 未授权进入业务层：code=500 业务校验失败，证明绕过鉴权（job_rce 判定依据，保持不变）
             return json_body({"code": 500, "msg": "定时任务不存在"})
@@ -555,7 +556,10 @@ def dispatch(path, method):
     # 登录：POST /prod-api/auth/login（JSON）→ 按账号发不同权限 token
     if path == "/prod-api/auth/login":
         if method == "POST":
-            body = request.get_json(silent=True) or {}
+            body = request.get_json(silent=True)
+            # 非 dict 的合法 JSON（数组/字符串/数字）曾穿过 `or {}` 兜底，在 .get 处抛 500
+            if not isinstance(body, dict):
+                body = {}
             user, pwd = body.get("username", ""), body.get("password", "")
             if user == "admin" and pwd == "admin123":
                 return json_body({"code": 200, "msg": "操作成功", "token": "admin-token"})

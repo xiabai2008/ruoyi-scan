@@ -128,19 +128,21 @@ python lab/version_matrix/run_matrix.py run
 
 ## 设计决策
 
-**1. 端口与数据库凭据不写进 jar，启动时用命令行覆盖**
+**1. 端口与数据库凭据不写进 jar，启动时用命令行/环境变量覆盖**
 
 启动参数形如：
 
 ```
+SPRING_DATASOURCE_DRUID_MASTER_PASSWORD=*** \
 java -jar ruoyi-admin.jar \
   --server.port=18102 \
   --spring.datasource.druid.master.url=jdbc:mysql://127.0.0.1:3306/ry_matrix_480?... \
-  --spring.datasource.druid.master.username=root \
-  --spring.datasource.druid.master.password=***
+  --spring.datasource.druid.master.username=root
 ```
 
-Spring Boot 中命令行参数优先级高于 `application.yml`。好处：
+密码不走命令行（`ps` / 任务管理器可见），单独经 `SPRING_DATASOURCE_DRUID_MASTER_PASSWORD`
+环境变量传入，由 Spring Boot 宽松绑定映射到 `spring.datasource.druid.master.password`。
+命令行参数与环境变量的优先级均高于 `application.yml`。好处：
 
 - **凭据变化无需重新编译**（编译是全流程最慢的一步，且需要下载依赖）
 - 各版本源码保持原样，便于对照上游与复现

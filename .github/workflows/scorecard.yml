@@ -15,10 +15,17 @@ on:
 
 permissions: read-all
 
+# 并发控制：同一 ref 的 push/schedule/dispatch run 互相取消。评分幂等，取消旧 run 可避免
+# 重叠占用 runner，以及并发发布 OSSF 结果时的竞态。
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       security-events: write  # 上传 SARIF 到 Code Scanning
       id-token: write         # 发布结果到 OSSF 公共 API（OIDC）
@@ -39,7 +46,7 @@ jobs:
           publish_results: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SARIF file
           path: results.sarif

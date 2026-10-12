@@ -34,8 +34,7 @@
         "RuoYi-Cloud Nacos 配置泄露",
         "RuoYi Swagger 未授权访问",
         "RuoYi 代码生成模块 SSTI"
-      ],
-      "expected_safe": []
+      ]
     },
     {
       "name": "lab-ruoyi-safe",

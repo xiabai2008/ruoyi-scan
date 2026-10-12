@@ -70,16 +70,17 @@ def start_lab(lab_module, lab_port, lab_mode):
     return proc
 
 
-def run_scan(target, mode, report_dir):
+def run_scan(target, mode, report_dir, timeout):
     """调用 main.py 扫描目标并输出报告到 report_dir
 
     Args:
         mode: 扫描模式字符 'u'/'p'/'m'/'l'（对应 main.py 的 -u/-p/-m/-l）
+        timeout: 扫描超时秒数，超时 kill 子进程并抛 subprocess.TimeoutExpired
     """
     cmd = [sys.executable, "main.py", f"-{mode}", target, "--report", report_dir]
     print(f"[run_scan] {' '.join(cmd)}")
     # stdin=DEVNULL：避免 main.py 末尾 final_prompt() 的 input() 在 CI 非交互环境卡住
-    subprocess.run(cmd, cwd=REPO_ROOT, check=True, stdin=subprocess.DEVNULL)
+    subprocess.run(cmd, cwd=REPO_ROOT, check=True, stdin=subprocess.DEVNULL, timeout=timeout)
 
 
 def check_report(json_path, name, min_confirmed, require_all, allow_safe_names=None):
@@ -130,7 +131,12 @@ def main(argv=None):
     )
     p.add_argument("--report-dir", required=True, help="报告输出目录（生成 report.json 等）")
     p.add_argument("--name", required=True, help="标签（日志/失败时显示）")
-    p.add_argument("--min-confirmed", type=int, default=0, help="CONFIRMED 数量下限（默认 0；真实靶场用此断言）")
+    p.add_argument(
+        "--min-confirmed",
+        type=int,
+        default=None,
+        help="CONFIRMED 数量下限（与 --require-all-confirmed 至少需提供一项，否则断言无意义）",
+    )
     p.add_argument(
         "--require-all-confirmed",
         action="store_true",
@@ -143,7 +149,13 @@ def main(argv=None):
         help="SAFE/UNKNOWN 豁免插件名（逗号分隔；如签名靶场未部署的中间件插件）",
     )
     p.add_argument("--timeout", type=int, default=30, help="等待端口可达的超时秒数")
+    p.add_argument("--scan-timeout", type=int, default=1800, help="单次 main.py 扫描的超时秒数（默认 1800）")
     a = p.parse_args(argv)
+
+    # 断言门禁二选一：默认全开会让任何 report.json 都 PASS（假绿），故启动即拒绝
+    min_confirmed = a.min_confirmed or 0
+    if min_confirmed <= 0 and not a.require_all_confirmed:
+        p.error("断言缺失：请提供 --min-confirmed（>0）或 --require-all-confirmed，二者至少其一")
 
     proc = None
     try:
@@ -157,7 +169,7 @@ def main(argv=None):
             print(f"[{a.name}] FAIL: 端口 {host}:{port} 在 {a.timeout}s 内不可达")
             return 1
 
-        run_scan(a.target, a.mode, a.report_dir)
+        run_scan(a.target, a.mode, a.report_dir, a.scan_timeout)
 
         json_path = os.path.join(a.report_dir, "report.json")
         if not os.path.isfile(json_path):
@@ -165,8 +177,11 @@ def main(argv=None):
             return 1
 
         allow_safe = [n.strip() for n in (a.allow_safe or "").split(",") if n.strip()]
-        ok = check_report(json_path, a.name, a.min_confirmed, a.require_all_confirmed, allow_safe_names=allow_safe)
+        ok = check_report(json_path, a.name, min_confirmed, a.require_all_confirmed, allow_safe_names=allow_safe)
         return 0 if ok else 1
+    except subprocess.TimeoutExpired:
+        print(f"[{a.name}] FAIL: 扫描超时（>{a.scan_timeout}s），main.py 已被终止")
+        return 1
     except subprocess.CalledProcessError as e:
         print(f"[{a.name}] FAIL: 扫描进程异常退出 (returncode={e.returncode})")
         return 1
@@ -175,8 +190,17 @@ def main(argv=None):
             proc.terminate()
             try:
                 proc.wait(timeout=5)
-            except Exception:
+            except subprocess.TimeoutExpired:
+                # SIGTERM 无效 → 强杀并回收，避免僵尸进程（原实现 kill 后不 wait）
+                print(f"[{a.name}] 靶场进程 5s 未退出，强制 kill")
                 proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"[{a.name}] WARN: 靶场进程 kill 后仍未回收")
+            except Exception as e:
+                # 清理失败不应掩盖断言结果，但必须可见（原实现静默丢弃）
+                print(f"[{a.name}] WARN: 靶场进程清理异常：{e}")
 
 
 if __name__ == "__main__":

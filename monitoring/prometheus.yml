@@ -21,6 +21,5 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-# 告警规则（可选，文件存在时加载）
-rule_files:
-  - /etc/prometheus/rules/*.yml
+# 告警规则（可选）：仓库未提供规则文件，docker-compose.yml 也未挂载 rules 目录，
+# 因此不声明 rule_files（避免「配置了但永不加载」的虚假监控覆盖）；需要时补规则并挂载目录

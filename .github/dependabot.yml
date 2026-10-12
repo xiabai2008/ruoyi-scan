@@ -15,6 +15,16 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
+  # 靶场依赖（lab/requirements.txt，独立依赖集，此前未被 Dependabot 覆盖）
+  - package-ecosystem: pip
+    directory: "/lab"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
   # GitHub Actions 版本
   - package-ecosystem: github-actions
     directory: "/"
@@ -25,3 +35,9 @@ updates:
     labels:
       - dependencies
       - ci
+    # 与 pip 保持一致：minor/patch 合并为单个 PR，避免一批 Actions 小版本各自开 PR
+    # 挤占 open-pull-requests-limit 配额（major 仍单独开 PR 供人工评估）
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

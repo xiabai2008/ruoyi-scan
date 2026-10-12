@@ -103,7 +103,11 @@ class RuoYiLowPriv:
     USERNAME = os.environ.get("RUOYI_SCAN_LOWPRIV_USER", "scanner_low")
     PASSWORD = os.environ.get("RUOYI_SCAN_LOWPRIV_PASS", "LowPriv_2026")
     # 越权探测的目标用户（默认超管自身：普通账号的数据范围必然不含它）
-    TARGET_USER_ID = int(os.environ.get("RUOYI_SCAN_LOWPRIV_TARGET", "1"))
+    try:
+        # 空/非数字的环境变量回退默认值：解析发生在 import 期，抛 ValueError 会让整个工具无法启动
+        TARGET_USER_ID = int(os.environ.get("RUOYI_SCAN_LOWPRIV_TARGET", "1") or "1")
+    except ValueError:
+        TARGET_USER_ID = 1
 
 
 # WAF 绕过配置（D7 阶段）

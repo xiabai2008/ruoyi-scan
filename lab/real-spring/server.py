@@ -26,8 +26,12 @@ def json_body(d, code=200):
 
 
 def html_body(body, code=200):
-    """构造 HTML 响应（如 H2 Console 登录页）"""
-    return Response(body, status=code, mimetype="text/html; charset=utf-8")
+    """构造 HTML 响应（如 H2 Console 登录页）
+
+    用 content_type 而非 mimetype：mimetype 是「不含 charset 的类型」，Werkzeug 会对
+    text/* 再追加一次 charset，导致 Content-Type 出现两个 charset=utf-8。
+    """
+    return Response(body, status=code, content_type="text/html; charset=utf-8")
 
 
 def binary_body(data, code=200):
@@ -276,8 +280,14 @@ def _route(p):
     if path == "/actuator/heapdump":
         return binary_body(heapdump_binary())
 
+    # GET /actuator/gateway/routes → 真实路由列表（HAL _links 披露的地址本身可访问，
+    # 返回 JSON 数组；真实 gateway-enabled actuator 在该地址即返回路由列表）
+    if path == "/actuator/gateway/routes" and method == "GET":
+        return json_body([gateway_route_created()])
+
     # POST /actuator/gateway/routes/test → 真实 201 Created 响应
-    if path.startswith("/actuator/gateway/routes/"):
+    # 仅 POST 才是创建路由：GET/DELETE 等按真实 Spring Cloud Gateway 行为落到下方 404
+    if path.startswith("/actuator/gateway/routes/") and method == "POST":
         return json_body(gateway_route_created(), code=201)
 
     # GET /actuator/jolokia/list → 真实 Jolokia LIST 响应

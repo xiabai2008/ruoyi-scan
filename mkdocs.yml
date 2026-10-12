@@ -82,6 +82,8 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
+        # Material 8.2+ 会在页面出现 mermaid 代码块时自动注入运行时，无需 extra_javascript
+        # （当前 docs/ 暂无 mermaid 图；新增时注意与 minify_html 的相互作用，见 plugins 段注释）
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
@@ -97,6 +99,8 @@ markdown_extensions:
 
 plugins:
   - search
+  # minify_html 压缩 HTML 空白；mermaid 语法对换行敏感，将来新增 mermaid 图时
+  # 需先验证渲染结果，必要时改为 minify_html: false
   - minify:
       minify_html: true
 

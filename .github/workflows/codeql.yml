@@ -1,5 +1,6 @@
 # CodeQL 静态代码分析（G4 信任建设：Scorecard SAST 项 + Code Scanning 闭环）
-# Python 无需编译，build-mode 默认 none；告警进 Security 标签页（不阻塞 CI）
+# Python 无需编译，build-mode 默认 none；分析告警只进 Security 标签页，不会因「发现告警」让 CI 变红。
+# 注意：这不等于本 workflow 永不阻塞——Init/Analyze 步骤自身报错或超时仍会使 job 失败。
 name: CodeQL
 
 on:
@@ -10,6 +11,12 @@ on:
   schedule:
     - cron: '17 3 * * 0'  # 每周日 03:17 UTC
 
+# 并发控制：按「事件 + ref」分组——推送/PR 的新 run 取消同组旧 run，
+# 但 schedule（每周定时，ref 同为 main）独立成组，不会被 push 取消。
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 permissions:
   contents: read
 
@@ -18,6 +25,10 @@ jobs:
     name: Analyze (python)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # fork/外部 PR 的 GITHUB_TOKEN 为只读，security-events: write 无法授予，
+    # analyze 会在 SARIF 上传阶段必失败（Resource not accessible by integration）→ 跳过外部 PR。
+    # 同仓库分支（含 Dependabot）不受影响，正常扫描。
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       security-events: write  # 上传分析结果到 Code Scanning
       packages: read          # CodeQL 查询包拉取

@@ -30,7 +30,8 @@ services:
     build: .
     command: --serve --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      # 宿主仅绑定回环：与 lab/监控端口同一收口策略，避免未设 API Key 时暴露到局域网
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data          # SQLite 持久化
       - ./reports:/app/reports    # 报告目录共享
@@ -96,7 +97,8 @@ services:
       - monitor
 
   # D16 Grafana 监控面板（仅 monitor profile 启用）
-  # 安全收口：默认密码 admin 且允许匿名查看，宿主端口仅绑定 127.0.0.1 限制为本地访问
+  # 安全收口：宿主端口仅绑定 127.0.0.1；必须显式提供 GRAFANA_ADMIN_PASSWORD（无默认口令），
+  # 匿名访问保持 Grafana 默认关闭
   grafana:
     image: grafana/grafana:latest
     profiles: ["monitor"]
@@ -105,7 +107,9 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      # :? 语法：未设置或为空时 compose 直接报错，杜绝 admin/admin 默认凭据
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?required}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus

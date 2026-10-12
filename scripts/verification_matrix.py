@@ -20,7 +20,8 @@
   L3  lab/REAL-RUOYI.md      真实 RuoYi 4.7.8 编译运行 + VULN-REINTRODUCE 回退验证
   L2  lab/REAL-SPRING.md     真实漏洞响应特征靶场（明确声明「不含扫描器约定的 marker」）
   L1  tests/regression_*.py  签名靶场对拍用例；lab/server.py 的端点
-  断言 tests/**/*.py         该测试函数内是否真的调用了 verify()
+  引用 tests/**/*.py         模块名/类名是否出现在测试源码中（粗筛：可能高估，
+                             未做「测试函数内真的调用 verify()」的精确分析）
   误报 tests/test_fp_baseline.py 的 KNOWN_FALSE_POSITIVES 登记项
 
 用法：
@@ -29,6 +30,7 @@
 """
 
 import argparse
+import ast
 import glob
 import os
 import re
@@ -112,7 +114,7 @@ def _parse_meta(src: str) -> Dict[str, str]:
         m = re.search(rf'^\s+{key}\s*=\s*(?:["\']([^"\']*)["\']|([A-Za-z_][A-Za-z0-9_]*))', src, re.M)
         if not m:
             continue
-        value = m.group(1) or m.group(2)
+        value = m.group(1) if m.group(1) is not None else m.group(2)
         if key == "severity" and value.upper().startswith("SEVERITY_"):
             value = value[len("SEVERITY_") :].lower()
         meta[key] = value
@@ -128,15 +130,38 @@ def _test_bodies() -> str:
 
 
 def _known_false_positives() -> Set[str]:
-    """误报基线测试中登记的已知误报插件（是明确的技术债，不是通过项）"""
+    """误报基线测试中登记的已知误报插件（是明确的技术债，不是通过项）
+
+    用 AST 解析字面量而非正则匹配源码格式：单行/多行、引号风格都可解析，
+    解析失败显式告警——避免格式变化时静默返回空集、把已知误报当成干净。
+    """
     path = os.path.join(PROJECT_ROOT, "tests", "test_fp_baseline.py")
     if not os.path.exists(path):
         return set()
     src = open(path, encoding="utf-8", errors="ignore").read()
-    m = re.search(r"KNOWN_FALSE_POSITIVES\s*[:=][^=]*?[={]\s*(.*?)\n\}", src, re.S)
-    if not m:
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        print(f"[!]无法解析 {path}: {e}", file=sys.stderr)
         return set()
-    return set(re.findall(r'["\']([A-Za-z0-9_]+)["\']', m.group(1)))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "KNOWN_FALSE_POSITIVES" for t in node.targets):
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except (ValueError, SyntaxError) as e:
+            print(f"[!]KNOWN_FALSE_POSITIVES 不是可解析的字面量: {e}", file=sys.stderr)
+            return set()
+        if isinstance(value, dict):
+            return {str(k) for k in value}
+        if isinstance(value, (set, list, tuple)):
+            return {str(v) for v in value}
+        print("[!]KNOWN_FALSE_POSITIVES 类型无法识别（应为 dict/set），按空集处理", file=sys.stderr)
+        return set()
+    print("[!]未找到 KNOWN_FALSE_POSITIVES 定义，按空集处理", file=sys.stderr)
+    return set()
 
 
 def build_rows() -> List[Dict[str, object]]:

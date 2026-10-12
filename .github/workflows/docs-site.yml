@@ -29,10 +29,11 @@ on:
 permissions:
   contents: read
 
-# 同一时间只跑一个部署，取消排队中的旧运行
+# 同一时间只跑一个部署；不取消进行中的部署（GitHub Pages 官方建议，避免已开始的发布被中断），
+# 排队中的旧运行由同组"仅保留一个待运行"机制自动替换
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,14 +48,11 @@ jobs:
           python-version: '3.12'
 
       - name: Install mkdocs-material
-        run: pip install mkdocs-material mkdocs-minify-plugin
+        run: pip install mkdocs-material==9.7.7 mkdocs-minify-plugin==0.8.0
 
       - name: Build site
         run: mkdocs build --strict --site-dir site --verbose
 
-      # README/CHANGELOG/ROADMAP/CONTRIBUTING 被 nav 以 ../ 引用，
-      # mkdocs strict 模式要求它们在 docs_dir 内或以绝对路径复制；
-      # 此处采用"构建前软链进 docs/"的方案（保持仓库根文件原位，供 GitHub 渲染）
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: site

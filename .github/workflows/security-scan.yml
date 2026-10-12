@@ -13,13 +13,26 @@ on:
     # 每周一凌晨 2 点（UTC 18:00 = Beijing 02:00）
     - cron: '0 18 * * 1'
 
+# 并发控制：同一事件 + ref 的新 run 取消同组旧 run，避免 PR 连推时多实例竞争
+# security-events 上传；schedule（ref 同为 main）独立成组，不被 push/PR 取消
+concurrency:
+  group: security-scan-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write  # SARIF 上传 Code Scanning
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.actor != 'dependabot[bot]') }}
+    # 排除 fork PR：fork 拿不到 SCAN_TARGET secret（扫描无目标）且 GITHUB_TOKEN 只读
+    # （upload-sarif 必失败），放行只会给外部贡献者一个永远失败的检查项。
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -27,6 +40,8 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
+          cache: pip  # pip 缓存：免去每周扫描重复下载依赖
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
@@ -44,7 +59,8 @@ jobs:
             --components
 
       - name: Upload SARIF to GitHub Code Scanning
-        if: always()
+        # 仅当扫描产出了 SARIF 时才上传，避免文件缺失在原始失败之上叠加第二个噪声失败
+        if: always() && hashFiles('reports/report.sarif') != ''
         uses: github/codeql-action/upload-sarif@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3
         with:
           sarif_file: reports/report.sarif

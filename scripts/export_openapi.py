@@ -13,8 +13,9 @@ import json
 import os
 import sys
 
-# 确保项目根目录在 sys.path 中
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 确保项目根目录在 sys.path 中（追加而非插到最前：避免本地模块遮蔽 stdlib/site-packages，
+# 如 email/logging 等同名包会优先命中项目文件导致难排查的导入失败）
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.app import create_app  # noqa: E402
 

@@ -10,13 +10,15 @@ __pycache__/
 .pytest_cache/
 
 # 运行时数据库（扫描缓存 + 任务持久化，按需生成）
+# 同时覆盖 SQLite 侧车文件（WAL/回滚日志：<db>-wal / <db>-shm / <db>-journal）
 data/*.db
+data/*.db-*
 # 保留 data 目录但排除 db 文件（用 .gitkeep 占位）
 !data/.gitkeep
 
-# 构建产物
-build/
-dist/
+# 构建产物（锚定仓库根：嵌套 build/dist 不再被误忽略，桌面端产物见下方单独条目）
+/build/
+/dist/
 *.whl
 
 # 开发文档与 AI 提示词（不纳入版本库）
@@ -34,14 +36,14 @@ reports_phase6/
 # README 演示 GIF 制作中间产物（脚本与报告留本地，便于重新生成动图）
 demo_reports/
 
-# 本地虚拟环境
-venv/
-.venv/
-env/
+# 本地虚拟环境（锚定仓库根；desktop/engine/.venv-build/ 见桌面端条目）
+/venv/
+/.venv/
+/env/
 
-# 阶段九临时调试脚本与日志
-_p9_*.py
-_p9_*.log
+# 阶段九临时调试脚本与日志（仅仓库根目录；新脚本建议放 tmp/ 并整体忽略，避免按前缀静默吞掉源码）
+/_p9_*.py
+/_p9_*.log
 
 # 真实靶场源码（外部仓库，仅保留文档与复现脚本）
 lab/real-ruoyi/
@@ -67,7 +69,8 @@ lab/run-ruoyi.bat
 .ci_tmp/
 lab_*.log
 .coverage
-生成日期*
+# 构建脚本在仓库根生成的日期报告（不再匹配任意层级同名文件）
+/生成日期*
 
 # 桌面端构建产物（引擎冻结产物与 Tauri 产物均不入库，由 CI 构建）
 desktop/engine/.venv-build/
