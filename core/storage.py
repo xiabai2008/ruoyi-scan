@@ -40,10 +40,17 @@ class Storage:
         # 初始化表结构
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        """创建连接（统一入口）：SQLite 默认不启用外键，且 PRAGMA 是连接级设置，
+        必须在每个连接上打开，否则 events.task_id 的外键约束形同虚设"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
     def _init_db(self) -> None:
         """初始化表结构 + WAL 模式"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("""
@@ -93,7 +100,7 @@ class Storage:
         task_json = json.dumps(task_dict, ensure_ascii=False)
 
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 # 冲突时仅更新可变字段（状态/快照/结束时间），target 与 created_at 保持首次写入值
                 conn.execute(
@@ -113,10 +120,12 @@ class Storage:
 
     def save_event(self, task_id: str, event_type: str, payload: Any) -> None:
         """保存事件"""
-        payload_json = json.dumps(payload, ensure_ascii=False) if payload else "{}"
+        # 显式 None 判断：0/False/[]/'' 都是合法 payload，不能被当作空值丢成 {}；
+        # 真正缺省（None）仍存 {}，保持读取端 get_events 的默认形状
+        payload_json = json.dumps(payload, ensure_ascii=False) if payload is not None else "{}"
         ts = time.time()
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.execute(
                     """
@@ -132,7 +141,7 @@ class Storage:
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """查询单个任务"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
@@ -145,7 +154,7 @@ class Storage:
     def list_tasks(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """列出任务（按创建时间倒序）"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
@@ -158,7 +167,7 @@ class Storage:
     def get_events(self, task_id: str, limit: int = 500) -> List[Dict[str, Any]]:
         """查询任务的事件历史"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
@@ -179,7 +188,7 @@ class Storage:
     def delete_task(self, task_id: str) -> None:
         """删除任务 + 其事件"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.execute("DELETE FROM events WHERE task_id = ?", (task_id,))
                 conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
@@ -188,22 +197,36 @@ class Storage:
                 conn.close()
 
     def cleanup_expired(self, max_age_seconds: int = 86400) -> None:
-        """清理过期任务（默认 24 小时）"""
+        """清理过期任务（默认 24 小时）
+
+        保留期以「完成时间」为准（finished_at，缺失/未落盘时回退 created_at）：
+        长任务可能创建很久后才结束，按 created_at 清理会把它刚完成就删除，
+        而更早完成的旧任务却留在库里。0.0 是未完成的哨兵值，与 NULL 一样回退。
+        """
         cutoff = time.time() - max_age_seconds
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
-                # 删除旧任务的事件
+                # 删除旧任务的事件（保留期判定与 tasks 表保持完全一致）
                 conn.execute(
                     """
                     DELETE FROM events WHERE task_id IN (
-                        SELECT task_id FROM tasks WHERE created_at < ? AND status IN ('done', 'failed')
+                        SELECT task_id FROM tasks
+                        WHERE COALESCE(NULLIF(finished_at, 0), created_at) < ?
+                          AND status IN ('done', 'failed')
                     )
                 """,
                     (cutoff,),
                 )
                 # 只清理已结束任务：进行中/待执行任务即使超龄也不删除，避免丢失半程状态
-                conn.execute('DELETE FROM tasks WHERE created_at < ? AND status IN ("done", "failed")', (cutoff,))
+                conn.execute(
+                    """
+                    DELETE FROM tasks
+                    WHERE COALESCE(NULLIF(finished_at, 0), created_at) < ?
+                      AND status IN ('done', 'failed')
+                """,
+                    (cutoff,),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -211,7 +234,7 @@ class Storage:
     def count_tasks(self) -> int:
         """任务总数"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
                 return row[0] if row else 0
@@ -225,7 +248,7 @@ class Storage:
     ) -> None:
         """保存/更新定时扫描任务（upsert）"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.execute(
                     """
@@ -244,7 +267,7 @@ class Storage:
     def list_schedules(self) -> List[Dict[str, Any]]:
         """列出全部定时扫描任务"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT * FROM schedules ORDER BY created_at ASC").fetchall()
@@ -265,7 +288,7 @@ class Storage:
     def get_schedule(self, job_id: str) -> Optional[Dict[str, Any]]:
         """查询单个定时任务"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute("SELECT * FROM schedules WHERE job_id = ?", (job_id,)).fetchone()
@@ -285,7 +308,7 @@ class Storage:
     def delete_schedule(self, job_id: str) -> None:
         """删除定时任务"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             try:
                 conn.execute("DELETE FROM schedules WHERE job_id = ?", (job_id,))
                 conn.commit()

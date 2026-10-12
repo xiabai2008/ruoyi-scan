@@ -29,11 +29,13 @@ logger = get_logger(__name__)
 AUTH_NONE = "none"  # 无鉴权（如 VulnPreviewController 直接暴露）
 AUTH_V4_SESSION = "v4"  # RuoYi v4 Session（Cookie）
 AUTH_V5_JWT = "v5"  # RuoYi v5 JWT（Authorization 头）
+AUTH_ERROR = "error"  # 探测失败（网络异常），区别于「确认无鉴权」
 
 # 登录结果
 LOGIN_OK = "ok"  # 登录成功
 LOGIN_FAIL = "fail"  # 登录失败（用户名/密码错误）
-LOGIN_CAPTCHA = "captcha"  # 需要验证码（D1 不处理，留 D3）
+LOGIN_CAPTCHA = "captcha"  # 验证码错误（换图重试有意义）
+LOGIN_CAPTCHA_INFRA = "captcha_infra"  # 验证码接口/OCR 后端故障（换图重试无意义，不重试）
 LOGIN_ERROR = "error"  # 网络异常或响应异常
 
 
@@ -121,18 +123,23 @@ class RuoYiAuthChain:
         self.auth_mode: Optional[str] = None
 
     def detect_auth_mode(self) -> str:
-        """探测鉴权模式：v4 Session / v5 JWT / 无鉴权
+        """探测鉴权模式：v4 Session / v5 JWT / 无鉴权 / 探测失败（AUTH_ERROR）
 
         判定依据：
         - GET /login 返回 HTML 登录页 → v4 Session（Shiro 表单登录）
         - GET /login 返回 JSON（{code:401} 或重定向）→ v5 JWT（前后端分离）
         - GET /login 404 或无响应 → 无鉴权
+        - 传输失败（超时/连接拒绝/熔断）→ AUTH_ERROR（不等于无鉴权）
         """
         try:
             resp = self.session.get(join_url(self.target, "/login"))
         except Exception:
-            self.auth_mode = AUTH_NONE
-            return AUTH_NONE
+            # 传输失败绝不能当作「无鉴权」：那会让 login() 直接返回成功，
+            # 调用方在「已认证」的错误前提下继续扫描。记 AUTH_ERROR，
+            # 由 login() 映射为 LOGIN_ERROR（网络异常）。
+            logger.debug("探测鉴权模式失败（网络异常）", exc_info=True)
+            self.auth_mode = AUTH_ERROR
+            return AUTH_ERROR
 
         http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
         text = resp.text or ""
@@ -184,7 +191,8 @@ class RuoYiAuthChain:
         Returns:
             (ok: bool, reason: str)
             ok=True, reason=LOGIN_OK：登录成功，session 已带凭证
-            ok=False, reason=LOGIN_CAPTCHA：需要验证码且多次 OCR 均失败
+            ok=False, reason=LOGIN_CAPTCHA：验证码错误且多次 OCR 均失败
+            ok=False, reason=LOGIN_CAPTCHA_INFRA：验证码接口/OCR 后端故障（不重试）
             ok=False, reason=LOGIN_FAIL：用户名/密码错误
             ok=False, reason=LOGIN_ERROR：网络异常
         """
@@ -195,15 +203,17 @@ class RuoYiAuthChain:
             # 无鉴权，直接返回成功
             return True, LOGIN_OK
 
-        attempts = 1 if captcha_code else max(1, max_attempts)
+        # 只有 None（自动探测）才需要重试 OCR 识别错误；''（跳过）与手动验证码都不重试
+        attempts = 1 if captcha_code is not None else max(1, max_attempts)
         last_reason = LOGIN_ERROR
         for i in range(attempts):
             ok, reason = self._login_once(captcha_code)
             if ok:
                 return True, LOGIN_OK
             last_reason = reason
-            # 仅验证码错误值得换图重试
-            if not reason.startswith(LOGIN_CAPTCHA):
+            # 仅「验证码错误」值得换图重试；探测异常/OCR 后端故障换图也不会好，
+            # 重试只会浪费 5 倍请求
+            if reason != LOGIN_CAPTCHA:
                 break
             logger.debug("第 %d/%d 次登录因验证码失败，换图重试", i + 1, attempts)
         return False, last_reason
@@ -239,10 +249,11 @@ class RuoYiAuthChain:
                     if code:
                         validate_code = code
                     else:
-                        # 有接口但 OCR 失败（图片为空或后端不可用）
-                        return False, f"{LOGIN_CAPTCHA}: 接口存在但识别失败(后端={solver.backend_name})"
+                        # 接口在但拿不到可识别图片（后端不可用/空图）：基础设施故障，
+                        # 换图重试无意义，用独立原因避免 login() 5 次空转
+                        return False, f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name})"
             except Exception as e:
-                return False, f"{LOGIN_CAPTCHA}: 探测异常 {e}"
+                return False, f"{LOGIN_CAPTCHA_INFRA}: 探测异常 {e}"
         elif captcha_code:
             validate_code = captcha_code
 
@@ -260,16 +271,21 @@ class RuoYiAuthChain:
 
         http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
 
-        # 解析 JSON 响应（RuoYi AjaxResult）
-        body = {}
+        # 解析 JSON 响应（RuoYi AjaxResult）；body 显式声明 Any：resp.json() 形状不可预知
+        body: Any = {}
         try:
             body = resp.json()
         except (ValueError, TypeError):
             logger.debug("登录响应 JSON 解析失败", exc_info=True)
+        if not isinstance(body, dict):
+            # 非字典 JSON（列表/标量）按无 JSON body 处理，避免 .get() 抛 AttributeError
+            body = {}
 
         # code=0 或 code=200 → 登录成功（若依 success() 返回 code=0，部分版本 200）
+        # 显式排除 JSON 布尔：False == 0，`False in (0, 200)` 会误判登录成功
         r_code = body.get("code")
-        if r_code in (0, 200):
+        success_code = isinstance(r_code, int) and not isinstance(r_code, bool) and r_code in (0, 200)
+        if success_code:
             return True, LOGIN_OK
 
         # 验证码错误 → 需要验证码（D1 不处理，留 D3 OCR）
@@ -282,16 +298,27 @@ class RuoYiAuthChain:
             return False, f"{LOGIN_FAIL}: {msg}"
 
         # 其他失败（code=500 等）
-        if r_code is not None and r_code != 0 and r_code != 200:
+        if r_code is not None and not success_code:
             return False, f"{LOGIN_FAIL}: code={r_code} msg={msg}"
 
-        # 非 JSON 响应但 HTTP 200（可能是重定向到首页，登录成功）
-        if http_code == 200 and not body:
-            # 检查是否有 Set-Cookie（登录成功会下发新 JSESSIONID）
-            set_cookie = resp.headers.get("Set-Cookie", "") or ""
-            # Shiro 认证失败会下发 deleteMe cookie 销毁会话，出现它说明登录并未成功
-            if "JSESSIONID" in set_cookie and "deleteMe" not in set_cookie:
+        # 非 JSON 响应但 HTTP 200：可能是登录成功后重定向到首页。
+        # 不能只看「响应带新 JSESSIONID」——登录失败重定向回 /login 也会（重）下发
+        # 会话 cookie，仅凭 cookie 会误报成功；要求确实发生了重定向且落点不是登录页，
+        # 另外 Shiro 认证失败会下发 deleteMe 销毁会话，出现它即未成功。
+        if http_code == 200:
+            history = getattr(resp, "history", None) or []
+            final_url = str(getattr(resp, "url", "") or "").lower()
+            # Set-Cookie 可能出现在重定向链的任一响应上（登录成功通常在 302 响应上下发
+            # 新会话 cookie，跟随重定向后的最终响应头里看不到它）
+            set_cookie_parts = []
+            for r in [resp] + list(history):
+                sc = (getattr(r, "headers", {}) or {}).get("Set-Cookie", "") or ""
+                if sc:
+                    set_cookie_parts.append(sc)
+            set_cookie = "; ".join(set_cookie_parts)
+            if history and "/login" not in final_url and "JSESSIONID" in set_cookie and "deleteMe" not in set_cookie:
                 return True, LOGIN_OK
+            return False, f"{LOGIN_FAIL}: 非 JSON 响应且无成功信号 http={http_code} msg={msg}"
 
         return False, f"{LOGIN_FAIL}: 未知响应 code={r_code} msg={msg}"
 
@@ -312,13 +339,16 @@ class RuoYiAuthChain:
                 solver = CaptchaSolver(self.target, self.session)
                 has_captcha, code = solver.solve()
                 if has_captcha:
+                    # uuid 必须与本次识别的图片同批下发，否则服务端校验必然失败
+                    captcha_uuid = solver.captcha_uuid
                     if code:
                         validate_code = code
                     else:
-                        return False, f"{LOGIN_CAPTCHA}: 接口存在但识别失败(后端={solver.backend_name})"
+                        return False, f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name})"
             except Exception as e:
-                return False, f"{LOGIN_CAPTCHA}: 探测异常 {e}"
+                return False, f"{LOGIN_CAPTCHA_INFRA}: 探测异常 {e}"
         elif captcha_code:
+            # 手动提供验证码：无对应 uuid 可用（调用方无法得知），如实提交
             validate_code = captcha_code
 
         url = join_url(self.target, "/login")
@@ -333,11 +363,14 @@ class RuoYiAuthChain:
         except Exception as e:
             return False, f"{LOGIN_ERROR}: {e}"
 
-        body = {}
+        body: Any = {}
         try:
             body = resp.json()
         except (ValueError, TypeError):
             return False, f"{LOGIN_ERROR}: 响应非 JSON"
+        if not isinstance(body, dict):
+            # 非字典 JSON（列表/标量）按异常响应处理，避免 .get() 抛 AttributeError
+            return False, f"{LOGIN_ERROR}: 响应 JSON 非对象"
 
         r_code = body.get("code")
         if r_code == 200:

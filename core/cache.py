@@ -2,7 +2,10 @@
 # 用于多 CMS 遍历时共享根响应与 favicon 响应，避免重复请求
 
 
+import logging
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 class FingerprintCache:
@@ -31,7 +34,9 @@ class FingerprintCache:
             try:
                 self._cache[url] = self._session.get(url)
             except Exception:
-                # 网络异常等缓存 None，调用方 detect() 的 try/except 会跳过
+                # 网络异常等缓存 None，调用方 detect() 的 try/except 会跳过；
+                # 记 debug 日志：否则瞬时网络故障与「确实无指纹」不可区分（且失败已被缓存，不再重试）
+                logger.debug("指纹缓存请求失败: %s", url, exc_info=True)
                 self._cache[url] = None
         return self._cache[url]
 

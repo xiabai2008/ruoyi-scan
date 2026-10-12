@@ -12,6 +12,7 @@
 #   '>=4.7'       表示 4.7 及以上
 #   '<=4.5'       表示 4.5 及以下
 #   ''            空串表示全版本适用（默认）
+import copy
 import re
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -23,6 +24,14 @@ logger = get_logger(__name__)
 # 真实若依 /login 页面含 "4.7.8" 两次（footer + JS 变量）
 # 主版本限定 4/5：避免误命中页面中其他形如 x.y.z 的无关版本号（JS 库、构建号等）
 VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
+
+# 版本号上下文锚点（按优先级排列）：优先取若依相关字样、「version/版本」关键字
+# 附近的版本号。裸用 VERSION_PATTERN 取「页面中第一个 4.x.y/5.x.y」会把先出现的
+# 无关库版本（Bootstrap 4.6.0、Font Awesome 5.x 等）误当作若依版本，进而错误过滤 POC。
+_VERSION_CONTEXT_PATTERNS = (
+    re.compile(r"(?:RuoYi|若依)[^\d]{0,24}(\d+\.\d+\.\d+)", re.IGNORECASE),
+    re.compile(r"(?:version|版本)[^\d<]{0,16}(\d+\.\d+\.\d+)", re.IGNORECASE),
+)
 
 # Thymeleaf 单机版的登录页**没有明文版本号**，只有版权年份——而年份与发布版本一一对应。
 # 数据来源：官方各 tag 源码 templates/login.html 逐一核对（2026-09-19）：
@@ -63,6 +72,9 @@ def extract_version_by_copyright(text: str) -> str:
 def extract_version(text: str) -> str:
     """从响应文本中提取若依版本号
 
+    提取顺序：若依相关上下文 → version/版本 关键字附近 → 首个 4.x.y/5.x.y
+    （前两者都没有时才回退首个裸版本号，兼容旧行为）。
+
     Args:
         text: 响应文本（/login 页面 HTML 或其他含版本号的响应）
 
@@ -71,6 +83,10 @@ def extract_version(text: str) -> str:
     """
     if not text:
         return ""
+    for pat in _VERSION_CONTEXT_PATTERNS:
+        m = pat.search(text)
+        if m:
+            return m.group(1)
     m = VERSION_PATTERN.search(text)
     if m:
         return "%s.%s.%s" % (m.group(1), m.group(2), m.group(3))
@@ -186,9 +202,13 @@ def version_in_range(version: str, range_spec: str) -> bool:
         cond = cond.strip()
         if not cond:
             continue
-        # 匹配 >=X.Y.Z, <=X.Y.Z, >X.Y.Z, <X.Y.Z
-        m = re.match(r"(>=|<=|>|<)(\d+(?:\.\d+)*)", cond)
+        # 匹配 >=X.Y.Z, <=X.Y.Z, >X.Y.Z, <X.Y.Z；容忍运算符后的空格（如 ">= 4.2"）——
+        # 否则该子句会被静默丢弃，范围被悄悄放宽（'>= 4.2, <4.6' 退化为仅 '<4.6'）
+        m = re.match(r"(>=|<=|>|<)\s*(\d+(?:\.\d+)*)", cond)
         if not m:
+            # 无法解析的子句：记录告警（不静默忽略），该子句不参与约束。
+            # 不用「解析失败即跳过 POC」的失败关闭策略，避免因 spec 笔误造成漏报
+            logger.warning("版本范围子句无法解析，已忽略该子句: %r（spec=%r）", cond, range_spec)
             continue
         op = m.group(1)
         bound = parse_version(m.group(2))
@@ -290,7 +310,9 @@ def get_variant_info(variant: str) -> Dict[str, Any]:
     Returns:
         dict: {'name', 'auth', 'api_prefixes', 'version_sources', 'notes'}，未知变体返回 {}
     """
-    return RUOYI_VARIANT_INFO.get(variant, {})
+    info = RUOYI_VARIANT_INFO.get(variant)
+    # 返回深拷贝：调用方修改结果不应污染进程级元数据（值含嵌套 list）
+    return copy.deepcopy(info) if info else {}
 
 
 def get_variant_api_prefixes(variant: str) -> List[str]:
@@ -303,14 +325,6 @@ def get_variant_api_prefixes(variant: str) -> List[str]:
         list: 前缀列表（如 ['/prod-api']），未知变体返回 ['']（裸路径）
     """
     return list(RUOYI_VARIANT_INFO.get(variant, {}).get("api_prefixes", [""]))
-
-
-# RuoYi-Cloud 特征路径（用于 detect_version 识别 Cloud 版）
-RUOYI_CLOUD_PATHS = [
-    "/nacos/",  # Nacos 控制台
-    "/gateway/",  # Spring Gateway
-    "/auth/login",  # Cloud 版 Gateway 统一登录
-]
 
 
 def build_version_matrix(version: str, plugin_classes: Iterable[Any]) -> List[Dict[str, Any]]:

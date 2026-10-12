@@ -1,8 +1,12 @@
 # 指纹→插件包路由（自动同步特征库 cms，新增 CMS 零改动）
+import re
 from typing import List
 
+from common.logger import get_logger
 from common.models import FingerprintResult
 from core.loader import load_plugins
+
+logger = get_logger(__name__)
 
 
 class Router:
@@ -73,11 +77,19 @@ class Router:
         package = self.mapping.get(cms)
         if not package:
             # 动态尝试 plugins.<cms>（特征库已注册的 CMS 自动可用）
+            # 先校验标识符合法性：--cms 传入 None/空串/含点号等畸形值时，
+            # 直接拼模块名（如 plugins.None）只会经异常静默返回空结果，难以排查
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", cms or ""):
+                logger.warning("无效的 CMS 标识: %r（应为字母/数字/下划线组成的模块名）", cms)
+                return []
             candidate = "plugins.%s" % cms
-            # 动态加载失败视为该 CMS 未注册，返回空列表（与显式映射缺失同语义）
+            # 动态加载失败视为该 CMS 未注册，返回空列表（与显式映射缺失同语义）；
+            # 但要记录异常：插件包存在却 import 失败（ImportError/AttributeError）
+            # 与「未注册」在返回值上不可区分，若不记日志将极难排查
             try:
-                load_plugins(candidate)
-                package = candidate
+                # 复用本次加载结果：原实现先 load 探测、随后又 load 一次，插件包被导入两遍
+                return load_plugins(candidate)
             except Exception:
+                logger.debug("动态加载插件包 %s 失败，按未注册 CMS 处理", candidate, exc_info=True)
                 return []
         return load_plugins(package)

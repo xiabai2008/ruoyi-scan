@@ -9,7 +9,7 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from common.logger import get_logger
 
@@ -95,12 +95,12 @@ class TaskRegistry:
                 logger.debug("任务快照落盘失败", exc_info=True)
 
     def get(self, task_id: str) -> Optional[TaskRecord]:
-        """获取任务记录"""
+        """获取任务记录（返回内部对象引用，调用方只读，勿修改 events/task_dict）"""
         with self._lock:
             return self._tasks.get(task_id)
 
     def list(self) -> List[TaskRecord]:
-        """列出所有任务"""
+        """列出所有任务（返回内部对象引用，调用方只读，勿修改 events/task_dict）"""
         with self._lock:
             return list(self._tasks.values())
 
@@ -118,21 +118,22 @@ class TaskRegistry:
 
         # 记录到历史事件缓冲
         with self._lock:
-            if task_id in self._tasks:
-                self._tasks[task_id].events.append(event)
+            record = self._tasks.get(task_id)
+            if record is not None:
+                record.events.append(event)
                 # 限制缓冲大小
-                if len(self._tasks[task_id].events) > self.max_events_per_task:
-                    self._tasks[task_id].events = self._tasks[task_id].events[-self.max_events_per_task :]
+                if len(record.events) > self.max_events_per_task:
+                    record.events = record.events[-self.max_events_per_task :]
                 # 更新状态
                 # 事件语义约定："status" 事件以 payload.status 为准；"error" 事件直接置为 failed
                 if event_type == "status" and isinstance(payload, dict):
-                    self._tasks[task_id].status = payload.get("status", self._tasks[task_id].status)
+                    record.status = payload.get("status", record.status)
                 elif event_type == "error":
-                    self._tasks[task_id].status = "failed"
+                    record.status = "failed"
 
-                subscribers = list(self._subscribers.get(task_id, set()))
-            else:
-                subscribers = []
+            # 订阅者与任务是否已注册无关：subscribe() 并不要求先 register()，
+            # 若未注册就取空集合，会导致已订阅队列永远收不到事件（事件却已落盘，成为不可达数据）
+            subscribers = list(self._subscribers.get(task_id, set()))
 
         # D11：事件落盘
         if self.storage:
@@ -153,17 +154,42 @@ class TaskRegistry:
         """WS handler 调用：订阅任务事件
 
         返回 asyncio.Queue，handler 通过 await queue.get() 等待事件。
+        队列只承载订阅之后的新事件；历史事件由订阅方另行调用 get_history() 补播。
+        ⚠ get_history() 与 subscribe() 非原子，两步之间的事件会同时在历史与队列中
+        出现（重复）；需要补播历史时请改用 subscribe_with_history()。
         """
-        # 队列只承载订阅之后的新事件；历史事件由订阅方另行调用 get_history() 补播
         queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
         with self._lock:
             self._subscribers[task_id].add(queue)
         return queue
 
-    def unsubscribe(self, task_id: str, queue: "asyncio.Queue[Dict[str, Any]]") -> None:
-        """WS handler 断开时调用：取消订阅"""
+    async def subscribe_with_history(
+        self, task_id: str
+    ) -> Tuple["asyncio.Queue[Dict[str, Any]]", List[Dict[str, Any]]]:
+        """原子订阅：同一把锁内注册新事件队列并取历史快照
+
+        订阅方先补播返回的 history，再从 queue 取新事件即可既不重复也不丢失：
+        历史快照与订阅在同一临界区完成，之后的事件只会进入队列。
+
+        Returns:
+            (queue, history)：新事件队列 + 订阅时刻的历史事件快照
+        """
+        queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
         with self._lock:
-            self._subscribers[task_id].discard(queue)
+            self._subscribers[task_id].add(queue)
+            record = self._tasks.get(task_id)
+            history = list(record.events) if record else []
+        return queue, history
+
+    def unsubscribe(self, task_id: str, queue: "asyncio.Queue[Dict[str, Any]]") -> None:
+        """WS handler 断开时调用：取消订阅（集合清空后删除 key，避免空集合长期累积）"""
+        with self._lock:
+            subscribers = self._subscribers.get(task_id)
+            if subscribers is None:
+                return
+            subscribers.discard(queue)
+            if not subscribers:
+                del self._subscribers[task_id]
 
     def get_history(self, task_id: str) -> List[Dict[str, Any]]:
         """获取任务历史事件（供新订阅者补播）"""
@@ -172,13 +198,18 @@ class TaskRegistry:
             return list(record.events) if record else []
 
     def cleanup_expired(self) -> List[str]:
-        """清理过期任务（超过 retention_seconds 的已完成任务）"""
+        """清理过期任务（超过 retention_seconds 的已完成任务）
+
+        保留期以「完成时间」为准（task_dict.finished_at，缺失时回退 created_at）：
+        按创建时间计算会把刚结束的长任务立即清理掉。
+        """
         now = time.time()
         expired = []
         with self._lock:
             for task_id, record in list(self._tasks.items()):
                 if record.status in ("done", "failed"):
-                    if now - record.created_at > self.retention_seconds:
+                    finished_at = record.task_dict.get("finished_at") or record.created_at
+                    if now - finished_at > self.retention_seconds:
                         expired.append(task_id)
             for task_id in expired:
                 del self._tasks[task_id]
@@ -203,15 +234,18 @@ class TaskRegistry:
                 task_id = td.get("task_id", "")
                 if not task_id:
                     continue
-                # 历史任务缺省按已完成恢复：重启后不再被当作待执行任务处理
-                status = td.get("status", "done")
+                # 历史任务状态以持久化字段为准；缺失时按 pending 恢复，
+                # 不臆断为 done（否则未完成任务在重启后被静默标记为已完成）
+                status = td.get("status") or "pending"
                 # 恢复事件历史
                 events = storage.get_events(task_id, limit=self.max_events_per_task)
                 with self._lock:
                     self._tasks[task_id] = TaskRecord(
                         task_id=task_id,
                         status=status,
-                        created_at=td.get("started_at", time.time()),
+                        # created_at 优先取自身持久化字段：TTL 清理按 created_at 计算，
+                        # 借用 started_at（或 time.time()）会失真
+                        created_at=td.get("created_at") or td.get("started_at") or time.time(),
                         events=events,
                         task_dict=td,
                     )

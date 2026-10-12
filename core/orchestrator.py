@@ -45,6 +45,13 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
         """重写线程创建：daemon 线程且不注册 _threads_queues（规避 atexit join 挂起）"""
         if self._idle_semaphore.acquire(timeout=0):
             return
+
+        # weakref 回调只绑定队列（同标准库写法），绝不能捕获 self：
+        # 捕获 self 会让回调强引用 executor，weakref 失去意义——executor 无法被
+        # 回收，唤醒 worker 的 None 哨兵永远不会投递（线程泄漏到进程退出）。
+        def _weakref_cb(_: Any, q: Any = self._work_queue) -> None:
+            q.put(None)
+
         num_threads = len(self._threads)
         if num_threads < self._max_workers:
             thread_name = "%s_%d" % (self._thread_name_prefix or self, num_threads)
@@ -52,7 +59,7 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
                 name=thread_name,
                 target=_worker,
                 args=(
-                    weakref.ref(self, lambda _: self._work_queue.put(None)),  # type: ignore[arg-type]
+                    weakref.ref(self, _weakref_cb),
                     self._work_queue,
                     self._initializer,
                     self._initargs,
@@ -115,6 +122,11 @@ class ScanRequest:
     nuclei_tags: Optional[List[str]] = None
     nuclei_severity: Optional[List[str]] = None
     nuclei_exclude_tags: Optional[List[str]] = None
+    # 方案 A：对抗型传输层（--adversarial-transport 启用；默认关闭，向后兼容）
+    # 开启后 WAF 绕过编排器会把 L5 引擎策略（Scrapling 指纹/隐身浏览器）作为
+    # 兜底追加到尝试序列，用于突破 Cloudflare Turnstile/Interstitial 等 JS 挑战。
+    # 需安装额外依赖：pip install 'ruoyi-scan[adversarial]'
+    adversarial_transport: bool = False
 
 
 @dataclass
@@ -240,10 +252,23 @@ class ScanOrchestrator:
         # 提交到线程池
         # 注意：on_event 传 None —— 事件推送统一走 _run 内部 _emit 的 registry.notify 通道，
         # 若再传 _api_event_handler 会造成每个事件被推送两次（历史/WS 全部翻倍）。
-        with self._pool_lock:
-            if self._pool is None:
-                self._pool = _DaemonThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
-        self._pool.submit(self._run, task, None)
+        try:
+            with self._pool_lock:
+                if self._pool is None:
+                    self._pool = _DaemonThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
+                self._pool.submit(self._run, task, None)
+        except Exception as e:
+            # 提交失败（如并发 shutdown 后线程池已关闭：RuntimeError: cannot schedule
+            # new futures after shutdown）不能只抛给调用方——注册表条目会永久停留在
+            # pending 且无错误信息。这里兜底置为 failed 并通知 registry。
+            logger.exception("任务提交线程池失败: %s", task_id)
+            task.status = "failed"
+            task.error = str(e)
+            task.finished_at = time.time()
+            task.duration = task.finished_at - task.started_at
+            if self.registry:
+                self.registry.update_task_dict(task_id, task.to_dict())
+                self.registry.notify(task_id, "status", {"status": "failed", "task_id": task_id})
         return task_id
 
     def _run(self, task: ScanTask, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
@@ -258,6 +283,13 @@ class ScanOrchestrator:
         """
         req = task.request
         target = normalize_target(req.target)
+        # 资源清理状态：session 在 try 内创建，必须在 finally 关闭（失败路径同样要关，
+        # 否则异常退出会泄漏连接池）；口令字典被本任务改写前需记录原值以便恢复
+        session: Optional[SessionManager] = None
+        prev_password_dict: Optional[str] = None
+        # 提前初始化结果列表：异常路径也要能返回失败前已收集的部分结果，
+        # 而不是静默丢弃（task.results 在失败时可能尚未赋值）
+        all_results: List[ScanResult] = []
 
         def _emit(event_type: str, payload: Any) -> None:
             """发送事件（同时调用回调 + 通知 registry）"""
@@ -362,8 +394,10 @@ class ScanOrchestrator:
                     },
                 )
 
-            # 3. 口令字典分级
+            # 3. 口令字典分级（记录原值，扫描结束在 finally 恢复——API 并发扫描下
+            # 进程级 settings.PASSWORD_DICT 不能永久停留在某个任务的级别）
             if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
+                prev_password_dict = settings.PASSWORD_DICT
                 settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
 
             # 4. 指纹识别
@@ -573,7 +607,7 @@ class ScanOrchestrator:
                 plugins_by_cat.setdefault(cat, []).append(cls)
 
             # 7. 引擎执行
-            all_results = []
+            # （all_results 已在 try 外初始化：异常路径可返回已收集的部分结果）
             categories = mode_categories.get(req.mode, ["vuln"])
             total_plugins = sum(len(plugins_by_cat.get(c, [])) for c in categories)
             done_count = [0]  # 闭包可变
@@ -627,7 +661,7 @@ class ScanOrchestrator:
             for cr in component_results:
                 all_results.append(to_scan_result(cr))
             task.results = all_results
-            session.close()
+            # session 关闭统一放到 finally（成功/失败路径共用，避免泄漏）
 
             # 8. 报告生成（可选）
             if req.report_dir:
@@ -683,10 +717,15 @@ class ScanOrchestrator:
             return all_results
 
         except Exception as e:
+            # CLI 模式下 _emit 可能没有任何消费者（无 on_event 且无 registry），
+            # 不落日志会让「扫描崩溃」与「扫描无发现」无法区分
+            logger.exception("扫描任务执行异常: %s", task.task_id)
             task.status = "failed"
             task.error = str(e)
             task.finished_at = time.time()
             task.duration = task.finished_at - task.started_at
+            # 保留失败前已收集的部分结果（引擎中途异常时 task.results 可能尚未赋值）
+            task.results = task.results or all_results
             _emit(
                 "error",
                 {
@@ -697,12 +736,44 @@ class ScanOrchestrator:
             _emit("status", {"status": "failed", "task_id": task.task_id})
             return task.results
 
+        finally:
+            # 无论成功/失败都关闭会话（含认证注入、指纹、WAF、插件执行等中途异常），
+            # 并恢复进程级口令字典，避免污染其他并发任务/进程后续扫描
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    logger.debug("会话关闭失败", exc_info=True)
+            if prev_password_dict is not None:
+                settings.PASSWORD_DICT = prev_password_dict
+
     def _build_waf_bypass(
         self, req: ScanRequest, waf_result: Dict[str, Any], target: str, session: SessionManager
     ) -> Optional[Any]:
         """构建 WAF 绕过协调器（从 main.py 抽取）"""
         bypass_mode = req.bypass_waf or "auto"
         waf_type = waf_result.get("waf", "")
+
+        # 方案 A：对抗型传输层兜底。仅在用户显式开启时启用；启用前确认 Scrapling 已安装，
+        # 否则降级为常规绕过并告警（避免静默产生永远失败的无效尝试）。
+        engine_fallback = bool(getattr(req, "adversarial_transport", False))
+        scrapling_version = ""
+        if engine_fallback:
+            try:
+                import scrapling  # noqa: F401
+
+                scrapling_version = getattr(scrapling, "__version__", "?")
+            except ImportError:
+                logger.warning(
+                    "已请求 --adversarial-transport 但未安装 Scrapling，本次降级为常规绕过"
+                    "（安装：pip install 'ruoyi-scan[adversarial]'）"
+                )
+                engine_fallback = False
+
+        # 仅在确实会构建协调器的模式下打印「已启用」：--bypass-waf off 时下方两个分支
+        # 都会被跳过（返回 None），提前提示会造成误导
+        if engine_fallback and bypass_mode in ("auto", "on"):
+            logger.info("对抗型传输层已启用（Scrapling %s），JS 挑战型 WAF 将追加引擎级兜底", scrapling_version)
 
         if waf_type and bypass_mode in ("auto", "on"):
             from lib.origin_finder import OriginIPFinder
@@ -721,14 +792,21 @@ class ScanOrchestrator:
                         origin_ip = ips[0]
             except Exception:
                 logger.debug("源站 IP 探测失败", exc_info=True)
-            return WafBypassCoordinator(waf_type=waf_type, origin_ip=origin_ip, stats_tracker=stats_tracker)
+            return WafBypassCoordinator(
+                waf_type=waf_type,
+                origin_ip=origin_ip,
+                stats_tracker=stats_tracker,
+                enable_engine_fallback=engine_fallback,
+            )
 
         # 未识别出 WAF 但用户强制 on：仍构建协调器（对误报/新型 WAF 保留绕过尝试）
         if not waf_type and bypass_mode == "on":
             from lib.waf_bypass import BypassStatsTracker, WafBypassCoordinator
 
             stats_tracker = BypassStatsTracker()
-            return WafBypassCoordinator(waf_type="", stats_tracker=stats_tracker)
+            return WafBypassCoordinator(
+                waf_type="", stats_tracker=stats_tracker, enable_engine_fallback=engine_fallback
+            )
 
         return None
 
@@ -778,6 +856,7 @@ class ScanOrchestrator:
 
         # 主动爬虫 + JS 端点提取
         if req.crawl or req.js_extract:
+            recon_session: Optional[SessionManager] = None
             try:
                 from lib.crawler import Crawler
                 from lib.js_extractor import JSExtractor
@@ -832,7 +911,6 @@ class ScanOrchestrator:
                             endpoint_urls.append(ep.url)
                     result["js_endpoints"] = endpoint_urls
 
-                recon_session.close()
             except Exception as e:
                 _emit(
                     "recon_error",
@@ -842,6 +920,13 @@ class ScanOrchestrator:
                         "task_id": task_id,
                     },
                 )
+            finally:
+                # 爬虫/JS 提取中途异常也要关闭临时会话，否则连接池泄漏
+                if recon_session is not None:
+                    try:
+                        recon_session.close()
+                    except Exception:
+                        logger.debug("recon 会话关闭失败", exc_info=True)
 
         return result
 

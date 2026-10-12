@@ -1,4 +1,5 @@
 # 插件动态发现与加载
+import hashlib
 import importlib
 import os
 import sys
@@ -81,21 +82,33 @@ def _load_external_dir(dir_path: str, logger: Any) -> List[type]:
     # 有 __init__.py，作为包导入
     pkg_name = os.path.basename(dir_path)
     parent = os.path.dirname(dir_path)
-    if parent not in sys.path:
+    # 临时把父目录加入 sys.path 以便按包名导入，导入结束必须还原：
+    # 永久留在 sys.path 首位会遮蔽已安装包（同名包被外部目录抢先解析）
+    inserted = parent not in sys.path
+    if inserted:
         sys.path.insert(0, parent)
     try:
         return load_plugins(pkg_name)
     except Exception as e:
         logger.debug("加载外部插件目录失败 %s: %s", dir_path, e)
         return []
+    finally:
+        if inserted:
+            try:
+                sys.path.remove(parent)
+            except ValueError:  # pragma: no cover - 其他线程已移除
+                pass
 
 
 def _load_external_file(file_path: str, logger: Any) -> List[type]:
     """从单个 .py 文件加载插件"""
     from plugins.base import PluginBase
 
-    # 模块名加前缀隔离命名空间，避免不同文件同名导致 sys.modules 互相覆盖
-    module_name = "_external_plugin_" + os.path.splitext(os.path.basename(file_path))[0]
+    # 模块名加前缀隔离命名空间，并用绝对路径哈希去重：不同目录下的同名文件
+    # （如两个 util.py）若沿用 basename 会在 sys.modules 中互相覆盖
+    _stem = os.path.splitext(os.path.basename(file_path))[0]
+    _digest = hashlib.md5(os.path.abspath(file_path).encode("utf-8")).hexdigest()[:8]
+    module_name = "_external_plugin_%s_%s" % (_stem, _digest)
 
     # 使用 importlib 加载
     import importlib.util
@@ -104,12 +117,15 @@ def _load_external_file(file_path: str, logger: Any) -> List[type]:
     if spec is None or spec.loader is None:
         return []
     module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
     except Exception as e:
+        # 导入失败时不把半初始化模块留在 sys.modules（否则后续加载会拿到坏模块，
+        # 而不是重新执行本文件）
+        sys.modules.pop(module_name, None)
         logger.debug("加载外部插件文件失败 %s: %s", file_path, e)
         return []
+    sys.modules[module_name] = module
 
     # 方式1：文件中定义了 plugin_list
     plugin_list = getattr(module, "plugin_list", [])
@@ -195,17 +211,18 @@ def load_entry_point_plugins() -> List[type]:
 
         for ep in eps:
             try:
-                plugin_list = ep.load()
-                if isinstance(plugin_list, list):
-                    result.extend(plugin_list)
-                else:
+                loaded = ep.load()
+                if not isinstance(loaded, list):
                     # 加载的是模块，尝试取 plugin_list 属性
-                    plugin_list = getattr(plugin_list, "plugin_list", [])
-                    if isinstance(plugin_list, list):
-                        result.extend(plugin_list)
-                logger.debug("entry_point 插件加载成功: %s (%d 个)", ep.name, len(result))
+                    loaded = getattr(loaded, "plugin_list", [])
+                if isinstance(loaded, list):
+                    before = len(result)
+                    result.extend(loaded)
+                    # 计数用本次 entry_point 新增的插件数，而非累计总数（后者会误导排查）
+                    logger.debug("entry_point 插件加载成功: %s (%d 个)", ep.name, len(result) - before)
             except Exception as e:
-                logger.debug("entry_point 插件加载失败 %s: %s", ep.name, e)
+                # 第三方插件导入失败会被静默丢弃，debug 默认不可见：升为 warning 并带堆栈
+                logger.warning("entry_point 插件加载失败 %s: %s", ep.name, e, exc_info=True)
     except Exception as e:
         logger.debug("entry_points 发现失败: %s", e)
 

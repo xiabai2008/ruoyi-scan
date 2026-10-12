@@ -12,9 +12,10 @@
 #   - ChainStep:  链节点（plugin_cls + condition + on_fail + depends_on + inputs/outputs）
 #   - ChainEdge:  依赖边（from → to，显式声明）
 #   - ChainDef:   链定义（steps + edges + meta）
-#   - ChainContext: 执行上下文（results/facts/secrets，线程安全）
+#   - ChainContext: 执行上下文（results/facts/secrets，步骤顺序执行时共享）
 #   - ChainEngine:  执行引擎（拓扑排序 + 节点执行 + 状态聚合）
 #   - ChainResult:  链执行结果（状态 + 节点结果 + 证据）
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -51,6 +52,8 @@ CHAIN_UNKNOWN = "UNKNOWN"  # 存在 UNKNOWN 且无 failed（无法判定）
 
 # === 敏感字段脱敏 ===
 _SECRET_MASK = "******"
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -127,6 +130,7 @@ class ChainDef:
         校验项：
         - 节点 id 唯一
         - depends_on 引用的 id 存在
+        - fallback_steps 引用的 id 存在
         - 无循环依赖（DFS 检测环）
         """
         errors = []
@@ -142,6 +146,11 @@ class ChainDef:
             for dep in s.depends_on:
                 if dep not in ids:
                     errors.append(f"节点 {s.id} 依赖不存在的节点: {dep}")
+        # fallback_steps 引用存在性（不存在的 id 永远无法执行，必须显式报错）
+        for s in self.steps:
+            for fb_id in s.fallback_steps:
+                if fb_id not in ids:
+                    errors.append(f"节点 {s.id} 的 fallback 节点不存在: {fb_id}")
         # 循环依赖检测（DFS）
         if not errors:  # 只有在 id 都合法时才检测环
             cycle = self._detect_cycle()
@@ -183,7 +192,7 @@ class ChainDef:
 
 
 class ChainContext:
-    """链执行上下文（线程安全的共享状态）
+    """链执行上下文（ChainEngine 顺序执行步骤时共享；当前实现无锁保护）
 
     Attributes:
         target: 扫描目标 URL
@@ -236,8 +245,15 @@ class ChainContext:
                     value = getattr(result, source, "")
                 self.facts[ctx_key] = value
             except Exception:
-                # 提取失败不影响链执行
-                pass
+                # 单个映射提取失败不影响链执行，但必须可观测：
+                # 整段静默会让错误配置（源格式非法/属性缺失）表现为下游 facts 缺失而无任何线索
+                _log.warning(
+                    "输出提取失败（节点=%s，键=%s，源=%s）",
+                    step_id,
+                    ctx_key,
+                    source,
+                    exc_info=True,
+                )
 
     def snapshot(self) -> Dict[str, Any]:
         """返回上下文快照（secrets 脱敏）"""
@@ -405,9 +421,15 @@ class ChainEngine:
 
         try:
             if self.step_timeout > 0:
-                with ThreadPoolExecutor(max_workers=1) as executor:
+                # 不用 with：ThreadPoolExecutor.__exit__ 会 shutdown(wait=True)，超时异常
+                # 展开时会一直等 verify() 真正返回，单步超时形同虚设。这里显式
+                # shutdown(wait=False) 立即返回；超时后的工作线程在后台自行结束。
+                executor = ThreadPoolExecutor(max_workers=1)
+                try:
                     future = executor.submit(_do_verify)
                     result = future.result(timeout=self.step_timeout)
+                finally:
+                    executor.shutdown(wait=False)
             else:
                 result = _do_verify()
 
@@ -437,8 +459,8 @@ class ChainEngine:
             )
             return error_result, NODE_ERROR
 
-    def _is_critical_failed(self, step: ChainStep, node_status: str) -> bool:
-        """判断节点是否为关键失败（影响链整体状态）"""
+    def _is_critical_failed(self, node_status: str) -> bool:
+        """判断节点是否为关键失败（仅由节点状态与 on_unknown 策略决定）"""
         if node_status in (NODE_SUCCESS, NODE_SKIPPED):
             return False
         # P2：超时视为关键失败
@@ -491,10 +513,6 @@ class ChainEngine:
 
         # 记录被跳过的节点（上游 abort 传播）
         aborted: Set[str] = set()
-
-        import logging
-
-        _log = logging.getLogger(__name__)
 
         for step_id in order:
             step = chain_def.step_by_id(step_id)
@@ -552,19 +570,25 @@ class ChainEngine:
                 step_duration,
             )
 
-            # 回调
+            # 回调：调用方回调异常不应中断链执行（否则后续状态聚合/facts 填充/耗时赋值全部跳过，
+            # ChainResult 停留在不完整状态）
             if on_result and scan_result:
-                on_result(scan_result)
+                try:
+                    on_result(scan_result)
+                except Exception:
+                    _log.warning("链结果回调执行失败（节点=%s），已忽略以继续执行", step_id, exc_info=True)
 
             # 失败策略处理
-            if self._is_critical_failed(step, node_status):
+            if self._is_critical_failed(node_status):
                 if step.on_fail == ON_FAIL_ABORT:
                     # 传播 abort 到所有下游节点
                     self._propagate_abort(chain_def, step_id, aborted)
                 elif step.on_fail == ON_FAIL_FALLBACK:
-                    # 执行 fallback 节点（标记为待执行）
+                    # fallback 节点是链内普通节点，按拓扑序在依赖满足后照常执行（无需额外调度）。
+                    # 此处的 discard 仅用于救援：若 fallback 节点已被某个无关上游的 abort
+                    # 传播标记为跳过，则在本节点失败时解除标记，使其仍能执行。
                     for fb_id in step.fallback_steps:
-                        aborted.discard(fb_id)  # 确保 fallback 不被跳过
+                        aborted.discard(fb_id)
                 # ON_FAIL_CONTINUE: 不传播，继续执行
 
         # 聚合链整体状态
@@ -575,9 +599,17 @@ class ChainEngine:
         return result
 
     def _propagate_abort(self, chain_def: ChainDef, failed_id: str, aborted: Set[str]) -> None:
-        """将 abort 传播到失败节点的所有下游节点（递归）"""
+        """将 abort 传播到失败节点的所有下游节点（递归）
+
+        下游同时取自 step.depends_on 与显式 chain_def.edges（与 _topological_sort 的依赖来源一致）：
+        仅看 depends_on 会漏掉只经 edge 声明的下游，使其在上游失败后仍被执行。
+        """
         for s in chain_def.steps:
-            if failed_id in s.depends_on and s.id not in aborted:
+            if s.id in aborted:
+                continue
+            deps = set(s.depends_on)
+            deps.update(e.from_id for e in chain_def.edges if e.to_id == s.id)
+            if failed_id in deps:
                 aborted.add(s.id)
                 self._propagate_abort(chain_def, s.id, aborted)
 
@@ -635,5 +667,6 @@ class ChainEngine:
         if has_skipped:
             return CHAIN_BLOCKED
 
-        # 只有 ambiguous（on_unknown != 'fail' 且无 failed/success）
+        # 兜底：出现未识别的状态字符串（数据异常）时无法判定；
+        # 已定义的 NODE_* 状态在以上分支均会提前 return
         return CHAIN_UNKNOWN

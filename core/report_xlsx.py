@@ -140,6 +140,9 @@ def _build_summary_sheet(ws: Any, builder: Any, gen_time: str) -> None:
     dist_start = len(info_rows) + 4  # 留空行
     ws.cell(row=dist_start, column=1, value="风险分布（仅统计确认漏洞）")
     ws.cell(row=dist_start, column=1).font = Font(name=_FONT, size=12, bold=True, color="FF1F2328")
+    # 饼图 titles_from_data=True 会取 B{dist_start} 作系列名：写表头避免图例空白
+    ws.cell(row=dist_start, column=2, value="数量")
+    ws.cell(row=dist_start, column=2).font = Font(name=_FONT, size=12, bold=True, color="FF1F2328")
 
     # 风险分布数据表（供饼图引用）
     dist = builder.risk_distribution()
@@ -218,7 +221,7 @@ def _build_vuln_sheet(ws: Any, builder: Any) -> None:
     for i, r in enumerate(confirmed, start=2):
         sev_cn = SEVERITY_CN.get(r.severity, r.severity)
         status_cn = _STATUS_CN.get(r.status, r.status)
-        hit_count = getattr(r, "hit_count", 1) if hasattr(r, "hit_count") else 1
+        hit_count = getattr(r, "hit_count", 1)
         row_data = [i - 1, r.name, sev_cn, status_cn, r.url or "", r.evidence or "", r.fix or "", hit_count]
         row_fill = _SEV_FILL.get(r.severity)
         for j, val in enumerate(row_data, start=1):

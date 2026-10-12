@@ -54,6 +54,7 @@ class FeatureBasedFingerprint(Fingerprint):
         strong_hits = 0
         weak_hits = 0
         root_body = ""  # 根路径响应体，供软404检测（catch-all 站点对任意路径返回相同内容）
+        root_ok = False  # 根路径是否取到响应：取不到时无法比对，见软404判定
         w_strong = f.get("weight_strong", 0.5)
         w_weak = f.get("weight_weak", 0.2)
 
@@ -68,6 +69,7 @@ class FeatureBasedFingerprint(Fingerprint):
             resp = _get(target)
             text = resp.text or ""
             root_body = text
+            root_ok = True
             title_m = re.findall(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
             title = title_m[0] if title_m else ""
             for kw in f.get("login_keywords", []):
@@ -104,8 +106,10 @@ class FeatureBasedFingerprint(Fingerprint):
                     # 对任意路径返回与根路径完全相同内容的站点（SPA 前端兜底、静态站
                     # catch-all、部分 CDN/WAF）并非有效强特征；否则会把非若依站点
                     # （wordpress/django/nginx 等）误判为若依变体。
+                    # 根路径取到响应时即做比对（含同为空的兜底页）；根路径获取失败
+                    # 时没有基线可用，维持原判定（无法比对不等于命中）
                     ok = True
-                    if body and root_body and body == root_body:
+                    if root_ok and body == root_body:
                         ok = False
                 if ok:
                     strong_hits += 1
@@ -122,8 +126,9 @@ class FeatureBasedFingerprint(Fingerprint):
                     strong_hits += 1
                     matched.append("favicon:%s" % h)
                 else:
-                    weak_hits += 1
-                    matched.append("favicon:unknown:%s" % h[:8])
+                    # 非匹配 favicon 不构成任何特征：几乎每个站点都返回 favicon.ico，
+                    # 若计为弱特征，配合单个弱关键字就能凑到 0.4 阈值，D5 误报防护失效
+                    logger.debug("favicon 未命中特征库: %s", h[:8])
         except Exception:
             logger.debug("favicon hash 比对失败", exc_info=True)
 
@@ -181,19 +186,37 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
 
     best_variant = ""
     best_hits = 0
+    # 软404/通配 200 基线：根路径响应体。cache 场景下根路径已被指纹探测抓取，
+    # 此处只是缓存读取（不会新增请求）；直接调用时仅多 1 次基线请求。
+    root_ok = False
+    root_body = ""
+    try:
+        root_resp = _get(target)
+        if root_resp is not None and getattr(root_resp, "status_code", 0) == 200:
+            root_ok = True
+            root_body = root_resp.text or ""
+    except Exception:
+        logger.debug("变体识别根路径基线获取失败", exc_info=True)
+
     for variant in list_variants():
         f = get_variant_feature(variant)
         if not f:
             continue
         hits = 0
-        # 负向特征：任一命中（200 且符合 expect）→ 排除该变体
+        # 负向特征：任一命中（200 且符合 expect 语义）→ 排除该变体。
+        # 复用 _expect_ok，并对与根路径同内容的响应做通配 200 防护：
+        # catch-all/SPA/CDN 站点对任意路径返回 200（甚至同一页面），
+        # 若直接按 200 排除会把真实变体也一并排除（detect_variant 恒返回 ''）
         excluded = False
         for item in f.get("negative_paths", []):
             try:
                 r = _get(target + item["path"].lstrip("/"))
-                if r.status_code == 200:
-                    excluded = True
-                    break
+                if not _expect_ok(r, item.get("expect", "any")):
+                    continue
+                if root_ok and (r.text or "") == root_body:
+                    continue  # 与根路径同内容 → 通配 200，不作为排除依据
+                excluded = True
+                break
             except Exception:
                 continue
         if excluded:
@@ -246,25 +269,29 @@ def detect_cms(target: str, session: SessionManager) -> FingerprintResult:
             from core.http import join_url
             from core.ruoyi_versions import extract_version
 
-            # 优先从缓存中已有的 /login 和根路径响应提取版本号（避免额外请求）
+            # 版本号来源：/login（页脚/JS 变量最常见位置）优先，缓存未命中时会显式
+            # 探测一次（1 次 GET）；根路径改用缓存 peek（各 CMS 指纹探测必已抓取），
+            # 不再用 cache.get 触发重复请求，也去掉与根 URL 等价的 "" 重复项
             cached_version = ""
-            for path in ["/login", "/", ""]:
+            try:
+                login_resp = cache.get(join_url(target, "/login"))
+                if login_resp:
+                    cached_version = extract_version(login_resp.text or "")
+            except Exception:
+                logger.debug("/login 版本号提取失败", exc_info=True)
+            if not cached_version and target in set(cache.keys()):
                 try:
-                    full_url = join_url(target, path) if path else target
-                    cached_resp = cache.get(full_url)
-                    if cached_resp:
-                        v = extract_version(cached_resp.text or "")
-                        if v:
-                            cached_version = v
-                            break
+                    root_resp = cache.get(target)
+                    if root_resp:
+                        cached_version = extract_version(root_resp.text or "")
                 except Exception:
-                    logger.debug("缓存响应版本号提取失败", exc_info=True)
+                    logger.debug("根路径缓存版本号提取失败", exc_info=True)
             if cached_version:
                 best.version = cached_version
                 best.matched.append("version:%s" % cached_version)
-            # 注：缓存未命中版本号时不额外请求 detect_version，
-            # 避免 detect_cms 的请求次数超出缓存测试预期。
-            # 版本号未在首页/login 出现时，Router 会按"版本未识别"处理（跑全部 POC）。
+            # 注：缓存未命中版本号时不再调用 detect_version 额外请求
+            # （detect_cms 仅新增 /login 一次探测，根路径复用缓存）。
+            # 版本号未在登录页/根路径出现时，Router 会按"版本未识别"处理（跑全部 POC）。
         except Exception:
             logger.debug("若依版本探测失败", exc_info=True)
     return best

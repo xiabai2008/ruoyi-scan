@@ -146,7 +146,7 @@ def _add_heading(doc: Any, text: str, level: int = 1, size: Optional[int] = None
 
 
 def _style_table_header(table: Any, fill: str = "0969DA") -> None:
-    """设置表格首行为表头样式（蓝底白字加粗）"""
+    """设置表格首行为表头样式（白字加粗居中，fill 为底色，默认蓝底）"""
     for cell in table.rows[0].cells:
         _set_cell_bg(cell, fill)
         for para in cell.paragraphs:
@@ -218,7 +218,11 @@ def render_docx(builder: Any, out_path: str) -> str:
     mode = builder.summary.get("mode", "")
     fp = builder.summary.get("fingerprint", {}) or {}
     fp_cms = fp.get("cms", "")
-    fp_conf = fp.get("confidence", 0)
+    # 置信度可能来自 JSON/外部输入（None/字符串），统一转 float 供 :.2f 格式化
+    try:
+        fp_conf = float(fp.get("confidence", 0))
+    except (TypeError, ValueError):
+        fp_conf = 0.0
 
     # === 摘要表格 ===
     _add_heading(doc, "扫描摘要", level=2)
@@ -288,17 +292,10 @@ def render_docx(builder: Any, out_path: str) -> str:
         vuln_table = doc.add_table(rows=len(confirmed) + 1, cols=len(headers))
         vuln_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _set_table_borders(vuln_table)
-        # 表头
+        # 表头（统一样式见 _style_table_header）
         for j, h in enumerate(headers):
-            _add_cell_text(
-                vuln_table.rows[0].cells[j],
-                h,
-                size=9,
-                bold=True,
-                color=RGBColor(0xFF, 0xFF, 0xFF),
-                align=WD_ALIGN_PARAGRAPH.CENTER,
-            )
-            _set_cell_bg(vuln_table.rows[0].cells[j], "0969DA")
+            _add_cell_text(vuln_table.rows[0].cells[j], h, size=9)
+        _style_table_header(vuln_table)
         # 数据行
         for i, r in enumerate(confirmed, 1):
             sev_cn = SEVERITY_CN.get(r.severity, r.severity)
@@ -337,8 +334,8 @@ def render_docx(builder: Any, out_path: str) -> str:
             comp_table = doc.add_table(rows=1, cols=3)
             _set_table_borders(comp_table)
             for j, h in enumerate((label_key, "漏洞数", "涉及漏洞")):
-                _add_cell_text(comp_table.rows[0].cells[j], h, size=9, bold=True, color=RGBColor(0xFF, 0xFF, 0xFF))
-                _set_cell_bg(comp_table.rows[0].cells[j], "0969DA")
+                _add_cell_text(comp_table.rows[0].cells[j], h, size=9)
+            _style_table_header(comp_table)
             for item in rows:
                 cells = comp_table.add_row().cells
                 _add_cell_text(cells[0], str(item[label_key]), size=9, bold=True)
@@ -356,15 +353,8 @@ def render_docx(builder: Any, out_path: str) -> str:
         other_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _set_table_borders(other_table)
         for j, h in enumerate(other_headers):
-            _add_cell_text(
-                other_table.rows[0].cells[j],
-                h,
-                size=9,
-                bold=True,
-                color=RGBColor(0xFF, 0xFF, 0xFF),
-                align=WD_ALIGN_PARAGRAPH.CENTER,
-            )
-            _set_cell_bg(other_table.rows[0].cells[j], "656D76")
+            _add_cell_text(other_table.rows[0].cells[j], h, size=9)
+        _style_table_header(other_table, fill="656D76")
         for i, r in enumerate(others, 1):
             _add_cell_text(other_table.rows[i].cells[0], r.name, size=9)
             _add_cell_text(

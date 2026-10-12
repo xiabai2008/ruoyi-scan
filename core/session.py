@@ -45,9 +45,17 @@ def is_timeout_error(exc: BaseException) -> bool:
         seen.add(id(cur))
         if isinstance(cur, requests.exceptions.Timeout):
             return True
-        if "timeout" in type(cur).__name__.lower() or "timed out" in str(cur).lower():
+        # 类型名含 "timeout" 覆盖 urllib3 的 ConnectTimeoutError/ReadTimeoutError 与内置
+        # TimeoutError（Python<3.10 的 socket.timeout 类型名即 timeout）。
+        # 不再匹配异常消息文本：MaxRetryError/ConnectionError 的消息会内嵌请求 URL，
+        # 目标路径恰含 "timeout"（如 /timeout.php）时会把连接失败误判为超时。
+        if "timeout" in type(cur).__name__.lower():
             return True
         nxt = getattr(cur, "reason", None) or cur.__cause__ or cur.__context__
+        if not isinstance(nxt, BaseException) and cur.args and isinstance(cur.args[0], BaseException):
+            # 兜底：部分包装异常只把内层异常放进 args（如 requests 的
+            # ConnectionError(MaxRetryError(...))），没有 reason/__cause__/__context__ 可循
+            nxt = cur.args[0]
         cur = nxt if isinstance(nxt, BaseException) else None
     return False
 
@@ -78,6 +86,11 @@ def _host_breaker(host: str, threshold: int) -> _HostBreaker:
         if breaker is None:
             breaker = _HostBreaker(threshold)
             _HOST_BREAKERS[host] = breaker
+        else:
+            # 已存在的熔断器同步更新阈值：_HOST_BREAKERS 是模块级共享的，
+            # 否则后续不同 breaker_threshold 的实例（或配置变更）会被首个创建者的阈值静默覆盖
+            with breaker.lock:
+                breaker.threshold = threshold
         return breaker
 
 
@@ -146,7 +159,9 @@ class SessionManager:
             # 仅重试网关/服务不可用错误（502/503/504），
             # 不重试 500（应用错误可能包含漏洞证据，如 SQL 报错注入）
             status_forcelist=(502, 503, 504),
-            allowed_methods=frozenset(["GET", "POST", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]),
+            # allowed_methods 只保留幂等方法：POST 可能触发副作用（登录/改密/任务执行），
+            # 网关 5xx 或读超时被 urllib3 自动重发会重复执行同一动作，污染扫描结果
+            allowed_methods=frozenset(["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]),
         )
         _adapter = HTTPAdapter(
             pool_connections=_pool,
@@ -215,20 +230,29 @@ class SessionManager:
                 )
 
     def _send(self, method: str, url: str, **kwargs: Any) -> requests.Response:
-        """统一请求出口：熔断检查 → 发起请求 → 记录结果"""
+        """统一请求出口：熔断检查 → 代理轮换 → 发起请求 → 记录结果"""
         self._check_breaker(url)
         kwargs.setdefault("timeout", self.timeout)
+        # D13：代理池轮换——每请求取一个代理，并把请求结果回写池健康度。
+        # 固定代理（self.session.proxies）在 __init__ 已设置，此处只处理代理池路径。
+        proxy_url: Optional[str] = None
+        if self.proxy_pool:
+            proxy_url = self._get_proxy_for_request()
+            if proxy_url:
+                kwargs.setdefault("proxies", {"http": proxy_url, "https": proxy_url})
         with self._count_lock:
             self.request_count += 1
         try:
             resp = self.session.request(method, url, **kwargs)
         except Exception as exc:
+            self._record_proxy_result(proxy_url, success=False)
             # 仅「超时」计入熔断序列。其他异常（连接被拒/SSL 失败/协议错误）既不计入
             # 也不复位——复位只应发生在确实收到响应时，否则「超时与其他错误交替」的
             # 目标会让计数反复归零，熔断永不触发。
             if is_timeout_error(exc):
                 self._note_outcome(url, timed_out=True)
             raise
+        self._record_proxy_result(proxy_url, success=True)
         self._note_outcome(url, timed_out=False)
         self._log_debug(method.upper(), url, resp)
         return resp

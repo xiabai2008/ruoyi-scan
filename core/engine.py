@@ -6,10 +6,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 
-from common.models import STATUS_UNKNOWN, ScanResult
+from common.logger import get_logger
+from common.models import STATUS_CONFIRMED, STATUS_UNKNOWN, ScanResult
 
 if TYPE_CHECKING:
     from core.session import SessionManager
+
+logger = get_logger(__name__)
 
 
 class ScanEngine:
@@ -20,11 +23,13 @@ class ScanEngine:
 
         Args:
             threads: 并发执行插件的线程数（<=1 退化为串行）
-            rate: 每秒请求数上限（0=不限速，令牌桶实现见 _rate_limit）
+            rate: 每秒插件启动数上限（0=不限速，令牌桶实现见 _rate_limit）。
+                注意：这是插件级限速，不是逐 HTTP 请求限速——单个插件内部发出
+                的多个请求不受此约束
         """
         self.threads = max(1, threads)
-        self.rate = rate  # 每秒请求数，0 表示不限速
-        self._timestamps: List[float] = []  # 令牌桶：最近 1 秒内的请求时间戳
+        self.rate = rate  # 每秒插件启动数上限，0 表示不限速
+        self._timestamps: List[float] = []  # 令牌桶：最近 1 秒内的插件启动时间戳
         self._rate_lock = threading.Lock()  # 保护 _rate_limit 的互斥锁（多线程安全）
 
     def run(
@@ -66,14 +71,16 @@ class ScanEngine:
                 if (
                     waf_bypass_coordinator is not None
                     and getattr(inst, "supports_waf_bypass", False)
-                    and original.status != "CONFIRMED"
+                    and original.status != STATUS_CONFIRMED
                 ):
                     try:
                         original = cast(
                             ScanResult, waf_bypass_coordinator.maybe_bypass(inst, target, session, original)
                         )
                     except Exception as e:
-                        # 绕过异常不降级为 SAFE，保持原状态
+                        # 绕过异常不降级为 SAFE，保持原状态；同时记录日志：
+                        # 否则绕过失败（及其部分执行的副作用）只留在 extra 里，对操作者不可见
+                        logger.exception("WAF 绕过执行失败，保持原判定: %s", e)
                         if not original.extra:
                             original.extra = {}
                         original.extra["waf_bypass_error"] = str(e)
@@ -110,23 +117,31 @@ class ScanEngine:
         return results
 
     def _rate_limit(self) -> None:
-        """令牌桶限速：保证每秒请求数不超过 self.rate（线程安全）
+        """令牌桶限速：保证每秒启动的插件数不超过 self.rate（线程安全）
+
+        注意：限的是一个插件「开始执行」的速率（_exec 入口调用），不是插件内部
+        逐 HTTP 请求的 QPS；单插件多请求的场景不受此约束。CLI --rate 的宣传语
+        「每秒请求数」在语义上以此为实际行为。
 
         多线程环境下通过 _rate_lock 保护竞态条件。令牌桶算法：
-        维护最近 1 秒内的请求时间戳列表，若已达上限则 sleep 等待。
+        维护最近 1 秒内的插件启动时间戳列表，若已达上限则等待令牌释放后重新竞争。
 
-        修复：sleep 必须在锁外执行，否则任一线程睡眠时其余线程全在锁上排队，
-        多线程退化为串行。锁只保护时间戳列表的读写临界区。
+        修复（2026 评审）：原实现「先在锁内预约时间戳、再到锁外睡眠」，多个线程
+        会同时预约（列表被撑过 rate）并算出几乎相同的睡眠时间，醒来后一起发起
+        请求，形成超过配置速率的突发。现改为：锁内判定无令牌则释放锁睡眠，
+        醒来后回到锁内重新竞争，只有真正拿到令牌（写入时间戳）的线程才继续请求。
         """
         if self.rate <= 0:
             return
-        sleep = 0.0
-        with self._rate_lock:
-            now = time.time()
-            self._timestamps = [t for t in self._timestamps if now - t < 1.0]
-            if len(self._timestamps) >= self.rate:
+        while True:
+            with self._rate_lock:
+                now = time.time()
+                self._timestamps = [t for t in self._timestamps if now - t < 1.0]
+                if len(self._timestamps) < self.rate:
+                    # 拿到令牌：此刻才记录时间戳（即请求即将发出的时刻）
+                    self._timestamps.append(now)
+                    return
                 sleep = 1.0 - (now - self._timestamps[0])
-            self._timestamps.append(time.time())
-        # 锁外睡眠：不阻塞其他线程获取令牌（它们会各自判定并睡眠）
-        if sleep > 0:
-            time.sleep(sleep)
+            # 锁外睡眠：不阻塞其他线程；醒来后重新竞争令牌，避免同时醒来的突发
+            if sleep > 0:
+                time.sleep(sleep)

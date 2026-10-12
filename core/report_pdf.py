@@ -4,6 +4,7 @@
 # 生成 A4 纵向 PDF：封面 → 漏洞详情表 → 其他结果 → 修复建议汇总。
 from datetime import datetime
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -107,7 +108,9 @@ def render_pdf(builder: Any, out_path: str) -> str:
     if not scan_time:
         scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    story.append(Paragraph(f"扫描目标：{target}", subtitle_style))
+    # 所有进入 Paragraph 的扫描/目标侧文本必须转义，否则 & < > 会触发 paraparser
+    # 报错或破坏排版（目标 URL、漏洞名、URL、证据、修复建议均由扫描结果提供）
+    story.append(Paragraph(f"扫描目标：{escape(target)}", subtitle_style))
     story.append(Paragraph(f"扫描时间：{scan_time}", subtitle_style))
     story.append(Paragraph(f"报告生成：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", subtitle_style))
     story.append(Spacer(1, 15 * mm))
@@ -155,11 +158,11 @@ def render_pdf(builder: Any, out_path: str) -> str:
                 hit_info = f" (x{r.hit_count})"
             data.append(
                 [
-                    Paragraph(r.name + hit_info, cell_style),
-                    Paragraph(sev_cn, cell_style),
-                    Paragraph(r.url or "", cell_style),
-                    Paragraph(r.evidence or "", cell_style),
-                    Paragraph(r.fix or "", cell_style),
+                    Paragraph(escape(r.name + hit_info), cell_style),
+                    Paragraph(escape(sev_cn), cell_style),
+                    Paragraph(escape(r.url or ""), cell_style),
+                    Paragraph(escape(r.evidence or ""), cell_style),
+                    Paragraph(escape(r.fix or ""), cell_style),
                 ]
             )
 
@@ -204,10 +207,10 @@ def render_pdf(builder: Any, out_path: str) -> str:
         for r in others:
             other_data.append(
                 [
-                    Paragraph(r.name, cell_style),
-                    Paragraph(_STATUS_CN.get(r.status, r.status), cell_style),
-                    Paragraph(r.url or "", cell_style),
-                    Paragraph(r.evidence or "", cell_style),
+                    Paragraph(escape(r.name), cell_style),
+                    Paragraph(escape(_STATUS_CN.get(r.status, r.status)), cell_style),
+                    Paragraph(escape(r.url or ""), cell_style),
+                    Paragraph(escape(r.evidence or ""), cell_style),
                 ]
             )
         # 列宽同样合计 170mm 撑满正文区；repeatRows=1 使表头跨页重复
@@ -238,12 +241,12 @@ def render_pdf(builder: Any, out_path: str) -> str:
             title_color = _SEV_COLOR.get(r.severity, colors.black)
             story.append(
                 Paragraph(
-                    f"{i}. {r.name}（{sev_cn}）",
+                    f"{i}. {escape(r.name)}（{escape(sev_cn)}）",
                     ParagraphStyle("FixItem", parent=fix_title_style, textColor=title_color),
                 )
             )
-            story.append(Paragraph(f"URL：{r.url}", body_style))
-            story.append(Paragraph(f"修复：{r.fix or '暂无建议'}", body_style))
+            story.append(Paragraph(f"URL：{escape(r.url or '')}", body_style))
+            story.append(Paragraph(f"修复：{escape(r.fix or '暂无建议')}", body_style))
 
     doc.build(story)
     return out_path

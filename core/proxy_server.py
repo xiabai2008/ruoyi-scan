@@ -3,7 +3,7 @@
 import socket
 import threading
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, List, Optional, Set
 
 from common.logger import get_logger
@@ -35,6 +35,9 @@ class ScanQueue:
         with self._lock:
             urls = list(self._urls)
             self._urls.clear()
+            # 同步清空去重集合：否则长会话中 _seen 无限增长（内存泄漏），
+            # 且已 drain 的 URL 再被访问时会被 add() 静默丢弃，永远无法重新捕获
+            self._seen.clear()
         return urls
 
     def size(self) -> int:
@@ -49,6 +52,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     # 类变量：由 ProxyServer 在启动时注入
     queue: Optional["ScanQueue"] = None
     target_hosts: Set[str] = set()
+    # 保护 target_hosts：_record_url 在工作线程写入，captured_hosts() 在调用方线程读取，
+    # 无锁并发 add/迭代会抛 RuntimeError: Set changed size during iteration
+    _hosts_lock = threading.Lock()
 
     def do_GET(self) -> None:
         """GET 代理请求入口（委托通用处理逻辑）"""
@@ -71,8 +77,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
         """处理 HTTP 代理请求（如 GET http://example.com/page HTTP/1.1）"""
         parsed = urllib.parse.urlparse(self.path)
         if parsed.scheme and parsed.netloc:
-            # 绝对 URL（代理模式）
+            # 绝对 URL（代理模式）：必须保留 query（扫描输入常位于 ?id=1 这类参数中），
+            # 与下方 _forward 的转发路径保持同一形态
             url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            if parsed.query:
+                url = f"{url}?{parsed.query}"
             self._record_url(url)
             self._forward(method, parsed)
         else:
@@ -83,9 +92,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if self.queue is not None:
             # 同步登记域名：URL 即使已被去重丢弃，该主机仍纳入后续扫描范围
             host = urllib.parse.urlparse(url).netloc.split(":")[0]
-            self.target_hosts.add(host)
+            with self._hosts_lock:
+                self.target_hosts.add(host)
             if self.queue.add(url):
-                self.log_message("Captured: %s", url)
+                # log_message 已被重写为空实现（抑制 BaseHTTPRequestHandler 默认输出），
+                # 捕获明细必须走 logger 才可见
+                logger.debug("Captured: %s", url)
 
     def _tunnel(self, host: str, port: int) -> None:
         """建立 CONNECT 隧道"""
@@ -138,13 +150,20 @@ class ProxyHandler(BaseHTTPRequestHandler):
             headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection",)}
             conn.request(method, path, body=self._read_body(), headers=headers)
             resp = conn.getresponse()
+            # 先整体读回响应体再发送响应头：chunked 响应由 http.client 在此解码，
+            # Content-Length 需由实际字节数推导（见下）
+            body = resp.read()
             self.send_response(resp.status)
             for k, v in resp.getheaders():
-                # 剥离 Transfer-Encoding：代理已整体读回响应体，保留 Content-Length 供客户端定长解析
-                if k.lower() not in ("transfer-encoding",):
+                # 剥离 Transfer-Encoding（已整体读回）与 hop-by-hop 头（Connection/Keep-Alive），
+                # 并丢弃源站 Content-Length，改为下方按实际读回字节数显式定长返回
+                if k.lower() not in ("transfer-encoding", "content-length", "connection", "keep-alive"):
                     self.send_header(k, v)
+            # 无实体状态码（1xx/204/304）不补 Content-Length
+            if resp.status >= 200 and resp.status not in (204, 304):
+                self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(resp.read())
+            self.wfile.write(body)
             conn.close()
         except Exception:
             self.send_error(502)
@@ -183,7 +202,7 @@ class ProxyServer:
         self.host = host
         self.port = port
         self.queue = queue or ScanQueue()
-        self._server: Optional[HTTPServer] = None
+        self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.running = False
 
@@ -191,8 +210,11 @@ class ProxyServer:
         """启动代理服务器（后台线程）"""
         # 通过类变量注入队列：所有处理器实例共享同一队列与主机集合
         ProxyHandler.queue = self.queue
-        ProxyHandler.target_hosts = set()
-        self._server = HTTPServer((self.host, self.port), ProxyHandler)
+        with ProxyHandler._hosts_lock:
+            ProxyHandler.target_hosts = set()
+        # ThreadingHTTPServer：CONNECT 隧道会在处理线程内阻塞到关闭；单线程 HTTPServer
+        # 会让一条 HTTPS 隧道独占服务循环，期间其余 HTTP 请求/CONNECT 全部无法捕获
+        self._server = ThreadingHTTPServer((self.host, self.port), ProxyHandler)
         self._server.timeout = 1
         self.running = True
         self._thread = threading.Thread(target=self._serve, daemon=True)
@@ -208,14 +230,20 @@ class ProxyServer:
     def stop(self) -> None:
         """停止代理服务器"""
         self.running = False
+        if self._thread:
+            # _serve 由 handle_request + timeout=1 轮询驱动，置 running=False 后
+            # 最多 1 秒即退出循环，join 可及时返回
+            self._thread.join(timeout=2)
         if self._server:
             try:
-                self._server.shutdown()
+                # 注意：不能调用 BaseServer.shutdown()——该实现只在 serve_forever()
+                # 结束时设置 __is_shut_down 事件，而本类的 _serve 从未调用 serve_forever，
+                # shutdown() 会永久阻塞（stop() 卡死）。改为直接关闭监听套接字。
+                self._server.server_close()
             except Exception:
                 logger.debug("代理服务器关闭失败", exc_info=True)
-        if self._thread:
-            self._thread.join(timeout=2)
 
     def captured_hosts(self) -> List[str]:
         """返回代理会话中捕获到的主机列表（供后续定向扫描使用）"""
-        return list(ProxyHandler.target_hosts)
+        with ProxyHandler._hosts_lock:
+            return list(ProxyHandler.target_hosts)

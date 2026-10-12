@@ -17,6 +17,7 @@
 import base64
 import io
 import re
+import threading
 from typing import Any, Optional, Tuple
 
 from common.logger import get_logger
@@ -29,6 +30,9 @@ logger = get_logger(__name__)
 _OCR_ENGINE: Any = None
 _OCR_BACKEND: Optional[str] = None
 _OCR_PROBED = False
+# 探测过程互斥锁：整个探测（import + 构造引擎 + 发布后端）必须串行完成，
+# 否则并发首扫时其他线程可能看到「_OCR_PROBED=True 但 _OCR_BACKEND 仍为 None」的中间态
+_OCR_PROBE_LOCK = threading.Lock()
 
 # 验证码接口候选路径（按若依版本兼容性排序）
 #
@@ -77,6 +81,8 @@ class CaptchaSolver:
         self.captcha_type = captcha_type  # auto / math / char
         self._ocr_backend: Optional[str] = None
         self._captcha_path: Optional[str] = None
+        # RuoYi 5.x JWT 登录要求 uuid 与图片同批提交，下载图片时记录
+        self._captcha_uuid: str = ""
 
     def _init_ocr_backend(self) -> Optional[str]:
         """初始化 OCR 后端，返回后端名称或 None
@@ -84,45 +90,52 @@ class CaptchaSolver:
         引擎缓存在进程级（模块全局）而非实例级：登录爆破对每个口令新建一个
         CaptchaSolver（默认字典 1052 条），实例级缓存等于每个口令重新加载一次
         DdddOcr 模型——实测默认 -u 扫描因此白等 100 秒以上。引擎本身无状态，
-        进程内复用安全（并发首次加载最多重复构造一次，无副作用）。
+        进程内复用安全（整个探测持 _OCR_PROBE_LOCK 串行执行，只加载一次）。
         """
         global _OCR_ENGINE, _OCR_BACKEND, _OCR_PROBED
 
-        if _OCR_PROBED:
-            self._ocr_backend = _OCR_BACKEND
-            if _OCR_BACKEND == "ddddocr":
+        # 持锁探测：扫描引擎用 ThreadPoolExecutor 并发跑插件，各节点会各自新建
+        # CaptchaSolver。若在解析出后端之前就置 _OCR_PROBED=True，并发线程会命中
+        # 早退分支并永久缓存 None 后端（该节点 OCR 静默失效）。因此探测标志必须在
+        # 后端解析完成之后才发布，且探测全程持锁。
+        with _OCR_PROBE_LOCK:
+            if _OCR_PROBED:
+                self._ocr_backend = _OCR_BACKEND
+                if _OCR_BACKEND == "ddddocr":
+                    self._ocr = _OCR_ENGINE
+                elif _OCR_BACKEND == "pytesseract":
+                    self._pytesseract, self._PIL = _OCR_ENGINE
+                return _OCR_BACKEND
+
+            # 1. 优先 ddddocr
+            try:
+                import ddddocr
+
+                _OCR_ENGINE = ddddocr.DdddOcr(show_ad=False)
+                _OCR_BACKEND = "ddddocr"
                 self._ocr = _OCR_ENGINE
-            elif _OCR_BACKEND == "pytesseract":
+                self._ocr_backend = _OCR_BACKEND
+                _OCR_PROBED = True  # 后端已解析完成，才发布探测标志
+                return self._ocr_backend
+            except Exception:
+                logger.debug("ddddocr 后端加载失败", exc_info=True)
+            # 2. 备选 pytesseract
+            try:
+                import pytesseract
+                from PIL import Image
+
+                _OCR_ENGINE = (pytesseract, Image)
+                _OCR_BACKEND = "pytesseract"
                 self._pytesseract, self._PIL = _OCR_ENGINE
-            return _OCR_BACKEND
-
-        _OCR_PROBED = True
-        # 1. 优先 ddddocr
-        try:
-            import ddddocr
-
-            _OCR_ENGINE = ddddocr.DdddOcr(show_ad=False)
-            _OCR_BACKEND = "ddddocr"
-            self._ocr = _OCR_ENGINE
-            self._ocr_backend = _OCR_BACKEND
-            return self._ocr_backend
-        except Exception:
-            logger.debug("ddddocr 后端加载失败", exc_info=True)
-        # 2. 备选 pytesseract
-        try:
-            import pytesseract
-            from PIL import Image
-
-            _OCR_ENGINE = (pytesseract, Image)
-            _OCR_BACKEND = "pytesseract"
-            self._pytesseract, self._PIL = _OCR_ENGINE
-            self._ocr_backend = _OCR_BACKEND
-            return self._ocr_backend
-        except Exception:
-            logger.debug("pytesseract 后端加载失败", exc_info=True)
-        # 两个后端都不可用：记录已探测，避免每次识别都重试 import
-        _OCR_BACKEND = None
-        return None
+                self._ocr_backend = _OCR_BACKEND
+                _OCR_PROBED = True  # 后端已解析完成，才发布探测标志
+                return self._ocr_backend
+            except Exception:
+                logger.debug("pytesseract 后端加载失败", exc_info=True)
+            # 两个后端都不可用：记录已探测（_OCR_BACKEND 确认为 None），避免每次识别都重试 import
+            _OCR_BACKEND = None
+            _OCR_PROBED = True
+            return None
 
     def detect_captcha(self) -> Tuple[bool, str]:
         """探测验证码接口是否存在
@@ -166,12 +179,19 @@ class CaptchaSolver:
                 if code == 200 and "json" in ct:
                     try:
                         body = resp.json()
-                        if "img" in body or "image" in body or "data" in body:
-                            self._captcha_path = path
-                            return True, path
                     except (ValueError, TypeError):
                         logger.debug("验证码接口 JSON 响应解析失败", exc_info=True)
+                        continue
+                    # 先校验类型：列表/标量上做 `in` 会抛 TypeError 并被静默吞掉，
+                    # 把「接口存在但响应形状异常」误报为「接口不存在」；
+                    # "data" 要求为真值，避免 {"code":500,"data":null} 这类错误响应
+                    # 被当作验证码接口（误报）
+                    if isinstance(body, dict) and ("img" in body or "image" in body or bool(body.get("data"))):
+                        self._captcha_path = path
+                        return True, path
             except Exception:
+                # 单候选失败（网络异常/响应畸形）不应与「接口不存在」混淆：记日志后继续
+                logger.debug("验证码候选路径 %s 探测异常", path, exc_info=True)
                 continue
         if empty_fallback:
             # 所有候选都拿不到图，但确实存在验证码接口：仍判「存在」，
@@ -192,7 +212,15 @@ class CaptchaSolver:
             if "json" in ct:
                 # RuoYi 5.x base64 JSON
                 body = resp.json()
-                b64 = body.get("img") or body.get("image") or body.get("data") or ""
+                if not isinstance(body, dict):
+                    # 非字典 JSON（列表/标量）：按无图处理，避免 .get 抛 AttributeError
+                    return b"", True
+                # 部分实现把 img/uuid 包在 data 对象里
+                inner = body.get("data")
+                payload: Any = inner if isinstance(inner, dict) else body
+                # uuid 必须与图片同批下发：这里重新 GET 拿到的是新图，uuid 一并更新
+                self._captcha_uuid = str(payload.get("uuid") or "")
+                b64 = payload.get("img") or payload.get("image") or payload.get("data") or ""
                 if b64:
                     # 去 data:image/...;base64, 前缀
                     if "," in b64 and b64.startswith("data:"):
@@ -263,7 +291,7 @@ class CaptchaSolver:
         if not has:
             return False, ""
         # 下载验证码图片
-        image_bytes, is_json = self._download_image()
+        image_bytes, _ = self._download_image()
         if not image_bytes:
             # 有接口但图片为空（如真实若依靶场 kaptcha 配置问题）
             return True, ""
@@ -281,3 +309,8 @@ class CaptchaSolver:
     def backend_name(self) -> str:
         """当前 OCR 后端名称（供调试/证据用）"""
         return self._init_ocr_backend() or "none"
+
+    @property
+    def captcha_uuid(self) -> str:
+        """最近一次下载的验证码 uuid（RuoYi 5.x JWT 登录需与 code 同批提交）"""
+        return self._captcha_uuid

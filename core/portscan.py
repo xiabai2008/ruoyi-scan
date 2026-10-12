@@ -176,6 +176,11 @@ BANNER_PROBES = {
     "mongodb": b"",
     "http": b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",
     "https": b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",
+    # 端口别名同样可能是 Web 服务（81/8000/8888=http-alt、8080=http-proxy、8443=https-alt）：
+    # 若不发探测包，裸 recv 对等待请求的 HTTP 服务不会返回任何数据，banner 恒为空
+    "http-alt": b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",
+    "http-proxy": b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",
+    "https-alt": b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",
 }
 
 
@@ -208,16 +213,25 @@ class PortScanner:
         with ThreadPoolExecutor(max_workers=self.threads) as ex:
             futures = {ex.submit(self._scan_port, host, p): p for p in ports}
             for fut in as_completed(futures):
-                res = fut.result()
+                try:
+                    res = fut.result()
+                except Exception:
+                    # 单个端口任务异常（如 fd 耗尽）不应让 fut.result() 重抛、终止整次扫描，
+                    # 该端口按 filtered 处理并继续其余结果收集
+                    port = futures[fut]
+                    logger.debug("端口 %s 扫描任务异常", port, exc_info=True)
+                    res = PortResult(port=port, state="filtered")
                 if res.state == "open":
                     results.append(res)
         return sorted(results, key=lambda r: r.port)
 
     def _scan_port(self, host: str, port: int) -> PortResult:
         """扫描单个端口：TCP connect → 成功则抓 Banner"""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(self.timeout)
+        # socket 创建/settimeout 也在 try 内：创建失败（如 fd 耗尽）不应把异常泄漏到扫描主循环
+        sock: Optional[socket.socket] = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.timeout)
             # connect_ex 不抛异常而是返回 errno（0=连接成功），比 connect 省一层 try/except
             if sock.connect_ex((host, port)) != 0:
                 return PortResult(port=port, state="closed")
@@ -225,10 +239,13 @@ class PortScanner:
             service = PORT_SERVICE_MAP.get(port, "unknown")
             banner = self._grab_banner(sock, service)
             return PortResult(port=port, state="open", service=service, banner=banner)
-        except (socket.timeout, ConnectionRefusedError, OSError):
+        except OSError:
+            # socket.timeout/ConnectionRefusedError 均为 OSError 子类，无需重复列出；
+            # 非 OSError 的意外异常由 scan() 在 fut.result() 处兜底为 filtered
             return PortResult(port=port, state="filtered")
         finally:
-            sock.close()
+            if sock is not None:
+                sock.close()
 
     def _grab_banner(self, sock: socket.socket, service: str) -> str:
         """尝试抓取 Banner（发探测包 → 接收响应）"""
@@ -242,8 +259,9 @@ class PortScanner:
                 logger.debug("Banner 探测失败", exc_info=True)
         # 无特定探测包，尝试直接 recv
         try:
-            # ssh/ftp 等服务会主动下发 banner，这里等最先到达的 1s 窗口即可
-            sock.settimeout(1)
+            # ssh/ftp 等服务会主动下发 banner；等待窗口跟随配置超时，
+            # 否则调用方调大 timeout 容忍慢速/丢包链路时，banner 仍被硬编码的 1s 截断
+            sock.settimeout(self.timeout)
             data = sock.recv(1024)
             return self._clean_banner(data)
         except Exception:
@@ -253,8 +271,10 @@ class PortScanner:
     def _clean_banner(data: bytes) -> str:
         """清洗 Banner：去掉控制字符，取第一行"""
         try:
-            text = data.decode("utf-8", errors="replace")
-        except Exception:
+            # 严格解码：非 UTF-8 字节才触发 fallback。
+            # 用 errors='replace' 永不抛异常，latin-1 分支会沦为死代码
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
             # latin-1 逐字节映射永不失败，非 UTF-8 编码的 banner 也能完整保留文本
             text = data.decode("latin-1", errors="replace")
         # 取第一行，移除 \r\n

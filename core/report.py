@@ -71,6 +71,10 @@ class ReportBuilder:
 
     def add(self, result: ScanResult) -> None:
         self.results.append(result)
+        # 新结果加入后必须失效去重缓存，否则后续 risk_distribution/to_html/to_dict/to_csv
+        # 会继续使用旧的 _cached_effective/_cached_dedup_report，新结果被静默漏报
+        self._cached_effective = None
+        self._cached_dedup_report = None
 
     # 风险分布：仅统计 CONFIRMED 漏洞
     def risk_distribution(self) -> Dict[str, int]:
@@ -534,6 +538,9 @@ function toggleFilter() {{
                 paths.append(pdf_path)
             except ImportError:
                 logger.warning("reportlab 未安装，跳过 PDF 报告（pip install reportlab）")
+            except Exception as e:
+                # 可选格式统一降级：渲染失败不应中断整个 render_all（与下方 SARIF 分支同语义）
+                logger.warning("PDF 报告生成失败，已跳过: %s", e)
         if "docx" in formats:
             try:
                 from core.report_docx import render_docx
@@ -543,6 +550,8 @@ function toggleFilter() {{
                 paths.append(docx_path)
             except ImportError:
                 logger.warning("python-docx 未安装，跳过 Word 报告（pip install python-docx）")
+            except Exception as e:
+                logger.warning("Word 报告生成失败，已跳过: %s", e)
         if "xlsx" in formats:
             try:
                 from core.report_xlsx import render_xlsx
@@ -552,6 +561,8 @@ function toggleFilter() {{
                 paths.append(xlsx_path)
             except ImportError:
                 logger.warning("openpyxl 未安装，跳过 Excel 报告（pip install openpyxl）")
+            except Exception as e:
+                logger.warning("Excel 报告生成失败，已跳过: %s", e)
         # D22: SARIF 报告格式（GitHub Code Scanning）
         if "sarif" in formats:
             try:
@@ -665,7 +676,7 @@ class BatchReport:
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         bar_svg = self._render_targets_bar_svg()
         rows = []
-        total_high = total_medium = total_low = total_vuln = total_req = 0.0
+        total_high = total_medium = total_low = total_vuln = total_req = 0
         total_dur = 0.0
         for b in self.builders:
             dist = b.risk_distribution()

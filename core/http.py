@@ -52,8 +52,14 @@ def split_target(url: str) -> Tuple[str, int]:
         (host, port)；无法解析主机名时 host 为空串
     """
     raw = url if "://" in url else "http://" + url
-    parts = urlsplit(raw)
-    port = parts.port
+    try:
+        parts = urlsplit(raw)
+        port = parts.port
+    except ValueError:
+        # 畸形目标（端口非数字/越界、非法 IPv6 字面量等）：urlsplit/parts.port 会抛
+        # ValueError。返回空 host，调用方 probe_reachable 会映射为友好失败提示，
+        # 而不是让预检抛出未捕获异常。
+        return "", 0
     if port is None:
         port = 443 if parts.scheme == "https" else 80
     return parts.hostname or "", port
@@ -112,7 +118,12 @@ def probe_http_responsive(url: str, timeout: float = 5.0) -> Tuple[bool, str]:
 
     from config import settings
 
-    if "://" in url and url.split("://", 1)[0].lower() not in _ALLOWED_SCHEMES:
+    # 协议归一化：无协议的输入（如 192.168.1.1:8080）按 http 处理，与 split_target /
+    # probe_reachable 显式接受的格式保持一致；否则 requests 抛 MissingSchema，
+    # 只会得到一句难以理解的「HTTP 请求失败」而非正常探测
+    if "://" not in url:
+        url = "http://" + url
+    if url.split("://", 1)[0].lower() not in _ALLOWED_SCHEMES:
         return False, f"不支持的协议（仅支持 http/https）：{url.split('://', 1)[0]}://"
 
     # 预检发生在 SessionManager 创建之前，需在此独立抑制证书警告，
@@ -136,5 +147,7 @@ def probe_http_responsive(url: str, timeout: float = 5.0) -> Tuple[bool, str]:
         return False, f"TLS 证书校验失败（当前 --verify-tls 已开启，目标可能使用自签名证书）：{exc}"
     except requests.exceptions.Timeout:
         return False, f"{timeout:.0f} 秒内无任何响应（端口可连接，但 HTTP 层无响应）"
-    except Exception as exc:
+    # 只兜住 requests 网络层异常（ConnectionError/InvalidURL/MissingSchema/TooManyRedirects 等）；
+    # 不吞 TypeError/AttributeError 这类程序缺陷，避免把内部 bug 误报为目标不可达
+    except requests.exceptions.RequestException as exc:
         return False, f"HTTP 请求失败（{exc}）"

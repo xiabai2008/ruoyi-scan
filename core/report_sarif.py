@@ -16,6 +16,7 @@
 #   gh code-scanning upload --sarif reports/report.sarif --repo owner/repo
 #
 # SARIF 2.1.0 规范：https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
+import hashlib
 import json
 from typing import Any, Dict, List
 
@@ -104,6 +105,9 @@ def _build_rules(results: List[Any]) -> Dict[str, Dict[str, Any]]:
 
 def _build_results(results: List[Any], rules: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """构建 SARIF results 数组"""
+    # 规则 id → 下标映射：预先算一次，避免每个结果都 list(rules.keys()).index(...)
+    # 导致 O(n^2) 的结果构建
+    rule_index = {rule_id: idx for idx, rule_id in enumerate(rules)}
     sarif_results = []
     for r in results:
         if r.status != "CONFIRMED":
@@ -119,7 +123,7 @@ def _build_results(results: List[Any], rules: Dict[str, Dict[str, Any]]) -> List
         result_entry = {
             "ruleId": rule_id,
             # ruleIndex 必须与 rules 数组中该 rule 的下标一致（SARIF 规范），未知 rule 时兜底 0
-            "ruleIndex": list(rules.keys()).index(rule_id) if rule_id in rules else 0,
+            "ruleIndex": rule_index.get(rule_id, 0),
             "level": level,
             "message": {
                 "text": f"{r.name}: {getattr(r, 'evidence', '') or ''}",
@@ -134,8 +138,10 @@ def _build_results(results: List[Any], rules: Dict[str, Dict[str, Any]]) -> List
                 }
             ],
             "partialFingerprints": {
-                # 用 rule+url 组合哈希生成去重指纹；& 0xFFFFFFFF 截断为 8 位十六进制
-                "primaryLocationLineHash": f"{rule_id}:{hash(url) & 0xFFFFFFFF:08x}",
+                # 以 url 的 sha256 前 8 位生成稳定去重指纹（rule_id 前缀区分规则）。
+                # 不用内置 hash()：它受 PYTHONHASHSEED 加盐影响，同输入每次运行都不同，
+                # 会破坏 GitHub Code Scanning 基于 partialFingerprints 的跨运行去重。
+                "primaryLocationLineHash": f"{rule_id}:{hashlib.sha256(url.encode('utf-8')).hexdigest()[:8]}",
             },
             "properties": {
                 "severity": r.severity,
@@ -193,7 +199,8 @@ def to_sarif(report_builder: Any) -> str:
         "invocations": [
             {
                 "executionSuccessful": True,
-                "endTimeUtc": summary.get("started_at", ""),
+                # 结束时间优先取 ended_at，缺失时退回 started_at（保持旧行为）
+                "endTimeUtc": summary.get("ended_at") or summary.get("started_at", ""),
             }
         ],
         "properties": {

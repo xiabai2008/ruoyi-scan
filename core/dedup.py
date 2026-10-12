@@ -15,6 +15,10 @@ from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_C
 _SEVERITY_ORDER = {SEVERITY_LOW: 0, SEVERITY_MEDIUM: 1, SEVERITY_HIGH: 2}
 # 状态排序（数值越大越"差"，CONFIRMED 最严重）
 _STATUS_ORDER = {STATUS_SAFE: 0, STATUS_UNKNOWN: 1, STATUS_CONFIRMED: 2}
+# 聚合取最高/最差时的未知取值兜底：按各表最严重档处理，
+# 否则 -1 哨兵会把数据异常（None/空串等）静默沉到最低，真实结果的等级被拉低
+_SEVERITY_MAX_RANK = max(_SEVERITY_ORDER.values())
+_STATUS_MAX_RANK = max(_STATUS_ORDER.values())
 
 # vuln_type → 中文名映射（聚合时优先使用语义化名称）
 VULN_TYPE_CN = {
@@ -268,9 +272,15 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
             merged_groups += 1
 
         # severity: 取最高
-        severity = max((getattr(r, "severity", SEVERITY_LOW) for r in group), key=lambda s: _SEVERITY_ORDER.get(s, -1))
+        severity = max(
+            (getattr(r, "severity", SEVERITY_LOW) for r in group),
+            key=lambda s: _SEVERITY_ORDER.get(s, _SEVERITY_MAX_RANK),
+        )
         # status: 取最差
-        status = max((getattr(r, "status", STATUS_UNKNOWN) for r in group), key=lambda s: _STATUS_ORDER.get(s, -1))
+        status = max(
+            (getattr(r, "status", STATUS_UNKNOWN) for r in group),
+            key=lambda s: _STATUS_ORDER.get(s, _STATUS_MAX_RANK),
+        )
         # name: 语义化名称
         name = _resolve_name(group)
         # url: 首个为主 URL
@@ -307,11 +317,11 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
             )
         )
 
-    # 排序：CONFIRMED 优先，同状态按 severity high→medium→low，同 severity 按名称
-    _sev_sort = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
-    _status_sort = {STATUS_CONFIRMED: 0, STATUS_UNKNOWN: 1, STATUS_SAFE: 2}
-    # 注意：这两个排序键与模块级 _SEVERITY_ORDER/_STATUS_ORDER 方向相反——
-    # 模块级是"数值越大越严重"的权重，此处是"数值越小越靠前"的排序优先级
+    # 排序：CONFIRMED 优先，同状态按 severity high→medium→low，同 severity 按名称。
+    # 排序键由模块级权重表取负导出（数值越小越靠前），新增严重度/状态只需改
+    # 模块级常量，排序自动跟随，避免两处定义漂移
+    _sev_sort = {k: -v for k, v in _SEVERITY_ORDER.items()}
+    _status_sort = {k: -v for k, v in _STATUS_ORDER.items()}
     aggregated.sort(
         key=lambda v: (
             _status_sort.get(v.status, 99),

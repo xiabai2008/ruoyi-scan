@@ -13,6 +13,7 @@
 #         至少命中一个强特征 → 高置信；仅弱特征 → 低置信（供人工复核）；无特征 → 未识别。
 
 # 真实采集的 RuoYi 4.7.8 favicon md5（2026-07-17 从运行实例 127.0.0.1:8080/favicon.ico 采集，size=16958）
+import copy
 from typing import Any, Dict, List, Optional
 
 RUOYI_FAVICON_MD5 = "e49fd30ea870c7a820464ca56a113e6e"
@@ -85,6 +86,8 @@ CMS_FEATURES = {
 #   1. strong_paths 命中至少 1 个（复用主指纹的 expect 语义）
 #   2. negative_paths 全部未命中（返回 404/非 200 才算排除项成立）
 #   3. 多个变体命中时取命中数最多者；全部未命中 → variant=''（通用版，跑全部 POC）
+# 注：variant 条目的 weak_keywords/weight_* 目前是未被 detect_variant 读取的 dead config；
+#     若后续接入评分，需先收紧 "plus"/"index-"/"cloud-plus" 等泛化 token，避免误判无关站点。
 VARIANT_FEATURES = {
     "ruoyi-vue3": {
         "display": "RuoYi-Vue3",
@@ -138,6 +141,9 @@ VARIANT_FEATURES = {
     },
     "ruoyi-magic": {
         "display": "RuoYi 魔改版",
+        # 空 strong_paths 有意的：detect_variant 只在强路径命中 >=1 时选中变体，
+        # 本条目因此永远不会被自动选中（弱关键字也与主 ruoyi 重合，自动匹配会给
+        # 所有普通若依站点打上「魔改版」标签）。仅保留供 --cms ruoyi-magic 手动指定。
         "strong_paths": [],
         "weak_keywords": ["若依", "ruoyi", "RuoYi"],
         "negative_paths": [],
@@ -148,8 +154,13 @@ VARIANT_FEATURES = {
 
 
 def get_feature(cms: str) -> Optional[Dict[str, Any]]:
-    """返回某 CMS 的特征 dict，未注册返回 None"""
-    return CMS_FEATURES.get(cms)
+    """返回某 CMS 的特征 dict（深拷贝），未注册返回 None
+
+    返回副本：调用方修改（含嵌套 set/list）不应污染进程级特征库，
+    避免后续扫描读到被篡改的共享注册表。
+    """
+    feature = CMS_FEATURES.get(cms)
+    return copy.deepcopy(feature) if feature else None
 
 
 def list_cms() -> List[str]:
@@ -163,5 +174,6 @@ def list_variants() -> List[str]:
 
 
 def get_variant_feature(variant: str) -> Optional[Dict[str, Any]]:
-    """返回某变体的特征 dict，未注册返回 None（E1）"""
-    return VARIANT_FEATURES.get(variant)
+    """返回某变体的特征 dict（深拷贝），未注册返回 None（E1）"""
+    feature = VARIANT_FEATURES.get(variant)
+    return copy.deepcopy(feature) if feature else None
