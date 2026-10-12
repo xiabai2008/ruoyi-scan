@@ -593,6 +593,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
         return results
 
     total = len(targets)
+
     def _progress(done, total_count, current):
         print(f"\r{YELLOW}[*]进度 [{done}/{total_count}] 当前：{current:<40}{RESET}", end="", flush=True)
 
@@ -634,6 +635,8 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
     # 显式列出失败/无结果目标，杜绝“99 个目标静默显示 0 漏洞”的观感
+    # （_scan_single 异常返回 []，与“扫完确实无漏洞”同为空——统一列入清单提示人工复核）
+    failed_targets = [t for t in targets if not results_by_target.get(t)]
     if failed_targets:
         print(f"{YELLOW}[!]以下 {len(failed_targets)} 个目标无结果（扫描失败或未发现漏洞）：{RESET}")
         for ft in failed_targets:

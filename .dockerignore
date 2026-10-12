@@ -35,6 +35,12 @@ lab/*
 **/env/
 **/node_modules/
 
+# 本地产物/前端产物（本机构建桌面端后 target/ 可达 10GB+，绝不进镜像）
+desktop/src-tauri/target/
+desktop/dist/
+desktop/artifacts/
+build/
+
 # 运行时/本地产物
 **/*.log
 **/*.tmp

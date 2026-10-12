@@ -416,7 +416,7 @@ _aggregate_status()       # 聚合链状态 → ChainResult
 | `scan_cache.db` | 20 KB | D37 结果缓存（SQLite） |
 | `tasks.db` | 112 KB | D11 Web API 任务持久化（SQLite） |
 
-字典分级由 [config/settings.py](../../config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步解析并注入当前扫描的 `session.password_dict`（并发隔离；爆破插件优先读取该属性，回退 `settings.PASSWORD_DICT`）。见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)。
+字典分级由 [config/settings.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步解析并注入当前扫描的 `session.password_dict`（并发隔离；爆破插件优先读取该属性，回退 `settings.PASSWORD_DICT`）。见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)。
 
 > `scan_cache.db` / `tasks.db` 是**运行时产物**，不应随仓库分发（已在 `.gitignore` 中）。
 

@@ -388,9 +388,7 @@ def _dsl_expr_supported(expr: str) -> bool:
 def _eval_dsl(expr: str, status_code: int, body: str, headers_str: str) -> bool:
     """dsl matcher 白名单求值：仅支持 status_code 数字比较 + contains(body/header, 'x')"""
     expr = expr.replace("status_code", str(status_code))
-    expr2 = _dsl_replace_contains(
-        expr, lambda part, needle: needle in (body if part == "body" else headers_str)
-    )
+    expr2 = _dsl_replace_contains(expr, lambda part, needle: needle in (body if part == "body" else headers_str))
     if expr2 is None:
         return False
     expr2 = _dsl_normalize_ops(expr2)
