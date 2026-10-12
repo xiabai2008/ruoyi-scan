@@ -1,5 +1,5 @@
 # CORS 跨域配置检测 — Origin 反射 + Access-Control 头分析
-from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from plugins.base import PluginBase
 
 
@@ -60,8 +60,24 @@ class CorsMisconfigPlugin(PluginBase):
 
     _TEST_ORIGIN = "https://evil.example.com"
 
+    @classmethod
+    def _reflects_attacker(cls, acao: str) -> bool:
+        """ACAO 是否放行攻击者 Origin
+
+        覆盖三类危险形态：
+        1. 完整反射（ACAO == 攻击者 Origin）；
+        2. 前缀/后缀白名单拼接缺陷（如 ACAO=https://evil.example.com.trusted.com）；
+        3. `null`（沙箱 iframe 场景）。
+        """
+        if not acao:
+            return False
+        origin = acao.strip()
+        if origin.lower() == "null":
+            return True
+        return cls._TEST_ORIGIN in origin
+
     def verify(self, target, session) -> ScanResult:
-        """检测 CORS 跨域配置不当：构造恶意 Origin 探测服务端是否反射
+        """检测 CORS 跨域配置不当：恶意 Origin 探测（GET + OPTIONS 预检）
 
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
@@ -74,10 +90,44 @@ class CorsMisconfigPlugin(PluginBase):
             resp = session.get(target, headers=headers)
             acao = resp.headers.get("Access-Control-Allow-Origin", "")
             acac = resp.headers.get("Access-Control-Allow-Credentials", "")
+            source = "GET"
 
-            # 反射型 CORS：服务器将请求中的 Origin 原样返回
-            if acao == self._TEST_ORIGIN:
-                detail = "Origin 完全反射"
+            # 部分服务端只在 OPTIONS 预检时下发 CORS 头（GET 上不反射），需补一次预检探测
+            if acao != "*" and not self._reflects_attacker(acao):
+                try:
+                    preflight = session.request(
+                        "OPTIONS",
+                        target,
+                        headers={"Origin": self._TEST_ORIGIN, "Access-Control-Request-Method": "GET"},
+                    )
+                except Exception:
+                    preflight = None
+                if preflight is not None:
+                    pacao = preflight.headers.get("Access-Control-Allow-Origin", "")
+                    if pacao == "*" or self._reflects_attacker(pacao):
+                        acao = pacao
+                        acac = preflight.headers.get("Access-Control-Allow-Credentials", "")
+                        source = "OPTIONS 预检"
+
+            # 通配符 CORS（低风险：浏览器禁止 * 与 Allow-Credentials=true 同时生效，无法携带凭据读数据）
+            if acao == "*":
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    # 通配符本身不构成凭据窃取风险，按低危报告，避免对公共/CDN 接口造成严重度虚高
+                    severity=SEVERITY_LOW,
+                    status=STATUS_CONFIRMED,
+                    url=target,
+                    evidence=f"{source} 响应 Access-Control-Allow-Origin=*（低风险：不可携带凭据但允许任意跨域读）",
+                    fix=self.fix,
+                )
+            # 反射型 CORS：完整反射 / 含攻击者域名（白名单前缀后缀缺陷）/ null
+            if self._reflects_attacker(acao):
+                origin = acao.strip()
+                if origin == self._TEST_ORIGIN:
+                    detail = "Origin 完全反射"
+                else:
+                    detail = f"ACAO 含攻击者域名（白名单可被绕过），ACAO={origin}"
                 # 高危组合：Allow-Credentials=true 时跨域请求才可携带 Cookie，进而窃取已登录用户数据
                 if acac.lower() == "true":
                     detail += " + Allow-Credentials=true（高风险：可携带 Cookie）"
@@ -87,18 +137,7 @@ class CorsMisconfigPlugin(PluginBase):
                     severity=self.severity,
                     status=STATUS_CONFIRMED,
                     url=target,
-                    evidence=f"{detail}, ACAO={acao}, ACAC={acac}",
-                    fix=self.fix,
-                )
-            # 通配符 CORS（信息级提示）
-            elif acao == "*":
-                return ScanResult(
-                    kind=self.category,
-                    name=self.name,
-                    severity=self.severity,
-                    status=STATUS_CONFIRMED,
-                    url=target,
-                    evidence="Access-Control-Allow-Origin=*（低风险：不可携带凭据但允许任意跨域读）",
+                    evidence=f"{detail}（{source} 响应）, ACAO={acao}, ACAC={acac}",
                     fix=self.fix,
                 )
             return ScanResult(

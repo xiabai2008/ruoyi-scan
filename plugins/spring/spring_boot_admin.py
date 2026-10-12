@@ -56,10 +56,10 @@ class SpringBootAdminPlugin(PluginBase):
             url = join_url(target, path)
             try:
                 resp = session.get(url)
-                # 只匹配响应前 500 字符：SBA 页面体积大，关键字头部即可命中，避免全量匹配开销
-                if resp.status_code == 200 and any(
-                    kw in (resp.text or "")[:500] for kw in ["spring-boot-admin", "applications"]
-                ):
+                # 匹配整个响应体：SBA 页面（SPA 壳）体积大，标识可能出现在前 500 字符之后，
+                # 截断匹配会漏报（resp.text 此时已全部物化，截断并不节省开销）
+                body = (resp.text or "").lower()
+                if resp.status_code == 200 and any(kw in body for kw in ["spring-boot-admin", "applications"]):
                     return ScanResult(
                         kind=self.category,
                         name=self.name,

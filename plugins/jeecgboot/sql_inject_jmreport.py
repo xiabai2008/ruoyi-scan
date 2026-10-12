@@ -1,9 +1,11 @@
 # JeecgBoot 报表 SQL 注入：/jmreport/queryFieldBySql 自定义 SQL 执行（未授权 RCE 前置）
-# 存在性验证：提交 union 探测 SQL，响应含 SQL 报错特征或回显差异即确认
+# 存在性验证：提交只读探针 select user()，响应回显 user@host 或含 SQL 报错特征即确认
+import re
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import match_sql_error
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -19,7 +21,7 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
         "【升级方案】升级至 JeecgBoot 3.4.3+（报表模块安全修复）\n"
         "【配置加固】/jmreport/** 全部接口增加登录鉴权（sa-token 拦截器白名单移除 jmreport）\n"
         "【代码修复】JmreportController 的 SQL 执行接口增加管理员权限校验\n"
-        "【WAF 规则】拦截 /jmreport/queryFieldBySql 与 /jmreport/queryFieldBySq l 的 POST 请求\n"
+        "【WAF 规则】拦截 /jmreport/queryFieldBySql 的 POST 请求\n"
         "【合规】OWASP A03:2021 注入；等保 2.0 8.1.3"
     )
     reproduce = (
@@ -54,8 +56,15 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             emit(no("JeecgBoot jmreport SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 成功执行：返回业务 JSON（code/result 字段）且非 401/403；或 SQL 报错泄漏
-        if resp.status_code == 200 and match_all(text, ["code", "result"]):
+        # 成功执行判定：必须拿到 SQL 真正被执行的证据，且排除 401/403 鉴权拦截——
+        #   1) select user() 的回显结果形如 root@localhost（用户@主机）；
+        #   2) 数据库报错泄漏（match_sql_error：XPATH syntax error / SQLSTATE 等）。
+        # 状态码不作为唯一门槛：网关/框架常把数据库报错包装成 500 并携带错误体，
+        # 历史缺陷「仅 status==200 才判定」会对这类响应直接落 SAFE（false negative）；
+        # 仅明确鉴权拦截（401/403）不参与判定。
+        user_host = re.search(r"[A-Za-z0-9_.\-]+@[A-Za-z0-9_.\-]+", text)
+        sql_error = match_sql_error(text)
+        if resp.status_code not in (401, 403) and (user_host or sql_error):
             emit(ok("存在 JeecgBoot jmreport SQL注入"))
             return ScanResult(
                 kind="vuln",
@@ -63,7 +72,11 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="SQL 执行接口返回业务 JSON",
+                evidence=(
+                    f"HTTP {resp.status_code}；select user() 结果回显：{user_host.group(0)}"
+                    if user_host
+                    else f"HTTP {resp.status_code}；响应含数据库报错特征（SQL 被执行）"
+                ),
                 fix=self.fix,
                 extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_jmreport"},
             )

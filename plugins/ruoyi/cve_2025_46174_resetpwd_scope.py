@@ -52,6 +52,8 @@ NVD 给出的 CVSS 向量为 `PR:N`（无需权限）。但实测结论是**需�
 
 import re
 
+import requests
+
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from config import settings
@@ -67,8 +69,10 @@ logger = get_logger(__name__)
 PERM_DENIED_MARKER = "没有权限访问用户数据"
 # 重置密码页表单固定 id（已核实 4.7.8 / 4.8.0 / 4.8.2 / 4.8.3 四个版本模板一致）
 FORM_MARKER = 'id="form-user-resetPwd"'
-# 表单中渲染目标登录名的输入框
-LOGIN_NAME_RE = re.compile(r'name="loginName"[^>]*value="([^"]*)"')
+# 表单中渲染目标登录名的输入框。属性顺序无关：先定位含 name="loginName" 的 <input> 标签，
+# 再从该标签内提取 value（原正则要求 name 必须出现在 value 之前，value 先渲染时会漏检）
+LOGIN_NAME_TAG_RE = re.compile(r'<input[^>]*name="loginName"[^>]*>', re.IGNORECASE)
+LOGIN_NAME_VALUE_RE = re.compile(r'value="([^"]*)"')
 
 
 class Cve202546174ResetPwdScopePlugin(PluginBase):
@@ -241,16 +245,48 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
 
     # ── 辅助 ────────────────────────────────────────────────────
 
+    # 分页参数：pageSize 取若依管理端常用值；页数上限防止超大租户下无界翻页
+    _LIST_PAGE_SIZE = 100
+    _LIST_MAX_PAGES = 10
+
     def _visible_user_ids(self, target, session):
-        """取当前会话可见的 userId 集合（数据范围过滤后的结果）"""
+        """取当前会话可见的 userId 集合（数据范围过滤后的结果）
+
+        必须翻完所有页并确认完整性：只读第一页时，目标用户若排在 100 行之后
+        会被误判为「不可见」，导致可见性守卫失效、把无越权场景错报 CONFIRMED。
+        任一页读取失败或超过页数上限时返回空集合（调用方据此判 UNKNOWN，不冒险判定）。
+        """
+        visible = set()
         try:
-            resp = session.post(join_url(target, "/system/user/list"), data={"pageNum": 1, "pageSize": 100})
-            ct = (resp.headers.get("Content-Type") or "").lower()
-            if "application/json" not in ct:
-                return set()
-            body = resp.json()
-            rows = body.get("rows") or [] if isinstance(body, dict) else []
-            return {int(r["userId"]) for r in rows if str(r.get("userId", "")).isdigit()}
+            for page in range(1, self._LIST_MAX_PAGES + 1):
+                resp = session.post(
+                    join_url(target, "/system/user/list"),
+                    data={"pageNum": page, "pageSize": self._LIST_PAGE_SIZE},
+                )
+                ct = (resp.headers.get("Content-Type") or "").lower()
+                if "application/json" not in ct:
+                    return set()
+                body = resp.json()
+                if not isinstance(body, dict):
+                    return set()
+                rows = body.get("rows") or []
+                for r in rows:
+                    uid = str(r.get("userId", ""))
+                    if uid.isdigit():
+                        visible.add(int(uid))
+                # 判断是否已翻完：不足一页即结束；有 total 时按 total 收敛
+                if len(rows) < self._LIST_PAGE_SIZE:
+                    return visible
+                total = body.get("total")
+                if total is not None:
+                    try:
+                        if int(total) <= page * self._LIST_PAGE_SIZE:
+                            return visible
+                    except (TypeError, ValueError):
+                        pass
+            # 达到页数上限仍未翻完 → 可见集合不完整，返回空集合触发 UNKNOWN
+            logger.debug("可见用户集合超过 %d 页，放弃完整枚举", self._LIST_MAX_PAGES)
+            return set()
         except Exception:
             logger.debug("获取可见用户集合失败", exc_info=True)
             return set()
@@ -260,7 +296,8 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
         try:
             resp = session.get(join_url(target, f"/system/user/resetPwd/{user_id}"))
             return resp.text or ""
-        except Exception:
+        except requests.RequestException:
+            # 仅吞传输异常；编程错误不再被静默折叠成「页面为空」的 UNKNOWN
             logger.debug("请求 resetPwd 页失败（userId=%s）", user_id, exc_info=True)
             return ""
 
@@ -274,5 +311,8 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
         """
         if FORM_MARKER not in (body or ""):
             return ""
-        m = LOGIN_NAME_RE.search(body)
+        tag = LOGIN_NAME_TAG_RE.search(body)
+        if not tag:
+            return ""
+        m = LOGIN_NAME_VALUE_RE.search(tag.group(0))
         return (m.group(1) or "").strip() if m else ""

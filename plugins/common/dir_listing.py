@@ -1,5 +1,5 @@
 # 目录遍历探测 — 探测常见路径是否开启目录列表
-from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
+from common.models import SEVERITY_LOW, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
 
@@ -61,26 +61,32 @@ class DirListingPlugin(PluginBase):
     ]
 
     # 目录列表的正/负向特征
-    _POSITIVE = ["<title>Index of", "Directory Listing", "Parent Directory"]
-    _NEGATIVE = ["<title>404", "<title>Error", "Page Not Found"]
+    # 统一小写做大小写不敏感匹配（服务器可能返回 directory listing / parent directory 等变体）
+    _POSITIVE = ["<title>index of", "directory listing", "parent directory"]
+    _NEGATIVE = ["<title>404", "<title>error", "page not found"]
 
     def verify(self, target, session) -> ScanResult:
         """探测常见静态资源目录是否开启目录列表（Directory Listing）
 
+        三态说明：任一探测拿到有效响应即可判 SAFE/CONFIRMED；若全部路径均因
+        网络异常（超时/连接重置等）失败，则返回 UNKNOWN——测不到 ≠ 安全。
+
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
-        @return: STATUS_CONFIRMED（发现可列表目录）或 STATUS_SAFE
+        @return: STATUS_CONFIRMED（发现可列表目录）/ STATUS_SAFE / STATUS_UNKNOWN（全部网络异常）
         """
         found = []
+        got_response = False
         for path in self._DIR_PATHS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
+                got_response = True
                 # 目录列表页必然以 200 返回；404/403 等直接跳过，不做无谓的内容匹配
                 if resp.status_code != 200:
                     continue
-                # 统一转空串：部分服务器对未知目录返回空 body，避免 None 参与关键字匹配
-                text = resp.text or ""
+                # 统一转空串并小写：部分服务器对未知目录返回空 body；小写化配合小写关键字实现大小写不敏感匹配
+                text = (resp.text or "").lower()
                 # 正向命中 + 负向排除
                 pos = any(kw in text for kw in self._POSITIVE)
                 # 剔除负向特征：自定义 404 页常返回 200 且含 "Not Found"，不排除会误报为目录列表
@@ -99,6 +105,16 @@ class DirListingPlugin(PluginBase):
                 evidence=f"发现 {len(found)} 个目录可列表: {', '.join(found)}",
                 extra={"paths": found},
                 fix=self.fix,
+            )
+        # 全部路径请求异常 → 不可判定（网络故障不得判 SAFE）
+        if not got_response:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="所有路径请求均网络异常，无法判定",
             )
         return ScanResult(
             kind=self.category,

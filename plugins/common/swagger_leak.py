@@ -1,7 +1,10 @@
 # Swagger/OpenAPI 文档泄露 — 常见 API 文档路径探测
-from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
+from common.logger import get_logger
+from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class SwaggerLeakPlugin(PluginBase):
@@ -73,32 +76,47 @@ class SwaggerLeakPlugin(PluginBase):
         "/druid/index.html",  # Druid 监控（也属于信息泄露类）
     ]
 
-    _POSITIVE = ["swagger", "Swagger", "openapi", "OpenAPI", "api-docs", "Knife4j", "swagger-ui", '"swagger"']
+    # 统一小写后匹配（大小写不敏感）；Swagger/OpenAPI/swagger-ui/'"swagger"' 等重复或被包含项已去重
+    _POSITIVE = [
+        "swagger",
+        "openapi",
+        "api-docs",
+        "knife4j",
+        # Druid 监控页不含 swagger/openapi 等词，必须自带关键字否则 /druid/index.html 永不命中
+        "druid",
+    ]
 
     def verify(self, target, session) -> ScanResult:
         """探测常见 Swagger/OpenAPI/Knife4j/Druid 文档端点是否可匿名访问
 
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
-        @return: STATUS_CONFIRMED（发现公开文档端点）或 STATUS_SAFE
+        @return: STATUS_CONFIRMED（发现公开文档端点）、STATUS_SAFE（确认未暴露）或 STATUS_UNKNOWN（全部探测失败）
         """
         found = []
+        failed = 0
         for path in self._SWAGGER_PATHS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
                 if resp.status_code != 200:
                     continue
-                # 只取响应前 500 字符判读：文档页面头部已含框架特征，避免大 JSON 拖慢扫描
-                text = (resp.text or "")[:500]
+                # HTML 界面特征在页面头部即可命中，切片仅用于关键字扫描；
+                # JSON 文档的 "paths" 键通常出现在 500 字符之后，故 JSON 键判定用全文
+                full_text = resp.text or ""
+                # 小写化：_POSITIVE 为小写关键字，实现大小写不敏感匹配（SWAGGER/Swagger-ui 等变体均可命中）
+                text = full_text[:500].lower()
                 ct = (resp.headers.get("Content-Type") or "").lower()
                 # JSON API 文档 或 HTML Swagger 界面
-                # 细分为两路判定：JSON 定义（Content-Type=json 且含 swagger/openapi 键）或 HTML 界面（关键字命中）
-                if ("json" in ct and ('"swagger"' in text or '"openapi"' in text or '"paths"' in text)) or any(
-                    kw in text for kw in self._POSITIVE
-                ):
+                # 细分为两路判定：JSON 定义（Content-Type=json 且含 swagger/openapi/paths 键）或 HTML 界面（关键字命中）
+                if (
+                    "json" in ct and ('"swagger"' in full_text or '"openapi"' in full_text or '"paths"' in full_text)
+                ) or any(kw in text for kw in self._POSITIVE):
                     found.append(path)
             except Exception:
+                # 单个路径失败不中断整体探测，但必须计数：全部失败时不能当"确认未暴露"（SAFE）
+                failed += 1
+                logger.debug("Swagger 探测请求失败: %s", url, exc_info=True)
                 continue
         if found:
             return ScanResult(
@@ -110,6 +128,16 @@ class SwaggerLeakPlugin(PluginBase):
                 evidence=f"发现 {len(found)} 个 API 文档端点: {', '.join(found)}",
                 extra={"paths": found},
                 fix=self.fix,
+            )
+        # 所有路径均请求失败（网络异常等）→ 无法判定，按契约返回 UNKNOWN，绝不判 SAFE
+        if failed == len(self._SWAGGER_PATHS):
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence=f"{failed} 个文档路径全部请求失败（网络异常），无法判定",
             )
         return ScanResult(
             kind=self.category,

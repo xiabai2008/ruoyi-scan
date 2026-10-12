@@ -69,7 +69,9 @@ logger = get_logger(__name__)
 DENIED_MARKER = "RuoYi - 403"
 # 部门树页面的稳定标记（已核实 4 个版本模板一致：ztree 相关引用各 3 处）
 TREE_PAGE_MARKER = 'id="treeName"'
-TREE_NAME_RE = re.compile(r'name="treeName"[^>]*value="([^"]*)"')
+# 取值与检测用同一属性集合（id/name 任一，且容忍 value 前有其他属性）：
+# 只锚定 name= 会与上面的 id= 标记耦合——模板变体只渲染 id= 时取值静默返回 None
+TREE_NAME_RE = re.compile(r'(?:id|name)="treeName"[^>]*value="([^"]*)"')
 # 登录页标记（会话失效守卫）
 LOGIN_PAGE_MARKER = "登录若依系统"
 
@@ -137,10 +139,15 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
 
             # 未认证基线：接口应要求登录（若匿名也能拿到部门数据，属更严重问题，记入证据）
             anon = SessionManager(timeout=settings.RuoYiAuth.TIMEOUT)
+            anon_bodies = []
             try:
-                anon_bodies = [anon.get(u).text or "" for u in (url_data, url_page)]
-            except Exception:
-                anon_bodies = []
+                # 两条请求分开捕获：一条失败不得丢弃另一条的结果；失败须留痕，
+                # 否则报告会把「未测到」误读为「匿名访问不可行」
+                for u in (url_data, url_page):
+                    try:
+                        anon_bodies.append(anon.get(u).text or "")
+                    except Exception as e:
+                        logger.warning("匿名基线请求失败 %s：%s", u, e)
             finally:
                 anon.close()
             anon_open = any(self._extract_leaked_depts(b) for b in anon_bodies)
@@ -195,6 +202,24 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     evidence=f"两个探针一个被权限页拦截、一个未拦截（{denied}），形态矛盾，不予判定",
                 )
 
+            # 正向证据守卫：CONFIRMED 必须先看到「业务层确实执行」的正面形态——
+            # treeData 能解析为 JSON（list/dict），或部门树页面渲染出 treeName 表单。
+            # 否则（空响应体、代理/WAF 拦截页、软 404、非若依应用）即便没有权限门标记，
+            # 也不足以证明缺少权限注解，按契约归 UNKNOWN，避免误报
+            if not self._is_json_body(bodies["treeData"]) and TREE_PAGE_MARKER not in bodies["selectDeptTree"]:
+                emit(no("部门树越权访问（响应无预期业务形态）"))
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url_data,
+                    evidence=(
+                        "两个探针均未呈现预期业务形态（treeData 非 JSON、selectDeptTree 未渲染部门树），"
+                        f"无法证明业务层执行：treeData {len(bodies['treeData'])} 字节、"
+                        f"selectDeptTree {len(bodies['selectDeptTree'])} 字节"
+                    ),
+                )
+
             # 全部未命中权限门 ⇒ 业务层在无权限下执行 ⇒ 缺少权限注解
             leaked = self._extract_leaked_depts(bodies["treeData"])
             tree_name = self._rendered_dept_name(bodies["selectDeptTree"])
@@ -230,6 +255,14 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             )
 
     # ── 辅助 ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_json_body(body):
+        """响应是否为合法 JSON 对象/数组（业务层执行的正向形态证据）"""
+        try:
+            return isinstance(json.loads(body or ""), (list, dict))
+        except Exception:
+            return False
 
     @staticmethod
     def _extract_leaked_depts(body):

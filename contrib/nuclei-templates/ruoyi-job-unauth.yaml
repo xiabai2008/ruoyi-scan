@@ -5,11 +5,11 @@ info:
   author: xiabai2008
   severity: medium
   description: |
-    The RuoYi scheduled task endpoint (/monitor/job/edit) is reachable
-    without authentication and reaches the business layer instead of
-    returning an authentication error. When combined with a weak or default
-    administrator account this class of exposure enables scheduled task
-    abuse; by itself it indicates a broken authorization configuration.
+    The RuoYi scheduled task list endpoint (/monitor/job/list) is readable
+    without authentication and returns the task listing instead of an
+    authentication error. When combined with a weak or default administrator
+    account this class of exposure enables scheduled task abuse; by itself it
+    indicates a broken authorization configuration.
   reference:
     - https://github.com/xiabai2008/ruoyi-scan
   classification:
@@ -22,12 +22,14 @@ info:
   tags: ruoyi,unauth,misconfig
 
 http:
-  - method: POST
+  # Read-only probe: GET the job list endpoint. A state-changing POST to
+  # /monitor/job/edit (previous implementation) could silently overwrite a
+  # production scheduled task on a vulnerable instance, i.e. a destructive scan.
+  - method: GET
     path:
-      - "{{BaseURL}}/monitor/job/edit"
+      - "{{BaseURL}}/monitor/job/list"
     headers:
-      Content-Type: application/x-www-form-urlencoded
-    body: "jobId=1&jobName=probe&invokeTarget=probe&cronExpression=0 0 0 * * ?"
+      Accept: application/json
 
     matchers-condition: and
     matchers:
@@ -35,25 +37,25 @@ http:
         status:
           - 200
 
-      # Reached the business layer (business response codes), not an auth wall
+      # Reached the business layer: a real job list envelope (rows/total fields),
+      # not an auth wall. "code":500 is NOT accepted here: RuoYi returns code 500
+      # for generic validation/exception failures that never reach the job logic
+      # (e.g. malformed input, method not supported), which caused false positives.
       - type: word
         part: body
         words:
-          - '"code":500'
-          - '"code": 500'
-          - '"code":0'
-          - '"code": 0'
+          - '"rows"'
+          - '"total"'
         condition: or
 
-      # Exclude explicit authorization failures and login redirects
-      - type: word
+      # Exclude explicit authorization failures and login redirects.
+      # 用 (?i) 正则而非大小写敏感 word：原写法会漏掉 "unauthorized"/"Login" 等变体；
+      # 正则同时收敛了 "code":401 / "code": 401 的空格变体
+      - type: regex
         part: body
         negative: true
-        words:
-          - '"code":401'
-          - '"code": 401'
-          - '"code":403'
-          - '"code": 403'
-          - "Unauthorized"
-          - "Forbidden"
-          - "login"
+        regex:
+          - '(?i)"code"\s*:\s*40[13]'
+          - '(?i)unauthorized'
+          - '(?i)forbidden'
+          - '(?i)login'

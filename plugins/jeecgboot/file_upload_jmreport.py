@@ -1,8 +1,9 @@
 # JeecgBoot 任意文件上传：/jmreport/upload 未授权上传（存在性验证，不落地恶意文件）
+import json
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -31,14 +32,17 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
     vuln_type = "file_upload"
     supports_waf_bypass = False
 
+    # 候选路径：JeecgBoot 默认 context-path 是 /jeecg-boot，但该配置可改为根路径
+    # （server.servlet.context-path 变更后只有 /jmreport/upload 可达）
+    CANDIDATE_PATHS = ["/jmreport/upload", "/jeecg-boot/jmreport/upload"]
+
     def verify(self, target, session):
-        """检测 /jmreport/upload 是否可未授权上传文件（仅做可写性验证）。
+        """依次探测候选路径，检测 jmreport 上传接口是否可未授权写文件（仅做可写性验证）。
 
         @param target: 目标站点根 URL
         @param session: 复用的 HTTP 会话
-        @return: ScanResult —— 上传成功 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        @return: ScanResult —— 上传成功 CONFIRMED；未命中 SAFE；全部请求异常 UNKNOWN
         """
-        url = join_url(target, "/jeecg-boot/jmreport/upload")
         # multipart 探针（上传无害 txt，仅验证接口可写）
         boundary = "----ruoyi-scan-probe"
         body = (
@@ -47,30 +51,64 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
             '--%s\r\nContent-Disposition: form-data; name="biz"\r\n\r\ntest\r\n'
             "--%s--\r\n" % (boundary, boundary, boundary)
         )
-        try:
-            resp = session.post(
-                url,
-                # 手拼 multipart 体：除 file 外还须带 biz 业务字段，缺失会提前走参数校验分支导致测不出
-                data=body,
-                headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary},
-            )
-            text = resp.text or ""
-        except Exception as e:
-            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
+        got_response = False
+        last_error = None
+        last_url = join_url(target, self.CANDIDATE_PATHS[0])
+        for path in self.CANDIDATE_PATHS:
+            url = join_url(target, path)
+            last_url = url
+            try:
+                resp = session.post(
+                    url,
+                    # 手拼 multipart 体：除 file 外还须带 biz 业务字段，缺失会提前走参数校验分支导致测不出
+                    data=body,
+                    headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary},
+                )
+                text = resp.text or ""
+            except Exception as e:
+                # 单路径请求异常（含 context-path 不匹配时的连接层失败）继续尝试其余候选
+                last_error = e
+                continue
+            got_response = True
+            if resp.status_code == 200 and self._upload_succeeded(text):
+                emit(ok("存在 JeecgBoot jmreport 文件上传"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence="上传接口返回成功标记 + url/fileName 字段（可写）",
+                    fix=self.fix,
+                    extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
+                )
+        if not got_response:
+            # 全部候选路径均请求失败：测不到 ≠ 安全，归 UNKNOWN 避免漏报
             emit(no("JeecgBoot jmreport 文件上传（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 上传成功响应特征：url（访问路径）+ fileName（落盘文件名），两者齐备才判接口可写
-        if resp.status_code == 200 and match_all(text, ["url", "fileName"]):
-            emit(ok("存在 JeecgBoot jmreport 文件上传"))
-            return ScanResult(
-                kind="vuln",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence="上传接口返回 url/fileName（可写）",
-                fix=self.fix,
-                extra={"vuln_type": "file_upload", "plugin_name": "jeecg_upload_jmreport"},
-            )
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error))
         emit(no("不存在 JeecgBoot jmreport 文件上传"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)
+
+    @staticmethod
+    def _upload_succeeded(text):
+        """严格判定上传是否成功：必须是含成功标记、且同时给出 url/fileName 字段的 JSON
+
+        不能用裸子串 "url" + "fileName"：SPA 兜底页、错误 JSON（消息里内嵌 URL）都会命中；
+        且关键字匹配大小写敏感，fileName/filename 两种写法都要覆盖。
+        """
+        try:
+            body = json.loads(text)
+        except Exception:
+            return False
+        if isinstance(body, dict):
+            keys = {str(k).lower() for k in body}
+            has_url = "url" in keys
+            has_name = "filename" in keys or "file_name" in keys
+            success = body.get("success") is True or str(body.get("code")) in ("0", "200")
+            if has_url and has_name and success:
+                return True
+        # 宽松兜底：url/fileName 可能嵌在 result 等子对象中，退化为
+        # 「成功标记 + 两字段字面量」同时命中（成功标记可排除错误页）
+        low = text.lower()
+        success_marker = '"success":true' in low or '"success": true' in low
+        return success_marker and '"url"' in low and '"filename"' in low

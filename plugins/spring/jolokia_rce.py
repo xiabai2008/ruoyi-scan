@@ -68,11 +68,13 @@ class SpringJolokiaRcePlugin(PluginBase):
         }
         try:
             resp = session.post(url, json=payload)
+            # 解析放进 try 内：resp.text 解码（异常 Content-Encoding 等）也可能抛异常，
+            # 放到 try 外会以未捕获异常冒泡，而不是按契约返回 UNKNOWN
+            text = resp.text or ""
         except Exception as e:
             emit(no("Spring Jolokia RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
-        text = resp.text or ""
         if JOLOKIA_MARKER in text:
             emit(ok("存在 Spring Boot Actuator Jolokia 远程代码执行漏洞"))
             return ScanResult(

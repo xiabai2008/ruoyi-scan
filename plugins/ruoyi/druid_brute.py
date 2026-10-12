@@ -68,6 +68,17 @@ class DruidBrutePlugin(PluginBase):
             emit(no(f"Druid 爆破字典读取失败：{e}"))
             return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
+        if not password_list:
+            # 空字典：两个循环都不执行，got_response 恒为 False——不能沿用「全部请求网络异常」的误诊
+            emit(no("Druid 爆破字典为空，无口令可尝试"))
+            return ScanResult(
+                kind="brute",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"口令字典 {settings.PASSWORD_DICT} 为空，未发送任何请求，无法判定",
+            )
+
         got_response = False  # 是否至少收到一次响应（避免全网络异常误判 SAFE）
         for user in user_list:
             for password in password_list:
@@ -88,8 +99,9 @@ class DruidBrutePlugin(PluginBase):
                 except Exception:
                     # 非 JSON：Druid 真实响应为纯文本 success(正确)/error(错误)
                     # 也可能返回 JSON {"success":true}，故同时兼容两种形态
+                    # 必须整体相等：HTML 错误页/WAF 页仅包含该字面量时不得判成功
                     low = login_response.text.lower().strip()
-                    success_ok = (low == "success") or '"success":true' in low or '"success": true' in low
+                    success_ok = low in ("success", '{"success":true}', '{"success": true}')
                 if success_ok:
                     # 成功=绿色（对齐原脚本成功配色）
                     emit(ok(f"登录成功,用户名:{user},密码:{password}"))

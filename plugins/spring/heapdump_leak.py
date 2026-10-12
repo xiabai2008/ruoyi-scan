@@ -62,20 +62,31 @@ class SpringHeapdumpLeakPlugin(PluginBase):
         @return: ScanResult——含堆转储特征返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
         """
         url = join_url(target, "/actuator/heapdump")
+        resp = None
         try:
             resp = session.get(url, stream=True)
+            # 先取出状态码/内容类型再关闭响应，避免依赖已关闭响应对象的读能力
+            status_code = resp.status_code
+            content_type = resp.headers.get("Content-Type", "") or ""
             # 仅读取前 64 KB 检测特征，避免完整下载大文件
             raw = resp.raw.read(65536)
             text = raw.decode("utf-8", errors="ignore")
         except Exception as e:
             emit(no("Spring Boot Actuator heapdump 泄露（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        finally:
+            # 确定性释放流式响应：stream=True 下不关闭会让连接/文件描述符悬挂，
+            # 大批量扫描时耗尽连接池（特征字节已读完，可安全关闭）
+            if resp is not None:
+                try:
+                    resp.close()
+                except Exception:  # pragma: no cover - 关闭失败不应影响扫描结论
+                    pass
 
-        content_type = resp.headers.get("Content-Type", "") or ""
         # Boot 2.x 的 heapdump 默认 gzip 压缩，Content-Type 为 application/x-gzip，两种形态都算命中
         is_octet = "octet-stream" in content_type or "application/x-gzip" in content_type
 
-        if resp.status_code == 200 and is_octet and HEAP_MARKER in text:
+        if status_code == 200 and is_octet and HEAP_MARKER in text:
             emit(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露"))
             return ScanResult(
                 kind="vuln",
@@ -87,7 +98,7 @@ class SpringHeapdumpLeakPlugin(PluginBase):
                 fix=self.fix,
             )
         # 真实漏洞响应：200 + octet-stream + heapdump 二进制特征（JAVA PROFILE / 敏感字符串）
-        if resp.status_code == 200 and is_octet and match_heapdump_binary(text):
+        if status_code == 200 and is_octet and match_heapdump_binary(text):
             emit(ok("存在 Spring Boot Actuator heapdump 敏感信息泄露（真实漏洞响应）"))
             return ScanResult(
                 kind="vuln",

@@ -10,8 +10,17 @@ http:
     path:
       - "{{BaseURL}}/druid/index.html"
       - "{{BaseURL}}/prod-api/druid/index.html"
+    # 关键字与状态码必须同时满足：软 404/错误页/重定向页也可能含部分指纹词，
+    # 单独状态码 200 会把任意 200 响应误报为 Druid 监控页
+    matchers-condition: and
     matchers:
+      # condition: and → 全部指纹词必须同时命中；Nuclei 的 word matcher 默认 OR，
+      # 只命中一个泛用 token 不足以证明是 Druid 监控页
       - type: word
+        condition: and
         words:
           - "DruidStatService"
           - "druid.index"
+      - type: status
+        status:
+          - 200

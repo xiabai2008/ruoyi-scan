@@ -66,7 +66,7 @@ class DirectoryScanPlugin(PluginBase):
         @return: ScanResult——recon 类统一 UNKNOWN 语义，命中清单放 extra.hits 供报告收集
         """
         # 原 path_scan 输出格式严格保留：
-        #   [*]\033[33m响应:[{code}\033[33m] -> 标题:[{title}\033[33m] -> 长度:[\033[32m{len}\033[33m] -> {respnse.request.url}\033[0m
+        #   [*]\033[33m响应:[{code}\033[33m] -> 标题:[{title}\033[33m] -> 长度:[\033[32m{len}\033[33m] -> {response.request.url}\033[0m
         # 状态码 '20' in code 为绿，否则红；标题为空显示红色 NULL，否则绿色
         hits = []
         try:
@@ -82,7 +82,7 @@ class DirectoryScanPlugin(PluginBase):
         for path in path_list:
             url = join_url(target, path)
             try:
-                respnse = session.get(url)
+                response = session.get(url)
             except Exception as e:
                 # 网络异常：保留 UNKNOWN 语义（不阻断后续条目）。
                 # 同一原因只提示一次：逐路径打印会在目标不可用时刷出数百行（实测自签名
@@ -95,14 +95,15 @@ class DirectoryScanPlugin(PluginBase):
                     emit(f"{RED}[/]请求异常：{reason}{RESET}")
                 fail_reasons[key] = fail_reasons.get(key, 0) + 1
                 continue
-            text = respnse.text
-            # 标题正则严格保留：<title>(\w+)</title>
-            title = re.findall("<title>(\\w+)</title>", text)
-            if len(title) < 1:
-                title = f"{RED}NULL{RESET}"
-            else:
-                title = f"{GREEN}{title[0]}{RESET}"
-            code = str(respnse.status_code)
+            text = response.text
+            # 标题提取：正则由 <title>(\w+)</title> 放宽为 [^<>]+ —— 原式只匹配纯单词标题，
+            # 含空格/标点的真实标题（如 "My App - Home"）会显示 NULL 并失去标题命中资格。
+            # 行格式（标题:[...]）保持不变，仅捕获内容更准确。
+            title_match = re.findall(r"<title>([^<>]+)</title>", text)
+            title_text = title_match[0].strip() if title_match else ""
+            has_real_title = bool(title_text)
+            title = f"{GREEN}{title_text}{RESET}" if has_real_title else f"{RED}NULL{RESET}"
+            code = str(response.status_code)
             # 状态码判定严格保留：'20' in code（200/201/204 均为绿）
             if "20" in code:
                 code = f"{GREEN}{code}{RESET}"
@@ -110,20 +111,19 @@ class DirectoryScanPlugin(PluginBase):
                 code = f"{RED}{code}{RESET}"
             # 行格式严格保留（[*] 前缀 + 黄色字段标签）
             emit(
-                f"[*]{YELLOW}响应:[{code}{YELLOW}] -> 标题:[{title}{YELLOW}] -> 长度:[{GREEN}{len(text)}{YELLOW}] -> {respnse.request.url}{RESET}"
+                f"[*]{YELLOW}响应:[{code}{YELLOW}] -> 标题:[{title}{YELLOW}] -> 长度:[{GREEN}{len(text)}{YELLOW}] -> {response.request.url}{RESET}"
             )
             # 收集 2xx / 3xx / 解析出真实标题的条目供报告
             # 修正：原条件用 `"20" in str(status_code)` 做子串匹配，会把 420 / 520 / 1200
             # 等非 2xx 状态码一并判为可用，现改为真正的状态码区间判断。
             # 遗留风险：软 404 页面通常带 <title>，仍会因「有真实标题」被收录，
             # 需要配合响应长度基线判别，勿仅凭 hits 数量判断目录泄露面。
-            code_num = int(respnse.status_code) if str(respnse.status_code).isdigit() else 0
-            has_real_title = bool(title) and "NULL" not in title
+            code_num = int(response.status_code) if str(response.status_code).isdigit() else 0
             if 200 <= code_num < 400 or has_real_title:
                 hits.append(
                     {
-                        "url": respnse.request.url,
-                        "code": str(respnse.status_code),
+                        "url": response.request.url,
+                        "code": str(response.status_code),
                         "length": len(text),
                     }
                 )

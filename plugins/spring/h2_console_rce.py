@@ -67,10 +67,13 @@ class SpringH2ConsoleRcePlugin(PluginBase):
         """
         url = join_url(target, "/h2-console")
         # JNDI 连接探针（仅触发签名，不执行真实 JNDI 查找）
+        # setting/name 传原始值，由 requests 统一做表单编码：
+        # 预埋 "+" 会被编码成 %2B，服务端解出字面加号，与 H2 期望的
+        # "Generic H2 (Embedded)" 设置名不符而被拒绝
         data = {
             "language": "en",
-            "setting": "Generic+H2+(Embedded)",
-            "name": "Generic+H2+(Embedded)",
+            "setting": "Generic H2 (Embedded)",
+            "name": "Generic H2 (Embedded)",
             "driver": "javax.naming.InitialContext",
             # 用内存库 URL 而非 JNDI 地址：探针仅验证控制台表单可达，不触发真实 LDAP 外连
             "url": "jdbc:h2:mem:probe",

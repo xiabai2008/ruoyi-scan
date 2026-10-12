@@ -1,4 +1,6 @@
 # .git 源码泄露探测 — GET /.git/HEAD 检测 ref: 关键字
+import re
+
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
@@ -61,16 +63,22 @@ class GitLeakPlugin(PluginBase):
         try:
             resp = session.get(url)
             # 响应体可能为空（空 200），统一转空串后再做关键字匹配
-            text = resp.text or ""
-            # .git/HEAD 固定以 "ref: refs/heads/..." 开头，是 git 仓库最稳定的特征；状态码与内容双重校验
-            if "ref:" in text and (resp.status_code == 200):
+            text = (resp.text or "").strip()
+            # .git/HEAD 只有两种合法形态，且必须**整行/整体**匹配：
+            #   1. 正常 checkout："ref: refs/heads/..."（或 refs/tags/...）
+            #   2. detached HEAD（git checkout <tag>/<commit>）：裸 40 位 commit SHA
+            # 未锚定时，SPA 兜底页/JS 包中偶然出现的 "ref:" 会被误报为泄露
+            is_ref = re.match(r"ref:\s+refs/", text) is not None
+            is_detached = re.fullmatch(r"[0-9a-fA-F]{40}", text) is not None
+            if resp.status_code == 200 and (is_ref or is_detached):
+                head_form = "引用(ref: refs/...)" if is_ref else "detached HEAD(commit SHA)"
                 return ScanResult(
                     kind=self.category,
                     name=self.name,
                     severity=self.severity,
                     status=STATUS_CONFIRMED,
                     url=url,
-                    evidence=f"状态码={resp.status_code}, 响应含 ref: 头部引用",
+                    evidence=f"状态码={resp.status_code}, 响应为 .git/HEAD {head_form}",
                     fix=self.fix,
                 )
             return ScanResult(

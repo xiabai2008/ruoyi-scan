@@ -1,4 +1,6 @@
 # .env 配置文件泄露 — GET /.env 检测数据库/密钥关键字
+import re
+
 from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
@@ -31,7 +33,7 @@ class EnvLeakPlugin(PluginBase):
         "【合规】OWASP A01:2021 失效的访问控制；等保 2.0 8.1.4 访问控制"
     )
     reproduce = (
-        "# 1. 探测 .env 主文件：\n"
+        "# 探测 .env 主文件（插件仅检测该路径；变体/其他配置文件需人工按需排查）：\n"
         'curl -i "http://target/.env"\n'
         "\n"
         "# 预期响应（漏洞存在）：HTTP/1.1 200，响应体含键值对：\n"
@@ -41,18 +43,7 @@ class EnvLeakPlugin(PluginBase):
         "#   REDIS_PASSWORD=xxxxxx\n"
         "#   MAIL_PASSWORD=xxxxxx\n"
         "\n"
-        "# 2. 探测 .env 变体与备份：\n"
-        'curl -i "http://target/.env.bak"\n'
-        'curl -i "http://target/.env.local"\n'
-        'curl -i "http://target/.env.production"\n'
-        'curl -i "http://target/.env.example"\n'
-        "\n"
-        "# 3. 探测其他常见配置文件：\n"
-        'curl -i "http://target/config.php"\n'
-        'curl -i "http://target/config/database.yml"\n'
-        'curl -i "http://target/application.properties"\n'
-        "\n"
-        "# 4. 利用 APP_KEY 反序列化 RCE（Laravel < 8.4.2，需 key 泄露）：\n"
+        "# 命中后可进一步利用 APP_KEY 反序列化 RCE（Laravel < 8.4.2，需 key 泄露）：\n"
         'php artisan tinker --execute="..." # 结合 CVE-2021-3129 利用链'
     )
 
@@ -90,8 +81,8 @@ class EnvLeakPlugin(PluginBase):
                     url=url,
                     evidence=f"状态码={resp.status_code}",
                 )
-            # 检查是否包含典型环境变量关键字
-            hits = [kw for kw in self._ENV_KEYWORDS if kw in text]
+            # 检查是否包含典型环境变量关键字（锚定 .env 的 KEY=VALUE 语法）
+            hits = self._find_env_keys(text)
             if hits:
                 return ScanResult(
                     kind=self.category,
@@ -114,3 +105,15 @@ class EnvLeakPlugin(PluginBase):
         # 网络异常置 UNKNOWN，避免把目标不可达误判为安全
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"请求异常: {e}")
+
+    def _find_env_keys(self, text):
+        """按 .env 的 KEY=VALUE 语法匹配键名（允许 = 两侧空白）
+
+        历史缺陷：仅判断键名子串存在——SPA JS bundle、框架调试页、文档页只要
+        「提到」DB_HOST/APP_KEY 等字样就会被误报为真实的 .env 文件泄露。
+        """
+        hits = []
+        for kw in self._ENV_KEYWORDS:
+            if re.search(rf"(?m)^[ \t]*{re.escape(kw)}[ \t]*=", text):
+                hits.append(kw)
+        return hits

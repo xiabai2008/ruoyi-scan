@@ -1,9 +1,14 @@
 """RuoYi Swagger/Knife4j API 文档未授权访问检测（信息泄露类）。"""
 
 # RuoYi Swagger 未授权 API 文档泄露
+import requests
+
+from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class RuoyiSwaggerUnauthPlugin(PluginBase):
@@ -23,7 +28,7 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
         "【Profile 隔离】仅在 dev profile 启用 Swagger：\n"
         '  @Profile({"dev","test"}) @EnableSwagger2\n'
         "【WAF 规则】拦截外网对 /swagger-ui.html, /v2/api-docs, /doc.html 路径的访问\n"
-        "【合规】OWASP A05:2021 安全配置错误；等保 2.0 8.1.4 访问控制"
+        "【合规】OWASP A01:2021 失效的访问控制；等保 2.0 8.1.4 访问控制"
     )
     reproduce = (
         "# 探测 Swagger UI 是否可访问：\n"
@@ -60,21 +65,25 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
             url = join_url(target, path)
             try:
                 resp = session.get(url)
-                any_success = True
-                if resp.status_code == 200:
-                    # 只匹配响应前 500 字符，避免对大型文档做全量匹配；关键词同时覆盖中/英文文档标题
-                    if any(kw in (resp.text or "")[:500] for kw in ["swagger", "Knife4j", "接口文档", '"swagger"']):
-                        return ScanResult(
-                            kind=self.category,
-                            name=self.name,
-                            severity=self.severity,
-                            status=STATUS_CONFIRMED,
-                            url=url,
-                            evidence=f"{path} 可未授权访问",
-                            fix=self.fix,
-                        )
-            except Exception:
+            except requests.exceptions.RequestException as e:
+                # 仅吞掉传输异常（并留痕）：单路径不可达不中断整体探测，编程错误不再被静默吞没
+                logger.debug("Swagger 路径探测请求失败（%s）: %s", url, e, exc_info=True)
                 continue
+            any_success = True
+            if resp.status_code == 200:
+                # 匹配整个响应体（resp.text 已物化，[:500] 截断会在大型文档上漏掉标题标记）；
+                # 统一转小写比较，覆盖 "Swagger UI" 等大写形态；原 '"swagger"' 为 "swagger" 的子串冗余
+                body = (resp.text or "").lower()
+                if any(kw in body for kw in ["swagger", "knife4j", "接口文档"]):
+                    return ScanResult(
+                        kind=self.category,
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=url,
+                        evidence=f"{path} 可未授权访问",
+                        fix=self.fix,
+                    )
         if not any_success:
             return ScanResult(
                 kind=self.category,

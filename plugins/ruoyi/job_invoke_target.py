@@ -156,88 +156,120 @@ class JobInvokeTargetPlugin(PluginBase):
             job = jobs[0]
             job_id = job.get("jobId")
             orig_target = job.get("invokeTarget") or ""
-            orig_status = str(job.get("status", "0"))
+            # 用 or 兜底而非 get 默认值：API 可能返回 "status": null，str(None) 会变成
+            # 字面量 "None" 并随还原请求原样回传（畸形请求）
+            orig_status = str(job.get("status") or "0")
 
             # Step 2：写入判别载荷（status=1 暂停，避免 cron 在探测窗口内执行载荷）
             marker = "ruoyi_scan_" + _rand_token()
             payload = PAYLOAD_TEMPLATE.format(marker=marker)
             edit_url = join_url(target, "/monitor/job/edit")
-            resp = self._edit_job(sess, url=edit_url, job=job, invoke_target=payload, status="1")
-            body = resp.text or ""
-            kind = self._classify(resp)
+            # 结果对象由 try 体构造，finally 中补记还原结论（对象引用有效），保证还原状态随证据返回
+            result = None
+            # 整个「写入 → 定性 → 回读 → 还原」序列包在 try/finally 中：
+            # 无论中途哪一步抛异常（edit 请求异常、emit 异常等），finally 都会把任务还原，
+            # 绝不把目标留在「持有探测载荷且已暂停」的持久状态。
+            try:
+                resp = self._edit_job(sess, url=edit_url, job=job, invoke_target=payload, status="1")
+                body = resp.text or ""
+                kind = self._classify(resp)
 
-            # 权限被拦（HTML 权限页/登录页）：是账号能力问题，不是漏洞结论
-            if kind == "denied":
-                emit(no("定时任务调用目标未校验（账号无 monitor:job:edit 权限）"))
-                return ScanResult(
-                    kind="info",
-                    name=self.name,
-                    status=STATUS_UNKNOWN,
-                    url=edit_url,
-                    evidence=(
-                        f"账号 {settings.RuoYiLowPriv.USERNAME} 调用 /monitor/job/edit 被权限门拦截"
-                        f"（非 JSON 响应），说明其缺少 monitor:job:edit 权限——无法判定白名单是否存在"
-                    ),
-                )
+                # 回读确认写入是否生效（证据可审计；权限页场景不进入此分支也无妨）
+                # 必须匹配本次随机 marker 而非静态 PAYLOAD_KEY：目标上遗留的旧载荷
+                # （上一次扫描还原失败）会让 written 恒真，导致已修复目标被误判 CONFIRMED
+                written = any(marker in str(j.get("invokeTarget") or "") for j in self._list_jobs(target, sess))
 
-            # Step 3：回读确认写入是否生效（证据可审计）
-            written = any(PAYLOAD_KEY in str(j.get("invokeTarget") or "") for j in self._list_jobs(target, sess))
+                # 权限被拦（HTML 权限页/登录页）：是账号能力问题，不是漏洞结论
+                if kind == "denied":
+                    emit(no("定时任务调用目标未校验（账号无 monitor:job:edit 权限）"))
+                    # 注意：权限页说明载荷大概率未写入，但仍走 finally 还原（幂等，无害）
+                    result = ScanResult(
+                        kind="info",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=edit_url,
+                        evidence=(
+                            f"账号 {settings.RuoYiLowPriv.USERNAME} 调用 /monitor/job/edit 被权限门拦截"
+                            f"（非 JSON 响应），说明其缺少 monitor:job:edit 权限——无法判定白名单是否存在"
+                        ),
+                    )
+                elif kind == "accepted" and written:
+                    emit(ok("存在定时任务调用目标未校验（可写入任意 invokeTarget）"))
+                    result = ScanResult(
+                        kind="vuln",
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=edit_url,
+                        evidence=(
+                            f"/monitor/job/edit 接受了任意调用目标并写入生效（回读确认 invokeTarget="
+                            f"{PAYLOAD_KEY}(...)），服务端未做白名单校验 ⇒ 可写入 ruoYiConfig.setProfile("
+                            f"任意文件读取链的一环)/org.springframework.*(JNDI 面) 等调用目标。"
+                            f"载荷未执行（status 置 1 暂停）"
+                        ),
+                        fix=self.fix,
+                        extra={
+                            "vuln_type": "rce",
+                            "plugin_name": "job_invoke_target",
+                            "job_id": job_id,
+                            "payload": payload,
+                            "write_verified": True,
+                        },
+                    )
+                elif kind == "rejected" or WHITELIST_MARKER in body:
+                    emit(no("不存在定时任务调用目标未校验"))
+                    result = ScanResult(
+                        kind="info",
+                        name=self.name,
+                        status=STATUS_SAFE,
+                        url=edit_url,
+                        evidence=(
+                            f"写入判别载荷被服务端拒绝：「{self._extract_msg(body)}」⇒ "
+                            f"ScheduleUtils.whiteList 白名单校验生效"
+                        ),
+                    )
+                else:
+                    emit(no("定时任务调用目标未校验（响应形态无法定性）"))
+                    result = ScanResult(
+                        kind="info",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=edit_url,
+                        evidence=(
+                            f"edit 响应既非「操作成功」也非白名单拒绝（HTTP {resp.status_code}，写入生效={written}），"
+                            f"形态不确定，不予判定"
+                        ),
+                    )
+            finally:
+                # Step 4：还原（并二次确认）——必须在 finally 中执行，保证任何异常路径都会还原
+                try:
+                    self._edit_job(sess, url=edit_url, job=job, invoke_target=orig_target, status=orig_status)
+                    # 同时核对 status：只比对 invokeTarget 时，status 未被服务端接受
+                    # （任务仍处暂停态）也会被误判为「已还原」
+                    restored = any(
+                        str(j.get("jobId")) == str(job_id)
+                        and str(j.get("invokeTarget") or "") == orig_target
+                        and str(j.get("status") or "0") == orig_status
+                        for j in self._list_jobs(target, sess)
+                    )
+                except Exception:
+                    logger.debug("任务还原请求异常", exc_info=True)
+                    restored = False
+                restore_note = "，任务已还原" if restored else "，**任务还原失败，请人工核查**"
+            # 还原结论补进证据：return 在 try 中，finally 先执行，此处再拼接（对象引用有效）
+            if result is not None:
+                result.evidence += restore_note
+                return result
 
-            # Step 4：还原（并二次确认）
-            self._edit_job(sess, url=edit_url, job=job, invoke_target=orig_target, status=orig_status)
-            restored = any(
-                str(j.get("jobId")) == str(job_id) and str(j.get("invokeTarget") or "") == orig_target
-                for j in self._list_jobs(target, sess)
-            )
-            restore_note = "，任务已还原" if restored else "，**任务还原失败，请人工核查**"
-
-            if kind == "accepted" and written:
-                emit(ok("存在定时任务调用目标未校验（可写入任意 invokeTarget）"))
-                return ScanResult(
-                    kind="vuln",
-                    name=self.name,
-                    severity=self.severity,
-                    status=STATUS_CONFIRMED,
-                    url=edit_url,
-                    evidence=(
-                        f"/monitor/job/edit 接受了任意调用目标并写入生效（回读确认 invokeTarget="
-                        f"{PAYLOAD_KEY}(...)），服务端未做白名单校验 ⇒ 可写入 ruoYiConfig.setProfile("
-                        f"任意文件读取链的一环)/org.springframework.*(JNDI 面) 等调用目标。"
-                        f"载荷未执行（status 置 1 暂停）{restore_note}"
-                    ),
-                    fix=self.fix,
-                    extra={
-                        "vuln_type": "rce",
-                        "plugin_name": "job_invoke_target",
-                        "job_id": job_id,
-                        "payload": payload,
-                        "write_verified": True,
-                    },
-                )
-
-            if kind == "rejected" or WHITELIST_MARKER in body:
-                emit(no("不存在定时任务调用目标未校验"))
-                return ScanResult(
-                    kind="info",
-                    name=self.name,
-                    status=STATUS_SAFE,
-                    url=edit_url,
-                    evidence=(
-                        f"写入判别载荷被服务端拒绝：「{self._extract_msg(body)}」⇒ "
-                        f"ScheduleUtils.whiteList 白名单校验生效{restore_note}"
-                    ),
-                )
-
-            emit(no("定时任务调用目标未校验（响应形态无法定性）"))
+            # result 为空说明 try 体在构造结果前异常（edit 请求/emit 抛错）——
+            # 不裸抛异常打断链引擎，按契约返回 UNKNOWN
+            logger.debug("定时任务调用目标探测未完成", exc_info=True)
             return ScanResult(
                 kind="info",
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=edit_url,
-                evidence=(
-                    f"edit 响应既非「操作成功」也非白名单拒绝（HTTP {resp.status_code}，写入生效={written}），"
-                    f"形态不确定，不予判定{restore_note}"
-                ),
+                evidence=f"探测过程异常，无法判定；任务处置：{restore_note}",
             )
 
     # ── 辅助 ────────────────────────────────────────────────────

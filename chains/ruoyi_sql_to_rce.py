@@ -1,7 +1,7 @@
 # 链 1：SQL注入 → 文件读取配置 → 定时任务 RCE
 #
 # 攻击链路：
-#   1. SQL 注入（/system/role/list dataScope 参数）提取数据库名
+#   1. SQL 注入（/system/role/list params[dataScope] 参数）提取数据库名
 #   2. 任意文件读取（/common/download/resource）获取 application.yml 配置凭证
 #   3. 定时任务 RCE（/monitor/job）验证接口未授权访问
 #
@@ -18,11 +18,13 @@ CHAIN = ChainDef(
     display_name="SQL注入 → 文件读取配置 → 定时任务 RCE",
     description="通过 SQL 注入提取数据库名，任意文件读取获取配置凭证，验证定时任务 RCE 接口未授权",
     severity="high",
-    affected_versions=">=4.0,<4.7",
+    # 版本边界取链内关键步骤（步骤 1）的最严范围：params[dataScope] SQL 注入在 4.6.0 已修复，
+    # 步骤 1 on_fail=abort 决定整链适用性，故上界必须与 sql_inject_role 的 >=4.0,<4.6 对齐（原 <4.7 高估）
+    affected_versions=">=4.0,<4.6",
     meta={
         "chain_type": "sql_to_rce",
         "references": [
-            "SQL注入 /system/role/list dataScope 参数",
+            "SQL注入 /system/role/list params[dataScope] 参数",
             "任意文件读取 /common/download/resource resource 参数",
             "定时任务 RCE /monitor/job invokeTarget 字段",
         ],

@@ -2,7 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -29,34 +29,49 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
     vuln_type = "unauth"
     supports_waf_bypass = False
 
+    # 候选路径：JeecgBoot 默认 context-path 是 /jeecg-boot，但该配置可改为根路径
+    CANDIDATE_PATHS = ["/jmreport/list?current=1&size=10", "/jeecg-boot/jmreport/list?current=1&size=10"]
+
     def verify(self, target, session):
-        """检测 /jmreport/list 是否未授权返回报表列表。
+        """依次探测候选路径，检测 jmreport 列表接口是否未授权返回报表数据。
 
         @param target: 目标站点根 URL
         @param session: 复用的 HTTP 会话
-        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；网络异常 UNKNOWN
+        @return: ScanResult —— 命中 CONFIRMED；未命中 SAFE；全部请求异常 UNKNOWN
         """
-        url = join_url(target, "/jeecg-boot/jmreport/list?current=1&size=10")
-        try:
-            # 分页参数命中列表分支：未授权返回 records 数据，鉴权拦截返回 401/403
-            resp = session.get(url)
-            text = resp.text or ""
-        except Exception as e:
-            # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
+        got_response = False
+        last_error = None
+        last_url = join_url(target, self.CANDIDATE_PATHS[0])
+        for path in self.CANDIDATE_PATHS:
+            url = join_url(target, path)
+            last_url = url
+            try:
+                # 分页参数命中列表分支：未授权返回 records 数据，鉴权拦截返回 401/403。
+                # allow_redirects=False：默认跟随重定向会把「302 → 登录页(200)」透明转成 200，
+                # 登录页正文可能恰好含 records/code 字样而被误判为未授权；此处把 3xx 显式归为非命中。
+                resp = session.get(url, allow_redirects=False)
+                text = resp.text or ""
+            except Exception as e:
+                # 单路径请求异常继续尝试其余候选路径，只有全部失败才归 UNKNOWN（测不到 ≠ 安全）
+                last_error = e
+                continue
+            got_response = True
+            if resp.status_code == 200 and "records" in text and match_positive(
+                text, ["code", "result", "success"], negatives=["请登录", "token", "登录已过期", "unauthorized"]
+            ):
+                emit(ok("存在 JeecgBoot 报表未授权"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence="未授权返回报表列表 JSON（records + 业务外壳字段）",
+                    fix=self.fix,
+                    extra={"vuln_type": "unauth", "plugin_name": "jeecg_jmreport_list"},
+                )
+        if not got_response:
             emit(no("JeecgBoot 报表未授权（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 未授权 + 业务 JSON（records 字段）→ 确认
-        if resp.status_code == 200 and match_all(text, ["records", "code"]):
-            emit(ok("存在 JeecgBoot 报表未授权"))
-            return ScanResult(
-                kind="vuln",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence="未授权返回报表列表 JSON",
-                fix=self.fix,
-                extra={"vuln_type": "unauth", "plugin_name": "jeecg_jmreport_list"},
-            )
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error))
         emit(no("不存在 JeecgBoot 报表未授权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)

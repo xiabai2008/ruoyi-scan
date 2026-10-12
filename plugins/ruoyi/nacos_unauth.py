@@ -30,9 +30,12 @@ def _is_nacos_user_list(text):
         data = _json.loads(text)
     except (ValueError, TypeError):
         return False, "响应非 JSON"
+    # JSON 顶层必须是对象：[]/[1,2]/"str"/123/null 都是合法 JSON，
+    # 非 dict 时 `k in data`/`data.get` 会抛 TypeError/AttributeError 使插件崩溃，须显式拦截
+    if not isinstance(data, dict):
+        return False, "响应非 JSON 对象"
 
     # Nacos 用户列表响应含 totalCount + pageItems/pageNumbers 等分页字段
-    has_pagination = any(k in data for k in ("totalCount", "pageNumber", "pageSize", "pageItems", "pageNumbers"))
     # 用户数组：pageItems（新版）或 pageNumbers（旧版）
     users = data.get("pageItems") or data.get("pageNumbers") or []
     if not isinstance(users, list) or not users:
@@ -43,12 +46,11 @@ def _is_nacos_user_list(text):
     if not has_user_fields:
         return False, "用户条目缺 username/password 字段"
 
-    # 至少满足分页字段 或 用户条目结构（双条件之一即可，降低假阳）
-    if has_pagination or has_user_fields:
-        # 提取用户名列表作为证据（脱敏：不输出密码哈希）
-        names = [u.get("username", "?") for u in users[:5]]
-        return True, f"未授权获取用户列表：{names}"
-    return False, "响应不含 Nacos 用户列表特征"
+    # 条目结构齐备即判定命中（历史缺陷：曾有 `has_pagination or has_user_fields` 的恒真条件——
+    # 走到这里时 has_user_fields 必为 True，分页字段实际从未参与判定，属死逻辑）
+    # 提取用户名列表作为证据（脱敏：不输出密码哈希）
+    names = [u.get("username", "?") for u in users[:5]]
+    return True, f"未授权获取用户列表：{names}"
 
 
 class RuoyiNacosUnauthPlugin(PluginBase):
@@ -118,10 +120,11 @@ class RuoyiNacosUnauthPlugin(PluginBase):
 
         text = resp.text or ""
         code = getattr(resp, "status_code", 0)
+        reason_200 = ""  # 200 时首次判据解析出的原因，SAFE 分支复用
 
         # 200 + 真实 Nacos 用户列表特征 → CONFIRMED
         if code == 200:
-            hit, evidence = _is_nacos_user_list(text)
+            hit, reason_200 = _is_nacos_user_list(text)
             if hit:
                 emit(ok("存在 Nacos 未授权访问漏洞"))
                 return ScanResult(
@@ -130,7 +133,7 @@ class RuoyiNacosUnauthPlugin(PluginBase):
                     severity=self.severity,
                     status=STATUS_CONFIRMED,
                     url=url,
-                    evidence=evidence,
+                    evidence=reason_200,
                     fix=self.fix,
                 )
 
@@ -140,9 +143,8 @@ class RuoyiNacosUnauthPlugin(PluginBase):
         elif code == 404:
             reason = "HTTP 404 端点不存在"
         elif code == 200:
-            # 重复调用判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
-            _, reason = _is_nacos_user_list(text)
-            reason = f"200 但{reason}"
+            # 复用上方首次解析结果，避免重复 JSON 解析
+            reason = f"200 但{reason_200}"
         else:
             reason = f"HTTP {code} 非 200 响应"
         emit(no(f"不存在 Nacos 未授权访问漏洞（{reason}）"))

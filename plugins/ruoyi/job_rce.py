@@ -55,7 +55,17 @@ class JobRcePlugin(PluginBase):
     supports_waf_bypass = True
 
     # 鉴权拦截关键字（命中即视为接口受保护，判 SAFE）
-    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源", "signin", "login"]
+    # 只保留强特征：历史缺陷——原列表含 "登录"/"login"/"signin" 等宽泛子串，
+    # 未授权可达的任务编辑页（含「退出登录」「loginName」等布局文案）会被误判为已鉴权，产生漏报。
+    # 该判定也已后移到 JSON/编辑页表单分析之后，且仅对非 JSON 正文生效，避免抢占正向证据。
+    AUTH_BLOCK_KEYWORDS = [
+        "请先登录",
+        "无法访问系统资源",
+        "认证失败",
+        "登录若依系统",
+        "redirect:/login",
+        "unauthorized",
+    ]
 
     def verify(self, target, session):
         """探测 /monitor/job/edit 是否未授权可访问（仅存在性判定，不修改任务、不触发 RCE）
@@ -72,7 +82,8 @@ class JobRcePlugin(PluginBase):
             "jobId": "99999",
             "jobName": "ruoyi_scan_probe",
             "jobGroup": "DEFAULT",
-            "invokeTarget": "ryTask.ryParams('ry'",
+            # 语法合法的良性调用目标（括号/引号闭合）：避免非法 invokeTarget 在校验阶段先行报错
+            "invokeTarget": "ryTask.ryNoParams",
             "cronExpression": "0/10 * * * * ?",
             "misfirePolicy": "1",
             "concurrent": "1",
@@ -87,33 +98,28 @@ class JobRcePlugin(PluginBase):
         text = resp.text or ""
         code = getattr(resp, "status_code", 0)
 
-        # 解析 JSON 响应（RuoYi AjaxResult 通常含 code/msg）
+        # 解析 JSON 响应（RuoYi AjaxResult 通常含 code/msg）；非对象 JSON 不算业务形态
         is_json = False
         body = {}
         try:
-            body = resp.json()
-            is_json = True
+            parsed = resp.json()
+            if isinstance(parsed, dict):
+                body = parsed
+                is_json = True
         except Exception:
             logger.debug("响应 JSON 解析失败", exc_info=True)
 
-        # 1) 若响应含鉴权拦截关键字 → 接口已保护，判 SAFE（使用 match_positive 统一降误报）
-        if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
-            emit(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
-            return ScanResult(
-                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应含鉴权拦截关键字：{text[:200]}"
-            )
-
-        # 2) HTTP 状态码 401/403 → 鉴权拦截（无论响应是否为 JSON）
+        # 1) HTTP 状态码 401/403 → 鉴权拦截（无论响应是否为 JSON）
         if code in (401, 403):
             emit(no(f"不存在定时任务 RCE 漏洞（HTTP {code} 鉴权拦截）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {code} 鉴权拦截"
             )
 
-        # 3) JSON 响应且 code 表示进入了业务层
+        # 2) JSON 响应且 code 表示进入了业务层
         #    - code == 200：通常表示操作成功（极端情况：未鉴权且 jobId 真的存在并修改成功，严重）
         #    - code == 500：业务校验失败（如「定时任务不存在」），证明已绕过鉴权进入业务层
-        #    - code == 401/403：鉴权失败（已在第 2 步兜底）
+        #    - code == 401/403：鉴权失败（已在第 1 步兜底）
         if is_json:
             r_code = body.get("code")
             msg = str(body.get("msg", ""))
@@ -122,6 +128,12 @@ class JobRcePlugin(PluginBase):
                 emit(no(f"不存在定时任务 RCE 漏洞（接口已鉴权，JSON code={r_code}）"))
                 return ScanResult(
                     kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"code={r_code} msg={msg}"
+                )
+            # JSON 明确返回鉴权拦截文案（如 code=200 但 msg=请先登录）→ 接口已保护
+            if match_positive(msg, self.AUTH_BLOCK_KEYWORDS):
+                emit(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
+                return ScanResult(
+                    kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应含鉴权拦截关键字：{msg}"
                 )
             # 加固：RuoYi AjaxResult 形态校验——必须同时含 code 与 msg 两个键。
             # 否则任意返回 {"code":200} 的第三方接口 / 网关 JSON 都会被当作「已进入若依业务层」。
@@ -154,7 +166,7 @@ class JobRcePlugin(PluginBase):
                 ),
             )
 
-        # 4) 非 JSON 响应：必须真的渲染出「任务编辑页表单」才算未授权可见。
+        # 3) 非 JSON 响应：必须真的渲染出「任务编辑页表单」才算未授权可见。
         #    历史缺陷：原判定为 `HTTP 200 且不含 login/登录 关键字`，等价于「任何 200 页面均判未授权」，
         #    首页、SPA 空壳页、软 404 兜底页都会被误报成未授权 RCE。
         #    加固：要求响应含编辑页表单字段名——这些字段只在 /monitor/job/edit 渲染页出现。
@@ -176,6 +188,15 @@ class JobRcePlugin(PluginBase):
                 url=url,
                 evidence=f"HTTP 200 且渲染出任务编辑页表单字段，响应前 200 字节：{text[:200]}",
                 fix=self.fix,
+            )
+
+        # 4) 非 JSON 响应含强鉴权拦截特征（登录页/重定向）→ 接口已保护。
+        #    放在编辑页检测之后：未授权可达的编辑页含「退出登录」「loginName」等字样，
+        #    不能被宽泛的登录关键字提前拦下（历史缺陷为漏报来源）。
+        if match_positive(text, self.AUTH_BLOCK_KEYWORDS):
+            emit(no("不存在定时任务 RCE 漏洞（编辑接口已鉴权）"))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应含鉴权拦截关键字：{text[:200]}"
             )
 
         # 5) 其他情形：无未授权证据，无法判定（非 200 的非 JSON 响应，或 200 但非编辑页）

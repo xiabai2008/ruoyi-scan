@@ -20,7 +20,7 @@ CHAIN = ChainDef(
     meta={
         "chain_type": "nacos_to_dbcreds",
         "references": [
-            "Nacos 未授权访问 CVE-2021-29441",
+            "Nacos 认证绕过 CVE-2021-29441（User-Agent 白名单绕过）",
             "配置接口 /nacos/v1/cs/configs",
         ],
     },
@@ -44,8 +44,10 @@ CHAIN = ChainDef(
             on_fail="continue",
             description="拉取 Nacos 配置并提取数据库凭证",
             outputs={
-                "db_url": "extra:db_url",
-                "db_username": "extra:db_username",
+                # 数据库地址与用户名同属凭证类：chains 的 facts 不做脱敏且会被 CLI/报告原样输出，
+                # 而 db_url 可能内嵌 ?user=x&password=y，故一并走 secret: 前缀（与 db_password 一致）
+                "db_url": "secret:db_url",
+                "db_username": "secret:db_username",
                 "db_password": "secret:db_password",
             },
         ),

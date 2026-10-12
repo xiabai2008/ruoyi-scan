@@ -81,10 +81,10 @@ class ThymeleafSstiPlugin(PluginBase):
 
     # 候选探测路径：RuoYi 不同版本的可疑端点（保守起见探测多个，任一命中即判存在）
     CANDIDATE_PATHS = [
-        "__${7*7}__::.x",  # 根路径注入
-        "getInfo/__${7*7}__::.x",  # 用户信息接口路径片段注入
-        "system/user/__${7*7}__::.x",  # 用户管理路径
-        "demo/table/__${7*7}__::.x",  # 示例页面
+        PROBE,  # 根路径注入
+        f"getInfo/{PROBE}",  # 用户信息接口路径片段注入
+        f"system/user/{PROBE}",  # 用户管理路径
+        f"demo/table/{PROBE}",  # 示例页面
     ]
 
     def verify(self, target, session):
@@ -111,8 +111,10 @@ class ThymeleafSstiPlugin(PluginBase):
                 continue
             got_response = True
             text = resp.text or ""
-            # 判定：响应含求值结果 49 且不含原始表达式 7*7（区分求值与原文反射）
-            if self.EVAL_RESULT in text and self.RAW_REFLECTION not in text:
+            # 判定：响应含求值结果 49 且含模板引擎强特征即命中。
+            # 原文反射（7*7）不再否决强命中：错误页会同时回显原始探针路径与求值后的视图名，
+            # 若因此排除，真实命中会被静默丢弃（假阴性）
+            if self.EVAL_RESULT in text:
                 lower_text = text.lower()
                 has_engine_evidence = any(kw.lower() in lower_text for kw in self.ENGINE_EVIDENCE_KEYWORDS)
                 # 严格判定：49 + 引擎强特征同时出现才算命中
@@ -128,10 +130,11 @@ class ThymeleafSstiPlugin(PluginBase):
                         extra={"probe": path, "eval_result": self.EVAL_RESULT},
                         fix=self.fix,
                     )
-                # 49 但无引擎强特征：可能只是业务数值巧合，记录后继续扫其余候选路径。
+                # 49 但无引擎强特征：可能只是业务数值巧合；若响应仅回显原始探针
+                # （含 7*7 原文且未求值），按噪声处理，否则记录弱命中后继续扫其余候选路径。
                 # 历史缺陷：此处原为直接 return UNKNOWN，会在第一个「碰巧含 49」的路径上
                 # 提前终止循环，漏掉后面真正命中的候选路径。
-                if weak_hit is None:
+                if weak_hit is None and self.RAW_REFLECTION not in text:
                     weak_hit = (path, url, text)
 
         # 全部候选路径扫完，存在弱命中且无强命中 → UNKNOWN 待人工复核（不判 SAFE 避免漏报）

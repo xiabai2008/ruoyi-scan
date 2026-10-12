@@ -10,7 +10,10 @@ class RedisUnauthPlugin(PluginBase):
     """检测 Redis 未授权访问（F7 中间件）：直连 6379 发送 INFO，能读到版本信息即未授权"""
 
     name = "Redis 未授权访问"
-    cve = "CVE-2021-32761"
+    # Redis 未授权访问无专属 CVE（对应 Redis 官方安全公告 + 配置缺陷）。
+    # 历史缺陷：曾误标 CVE-2021-32761（BITFIELD 32 位整数溢出，与未授权访问无关），
+    # 会产生误导性的 CVE 归属，此处按惯例置 N/A。
+    cve = "N/A"
     severity = "high"
     category = "vuln"
     description = "Redis 服务未设置认证（requirepass 为空），任意连接可执行 INFO/CONFIG 等命令"
@@ -57,23 +60,30 @@ class RedisUnauthPlugin(PluginBase):
         url = "%s:%d" % (host, port)
         try:
             sock = socket.create_connection((host, port), timeout=5)
-            try:
-                sock.sendall(b"INFO\r\n")
-                sock.settimeout(5)
-                data = b""
-                try:
-                    # 只读 2048 字节：INFO 的 redis_version 字段位于响应头部，避免大响应拖慢/阻塞
-                    while len(data) < 2048:
-                        chunk = sock.recv(1024)
-                        if not chunk:
-                            break
-                        data += chunk
-                except socket.timeout:
-                    pass
-            finally:
-                sock.close()
-        except Exception as e:
+        except OSError as e:
+            # 仅连接建立失败归为「连接失败」；编程错误不再被宽泛的 except 吞掉
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence="连接失败: %s" % e)
+
+        data = b""
+        try:
+            sock.sendall(b"INFO\r\n")
+            sock.settimeout(5)
+            try:
+                # 只读 2048 字节：INFO 的 redis_version 字段位于响应头部，避免大响应拖慢/阻塞
+                while len(data) < 2048:
+                    chunk = sock.recv(1024)
+                    if not chunk:
+                        break
+                    data += chunk
+            except socket.timeout:
+                pass
+        except OSError as e:
+            # 连接已建立但收发失败：与「连接失败」区分开，避免误导排查方向
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence="发送/接收失败: %s" % e
+            )
+        finally:
+            sock.close()
         # 容错解码：INFO 响应可能含二进制字节，errors="ignore" 保证后续关键字匹配不中断
         text = data.decode("utf-8", errors="ignore")
         # 未授权判定：INFO 返回 redis 版本信息（有 auth 时返回 -NOAUTH）
@@ -90,4 +100,12 @@ class RedisUnauthPlugin(PluginBase):
             )
         if "-NOAUTH" in text or "DENIED" in text:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="Redis 已启用认证")
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="非 Redis 服务或无未授权")
+        # 端口有响应但既无版本信息也无认证拒绝特征：可能是其他服务占用 6379。
+        # 这属于「没有测到 Redis」而非「已验证安全」，按测不到 ≠ 安全归 UNKNOWN
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            url=url,
+            evidence="非 Redis 服务或无未授权特征，无法判定",
+        )

@@ -1,4 +1,8 @@
 # JeecgBoot 默认口令：admin/123456 登录探测（brute 类，存在性验证）
+import json
+
+import requests
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
@@ -29,6 +33,9 @@ class JeecgDefaultPasswordPlugin(PluginBase):
     vuln_type = "auth"
     supports_waf_bypass = False
 
+    # 验证码相关关键字（命中即视为无法判定，标 UNKNOWN 而非 SAFE，避免漏报）
+    CAPTCHA_KEYWORDS = ["验证码", "captcha", "code expired", "验证码已失效", "code is null"]
+
     def verify(self, target, session):
         """探测 JeecgBoot 后台默认口令 admin/123456 能否直接登录。
 
@@ -45,12 +52,32 @@ class JeecgDefaultPasswordPlugin(PluginBase):
                 headers={"Content-Type": "application/json"},
             )
             text = resp.text or ""
-        except Exception as e:
-            # 网络异常无法证明口令状态：归 UNKNOWN 而非 SAFE，避免把"测不到"误报成"安全"
+        except requests.RequestException as e:
+            # 仅捕获传输异常：网络异常无法证明口令状态，归 UNKNOWN 而非 SAFE；
+            # 编程错误（AttributeError/TypeError 等）不再被吞掉后误报为「网络异常」
             emit(no("JeecgBoot 默认口令（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 以 token 字段为登录成功唯一 oracle：该接口成功响应必然携带 token，避免误判其他页面
-        if resp.status_code == 200 and "token" in text:
+
+        # 解析业务 JSON：JeecgBoot 成功响应为 {"success":true,"code":200,"result":{"token":"..."}}
+        # 不使用裸子串 "token" 判定——任意含 token 字样的页面（错误文案/Swagger 页）都会误报
+        body = {}
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                body = parsed
+        except Exception:
+            body = {}
+
+        # token 可能位于顶层（旧版）或 result 内（新版）
+        token = body.get("token") or ""
+        if not token:
+            result = body.get("result")
+            if isinstance(result, dict):
+                token = result.get("token") or ""
+        msg = str(body.get("message", "") or body.get("msg", ""))
+
+        # 命中判定：结构化成功信号（token 非空），不再依赖 status_code==200 + 正文子串
+        if token and resp.status_code not in (401, 403):
             emit(ok("存在 JeecgBoot 默认口令"))
             return ScanResult(
                 kind="vuln",
@@ -58,9 +85,34 @@ class JeecgDefaultPasswordPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="admin/123456 登录成功（响应含 token）",
+                evidence=f"admin/123456 登录成功（返回 token={str(token)[:20]}...）",
                 fix=self.fix,
                 extra={"vuln_type": "default_password", "plugin_name": "jeecg_default_pw"},
             )
-        emit(no("不存在 JeecgBoot 默认口令"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+
+        # 验证码拦截：无法证明口令错误（可能口令正确但验证码校验先行）→ UNKNOWN
+        if any(kw in msg for kw in self.CAPTCHA_KEYWORDS):
+            emit(no("JeecgBoot 默认口令：服务端要求验证码，无法判定"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"登录响应要求验证码，无法在无验证码场景判定：{msg or text[:200]}",
+                extra={"captcha_required": True},
+            )
+
+        # 明确的失败信号：错误文案指向账号/口令错误 → 默认口令不存在
+        if any(kw in msg for kw in ["用户名或密码错误", "密码错误", "用户不存在", "登录失败", "incorrect", "invalid"]):
+            emit(no("不存在 JeecgBoot 默认口令"))
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"登录失败：{msg}")
+
+        # 其余形态（401/403/500、WAF 拦截页、非 JSON 等）不能证明口令错误 → UNKNOWN（非 SAFE）
+        emit(no("JeecgBoot 默认口令：响应形态不明确，判 UNKNOWN"))
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            url=url,
+            evidence=f"HTTP {resp.status_code} 响应无法判定口令状态：{text[:200]}",
+        )

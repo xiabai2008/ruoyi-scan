@@ -1,4 +1,6 @@
 # 后台默认口令：POST /login 尝试 admin/admin123，按 token/code:200/Set-Cookie 判定
+import requests
+
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -60,6 +62,22 @@ class DefaultPasswordPlugin(PluginBase):
     # 验证码相关关键字（命中即视为需要验证码，无法判定，标 UNKNOWN）
     CAPTCHA_KEYWORDS = ["验证码", "captcha", "code expired", "验证码已失效", "code is null"]
 
+    # 登录失败关键字：仅保留若依真实失败文案与具体认证英文短语（统一小写后匹配），
+    # 不用裸 "password"/"incorrect"/"invalid" 这类泛化片段——它们既可能抑制真实的
+    # code==200 成功判定（假阴性），也可能把成功响应误导向 SAFE
+    FAILURE_KEYWORDS = [
+        "密码错误",
+        "用户名或密码错误",
+        "用户不存在",
+        "登录失败",
+        "验证码错误",
+        "密码不正确",
+        "bad credentials",
+        "invalid username",
+        "incorrect password",
+        "authentication failed",
+    ]
+
     def verify(self, target, session):
         """用默认口令（admin/admin123）无验证码登录后台并判定是否命中
 
@@ -79,7 +97,8 @@ class DefaultPasswordPlugin(PluginBase):
         headers = {"Content-Type": "application/json"}
         try:
             resp = session.post(url, json=data, headers=headers)
-        except Exception as e:
+        except requests.RequestException as e:
+            # 仅捕获传输异常：编程错误不再被静默分类为网络异常 UNKNOWN
             emit(no("后台默认口令（网络异常）"))
             return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
@@ -96,31 +115,18 @@ class DefaultPasswordPlugin(PluginBase):
         except Exception:
             logger.debug("登录响应 JSON 解析失败", exc_info=True)
 
-        # 1) 验证码拦截：服务端要求验证码 → 无法判定（非 SAFE，避免漏报）
-        if match_positive(text, self.CAPTCHA_KEYWORDS):
-            emit(no("后台默认口令：服务端要求验证码，无法判定"))
-            return ScanResult(
-                kind="brute",
-                name=self.name,
-                status=STATUS_UNKNOWN,
-                url=url,
-                evidence=f"响应含验证码关键字，无法在无验证码场景判定。前 200 字节：{text[:200]}",
-                extra={"captcha_required": True},
-            )
-
-        # 2) 命中判定：JSON 含 token / code == 200 / Set-Cookie 含 session/Admin-Token
+        # 1) 命中判定：JSON 含 token / code == 200 / Set-Cookie 含 session/Admin-Token
         # body 可能是 JSON 数组/标量（非对象），isinstance 兜底避免对其调用 .get
         token = body.get("token") if isinstance(body, dict) else ""
         r_code = body.get("code") if isinstance(body, dict) else None
         msg = str(body.get("msg", "")) if isinstance(body, dict) else ""
 
         # 排除「code:200 但 msg 含错误」的误报（部分版本错误也返 200）
-        has_login_failure_kw = any(
-            kw in msg for kw in ["密码错误", "用户不存在", "登录失败", "password", "incorrect", "invalid"]
-        )
+        msg_lower = msg.lower()
+        has_login_failure_kw = any(kw in msg_lower for kw in self.FAILURE_KEYWORDS)
 
         if token:
-            # 含 token → 强命中
+            # 含 token → 强命中；token 是可用会话凭证，不写入 evidence/extra（仅记录存在标志）
             emit(ok("存在后台默认口令漏洞（admin/admin123，返回 token）"))
             return ScanResult(
                 kind="brute",
@@ -128,8 +134,8 @@ class DefaultPasswordPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence=f"登录返回 token={str(token)[:30]}...",
-                extra={"username": self.USERNAME, "password": self.PASSWORD, "token": str(token)[:50], "code": r_code},
+                evidence=f"登录返回 token（已脱敏，长度 {len(str(token))}）",
+                extra={"username": self.USERNAME, "password": self.PASSWORD, "token_present": True, "code": r_code},
                 fix=self.fix,
             )
 
@@ -151,6 +157,7 @@ class DefaultPasswordPlugin(PluginBase):
             # Admin-Token 是 RuoYi 前后端分离版登录成功下发的专属 token Cookie
             # 注意：JSESSIONID 不在此判定中——Java 应用登录失败时通常也会下发 JSESSIONID，
             # 仅凭 JSESSIONID 会产生大量误报（P0 修复）
+            # Cookie 值同属可用会话凭证，不写入 evidence/extra（仅记录存在标志）
             emit(ok("存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）"))
             return ScanResult(
                 kind="brute",
@@ -158,12 +165,26 @@ class DefaultPasswordPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence=f"登录返回 Set-Cookie={set_cookie[:100]}",
-                extra={"username": self.USERNAME, "password": self.PASSWORD, "set_cookie": set_cookie[:200]},
+                evidence="登录响应 Set-Cookie 含 Admin-Token（值已脱敏）",
+                extra={"username": self.USERNAME, "password": self.PASSWORD, "admin_token_present": True},
                 fix=self.fix,
             )
 
-        # 3) 明确的失败信号：code == 500 / msg 含「密码错误」等
+        # 3) 验证码拦截：强成功信号均不成立时，才轮到「服务端要求验证码」的 UNKNOWN 分支；
+        # 顺序不能倒置——成功响应（token/code:200/Admin-Token）或 SPA 兜底页里出现
+        # "captcha" 等泛化子串时，不应掩盖真实命中
+        if match_positive(text, self.CAPTCHA_KEYWORDS):
+            emit(no("后台默认口令：服务端要求验证码，无法判定"))
+            return ScanResult(
+                kind="brute",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"响应含验证码关键字，无法在无验证码场景判定。前 200 字节：{text[:200]}",
+                extra={"captcha_required": True},
+            )
+
+        # 4) 明确的失败信号：code == 500 / msg 含「密码错误」等
         if r_code == 500 or has_login_failure_kw:
             emit(no("不存在后台默认口令漏洞（口令已修改）"))
             return ScanResult(
@@ -175,7 +196,7 @@ class DefaultPasswordPlugin(PluginBase):
                 extra={"username": self.USERNAME, "code": r_code, "msg": msg},
             )
 
-        # 4) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
+        # 5) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
         emit(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
         return ScanResult(
             kind="brute",

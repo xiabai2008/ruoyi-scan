@@ -2,7 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_all
+from lib.matcher import match_file_read_leak
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -47,18 +47,19 @@ class FileReadPlugin(PluginBase):
 
         @param target: 目标主机，用于拼接下载接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——响应同时含 'root' 与 ':/' 特征为 CONFIRMED，否则 SAFE
+        @return: ScanResult——响应含真实 /etc/passwd 行特征（root:x:0:0: 等）为 CONFIRMED，否则 SAFE
         """
         # 原 URL 拼接：self.url + '/common/...'（self.url 以 / 结尾，保留双斜杠特性）
         url = join_url(target, "/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         try:
-            file_read_use = session.get(url).text
+            file_read_use = session.get(url).text or ""
         except Exception as e:
             emit(no("任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 判定 1:1 保留：'root' 与 ':/' 同时出现（AND 联合，过滤仅含 root 的噪声）
-        # 使用 match_all 统一降误报工具（agents.md §5）
-        if match_all(file_read_use, ["root", ":/"]):
+        # 强特征判定：使用 lib.matcher.match_file_read_leak（校验 root:x:0:0:、daemon:x:1:1: 等真实 passwd 行特征）。
+        # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
+        # "root" 更是 HTML/JS/报错页的常客，普通页面即可满足，造成确定性误报。
+        if match_file_read_leak(file_read_use):
             emit(ok("存在任意文件读取漏洞"))
             return ScanResult(
                 kind="vuln",
@@ -66,7 +67,7 @@ class FileReadPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 root 与 :/ 特征（/etc/passwd）",
+                evidence="响应含 /etc/passwd 真实行特征（如 root:x:0:0:）",
                 fix=self.fix,
                 # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计
                 extra={

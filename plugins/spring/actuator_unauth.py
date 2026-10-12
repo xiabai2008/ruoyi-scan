@@ -64,8 +64,10 @@ class SpringActuatorUnauthPlugin(PluginBase):
             emit(no("Spring Boot Actuator 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_root, evidence=str(e))
 
-        # /actuator 根端点必须返回 JSON HAL 响应：纯 200 无效（HTML 错误页也可能是 200）
-        if r1.status_code != 200 or "application/json" not in (r1.headers.get("Content-Type", "") or ""):
+        # /actuator 根端点必须返回 JSON 响应：Actuator 返回
+        # application/vnd.spring-boot.actuator.v3+json 等厂商标型（不含字面量 application/json），
+        # 故按 JSON 子类型判定，避免真实目标被误判为不可达；纯 200 HTML 错误页无效
+        if r1.status_code != 200 or "json" not in (r1.headers.get("Content-Type", "") or "").lower():
             emit(no("不存在 Spring Boot Actuator 未授权（/actuator 不可达）"))
             return ScanResult(
                 kind="vuln",
@@ -80,10 +82,13 @@ class SpringActuatorUnauthPlugin(PluginBase):
         try:
             r2 = session.get(url_env)
         except Exception as e:
+            # 与第一关保持一致的输出：否则同一插件两阶段的控制台提示不对称
+            emit(no("Spring Boot Actuator 未授权（/actuator/env 网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_env, evidence=str(e))
 
         # 第二关通过才确认：/actuator 可达但 env 需认证时属“已保护”场景，不算未授权漏洞
-        if r2.status_code == 200 and "application/json" in (r2.headers.get("Content-Type", "") or ""):
+        # Content-Type 同样按 JSON 子类型判定（Actuator 常用 v3/v2 厂商标型）
+        if r2.status_code == 200 and "json" in (r2.headers.get("Content-Type", "") or "").lower():
             emit(ok("存在 Spring Boot Actuator 未授权访问"))
             return ScanResult(
                 kind="vuln",

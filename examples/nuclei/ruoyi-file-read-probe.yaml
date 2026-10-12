@@ -1,12 +1,10 @@
-id: generic-error-page-lfi
+id: generic-path-traversal-probe
 info:
   name: 通用路径穿越探测
   author: ruoyi-scan
   severity: high
   description: 常见文件读取接口路径穿越（非破坏性探测 etc/passwd 特征）
   tags: lfi,file-read,ruoyi
-  metadata:
-    cve: ""
 http:
   - method: GET
     path:
@@ -15,4 +13,7 @@ http:
       - type: regex
         part: body
         regex:
-          - "root:[x*]:0:0"
+          # 锚定到行首并要求完整 passwd 条目结构（user:password:uid:gid:gecos:...），
+          # 避免正文任意位置出现 "root:...:0:0" 子串即命中（反射/错误页误报）；
+          # 密码位用 [^:\r\n]* 而非 [x*]，同时覆盖锁定账号（! 或 *）
+          - '(?m)^root:[^:\r\n]*:0:0:[^:\r\n]*:'

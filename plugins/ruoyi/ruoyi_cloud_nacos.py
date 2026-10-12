@@ -65,17 +65,26 @@ class RuoyiCloudNacosPlugin(PluginBase):
         url = join_url(target, "/nacos/v1/cs/configs?dataId=&group=&pageSize=1")
         try:
             resp = session.get(url)
-            # pageItems（分页结构）与 configs（非分页结构）是 Nacos 两种合法响应形态，任一出现即配置可读
-            if resp.status_code == 200 and ("pageItems" in (resp.text or "") or "configs" in (resp.text or "")):
-                return ScanResult(
-                    kind=self.category,
-                    name=self.name,
-                    severity=self.severity,
-                    status=STATUS_CONFIRMED,
-                    url=url,
-                    evidence="Nacos 配置接口可未授权访问",
-                    fix=self.fix,
-                )
+            ct = (resp.headers.get("Content-Type") or "").lower()
+            # 结构化判定：必须解析为 JSON 对象且配置列表字段（pageItems/configs）是数组。
+            # 不再用裸子串 "pageItems"/"configs"：普通页面、JS 包里出现这些词会造成误报
+            if resp.status_code == 200 and "json" in ct:
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = None
+                if isinstance(body, dict) and (
+                    isinstance(body.get("pageItems"), list) or isinstance(body.get("configs"), list)
+                ):
+                    return ScanResult(
+                        kind=self.category,
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=url,
+                        evidence="Nacos 配置接口可未授权访问（结构化配置列表响应）",
+                        fix=self.fix,
+                    )
             # X-Ruoyi-Vuln 为本地靶场注入的签名响应头（离线验证场景），命中即作为检测证据
             if resp.headers.get("X-Ruoyi-Vuln") == "nacos-leak":
                 return ScanResult(

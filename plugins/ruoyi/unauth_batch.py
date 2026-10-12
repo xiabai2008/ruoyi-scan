@@ -87,8 +87,11 @@ class UnauthBatchPlugin(PluginBase):
         },
     ]
 
-    # 鉴权拦截关键字（命中即视为该端点已保护）
-    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源", "signin", "login"]
+    # 鉴权拦截关键字（命中即视为该端点已保护）。
+    # 收紧说明：原列表含泛用英文子串 "login"/"signin"。/system/user/list 的真实暴露响应
+    # 常含 loginName/lastLoginTime 等字段（都带 "login"），会在正特征前被误判为「已鉴权」，
+    # 造成确定性漏报（false negative）。现仅保留不会与业务字段冲突的鉴权文案。
+    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源"]
 
     def verify(self, target, session):
         """批量探测多个常见未授权端点，对每个端点单独评定（已鉴权 / 未授权 / 网络异常）。
@@ -133,10 +136,9 @@ class UnauthBatchPlugin(PluginBase):
                 continue
 
             if matched_kw:
-                # 进一步控误报（P1 修复）：
-                # Druid/Swagger 等 HTML 端点必须 HTTP 200（避免 404 自定义错误页含关键字而误报）；
-                # JSON 端点（Actuator/user/list）已在上方 need_json 兜底
-                if not ep.get("need_json") and code != 200:
+                # 进一步控误报（P1 修复扩展）：所有端点统一要求 HTTP 200——
+                # 非 200 的 JSON 错误体/自定义错误页（404/500 等）即使含关键字也不作为未授权证据
+                if code != 200:
                     all_status.append((ep["name"], "SAFE", f"含关键字 {matched_kw} 但 HTTP {code} 非 200"))
                     continue
                 hit_endpoints.append(

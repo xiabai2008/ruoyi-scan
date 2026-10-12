@@ -40,6 +40,17 @@ http:
           - '"total"'
         condition: and
 
+      # RuoYi 用户列表业务字段：锚定真实业务载荷，避免任意分页 JSON（含 rows/total 的
+      # 无关接口或错误信封）被误判为未授权用户列表
+      - type: word
+        part: body
+        words:
+          - '"userName"'
+          - '"nickName"'
+          - '"deptName"'
+          - '"createBy"'
+        condition: or
+
       - type: word
         part: body
         negative: true
@@ -68,6 +79,16 @@ http:
           - '"rows"'
           - '"total"'
         condition: and
+
+      # 同上：要求命中至少一个 RuoYi 用户列表字段，锚定真实业务载荷
+      - type: word
+        part: body
+        words:
+          - '"userName"'
+          - '"nickName"'
+          - '"deptName"'
+          - '"createBy"'
+        condition: or
 
       - type: word
         part: body

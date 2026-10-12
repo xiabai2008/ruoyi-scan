@@ -1,4 +1,5 @@
 # 插件抽象基类（agents.md §5：每漏洞一插件，继承 PluginBase）
+import math
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -53,8 +54,13 @@ def cvss_score(vector: str) -> float:
     """
     if not vector:
         return 0.0
-    # 标准化：去掉 CVSS:3.1/ 前缀
-    v = vector.strip().lstrip("CVSS:3.1/").lstrip("CVSS:3.0/")
+    # 标准化：去掉 CVSS:3.1/ 或 CVSS:3.0/ 的**字面前缀**
+    # （不能用 lstrip：它把参数当作字符集合，会剥掉以 C/V/S/:/3/./1 等开头的任意字符段）
+    v = vector.strip()
+    for prefix in ("CVSS:3.1/", "CVSS:3.0/"):
+        if v.startswith(prefix):
+            v = v[len(prefix) :]
+            break
     parts = [p.strip() for p in v.split("/") if p.strip()]
     metrics = {}
     for p in parts:
@@ -101,10 +107,22 @@ def cvss_score(vector: str) -> float:
     else:
         base = min(impact + exploitability, 10.0)
 
-    # CVSS v3.1 规范要求向上取整到 0.1（Roundup，非四舍五入）
-    import math
+    # CVSS v3.1 规范要求向上取整到 0.1（Roundup）。规范在 v3.1 专门改为整数运算：
+    # 直接 math.ceil(base*10)/10 会因浮点表示误差把本应恰为 X.Y 的分值抬到 X.(Y+1)
+    return _cvss_roundup(base)
 
-    return math.ceil(base * 10) / 10.0
+
+def _cvss_roundup(value: float) -> float:
+    """CVSS v3.1 规范 Roundup 算法（整数运算，避免浮点误差多进一位）
+
+    规范伪码：int_input = round_to_nearest_integer(input * 100000)；
+    int_input % 10000 == 0 时返回 int_input / 100000，否则 (floor(int_input / 10000) + 1) / 10。
+    """
+    # round_to_nearest_integer 为「四舍五入、半数进位」（Python round 是银行家舍入，不能直接用）
+    int_input = int(math.floor(value * 100000 + 0.5))
+    if int_input % 10000 == 0:
+        return int_input / 100000.0
+    return (int_input // 10000 + 1) / 10.0
 
 
 def parse_compliance(tag: str) -> Dict[str, str]:

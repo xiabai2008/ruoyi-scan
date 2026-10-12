@@ -2,6 +2,8 @@
 # 漏洞原因：Actuator 暴露 /gateway/routes/ 端点，可 POST 创建含恶意 Filter 的路由触发
 #   SPEL 表达式求值执行任意命令（影响 Spring Cloud Gateway 3.1.x）。
 # 本插件仅做存在性验证：POST 创建测试路由探针，检测响应特征判定接口是否可达。
+import requests
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
@@ -66,7 +68,9 @@ class SpringGatewayRcePlugin(PluginBase):
         url = join_url(target, "/actuator/gateway/routes/test")
         # 路由创建探针（仅触发接口签名，不执行真实 SPEL）
         payload = {
-            "id": "test-route-probe",
+            # 路由 id 必须与 URL 路径段一致：Gateway 以路径段为主键（控制器会用路径 id 覆盖 body id），
+            # 不一致在严格/旧版实现上可能导致创建被拒，削弱检测可靠性
+            "id": "test",
             "filters": [{"name": "AddResponseHeader", "args": {"name": "X-Probe", "value": "c22947"}}],
             # uri 指向本地不可达端口：探针路由不会被真实转发流量，避免副作用
             "uri": "http://localhost:1",
@@ -74,7 +78,8 @@ class SpringGatewayRcePlugin(PluginBase):
         }
         try:
             resp = session.post(url, json=payload)
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
+            # 只捕获请求类异常：编程/清理类错误不再被吞成「网络异常 UNKNOWN」
             emit(no("Spring Cloud Gateway RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 

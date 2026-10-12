@@ -51,34 +51,86 @@ class RuoyiGenRcePlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
-        """访问代码生成编辑页，检测该模块是否存在 SSTI 模板注入特征。
+        """访问代码生成编辑页，检测该模块是否可达并尝试 SSTI 特征判定。
 
         @param target: 目标站点根 URL
         @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
-        @return: ScanResult — 命中 SSTI 签名则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
+        @return: ScanResult — 命中签名/编辑器可达返回相应判定；不可达 SAFE；网络异常 UNKNOWN
         """
         # GET 访问编辑页记录可达性与状态码：未命中特征时状态码写入 evidence 供人工研判
         url = join_url(target, "/tool/gen/edit")
+        resp = None
+        primary_error = None
         try:
             resp = session.get(url)
-            # 签名头为测试环境注入的判定桩；生产环境需人工复核模板渲染行为，不能仅凭状态码下结论
-            if resp.headers.get("X-Ruoyi-Vuln") == "gen-ssti":
+        except Exception as e:
+            # 网络异常不在此下结论（避免把连接失败误定性），先探测模块是否可达
+            primary_error = e
+
+        if resp is None:
+            try:
+                reachable = session.get(join_url(target, "/tool/gen")).status_code == 200
+            except Exception:
+                reachable = False
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"请求异常无法判定 SSTI（/tool/gen 可达={reachable}）：{primary_error}",
+            )
+
+        # 【显式 lab 快速路径】签名头为测试环境注入的判定桩，仅在本地靶场命中
+        if resp.headers.get("X-Ruoyi-Vuln") == "gen-ssti":
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence="代码生成 SSTI 签名命中（lab 判定桩）",
+                fix=self.fix,
+            )
+
+        # 【真实行为响应】编辑器可达（200 + JSON）说明代码生成模块真实暴露；
+        # 但无破坏性载荷时无法在本插件内证明模板求值（需登录态 POST /tool/gen/edit + /tool/gen/preview），
+        # 因此按契约返回 UNKNOWN（可能被利用，待人工复核），而不是 SAFE。
+        if resp.status_code == 200:
+            try:
+                body = resp.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict) and "code" in body:
                 return ScanResult(
                     kind=self.category,
                     name=self.name,
                     severity=self.severity,
-                    status=STATUS_CONFIRMED,
+                    status=STATUS_UNKNOWN,
                     url=url,
-                    evidence="代码生成 SSTI 签名命中",
-                    fix=self.fix,
+                    evidence=(
+                        f"代码生成编辑器可达（HTTP 200，业务 JSON={str(body)[:120]}），"
+                        "但未执行模板求值探针，SSTI 未能证实，需人工复核"
+                    ),
                 )
+
+        # 模块不可达（401/403/404 鉴权或路由拦截）：该版本/部署未启用或需鉴权 → SAFE
+        if resp.status_code in (401, 403, 404):
             return ScanResult(
                 kind=self.category,
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_SAFE,
                 url=url,
-                evidence=f"未命中 SSTI 特征, 状态码={resp.status_code}",
+                evidence=f"代码生成模块不可达或需鉴权，状态码={resp.status_code}",
             )
-        except Exception as e:
-            return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"异常: {e}")
+
+        # 其他状态码（5xx/3xx 等）：端点有响应但形态无法定性，不得当「不可达」判 SAFE
+        return ScanResult(
+            kind=self.category,
+            name=self.name,
+            severity=self.severity,
+            status=STATUS_UNKNOWN,
+            url=url,
+            evidence=f"代码生成模块响应形态无法定性（HTTP {resp.status_code}），需人工复核",
+        )

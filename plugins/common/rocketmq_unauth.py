@@ -38,19 +38,28 @@ class RocketmqUnauthPlugin(PluginBase):
         """
         paths = ["/rocketmq/", "/dashboard/", "/rocketmq-console-ng/"]
         evidence_url = ""
+        # SAFE 证据用最后探测的 URL：只报裸 target 无法说明实际探测到哪个路径（与 CONFIRMED 的 evidence_url 对齐）
+        last_url = ""
+        got_response = False
+        last_error = None
         for p in paths:
             # 统一去掉前导 /：与 join_url 的双斜杠归一化配合，保证各候选路径拼接结果一致
             url = join_url(target, p.lstrip("/"))
+            last_url = url
             try:
                 resp = session.get(url)
                 text = resp.text or ""
             except Exception as e:
-                emit(no("RocketMQ Dashboard 未授权（网络异常）"))
-                return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-            # 控制台特征 + 排除登录页：命中 dashboard 关键字但含 login/sign in 说明有鉴权，不算未授权
+                # 单路径网络异常不阻断其余候选路径：直接 return UNKNOWN 会漏掉后续可用路径
+                last_error = e
+                continue
+            got_response = True
+            # 控制台特征 + 排除登录页：命中 RocketMQ 专有标识但含 login/sign in 说明有鉴权，不算未授权
+            # 历史缺陷：positives 曾含 "dashboard"/"topic" 等泛化词，任意含 "topics" 的普通页面即误报；
+            # 现在只认 RocketMQ 专有标识（rocketmq / mqnamesrv）
             if resp.status_code == 200 and match_positive(
                 text.lower(),
-                ["rocketmq", "dashboard", "mqnamesrv", "topic"],
+                ["rocketmq", "mqnamesrv"],
                 negatives=["login", "sign in"],
             ):
                 evidence_url = url
@@ -67,5 +76,15 @@ class RocketmqUnauthPlugin(PluginBase):
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "rocketmq_unauth"},
             )
+        if not got_response:
+            # 所有候选路径均请求失败：测不到 ≠ 安全，归 UNKNOWN
+            emit(no("RocketMQ Dashboard 未授权（网络异常）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=join_url(target, paths[0].lstrip("/")),
+                evidence=str(last_error),
+            )
         emit(no("不存在 RocketMQ Dashboard 未授权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=target)
+        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url or target)

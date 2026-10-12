@@ -43,10 +43,10 @@ plugin_list = [
     # brute：原有 Druid 爆破 + Step 5 新增默认口令
     DruidBrutePlugin,  # Druid 弱口令爆破
     DefaultPasswordPlugin,  # 后台默认口令 admin/admin123
-    # P1-F 新增（阶段扩充 +3）
+    # P1-F 新增（阶段扩充 +3，按危险度从高到低：两个 high 在前）
     RuoyiCloudNacosPlugin,  # RuoYi-Cloud Nacos 配置泄露（high）
-    RuoyiSwaggerUnauthPlugin,  # Swagger 未授权 API 文档（medium）
     RuoyiGenRcePlugin,  # 代码生成模块 SSTI（high）
+    RuoyiSwaggerUnauthPlugin,  # Swagger 未授权 API 文档（medium）
     # 多版本矩阵实测新增（2026-09-17）：认证后越权类，需「持功能权限但数据范围受限」的低权账号
     Cve202546174ResetPwdScopePlugin,  # CVE-2025-46174 重置密码页数据权限绕过（high，影响 <=4.8.0）
     Cve202570986SelectDeptTreePlugin,  # CVE-2025-70986 部门树越权访问（medium，影响 <=4.8.0）

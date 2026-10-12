@@ -12,7 +12,8 @@ class MinioUnauthPlugin(PluginBase):
     """检测 MinIO 未授权访问（F7 中间件）：非破坏性确认服务存在并无凭证枚举 bucket"""
 
     name = "MinIO 未授权访问"
-    cve = "CVE-2023-28432"
+    # 本插件检测匿名 bucket 枚举/未授权访问，与 CVE-2023-28432（bootstrap 接口环境变量泄露）不是同一问题
+    cve = "N/A"
     severity = "medium"
     category = "vuln"
     description = "MinIO 对象存储未授权访问（默认配置匿名可列举/读取 bucket）"
@@ -47,8 +48,14 @@ class MinioUnauthPlugin(PluginBase):
         except Exception as e:
             emit(no("MinIO 未授权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=health_url, evidence=str(e))
-        # 200/3xx/400 均为服务存在的表现（含健康检查失败与部署重定向），其余状态即无 MinIO 服务
-        if resp.status_code not in (200, 301, 302, 400):
+        # 200 为健康检查正常响应；301/302/400 只有在响应头/正文含 MinIO 专有信号
+        # （Server: MinIO / X-Amz-* / 正文 minio 字样）时才视为服务存在——
+        # 否则任何返回这些状态码的无关服务器或 WAF 错误页都会进入 bucket 枚举阶段
+        code = getattr(resp, "status_code", 0)
+        headers_text = str(getattr(resp, "headers", "") or "").lower()
+        body_text = (resp.text or "").lower()
+        minio_signal = "minio" in headers_text or "x-amz" in headers_text or "minio" in body_text
+        if code != 200 and not minio_signal:
             emit(no("未检测到 MinIO 服务"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=health_url)
         # 2. 无凭证列举 bucket（匿名桶列表）
@@ -58,8 +65,13 @@ class MinioUnauthPlugin(PluginBase):
             text2 = resp2.text or ""
         except Exception as e:
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=root_url, evidence=str(e))
-        # 匿名列举成功时 /minio/ 返回含 bucket/storage-class 的 XML/JSON 桶列表，命中即无鉴权
-        if match_positive(text2, ["bucket", "storage-class", "minio"]):
+        # 匿名列举成功时 /minio/ 必须返回 2xx 且正文含 bucket 列表结构；
+        # 403/404 错误页（AccessDenied/<Error>、控制台登录页）即使含 "minio"/"bucket" 字样也不算未授权
+        if resp2.status_code == 200 and match_positive(
+            text2,
+            ["bucket", "storage-class", "<ListAllMyBucketsResult"],
+            negatives=["AccessDenied", "<Error>"],
+        ):
             emit(ok("存在 MinIO 未授权访问"))
             return ScanResult(
                 kind="vuln",

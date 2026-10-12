@@ -6,17 +6,39 @@ info:
   description: Swagger/OpenAPI 文档接口未授权访问，泄露 API 结构
   tags: swagger,exposure,api
 http:
+  # Swagger UI / Knife4j 页面：关键字与状态码必须同时满足
   - method: GET
     path:
       - "{{BaseURL}}/swagger-ui/index.html"
       - "{{BaseURL}}/prod-api/swagger-ui/index.html"
-      - "{{BaseURL}}/v3/api-docs"
     matchers:
+      # case-insensitive：页面可能渲染为 SWAGGER-UI / SwaggerUI / swagger-ui，
+      # 大小写敏感的 word matcher 会整体漏报（两个词条本身也高度重叠）
       - type: word
+        case-insensitive: true
         words:
           - "swagger-ui"
           - "Swagger"
       - type: status
         status:
           - 200
-    matchers-condition: or
+    # 关键字与状态码必须同时满足：单独状态码 200 会让任意 200 响应（SPA 兜底路由/错误页）
+    # 被误报为 Swagger 暴露，关键字匹配必须成为必要条件
+    matchers-condition: and
+
+  # OpenAPI JSON（/v3/api-docs）是 springdoc 规范文档，正文用 "openapi"/"paths"，
+  # 通常不含 swagger-ui/Swagger 字样，与 UI 路径共用同一 word matcher 会漏报，
+  # 故拆分为独立请求并使用 OpenAPI 专属特征匹配
+  - method: GET
+    path:
+      - "{{BASEURL}}/v3/api-docs"
+    matchers-condition: and
+    matchers:
+      - type: word
+        condition: and
+        words:
+          - '"openapi"'
+          - '"paths"'
+      - type: status
+        status:
+          - 200

@@ -1,8 +1,11 @@
 # 备份文件扫描 — 常见备份/交换/IDE 文件后缀拼接探测
+from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from core.http import join_url
 from lib.soft404 import Soft404Baseline
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class BackupScanPlugin(PluginBase):
@@ -49,7 +52,8 @@ class BackupScanPlugin(PluginBase):
         'python ds_store_exp.py "http://target/.DS_Store"'
     )
 
-    # 常见备份 / 交换 / 系统残留后缀
+    # 常见备份 / 交换 / 系统残留后缀（.swp 曾重复登记：重复项会让同一 URL 被请求两次、
+    # 命中时同一路径进入 found 两次，虚增报告计数）
     _BACKUP_SUFFIXES = [
         ".bak",
         ".back",
@@ -61,7 +65,6 @@ class BackupScanPlugin(PluginBase):
         ".zip",
         ".DS_Store",
         "~",
-        ".swp",
         ".swo",
         ".swn",
     ]
@@ -83,18 +86,25 @@ class BackupScanPlugin(PluginBase):
         base_names = ["index", "config", ".env", "web", "app"]
         for base in base_names:
             for suf in self._BACKUP_SUFFIXES:
-                # 后缀直接衔接文件名（/index.bak、/.env.bak 形态），点号开头与否不影响拼接结果
-                path = f"/{base}{suf}" if suf.startswith(".") or base.startswith(".") else f"/{base}{suf}"
+                # 后缀直接衔接文件名（/index.bak、/.env.bak 形态）；点号开头与否
+                # 对拼接结果无影响（历史遗留的恒真条件表达式已简化）
+                path = f"/{base}{suf}"
                 url = join_url(target, path)
                 try:
                     resp = session.get(url)
+                except Exception:
+                    # 单路径请求异常（超时/连接拒绝）跳过，但必须留痕：
+                    # 静默吞掉会让「请求失败」与「目标返回 404」在日志中不可区分
+                    logger.debug("备份文件探测请求失败: %s", url, exc_info=True)
+                    continue
+                try:
                     # 存在性判定交给基线：无兜底路由时等价于「2xx + 非空」，
                     # 有兜底路由时额外要求响应内容与兜底页不同
                     if baseline.looks_like_real_file(resp):
                         found.append(path)
-                # 单路径请求异常（超时/连接拒绝）直接跳过，不影响其余组合的探测
                 except Exception:
-                    continue
+                    # 基线判定自身出错（非常规异常）单独记录，不影响其余组合的探测
+                    logger.debug("备份文件基线判定异常: %s", path, exc_info=True)
         if found:
             return ScanResult(
                 kind=self.category,

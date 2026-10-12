@@ -1,6 +1,8 @@
 """若依 /system/role/list 的 params[dataScope] 参数 SQL 报错注入检测（CNVD-2021-01931）。"""
 
 # SQL 报错注入（role）：/system/role/list 的 params[dataScope] 参数 extractvalue 报错注入
+from urllib.parse import urlsplit
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
@@ -50,7 +52,12 @@ class SqlInjectRolePlugin(PluginBase):
         @return: ScanResult — 响应含 '运行时异常' 或 'database()' 报错特征则 CONFIRMED，否则 SAFE，网络异常则 UNKNOWN
         """
         host = host_of(target)
-        # 原 headers 1:1 保留（含 Origin/Referer/Cookie 等）
+        # Origin/Referer 必须与目标同协议：HTTPS 目标上发 http:// 的 Origin/Referer
+        # 会被部分服务端/WAF 拒绝，导致误判 SAFE（假阴性）
+        scheme = urlsplit(target).scheme or "http"
+        # headers 仅保留与注入形态相关的请求特征：
+        # 历史缺陷：曾 1:1 复制原始脚本的硬编码 Cookie（含他人 JSESSIONID/论坛会话），
+        # 会把无关凭证发给目标并在代码仓库中长期留存，现予移除（有鉴权需求由入参会话自带 Cookie 处理）。
         headers = {
             "Host": host,
             # 浏览器指纹头的键名 "nt" 为原脚本 1:1 保留（非标准 User-Agent 键名），保持请求形态与原始注入脚本一致
@@ -60,10 +67,9 @@ class SqlInjectRolePlugin(PluginBase):
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/x-www-form-urlencoded",
             "X-Requested-With": "XMLHttpRequest",
-            "Origin": f"http://{host}",
+            "Origin": f"{scheme}://{host}",
             "Connection": "close",
-            "Referer": f"http://{host}/system/role",
-            "Cookie": "UMK8_2132_ulastactivity=fdf6lh5P4KaIR7rPwncVmGmx5z2ymLLNz3o33msgkFJlQ1SdH/hR; UMK8_2132_lastcheckfeed=1|1637287051; UMK8_2132_nofavfid=1; JSESSIONID=d9eca4a4-7fcd-41ba-9888-75e7c73dc9bf",
+            "Referer": f"{scheme}://{host}/system/role",
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
@@ -157,7 +163,7 @@ class SqlInjectRolePlugin(PluginBase):
                 evidence=(
                     f"注入请求含 {WEAK_SIG}，但"
                     + ("基线请求同样含该文案" if ctl_weak else "响应存在载荷回显")
-                    + "，无法区分注入成功与目标常驻错误页，需人工复核",
+                    + "，无法区分注入成功与目标常驻错误页，需人工复核"
                 ),
             )
         emit(no("不存在POST型报错注入"))

@@ -21,5 +21,5 @@ plugin_list = [
     JeecgFileReadDownloadPlugin,  # 任意文件读取（high）
     JeecgJmreportListUnauthPlugin,  # 报表未授权（medium）
     JeecgDictUnauthPlugin,  # 字典越权（medium）
-    JeecgDefaultPasswordPlugin,  # 默认口令（brute）
+    JeecgDefaultPasswordPlugin,  # 默认口令（medium）
 ]

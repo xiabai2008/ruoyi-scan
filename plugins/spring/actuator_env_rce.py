@@ -61,11 +61,13 @@ class SpringActuatorEnvRcePlugin(PluginBase):
         @return: ScanResult——CONFIRMED 表示 env 可写入，SAFE 表示不可达，UNKNOWN 表示网络异常
         """
         url = join_url(target, "/actuator/env")
-        # 配置覆盖探针（仅写入无害属性，不指向恶意 XML 服务）
+        # 配置覆盖探针：写入一个本就无业务含义的探针属性即可证明 env POST 可写。
+        # 历史缺陷：探针直接改写 eureka.client.serviceUrl.defaultZone（真实运行配置项），
+        # 检测工具不应产生状态变更且无副作用回收机制；写入任意属性同样能证明漏洞前提，
+        # 但不会覆盖任何现有配置（这是只读/低副作用的检测方式）。
         payload = {
-            "name": "eureka.client.serviceUrl.defaultZone",
-            # 使用不可解析的 .test 域名：即使配置被真实加载也不会触发外部回调
-            "value": "http://spring-probe.test/",
+            "name": "ruoyi.scan.env_probe",
+            "value": "true",
         }
         try:
             resp = session.post(url, json=payload)

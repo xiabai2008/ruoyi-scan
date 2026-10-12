@@ -82,8 +82,10 @@ class PlusAuthLoginProbePlugin(PluginBase):
                 evidence=f"HTTP {resp.status_code} 重定向至 {resp.headers.get('Location', '')}，非独立认证服务",
             )
 
-        # 2) 认证服务可能返回 200/400/401/500；404/405 等代表接口不存在
-        if resp.status_code not in (200, 400, 401, 500):
+        # 2) 认证服务可能返回 200/400/401；404/405 等代表接口不存在。
+        #    500 不纳入白名单：网关/后端的通用 5xx 错误页常返回 {"code":500,...}，
+        #    纳白名单会把「后端已挂」误判为认证服务存在（本插件精度优先）
+        if resp.status_code not in (200, 400, 401):
             emit(no("未探测到 RuoYi-Plus 认证服务"))
             return ScanResult(
                 kind="info", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {resp.status_code}"

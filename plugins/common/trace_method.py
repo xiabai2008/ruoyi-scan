@@ -70,7 +70,7 @@ class TraceMethodPlugin(PluginBase):
         判定规则：
           - CONFIRMED：状态码 <400 **且**响应体回显了探针头值（TRACE 真实启用，存在 XST 风险）
           - SAFE：仅 OPTIONS 返回 Allow（信息级发现，不构成漏洞），或 TRACE 未回显报文
-          - UNKNOWN：请求异常，绝不判 SAFE
+          - UNKNOWN：请求异常（含 OPTIONS 或 TRACE 请求失败），绝不判 SAFE
 
         @param target: 目标站点 URL
         @param session: 已配置的 HTTP 会话
@@ -85,13 +85,32 @@ class TraceMethodPlugin(PluginBase):
 
             # TRACE 探测：带唯一探针头发送，要求响应体回显该值才算真实启用
             trace_echoed = False
+            # TRACE 请求本身失败（超时/连接重置/TLS 握手失败）→ 该探针从未真正执行，
+            # 不能按「未回显」判 SAFE（假阴性），标记后走 UNKNOWN 分支
+            trace_error = None
             probe_value = uuid.uuid4().hex
             try:
                 trace_resp = session.request("TRACE", target, headers={self.TRACE_PROBE_HEADER: probe_value})
                 trace_body = trace_resp.text or ""
-                trace_echoed = trace_resp.status_code < 400 and probe_value in trace_body
-            except Exception:
-                trace_echoed = False
+                # RFC 9110：真实 TRACE 必须原样回显整个请求报文，首行即 "TRACE <path> HTTP/1.1"。
+                # 仅凭「响应体出现探针头值」会把反射请求头/回显参数的调试页、错误页、
+                # WAF 页误判为 TRACE 启用，故额外要求响应首行是 TRACE 请求行
+                first_line = trace_body.lstrip().splitlines()[0] if trace_body.strip() else ""
+                trace_echoed = (
+                    trace_resp.status_code < 400 and probe_value in trace_body and first_line.upper().startswith("TRACE ")
+                )
+            except Exception as e:
+                trace_error = e
+
+            # TRACE 请求失败 → 无法完成回显判定，返回 UNKNOWN（测不到 ≠ 安全）
+            if trace_error is not None:
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=target,
+                    evidence=f"TRACE 探测请求异常：{trace_error}",
+                )
 
             evidence_parts = []
             if methods:

@@ -42,35 +42,37 @@ class ShiroRemembermePlugin(PluginBase):
     vuln_type = "rce"
     supports_waf_bypass = False
 
-    # Shiro 默认 AES 密钥（Base64 编码）
-    DEFAULT_KEYS = [
-        "kPH+bIxk5D2deZiIxcaaaA==",
-        "2AvVhdsgUs0FSA3SDFAdag==",
-        "3AvVhmFLUs0KTA3Kprsdag==",
-        "4AvVhmFLUs0KTA3Kprsdag==",
-        "Z3Vybg==",
-        "wGiHplamyXlVB11UXWol8g==",
-        "fCq+/x448o9wCM4BqR5bJw==",
-    ]
-
     # rememberMe Cookie 检测特征
     SHIRO_COOKIE = "rememberMe"
     DELETE_ME = "rememberMe=deleteMe"
+    # 候选探测路径：Shiro rememberMe 只处理 filter chain 覆盖的 URL，
+    # 不同部署受保护端点不同（仅探 /login 会在保护其他端点的部署上漏报），
+    # 故逐个探测，任一返回 deleteMe 即判框架特征
+    PROBE_PATHS = ["/", "/login"]
 
     def verify(self, target, session) -> ScanResult:
         """检测 Shiro rememberMe 反序列化漏洞
 
         检测逻辑：
-        1. 发送带有 rememberMe Cookie 的请求
+        1. 依次对候选路径发送带 rememberMe Cookie 的请求
         2. 检查响应 Set-Cookie 是否含 rememberMe=deleteMe（Shiro 特征）
         3. 若存在 Shiro 特征，判定为 UNKNOWN（需进一步验证密钥）
         """
-        # 探测点选登录页：Shiro 只处理受保护 URL，登录请求必然经过 rememberMe 解密链
-        url = join_url(target, "/login")
-        try:
-            # 发送带有 rememberMe Cookie 的请求触发 Shiro 处理
-            # Cookie 值随意（test 即可）：Shiro 解密失败会回 Set-Cookie: rememberMe=deleteMe，这正是框架指纹
-            resp = session.get(url, headers={"Cookie": f"{self.SHIRO_COOKIE}=test"})
+        got_response = False
+        last_url = join_url(target, self.PROBE_PATHS[0])
+        last_error = None
+        for path in self.PROBE_PATHS:
+            url = join_url(target, path)
+            last_url = url
+            try:
+                # 用 cookies= 传值而非手写 Cookie 头：requests 会把它与 session 的
+                # cookie jar 合并；手写 Cookie 头会在 jar 已持有该 host cookie 时
+                # 被 prepare_cookies 重建覆盖，探针可能实际未发出（假 SAFE）
+                resp = session.get(url, cookies={self.SHIRO_COOKIE: "test"})
+            except Exception as e:
+                last_error = e
+                continue
+            got_response = True
 
             # 检查响应头是否包含 Shiro rememberMe 特征
             # 双重检查：Set-Cookie 可能出现在多值响应头中，get() 只取首值，故再对完整头字符串匹配
@@ -93,19 +95,21 @@ class ShiroRemembermePlugin(PluginBase):
                     reproduce=self.reproduce,
                 )
 
-            # 未检测到 Shiro 特征
-            return ScanResult(
-                kind=self.category,
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_SAFE,
-                url=url,
-                evidence="未检测到 Shiro rememberMe 特征",
-            )
-        except Exception as e:
+        # 所有候选路径均请求失败：无法判定，不得当作「无 Shiro 特征」判 SAFE
+        if not got_response:
             return ScanResult(
                 kind="error",
                 name=self.name,
                 status=STATUS_UNKNOWN,
-                evidence=f"exception: {e}",
+                evidence=f"exception: {last_error}",
             )
+
+        # 未检测到 Shiro 特征
+        return ScanResult(
+            kind=self.category,
+            name=self.name,
+            severity=self.severity,
+            status=STATUS_SAFE,
+            url=last_url,
+            evidence="未检测到 Shiro rememberMe 特征",
+        )

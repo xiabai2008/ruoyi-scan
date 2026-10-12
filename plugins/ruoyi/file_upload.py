@@ -86,27 +86,38 @@ class FileUploadPlugin(PluginBase):
             emit(no("不存在任意文件上传漏洞"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="响应非合法 JSON")
 
+        # resp.json() 可能返回 JSON 数组/标量（Content-Type 含 json 即通过上面的 is_json），
+        # 后续 data.get 会抛 AttributeError，故必须先确认解析结果是对象
+        if not isinstance(data, dict):
+            emit(no("不存在任意文件上传漏洞"))
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence="响应 JSON 非对象")
+
         # RuoYi 上传响应：{"code":200,"fileName":"...","url":"/profile/upload/...","newFileName":"..."}
         # 部分版本无 code，但必有 url 或 fileName
         up_url = data.get("url") or ""
         file_name = data.get("fileName") or ""
         code = data.get("code")
 
-        # 控误报：url/fileName 非空且 url 以 http 或 / 开头（排除任意字符串响应）
-        url_valid = bool(up_url) and (up_url.startswith("http") or up_url.startswith("/"))
+        # 控误报：url/fileName 非空且 url 是真实上传路径（显式 scheme 或以 / 开头，
+        # 排除 "httpsomething"/"httpx" 这类以 http 开头的任意字符串）
+        url_valid = bool(up_url) and (
+            up_url.startswith(("http://", "https://")) or up_url.startswith("/")
+        )
         name_valid = bool(file_name)
 
-        # 上传成功判定：要求 url 或 fileName 存在（P1 修复：
-        # 修复前裸 code==200 即触发 CONFIRMED，导致 {"code":200} 无上传字段的响应也误报；
-        # 现在必须同时满足 url_valid 或 name_valid 才判命中，code==200 单独不触发）
-        if (url_valid or name_valid) and code != 401:
-            # 进一步排除鉴权拦截：若 msg 含登录关键字，判 SAFE
-            msg = str(data.get("msg", ""))
-            if any(kw in msg for kw in ["登录", "请先登录", "unauthorized", "未授权"]):
-                emit(no("不存在任意文件上传漏洞（接口已鉴权）"))
-                return ScanResult(
-                    kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应 msg={msg}（疑似拦截）"
-                )
+        # 鉴权/权限拦截独立判定（不受 url/fileName 字段存在性影响）：
+        # 拦截响应可能带 code!=401（如 403）或字符串 "401"，必须在 CONFIRMED 之前排除
+        msg = str(data.get("msg", ""))
+        if any(kw in msg for kw in ["登录", "请先登录", "unauthorized", "未授权"]):
+            emit(no("不存在任意文件上传漏洞（接口已鉴权）"))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应 msg={msg}（疑似拦截）"
+            )
+
+        # 上传成功判定：要求 code 为成功码（部分版本无 code 字段，允许缺失）且含 url/fileName。
+        # 非成功 code（401/403/500 等，含字符串形式）一律不判 CONFIRMED（P1 修复扩展）。
+        code_ok = code is None or code in (200, "200")
+        if (url_valid or name_valid) and code_ok:
             emit(ok("存在任意文件上传漏洞"))
             return ScanResult(
                 kind="vuln",
