@@ -23,12 +23,12 @@
 | L1 | Nacos未授权访问 | N/A | high | 是 | — | `plugins/chain/nacos_to_dbcreds_steps.py` |
 | L1 | 备份文件泄露 | N/A | medium | 是 | — | `plugins/common/backup_scan.py` |
 | L1 | .git 源码泄露 | N/A | high | 是 | — | `plugins/common/git_leak.py` |
-| L1 | MinIO 未授权访问 | CVE-2023-28432 | medium | 是 | — | `plugins/common/minio_unauth.py` |
-| L1 | Redis 未授权访问 | CVE-2021-32761 | high | 是 | — | `plugins/common/redis_unauth.py` |
+| L1 | MinIO 未授权访问 | N/A | medium | 是 | — | `plugins/common/minio_unauth.py` |
+| L1 | Redis 未授权访问 | N/A | high | 是 | — | `plugins/common/redis_unauth.py` |
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
 | L1 | JeecgBoot 默认口令 | N/A | medium | 是 | — | `plugins/jeecgboot/default_password.py` |
 | L1 | JeecgBoot 任意文件读取 | CNVD-2022-39817 | high | 是 | — | `plugins/jeecgboot/file_read_download.py` |
-| L1 | JeecgBoot 报表 SSTI | CVE-2022-26809 | high | 是 | — | `plugins/jeecgboot/freemarker_ssti.py` |
+| L1 | JeecgBoot 报表 SSTI | N/A | high | 是 | — | `plugins/jeecgboot/freemarker_ssti.py` |
 | L1 | JeecgBoot queryUserByDepId SQL注入 | CVE-2022-44153 | high | 是 | — | `plugins/jeecgboot/sql_inject_query_user.py` |
 | L1 | 重置密码页数据权限绕过 | CVE-2025-46174 | high | 是 | — | `plugins/ruoyi/cve_2025_46174_resetpwd_scope.py` |
 | L1 | 部门树越权访问 | CVE-2025-70986 | medium | 是 | — | `plugins/ruoyi/cve_2025_70986_select_dept_tree.py` |
