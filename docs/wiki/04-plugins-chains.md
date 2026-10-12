@@ -344,6 +344,11 @@ CHAIN = ChainDef(...)
 | --- | --- | --- |
 | `abort` | 整链终止 | 起点步骤（后续所有步骤都以它为前置） |
 | `continue` | 跳过依赖此步的支线，继续其他支线 | 支线步骤 |
+| `fallback` | 预留：`fallback_steps` 目前仅作"救援"——备用节点是链内普通节点，照常按拓扑序执行 | 暂无生产链使用 |
+
+> ⚠️ `fallback_steps` **不是条件调度**：备用节点会在拓扑序上正常执行，`on_fail=fallback`
+> 只会在"备用节点被无关上游的 abort 误标记为跳过"时解除该标记（救援）。
+> 真正的"仅当声明步骤失败才执行备用节点"语义尚未实现（见 `core/chain.py` 失败策略分支注释）。
 
 **(b) `job_rce` 只依赖 `sql_inject`，不依赖 `config_read`**
 
@@ -411,7 +416,7 @@ _aggregate_status()       # 聚合链状态 → ChainResult
 | `scan_cache.db` | 20 KB | D37 结果缓存（SQLite） |
 | `tasks.db` | 112 KB | D11 Web API 任务持久化（SQLite） |
 
-字典分级由 [config/settings.py](../../config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步生效（见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)）。
+字典分级由 [config/settings.py](../../config/settings.py) 的 `PASSWORD_DICT_BY_LEVEL` 映射，`--pass-level` 在 orchestrator 第 3 步解析并注入当前扫描的 `session.password_dict`（并发隔离；爆破插件优先读取该属性，回退 `settings.PASSWORD_DICT`）。见 [03 章 §3](03-core.md#3-scanorchestrator_run-九步主流程)。
 
 > `scan_cache.db` / `tasks.db` 是**运行时产物**，不应随仓库分发（已在 `.gitignore` 中）。
 

@@ -102,7 +102,7 @@ submit(req) → TaskRegistry.register()        ← API 入口
 | 1 | **端口扫描**（可选 `--portscan`） | `core.portscan.PortScanner`，纯 socket，不依赖 nmap |
 | 1′ | **主动信息收集**（可选 `--crawl/--subdomain/--js-extract`） | `_run_recon()`：爬虫 + 子域名 + JS 端点提取，使用**独立临时 session** 避免污染主 session |
 | 2 | **创建会话与引擎** | `SessionManager(proxy, debug, timeout)` + `ScanEngine(threads, rate)`；注入 `req.auth` 认证信息 |
-| 3 | **口令字典分级** | `settings.PASSWORD_DICT` 按 `pass_level` 切换 top100 / top1000 / full |
+| 3 | **口令字典分级** | 按 `pass_level` 解析 top100 / top1000 / full 字典路径，注入 `session.password_dict`（扫描级隔离，不改写 `settings.PASSWORD_DICT`） |
 | 4 | **指纹识别** | 人工 `--cms` 走 `Router.resolve_by_name()`；否则 `detect_cms()` 自动识别（含若依变体与版本） |
 | 5 | **WAF 探测 + 组件检测**（可选） | `detect_waf()` → `_build_waf_bypass()` 构造绕过协调器；`--components` 走 `ComponentDetector` |
 | 6 | **插件加载与路由** | 路由结果 + `plugins.common`（始终参与）+ 外部路径 + 用户安装目录 + entry_points + nuclei 模板；再按 `--template` 过滤 |
@@ -242,7 +242,7 @@ build_version_matrix()  → 用「未过滤候选集」生成对照表，展示�
 |------|------|-----------|
 | 插件并发 vs 结果顺序 | `threads<=1` 时串行保证顺序稳定；`>1` 用 `as_completed`（无序） | 顺序在报告可读性上有价值，默认 `THREADS=1` |
 | 限速实现 | 时间戳滑动窗口令牌桶 | 简单、无外部依赖；sleep 必须在锁外 |
-| 配置求值时机 | `settings` 模块导入时求值 | 简单直接；代价是运行时改动需显式赋值（如 `settings.PASSWORD_DICT` 在扫描后手动恢复） |
+| 配置求值时机 | `settings` 模块导入时求值 | 简单直接；运行时的扫描级差异（如 `pass_level` 字典）改为注入 `session`，不再改写全局 |
 | 循环依赖规避 | 函数内**延迟导入**（如 `cli/runner.py` 底部导入子模块） | 保持模块顶层依赖图清晰，代价是可读性略降 |
 | 报告无第三方依赖 | HTML/JSON/CSV 用标准库；PDF/DOCX/XLSX 走可选依赖组 | `pip install ruoyi-scan` 保持极轻（仅 requests） |
 | 新增框架不改代码 | 指纹特征库 + `Router` 动态 `plugins.<cms>` 推导 | JeecgBoot 是第一个实证（`plugins/jeecgboot/`，指纹/路由/三态/报告零改动接入） |

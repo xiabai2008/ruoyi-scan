@@ -5,6 +5,7 @@
  *  - persona:// 协议 → asset:// 转换（自定义头像展示）
  *  全部 Tauri API 动态 import，浏览器 dev 模式静默降级。
  */
+import { assetFor } from "../assets/avatars";
 import type { OperatorConfig } from "../persona";
 
 const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -104,12 +105,32 @@ export async function refreshAppIcon(_op: OperatorConfig) {
 
 /* ---------- persona:// → asset:// 转换（自定义头像展示） ---------- */
 
+/** 默认形象（内置资源，离线可用）：自定义头像加载失败时回退，避免碎图 */
+const DEFAULT_PERSONA_AVATAR = assetFor("avatar_v01_lookback_smile.jpg");
+
+/** 为转换后的自定义头像挂一次性错误回退（重启后 asset 作用域不含原路径时会加载失败） */
+function attachPersonaAvatarFallback(el: HTMLImageElement) {
+  if (el.dataset.rsFallback === "1") return;
+  el.dataset.rsFallback = "1";
+  el.addEventListener(
+    "error",
+    () => {
+      if (DEFAULT_PERSONA_AVATAR && el.src !== DEFAULT_PERSONA_AVATAR) {
+        console.warn("[persona] 头像加载失败，已回退默认形象:", el.src);
+        el.src = DEFAULT_PERSONA_AVATAR;
+      }
+    },
+    { once: true },
+  );
+}
+
 /** 单个 persona:// img → asset://；非法 percent 编码（如 persona://%）跳过该图 */
 function rewritePersonaImg(el: HTMLImageElement, convertFileSrc: (p: string) => string) {
   const src = el.getAttribute("src") || "";
   if (!src.startsWith("persona://")) return;
   try {
     el.setAttribute("src", convertFileSrc(decodeURIComponent(src.slice("persona://".length))));
+    attachPersonaAvatarFallback(el);
   } catch {
     /* URIError：保留原 src，不让异常冒泡到 MutationObserver 回调 */
   }

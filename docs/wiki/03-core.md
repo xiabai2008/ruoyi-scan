@@ -98,7 +98,7 @@
 | 1b | D14 主动信息收集（爬虫/子域名/JS 提取） | `recon_info` | `recon_start` / `recon` / `recon_error` |
 | 2 | 创建 `SessionManager` + `ScanEngine` | — | — |
 | 2b | D26 认证注入 `apply_auth_to_session` | — | `auth` |
-| 3 | 口令字典分级（`pass_level` → `settings.PASSWORD_DICT`） | — | — |
+| 3 | 口令字典分级（`pass_level` → `session.password_dict`，扫描级注入） | — | — |
 | 4 | 指纹识别 `detect_cms`（或 `--cms` 手动）→ `Router.resolve` | `FingerprintResult` + 插件类列表 | `fingerprint` |
 | 5 | WAF 探测 `detect_waf` + 构建绕过协调器 + E2 组件检测 | `waf_info` / `WafBypassCoordinator` | `waf` / `waf_bypass` / `component` |
 | 6 | 插件加载与过滤（5 条来源 + 模板过滤 + category 分组） | `plugins_by_cat` | `plugins_loaded` / `template` / `plugin_fallback` |
