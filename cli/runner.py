@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime
 import os
 import sys
+import threading
 import time
 from argparse import Namespace
 from typing import List, Optional
@@ -132,6 +133,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         portscan=getattr(args, "portscan", False),
         ports=getattr(args, "ports", "") or "",
         bypass_waf=getattr(args, "bypass_waf", "auto"),
+        # 方案 A：对抗型传输层（--adversarial-transport 启用；默认关闭，向后兼容）
+        adversarial_transport=getattr(args, "adversarial_transport", False),
         auth=auth_config,
         template=getattr(args, "template", "") or "",
         crawl=getattr(args, "crawl", False),
@@ -150,10 +153,10 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     )
 
 
-# 最近一次扫描的指纹检测结果（由 _cli_event_handler 捕获，供报告摘要使用）。
+# 指纹检测结果的捕获已下沉到 run_mode 内的每次调用闭包（_on_event）：
+# 此前是模块级全局 dict，--async 批量各目标并发时会互相覆盖，导致报告串用其他目标的指纹。
 # 注意：检测到的指纹必须进报告——此前摘要只认人工 --cms，导致版权年份版本号
 # 识别成功却进不了 report.json（2026-09-19 实测）。
-_LAST_DETECTED_FINGERPRINT = {}
 
 
 def _cli_event_handler(event_type: str, payload):
@@ -222,9 +225,6 @@ def _cli_event_handler(event_type: str, payload):
 
     elif event_type == "fingerprint":
         cms = payload.get("cms", "")
-        # 捕获检测结果供报告摘要使用（人工 --cms 的场景下以人工值优先）
-        _LAST_DETECTED_FINGERPRINT.clear()
-        _LAST_DETECTED_FINGERPRINT.update(payload)
         if cms:
             variant = payload.get("variant", "")
             variant_txt = f" variant={variant}" if variant else ""
@@ -312,20 +312,28 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
     label, color = MODE_LABELS[mode]
     print(f"{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}")
 
-    # 口令字典分级
+    # 口令字典分级：不在 CLI 修改 settings.PASSWORD_DICT 全局——--async 批量并发时
+    # 各目标的 set/restore 会互相污染，改由 orchestrator 按 req.pass_level 统一处理
     if args.pass_level != "full" and args.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
-        settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL[args.pass_level]
         print(f"{YELLOW}[*]口令字典级别: {args.pass_level}{RESET}")
+
+    # 本次调用的指纹检测结果（供报告摘要）；每次扫描独立捕获。
+    # 此前用模块级全局 dict，--async 批量下各目标并发运行会互相覆盖指纹
+    detected_fingerprint: dict = {}
+
+    def _on_event(event_type: str, payload):
+        """本次扫描的事件处理器：捕获指纹后转发给终端输出"""
+        if event_type == "fingerprint" and isinstance(payload, dict):
+            detected_fingerprint.clear()
+            detected_fingerprint.update(payload)
+        _cli_event_handler(event_type, payload)
 
     # 构造扫描请求并委托 orchestrator 执行
     req = _build_scan_request(mode, target, args)
     t0 = time.time()
     orch = ScanOrchestrator()
-    all_results = orch.run_sync(req, on_event=_cli_event_handler)
+    all_results = orch.run_sync(req, on_event=_on_event)
     duration = time.time() - t0
-
-    # 口令字典恢复（避免全局状态污染批量扫描）
-    settings.PASSWORD_DICT = settings.PASSWORD_DICT_BY_LEVEL.get("full", settings.PASSWORD_DICT)
 
     target_normalized = normalize_target(target)
 
@@ -344,8 +352,8 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         # 若不在此补算，报告的 version_matrix 恒为空、版本对照表不显示（2026-09-19 修复）。
         version_matrix = []
         try:
-            fp_cms = req.cms or _LAST_DETECTED_FINGERPRINT.get("cms", "")
-            fp_version = _LAST_DETECTED_FINGERPRINT.get("version", "")
+            fp_cms = req.cms or detected_fingerprint.get("cms", "")
+            fp_version = detected_fingerprint.get("version", "")
             if fp_cms and fp_version:
                 from common.models import FingerprintResult
                 from core.loader import load_plugins
@@ -355,9 +363,9 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
                 fp_obj = FingerprintResult(
                     cms=fp_cms,
                     version=fp_version,
-                    confidence=_LAST_DETECTED_FINGERPRINT.get("confidence", 0.0),
-                    matched=list(_LAST_DETECTED_FINGERPRINT.get("matched", [])),
-                    variant=_LAST_DETECTED_FINGERPRINT.get("variant", ""),
+                    confidence=detected_fingerprint.get("confidence", 0.0),
+                    matched=list(detected_fingerprint.get("matched", [])),
+                    variant=detected_fingerprint.get("variant", ""),
                 )
                 # 用未过滤候选集：矩阵要展示「哪些插件因版本被跳过」
                 cands = Router().candidates(fp_obj) or load_plugins("plugins.ruoyi")
@@ -372,11 +380,11 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
             "mode": report_label,
             "version_matrix": version_matrix,
             "fingerprint": {
-                "cms": req.cms or _LAST_DETECTED_FINGERPRINT.get("cms", ""),
-                "version": _LAST_DETECTED_FINGERPRINT.get("version", ""),
-                "variant": _LAST_DETECTED_FINGERPRINT.get("variant", ""),
-                "confidence": 1.0 if req.cms else _LAST_DETECTED_FINGERPRINT.get("confidence", 0.0),
-                "matched": ["manual"] if req.cms else _LAST_DETECTED_FINGERPRINT.get("matched", []),
+                "cms": req.cms or detected_fingerprint.get("cms", ""),
+                "version": detected_fingerprint.get("version", ""),
+                "variant": detected_fingerprint.get("variant", ""),
+                "confidence": 1.0 if req.cms else detected_fingerprint.get("confidence", 0.0),
+                "matched": ["manual"] if req.cms else detected_fingerprint.get("matched", []),
             },
         }
         builder = ReportBuilder(results=all_results, target=target_normalized, summary=summary, dedup=not args.no_dedup)
@@ -481,25 +489,28 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
                     urls = [line.strip() for line in f if line.strip()]
                 endpoints = parse_endpoints_from_urls(urls)
         logic_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-        scanner = LogicScanner(session=logic_session)
-        logic_vulns = scanner.scan(target_normalized, endpoints)
-        # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
-        for lv in logic_vulns:
-            all_results.append(
-                ScanResult(
-                    kind="vuln",
-                    name=lv.name,
-                    severity=lv.severity,
-                    status=STATUS_CONFIRMED,
-                    url=lv.url,
-                    evidence=lv.evidence,
-                    fix=lv.fix,
-                    fix_detail=lv.fix_detail,
-                    reproduce=lv.reproduce,
+        try:
+            scanner = LogicScanner(session=logic_session)
+            logic_vulns = scanner.scan(target_normalized, endpoints)
+            # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
+            for lv in logic_vulns:
+                all_results.append(
+                    ScanResult(
+                        kind="vuln",
+                        name=lv.name,
+                        severity=lv.severity,
+                        status=STATUS_CONFIRMED,
+                        url=lv.url,
+                        evidence=lv.evidence,
+                        fix=lv.fix,
+                        fix_detail=lv.fix_detail,
+                        reproduce=lv.reproduce,
+                    )
                 )
-            )
-        print(f"{YELLOW}[*]业务逻辑扫描完成：发现 {len(logic_vulns)} 个漏洞{RESET}")
-        logic_session.close()
+            print(f"{YELLOW}[*]业务逻辑扫描完成：发现 {len(logic_vulns)} 个漏洞{RESET}")
+        finally:
+            # 异常路径同样释放会话连接（scan 抛错时不能泄漏 socket/连接池）
+            logic_session.close()
 
     # G1：认证后深度扫描（登录态接口资产盘点 + 越权矩阵）
     if getattr(args, "auth_surface", False):
@@ -561,23 +572,27 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     """
     from lib.async_engine import scan_batch_targets
 
+    # 每个目标的结果单独留存：scan_batch_targets 只返回扁平列表，无法再把结果按目标还原
+    results_by_target: dict = {}
+    results_lock = threading.Lock()
+
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
         try:
-            return run_mode(mode, target, args, show_cta=False)
+            results = run_mode(mode, target, args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             return []
+        with results_lock:
+            results_by_target[target] = results
+        return results
 
     total = len(targets)
-    completed = [0]  # 用 list 包装以便闭包修改
-
     def _progress(done, total_count, current):
-        completed[0] = done
         print(f"\r{YELLOW}[*]进度 [{done}/{total_count}] 当前：{current:<40}{RESET}", end="", flush=True)
 
     print(f"{YELLOW}[*]开始并发扫描 {total} 个目标（{max_workers} workers）...{RESET}")
-    all_results_flat = scan_batch_targets(
+    scan_batch_targets(
         scan_fn=_scan_single,
         targets=targets,
         max_workers=max_workers,
@@ -585,15 +600,11 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     )
     print()  # 换行结束进度条
 
-    # 按 target 分组重建报告
+    # 按 target 分组重建报告（结果已在 _scan_single 中按目标留存）
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
-    for i, target in enumerate(targets):
-        # all_results_flat 是扁平化的，我们需要按 target 索引重建
-        # 但 scan_batch_targets 返回的是扁平列表，所以我们重新扫描生成报告
-        # 更好的方案：scan_batch_targets 返回 {target: results} 字典
-        # 这里保持简单：用同步方式重新生成报告（结果已缓存）
-        results = all_results_flat if i == 0 else []
+    for target in targets:
+        results = results_by_target.get(target, [])
         if results:
             builder = ReportBuilder(
                 results=results,

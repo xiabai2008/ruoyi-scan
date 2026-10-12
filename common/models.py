@@ -112,6 +112,8 @@ class ComponentVersionResult:
             "evidence": self.evidence,
             "url": self.url,
             "severity": self.severity,
+            # 与 ScanResult.to_dict() 保持同形状：注入中文等级展示字段
+            "severity_cn": SEVERITY_CN.get(self.severity, self.severity),
             "cvss_score": self.cvss_score,
             "compliance": self.compliance,
         }

@@ -13,6 +13,7 @@
 import logging
 import os
 import sys
+import threading
 
 _DEFAULT_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 _DEFAULT_DATEFMT = "%H:%M:%S"
@@ -23,6 +24,8 @@ _DEFAULT_DATEFMT = "%H:%M:%S"
 _NOISY_LOGGERS = ("urllib3", "requests", "charset_normalizer")
 
 _configured = False
+# 并行插件加载/工作线程可能并发首次进入：加锁防止重复安装 handler 导致日志重复输出
+_config_lock = threading.Lock()
 
 
 def setup_logging(debug: bool = False, level: int | None = None) -> None:
@@ -35,23 +38,29 @@ def setup_logging(debug: bool = False, level: int | None = None) -> None:
     global _configured
     if level is None:
         # 容器/CI 部署可用环境变量 RUOYI_SCAN_DEBUG=1 全局强制 DEBUG，与 --debug 等效
-        env_level = os.environ.get("RUOYI_SCAN_DEBUG", "")
-        level = logging.DEBUG if (debug or env_level in ("1", "true", "yes")) else logging.WARNING
-    if not _configured:
-        # 日志走 stderr：避免污染 stdout（banner/报告等用户主输出）
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT))
-        root = logging.getLogger()
-        # 避免重复添加 handler
-        if not any(
-            isinstance(h, logging.StreamHandler) and h.formatter and "levelname" in (h.formatter._fmt or "")
-            for h in root.handlers
-        ):
-            root.addHandler(handler)
-        _configured = True
+        # 大小写不敏感且容忍首尾空白（TRUE/Yes/ON、" 1 " 等写法均等效）
+        env_level = os.environ.get("RUOYI_SCAN_DEBUG", "").strip().lower()
+        level = logging.DEBUG if (debug or env_level in ("1", "true", "yes", "on")) else logging.WARNING
+    with _config_lock:
+        if not _configured:
+            # 日志走 stderr：避免污染 stdout（banner/报告等用户主输出）
+            handler = logging.StreamHandler(sys.stderr)
+            handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT, datefmt=_DEFAULT_DATEFMT))
+            root = logging.getLogger()
+            # 避免重复添加 handler；_fmt 是 Formatter 实现细节，用 getattr 兜底防自定义 Formatter 抛 AttributeError
+            if not any(
+                isinstance(h, logging.StreamHandler)
+                and h.formatter
+                and "levelname" in (getattr(h.formatter, "_fmt", "") or "")
+                for h in root.handlers
+            ):
+                root.addHandler(handler)
+            _configured = True
     # 重复设置级别是幂等的，故不区分首次/后续调用
     logging.getLogger().setLevel(level)
-    # NOTSET 表示继承父 logger（root），用于 DEBUG 档位恢复第三方库原始输出
+    # NOTSET 表示继承父 logger（root），仅 DEBUG 档位恢复第三方库原始输出；
+    # 其余档位（含显式 INFO/WARNING）统一压到 ERROR 降噪：目标不可达时 urllib3
+    # 的 "Retrying" 会刷屏，INFO/WARNING 级第三方输出在此模式下不可见
     third_party_level = logging.NOTSET if level <= logging.DEBUG else logging.ERROR
     for name in _NOISY_LOGGERS:
         logging.getLogger(name).setLevel(third_party_level)

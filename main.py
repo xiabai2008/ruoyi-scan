@@ -31,10 +31,11 @@ def print_banner():
 
 def build_parser():
     """构建参数解析（-h/-u/-m/-p/-l 向后兼容，新增能力用长参数）"""
-    # 禁用 argparse 内置 -h：自建 dest="help" 参数，帮助输出对齐原脚本（print_help）
+    # 禁用 argparse 内置 -h：自建 dest="help" 参数，帮助输出对齐原脚本（print_help）。
+    # action="store_true"：值从不读取，且避免 nargs="?" 把 `-h <token>` 之后的 token 静默吞掉
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group("核心参数（向后兼容）")
-    group.add_argument("-h", dest="help", nargs="?", const="flag", default=None, help="帮助")
+    group.add_argument("-h", dest="help", action="store_true", help="帮助")
     group.add_argument("-u", metavar="target", nargs="?", const="__flag__", default=None, help="综合扫描")
     group.add_argument("-m", metavar="target", nargs="?", const="__flag__", default=None, help="目录扫描")
     group.add_argument("-p", metavar="target", nargs="?", const="__flag__", default=None, help="漏洞检测")
@@ -112,6 +113,12 @@ def build_parser():
 
     group = parser.add_argument_group("D7 WAF 绕过")
     group.add_argument("--bypass-waf", choices=["auto", "on", "off"], default="auto", help="WAF 绕过策略")
+    group.add_argument(
+        "--adversarial-transport",
+        action="store_true",
+        default=False,
+        help="启用对抗型传输层（Scrapling 指纹/隐身浏览器）兜底绕过 CF/JS 挑战，需 pip install 'ruoyi-scan[adversarial]'",
+    )
 
     group = parser.add_argument_group("D9 Web API 服务")
     group.add_argument("--serve", action="store_true", default=False, help="启动 Web API 服务")
@@ -337,6 +344,7 @@ def print_help():
         ("--chain <name>", "执行漏洞利用链"),
         ("--chain-list", "列出所有可用的漏洞利用链"),
         ("--bypass-waf <m>", "WAF 绕过策略：auto/on/off（默认 auto）"),
+        ("--adversarial-transport", "启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战"),
         ("--serve", "启动 Web API 服务（FastAPI + WebSocket + Web 控制台）"),
         ("--host <addr>", "API 服务监听地址（默认 0.0.0.0）"),
         ("--port <n>", "API 服务监听端口（默认 8000）"),
@@ -362,6 +370,9 @@ def print_help():
         ("--auth-login <user:pass>", "自动登录获取认证"),
         ("--lang <zh|en>", "报告语言（默认 zh）"),
         ("--plugin-init <name>", "生成插件模板"),
+        ("--plugin-new <name>", "创建新插件脚手架（P3）"),
+        ("--plugin-path <dir>", "加载第三方插件目录"),
+        ("--category <c>", "插件类别（ruoyi/spring/common）"),
         ("--plugin-check <path>", "验证插件文件完整性"),
         ("--plugin-list", "列出所有已加载插件"),
         ("--plugin-export <dir>", "导出插件源码与元信息到目录（模板仓库）"),
@@ -405,6 +416,8 @@ def print_help():
         ("--web-ui-api <url>", "Web UI 连接的 API 地址"),
         ("--distributed <mode>", "分布式模式（master/worker/standalone）"),
         ("--redis-url <url>", "Redis 连接 URL"),
+        ("--distributed-rate <n>", "分布式全局限速（每秒请求数，0 不限速）"),
+        ("--distributed-timeout <n>", "分布式任务超时秒数"),
         ("--worker-max-tasks <n>", "Worker 最大任务数"),
         ("--cache", "启用扫描结果缓存"),
         ("--cache-ttl <n>", "缓存有效期秒数"),
@@ -441,12 +454,13 @@ def main(argv=None):
 
     # D27：加载 YAML 配置文件
     config_data = {}
+    raw_config_data = {}
     if getattr(args, "config", None):
         from lib.config_loader import apply_config_to_args, load_yaml_config, normalize_config_keys
 
         try:
-            config_data = load_yaml_config(args.config)
-            config_data = normalize_config_keys(config_data)
+            raw_config_data = load_yaml_config(args.config)
+            config_data = normalize_config_keys(raw_config_data)
             args, _overridden = apply_config_to_args(args, args.config, verbose=True)
         except FileNotFoundError as e:
             print(f"{RED}[!]{e}{RESET}")
@@ -457,7 +471,8 @@ def main(argv=None):
         cli_has_mode = any([args.u, args.m, args.p, args.l])
         # 仅当命令行未显式指定模式时，才用 YAML 的 mode/target 回填，避免覆盖 -u/-m/-p/-l
         if not cli_has_mode:
-            cfg_mode = config_data.get("mode", "u")
+            # 归一化会丢弃 mode（"mode": None），此处必须从原始配置读取
+            cfg_mode = raw_config_data.get("mode", "u")
             cfg_target = config_data.get("target", config_data.get("u", ""))
             if cfg_target and cfg_target != "__flag__":
                 if cfg_mode in ("u", "m", "p", "l"):
@@ -507,11 +522,13 @@ def main(argv=None):
             args.distributed,
             args.cache_stats,
             args.cache_clear,
+            args.cache_clear_all,
             args.nuclei_validate,
         ]
     )
     # 显式 -h 或未指定任何可执行模式 → 打印帮助并退出
-    if args.help is not None or not has_mode:
+    # （-h 现为 store_true，args.help 是 bool：真值判断即可，勿写成 is not None）
+    if args.help or not has_mode:
         print_help()
         return
 

@@ -22,6 +22,9 @@ class ScanCreateRequest(BaseModel):
     portscan: bool = Field(False, description="扫描前执行端口扫描")
     ports: str = Field("", description="自定义端口（逗号分隔，如 80,443,8080）")
     bypass_waf: str = Field("auto", description="WAF 绕过：auto=自动/on=强制/off=禁用")
+    adversarial_transport: bool = Field(
+        False, description="启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战，需安装 [adversarial]"
+    )
     plugins: Optional[List[str]] = Field(None, description="指定插件名列表（空=全部）")
 
 

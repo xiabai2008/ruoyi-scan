@@ -29,6 +29,11 @@ def run_plugin_init_mode(args: Namespace) -> None:
         print("    3. 运行 python main.py -u http://target/ 扫描")
     except FileExistsError as e:
         print(f"{RED}[!]{e}{RESET}")
+    except Exception as e:
+        # 与 run_plugin_new_mode 对齐：无效名称/类别、目录/文件权限等错误给友好提示，
+        # 同时保留 traceback 供排查
+        logger.warning("生成插件模板失败: %s", name, exc_info=True)
+        print(f"{RED}[!]生成插件模板失败: {e}{RESET}")
 
 
 def run_plugin_check_mode(args: Namespace) -> None:
@@ -113,4 +118,6 @@ def run_plugin_new_mode(args: Namespace) -> None:
     except FileExistsError as e:
         print(f"{RED}[!]{e}{RESET}")
     except Exception as e:
+        # 保留 traceback 供排查（模块 logger 此前未被使用）；对用户仍给友好提示
+        logger.warning("创建插件失败: %s", name, exc_info=True)
         print(f"{RED}[!]创建插件失败: {e}{RESET}")

@@ -29,8 +29,12 @@ def run_passive_mode(args: Namespace) -> None:
     print(f"{YELLOW}[*]按 Ctrl+C 停止被动扫描{RESET}")
     print(f"{SEPARATOR}")
 
-    # 已扫描 URL 去重集合：防止代理重放/浏览器重复请求导致同一目标被反复扫描
-    scanned = set()
+    # 去重由 ScanQueue 全权负责：add() 时的 _seen 永久去重（drain 不清除），
+    # 同一 URL 不可能再次入队；此处只需计数供退出时展示（避免无界的本地集合）
+    scanned_count = 0
+    # 延迟导入必须在函数内：cli.runner 反向导入本模块，模块级导入会形成循环
+    from cli.runner import run_mode
+
     try:
         # 代理主循环：常驻轮询采集队列，直到用户 Ctrl+C 退出
         while True:
@@ -40,20 +44,18 @@ def run_passive_mode(args: Namespace) -> None:
             if not urls:
                 continue
             for url in urls:
-                if url in scanned:
-                    continue
-                scanned.add(url)
+                scanned_count += 1
                 print(f"\n{SEPARATOR}")
                 print(f"{YELLOW}[*]被动捕获: {url}{RESET}")
                 # 单 URL 扫描隔离：个别目标异常仅提示，不中断代理与后续流量采集
                 try:
-                    from cli.runner import run_mode
-
                     # 被动代理每捕获一个 URL 就扫一次，此处必须关闭引导避免逐条刷屏
                     run_mode("p", url, args, show_cta=False)
                 except Exception as e:
+                    # 保留 traceback（debug 档可查），对用户仍只给一行提示
+                    logger.debug("被动扫描异常 url=%s", url, exc_info=True)
                     print(f"{RED}[!]扫描异常 ({url}): {e}{RESET}")
     except KeyboardInterrupt:
-        print(f"\n{YELLOW}[*]被动扫描已停止，共扫描 {len(scanned)} 个目标{RESET}")
+        print(f"\n{YELLOW}[*]被动扫描已停止，共扫描 {scanned_count} 个目标{RESET}")
     finally:
         proxy.stop()

@@ -42,7 +42,7 @@ async def create_schedule(request: Request, body: dict):
     try:
         parse_schedule_expr(cron)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     job_id = scheduler.add_job(cron, target, mode=mode, payload=body.get("payload") or {})
     return {"job_id": job_id, "cron": cron, "target": target, "status": "scheduled"}
 
@@ -79,6 +79,7 @@ async def create_scan(
         portscan=req.portscan,
         ports=req.ports,
         bypass_waf=req.bypass_waf,
+        adversarial_transport=getattr(req, "adversarial_transport", False),
         plugins=req.plugins,
     )
     task_id = orch.submit(scan_req)
@@ -89,7 +90,8 @@ async def create_scan(
 async def list_scans(registry: TaskRegistry = Depends(get_registry)):
     """列出所有扫描任务"""
     records = registry.list()
-    return [r.task_dict for r in records if r.task_dict]
+    # 用 is not None 而非真值判断：register 默认 task_dict={}，空快照也是有效任务
+    return [r.task_dict for r in records if r.task_dict is not None]
 
 
 @router.get("/scan/{task_id}", response_model=ScanTaskDTO, summary="查询单个任务状态")
@@ -98,12 +100,16 @@ async def get_scan(task_id: str, registry: TaskRegistry = Depends(get_registry))
     record = registry.get(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
-    data = record.task_dict or {
-        "task_id": task_id,
-        "status": record.status,
-        "target": "",
-        "mode": "u",
-    }
+    data = dict(record.task_dict or {})
+    # status 以 registry 维护的 record.status 为准：cancel_scan 只更新 record.status，
+    # 不更新 task_dict，直接用 task_dict['status'] 会返回取消前的旧状态
+    data["status"] = record.status
+    if not data.get("task_id"):
+        data["task_id"] = task_id
+    if "target" not in data:
+        data["target"] = ""
+    if "mode" not in data:
+        data["mode"] = "u"
     # 只取 DTO 声明的字段再构造，防止 task_dict 中的额外键导致校验失败
     return ScanTaskDTO(**{k: v for k, v in data.items() if k in ScanTaskDTO.model_fields})
 
@@ -114,8 +120,9 @@ async def cancel_scan(task_id: str, registry: TaskRegistry = Depends(get_registr
     record = registry.get(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
-    # 软取消：只置内存状态标志并广播事件，执行中的插件线程在下一轮检查状态时自行退出
-    record.status = "cancelled"
+    # 软取消：广播 status 事件（notify 在锁内把 record.status 置为 cancelled），
+    # 执行中的插件线程在下一轮检查状态时自行退出。
+    # 不再直接写 record.status：绕过锁会与 orchestrator 线程的 notify 竞争，且 notify 已负责更新
     registry.notify(task_id, "status", {"status": "cancelled", "task_id": task_id})
     return {"task_id": task_id, "status": "cancelled"}
 

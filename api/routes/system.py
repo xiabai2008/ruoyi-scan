@@ -38,18 +38,23 @@ async def version_info():
 
 
 @router.get("/system/fingerprint", response_model=FingerprintDTO, summary="在线指纹探测")
-async def fingerprint_probe(target: str = Query(..., description="目标 URL")):
+def fingerprint_probe(target: str = Query(..., description="目标 URL")):
     """在线指纹探测（轻量，不入任务表）
 
     对目标执行 detect_cms + detect_waf，返回识别结果。
+
+    使用同步 def（而非 async def）：SessionManager/detect_cms/detect_waf 均为阻塞式
+    网络 IO，FastAPI 会将同步端点放入线程池执行，避免阻塞事件循环。
     """
+    session = None
+    # 归一化在 try 之外：仅为字符串处理，若未来引入校验失败，不应被下文笼统伪装成
+    # 502「上游探测失败」（编程错误应自然暴露为 500）
+    normalized = normalize_target(target)
     try:
-        normalized = normalize_target(target)
         # 每次请求独立会话，探测完成后主动关闭，避免连接泄漏
         session = SessionManager(timeout=10)
         fp = detect_cms(normalized, session)
         waf = detect_waf(normalized, session)
-        session.close()
         return FingerprintDTO(
             target=normalized,
             cms=fp.cms,
@@ -60,4 +65,9 @@ async def fingerprint_probe(target: str = Query(..., description="目标 URL")):
             waf_display=waf.get("display", ""),
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"指纹探测失败: {e}")
+        # from e：保留原始异常链，便于日志追溯真实失败原因
+        raise HTTPException(status_code=502, detail=f"指纹探测失败: {e}") from e
+    finally:
+        # 探测异常（网络错误/超时/解析失败）时同样关闭会话，避免连接池泄漏
+        if session is not None:
+            session.close()

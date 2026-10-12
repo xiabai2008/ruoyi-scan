@@ -35,20 +35,39 @@ PUBLIC_PATHS = (
 # 权限分级（数值越大权限越高）
 _SCOPE_LEVEL = {"read": 1, "scan": 2, "admin": 3}
 
-# 路径 → 所需最小权限（admin 路径先匹配）
+
+def _secure_equals(a: str, b: str) -> bool:
+    """常量时间字符串比较；含非 ASCII 字符时直接视为不等
+
+    hmac.compare_digest 对含非 ASCII 字符的 str 会抛 TypeError：
+    Starlette 按 latin-1 解码请求头，攻击者可构造 >0x7F 的 X-API-Key 字节，
+    必须在此拦截，避免 500 而非 401。
+    """
+    if not a.isascii() or not b.isascii():
+        return False
+    return hmac.compare_digest(a, b)
+
+
+# 路径 → 所需最小权限（admin 路径先匹配；按路径边界匹配，见 _path_matches）
 _ADMIN_PATHS = (
-    "/api/plugin",  # 插件管理
+    "/api/plugin",  # 插件管理（单数前缀，兼容旧调用）
+    "/api/plugins",  # 插件管理（真实路由为复数）
     "/api/schedule",  # 定时任务管理（创建/删除）
 )
-_SCAN_PATHS = (
-    ("POST", "/api/scan"),
-    ("DELETE", "/api/scan"),
-)
+
+
+def _path_matches(path: str, prefixes: tuple) -> bool:
+    """前缀匹配要求路径边界：path == 前缀 或 path 以 前缀/ 开头
+
+    避免 /api/system/healthcheck、/api/pluginx 这类同前缀兄弟路径
+    被误判为公开/管理路径（前缀裸 startswith 会放行）。
+    """
+    return any(path == p or path.startswith(p + "/") for p in prefixes)
 
 
 def _required_scope(method: str, path: str) -> str:
     """返回路径所需的最小权限（read 默认）"""
-    if path.startswith(_ADMIN_PATHS):
+    if _path_matches(path, _ADMIN_PATHS):
         return "admin"
     if method in ("POST", "PUT", "PATCH", "DELETE"):
         return "scan"
@@ -69,7 +88,7 @@ def parse_api_keys(api_key_str: str) -> dict:
         api_key_str: 如 'key1:read,key2:scan,key3:admin' 或 'single-key'
 
     Returns:
-        {key: scope} 字典（无效 scope 回落 admin）
+        {key: scope} 字典（无效 scope 一律降级为最小权限 read，fail-closed）
     """
     result = {}
     if not api_key_str:
@@ -80,7 +99,8 @@ def parse_api_keys(api_key_str: str) -> dict:
             continue
         scope = _scope_of(entry)
         if scope not in _SCOPE_LEVEL:
-            scope = "admin"
+            # 拼写错误的 scope（如 key:raed）不能静默提权为 admin，按最小权限处理
+            scope = "read"
         key = entry.rsplit(":", 1)[0] if ":" in entry else entry
         result[key.strip()] = scope
     return result
@@ -121,12 +141,12 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         单 Key 模式：命中返回 "admin"；多 Key 模式：命中返回对应 scope。
         """
         if not self.key_scopes:
-            if hmac.compare_digest(provided_key, self.api_key):
+            if _secure_equals(provided_key, self.api_key):
                 return "admin"
             return None
         matched = None
         for stored_key, scope in self.key_scopes.items():
-            if hmac.compare_digest(provided_key, stored_key):
+            if _secure_equals(provided_key, stored_key):
                 matched = scope
                 # 不 break：即使已匹配也继续遍历，保持恒定时间
         return matched
@@ -135,8 +155,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         """鉴权主流程：公共路径放行 → 本地访问放行 → X-API-Key 校验 → 权限分级校验"""
         path = request.url.path
 
-        # 1. 公共路径放行
-        if path.startswith(PUBLIC_PATHS):
+        # 1. 公共路径放行（按路径边界匹配，避免 /api/system/healthcheck 等兄弟路径绕过鉴权）
+        if _path_matches(path, PUBLIC_PATHS):
             return await call_next(request)
 
         # 2. 无 API Key 模式：仅允许本地访问

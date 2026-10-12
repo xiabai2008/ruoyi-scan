@@ -7,18 +7,15 @@ import sys
 import time
 from argparse import Namespace
 
-from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, FingerprintResult
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
-
-logger = get_logger(__name__)
 
 
 def run_chain_mode(chain_name: str, args: Namespace) -> None:
     """漏洞利用链执行模式（D6）：按链定义编排多插件"""
     from chains.registry import get_chain, list_chains
-    from core.chain import ChainEngine
+    from core.chain import CHAIN_CONFIRMED, CHAIN_UNKNOWN, ChainEngine
 
     # 链列表模式：--chain list 与 --chain-list 等价，仅列出可用链不执行
     if chain_name == "list" or getattr(args, "chain_list", False):
@@ -65,40 +62,43 @@ def run_chain_mode(chain_name: str, args: Namespace) -> None:
     if not preflight_target(target, args):
         sys.exit(EXIT_UNREACHABLE)
     session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
-
-    # 手动指定 CMS 时跳过指纹识别：confidence=1.0 / matched=["manual"] 标记为人工确认
-    if args.cms:
-        fp_result = FingerprintResult(cms=args.cms, version="", confidence=1.0, matched=["manual"])
-        print(f"{YELLOW}[*]手动指定 CMS: {args.cms}（跳过指纹识别）{RESET}")
-    else:
-        fp_result = detect_cms(target, session)
-        if fp_result.cms:
-            print(f"{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f}{RESET}")
+    # 会话必须无条件释放：detect_cms / engine.run 任一步抛异常也不能泄漏连接池
+    try:
+        # 手动指定 CMS 时跳过指纹识别：confidence=1.0 / matched=["manual"] 标记为人工确认
+        if args.cms:
+            fp_result = FingerprintResult(cms=args.cms, version="", confidence=1.0, matched=["manual"])
+            print(f"{YELLOW}[*]手动指定 CMS: {args.cms}（跳过指纹识别）{RESET}")
         else:
-            print(f"{YELLOW}[*]指纹识别：未识别到已知 CMS{RESET}")
+            fp_result = detect_cms(target, session)
+            if fp_result.cms:
+                print(f"{YELLOW}[*]指纹识别：cms={fp_result.cms} 置信度={fp_result.confidence:.2f}{RESET}")
+            else:
+                print(f"{YELLOW}[*]指纹识别：未识别到已知 CMS{RESET}")
 
-    engine = ChainEngine()
-    # started_at 用于报告时间戳，t0 用于耗时统计；均在链执行前记下起点
-    started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    t0 = time.time()
+        engine = ChainEngine()
+        # started_at 用于报告时间戳，t0 用于耗时统计；均在链执行前记下起点
+        started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        t0 = time.time()
 
-    # 节点结果回调：CONFIRMED=节点成功 / SAFE=节点失败 / 其余视为未知并带出证据
-    def _on_chain_result(res):
-        if res.status == STATUS_CONFIRMED:
-            print(f"{GREEN}[*]节点成功: {res.name}{RESET}")
-        elif res.status == STATUS_SAFE:
-            print(f"{RED}[/]节点失败: {res.name}{RESET}")
-        else:
-            print(f"{YELLOW}[?]节点未知: {res.name} - {res.evidence}{RESET}")
+        # 节点结果回调：CONFIRMED=节点成功 / SAFE=节点失败 / 其余视为未知并带出证据
+        def _on_chain_result(res):
+            if res.status == STATUS_CONFIRMED:
+                print(f"{GREEN}[*]节点成功: {res.name}{RESET}")
+            elif res.status == STATUS_SAFE:
+                print(f"{RED}[/]节点失败: {res.name}{RESET}")
+            else:
+                print(f"{YELLOW}[?]节点未知: {res.name} - {res.evidence}{RESET}")
 
-    chain_result = engine.run(chain_def, target, session, fp_result, on_result=_on_chain_result)
-    duration = time.time() - t0
-    session.close()
+        chain_result = engine.run(chain_def, target, session, fp_result, on_result=_on_chain_result)
+        duration = time.time() - t0
+    finally:
+        session.close()
 
     print(f"{SEPARATOR}")
     # 链状态配色与扫描结果一致：CONFIRMED 绿 / UNKNOWN 黄 / 其余状态红
+    # （状态常量取自 core/chain.py，避免硬编码字面量漂移）
     status_color = (
-        GREEN if chain_result.status == "CONFIRMED" else (YELLOW if chain_result.status == "UNKNOWN" else RED)
+        GREEN if chain_result.status == CHAIN_CONFIRMED else (YELLOW if chain_result.status == CHAIN_UNKNOWN else RED)
     )
     print(f"{YELLOW}[*]链执行状态: {status_color}{chain_result.status}{YELLOW}{RESET}")
     print(f"{YELLOW}[*]耗时: {duration:.2f}s{RESET}")

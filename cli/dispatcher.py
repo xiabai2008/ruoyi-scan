@@ -31,6 +31,14 @@ from cli.runner import (
     run_wiki_mode,
 )
 
+# 标准扫描的模式参数：裸开关（不带 target）时值为 "__flag__"（见 main.py nargs="?" const）
+_MODE_ARGS = ("u", "m", "p", "l")
+
+
+def _has_scan_target(args: Namespace) -> bool:
+    """是否携带真实扫描目标（忽略只作开关用的 "__flag__" 占位符）"""
+    return any(getattr(args, k, None) not in (None, "__flag__") for k in _MODE_ARGS)
+
 
 def dispatch(args: Namespace) -> None:
     """根据 CLI args 分发到对应模式执行器
@@ -83,7 +91,7 @@ def dispatch(args: Namespace) -> None:
 
         run_cache_stats_mode(args)
         return
-    if args.cache_clear:
+    if args.cache_clear or args.cache_clear_all:
         from lib.cache import run_cache_clear_mode
 
         run_cache_clear_mode(args)
@@ -107,8 +115,9 @@ def dispatch(args: Namespace) -> None:
         from lib.ai_validate import run_ai_validate_mode
 
         sys.exit(run_ai_validate_mode(args))
-    # G3：--ai-triage 仅在扫描模式中联动处理（runner 内），独立调用无意义
-    if args.ai_triage and not (args.u or args.m or args.p or args.l or args.file):
+    # G3：--ai-triage 仅在扫描模式中联动处理（runner 内），独立调用无意义。
+    # 用 _has_scan_target 而非真值判断：裸 -u 的值为 "__flag__"，不构成可执行的扫描目标
+    if args.ai_triage and not _has_scan_target(args) and not args.file:
         from lib.colors import RED, RESET
 
         print(f"{RED}[!]--ai-triage 需配合扫描模式使用（如 -u <url> --ai-triage）{RESET}")
@@ -136,13 +145,10 @@ def dispatch(args: Namespace) -> None:
         return
 
     # ── 标准扫描模式 ──
-    def _mode_flag(val):
-        return val is not None and val != "__flag__"
-
     # 分别收集"真实目标值"与"纯开关标记"：值为 __flag__ 时仅标记模式，无实际目标
     target_for = {}
     flag_for = {}
-    for k in ("u", "m", "p", "l"):
+    for k in _MODE_ARGS:
         val = getattr(args, k, None)
         if val is not None:
             if val == "__flag__":
@@ -153,7 +159,7 @@ def dispatch(args: Namespace) -> None:
     # 批量模式：-f 需配合 -u/-m/-p/-l 开关指定扫描类型，开关位的值本身无意义
     if args.file:
         mode = None
-        for k in ("u", "m", "p", "l"):
+        for k in _MODE_ARGS:
             if k in flag_for:
                 mode = k
                 break
@@ -165,7 +171,7 @@ def dispatch(args: Namespace) -> None:
         run_mode_batch(args.file, mode, args)
     # 单目标模式按 u→m→p→l 顺序取第一个有效目标执行（优先级隐含在元组顺序中）
     elif target_for:
-        for k in ("u", "m", "p", "l"):
+        for k in _MODE_ARGS:
             if k in target_for:
                 if not preflight_target(target_for[k], args):
                     sys.exit(EXIT_UNREACHABLE)

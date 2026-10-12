@@ -14,10 +14,12 @@ from api import metrics
 from api.auth import ApiKeyMiddleware, get_api_key_from_env
 from api.routes import plugin, report, scan, system
 from api.ws.handler import scan_ws
+from common.logger import get_logger
 from core.orchestrator import ScanOrchestrator
 from core.storage import DEFAULT_DB_PATH, Storage
 from core.task_registry import TaskRegistry
-from lib.reporter import set_quiet
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -57,10 +59,6 @@ def create_app(
     Returns:
         配置好的 FastAPI 应用
     """
-    # 服务模式默认静默：插件的进度输出改走 logging，
-    # 不再直接写服务进程的 stdout。API 已通过 WebSocket 事件流（on_result 回调）
-    # 向前端推送实时进度，因此 stdout 输出属于冗余噪音。
-    set_quiet(True)
     app = FastAPI(
         title="若依综合漏洞检测 API",
         description="Ruoyi-Scan Web API — 提交扫描任务、实时事件推送、报告下载",
@@ -81,7 +79,9 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=True,
+        # 鉴权走 X-API-Key 头而非 Cookie：关闭 credentials，避免过宽 Origin（如误配 "*"）
+        # 时 Starlette 回显 Origin 导致跨域携带凭据（CSRF/凭据泄露）
+        allow_credentials=False,
         # 仅开放 REST 实际用到的方法，收紧攻击面（无 PUT/PATCH）
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type", "Authorization"],
@@ -105,10 +105,16 @@ def create_app(
         from lib.scheduler import ScanScheduler
 
         scheduler = ScanScheduler(orchestrator=orchestrator, storage=storage)
-        if schedule_expr and schedule_target:
-            scheduler.add_job(schedule_expr, schedule_target, mode="u")
     except Exception:
+        logger.warning("调度器初始化失败，降级为无调度模式", exc_info=True)
         scheduler = None
+    # add_job 单独捕获：单个错误的 --schedule 表达式不应连带禁用整个调度器
+    # （否则 storage 中已持久化的任务在 startup 时也无法恢复），且需记录原始错误
+    if scheduler is not None and schedule_expr and schedule_target:
+        try:
+            scheduler.add_job(schedule_expr, schedule_target, mode="u")
+        except Exception:
+            logger.warning("定时扫描任务注册失败（表达式或目标无效），调度器继续运行", exc_info=True)
 
     # 挂载到 app.state（路由通过 Depends 访问）
     app.state.registry = registry

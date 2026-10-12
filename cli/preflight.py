@@ -42,14 +42,23 @@ def preflight_target(target: str, args: Namespace) -> bool:
 
     hints = f"{YELLOW}[*]经代理访问请加 --proxy；确需跳过本检查用 --skip-preflight{RESET}"
 
-    ok, reason = probe_reachable(target)
-    if not ok:
-        print(f"{RED}[!]目标不可达：{reason}{RESET}")
-        print(f"{YELLOW}[*]已跳过该目标。请确认地址与端口是否正确、目标是否已启动。{RESET}")
+    # 探测自身可能抛出非 OSError 异常（如 URL 端口非法时 split_target 抛 ValueError）：
+    # 本函数契约是返回 False + 可读提示，不能把 CLI 输入错误升级为整段扫描崩溃
+    try:
+        ok, reason = probe_reachable(target)
+        if not ok:
+            print(f"{RED}[!]目标不可达：{reason}{RESET}")
+            print(f"{YELLOW}[*]已跳过该目标。请确认地址与端口是否正确、目标是否已启动。{RESET}")
+            print(hints)
+            return False
+
+        ok, reason = probe_http_responsive(target)
+    except Exception as e:
+        print(f"{RED}[!]目标预检失败：{e}{RESET}")
+        print(f"{YELLOW}[*]已跳过该目标。请检查目标地址格式是否正确。{RESET}")
         print(hints)
         return False
 
-    ok, reason = probe_http_responsive(target)
     if not ok:
         print(f"{RED}[!]目标无 HTTP 响应：{reason}{RESET}")
         print(f"{YELLOW}[*]已跳过该目标：端口可连接但服务不返回数据，继续扫描只会白等超时。{RESET}")

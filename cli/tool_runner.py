@@ -57,7 +57,14 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
         return
 
     # 结构化差异对比：按漏洞条目匹配出新增/修复/变化/未变四类，非整文本比对
-    diff = diff_reports(old_report, new_report)
+    # 对比 + 渲染整体兜底：diff_reports 依赖报告为 dict（否则 AttributeError），
+    # render_diff_report 写文件可能 OSError，均不应让 CLI 以 traceback 崩溃
+    try:
+        diff = diff_reports(old_report, new_report)
+    except Exception as e:
+        logger.warning("差异对比失败", exc_info=True)
+        print(f"{RED}[!]差异对比失败: {e}{RESET}")
+        return
     print(f"{SEPARATOR}")
     print(f"{YELLOW}[*]差异结果{RESET}")
     print(f"    旧扫描: {diff.old_scan_time}（{diff.old_total} 个漏洞）")
@@ -69,7 +76,12 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
 
     # diff 报告输出到新报告所在目录；新报告无目录名时回退到当前目录
     out_dir = os.path.dirname(new_path) or "."
-    paths = render_diff_report(diff, os.path.join(out_dir, "diff"))
+    try:
+        paths = render_diff_report(diff, os.path.join(out_dir, "diff"))
+    except OSError as e:
+        logger.warning("差异报告写入失败", exc_info=True)
+        print(f"{RED}[!]差异报告写入失败: {e}{RESET}")
+        return
     print(f"{SEPARATOR}")
     print(f"{GREEN}[+]差异报告已生成:{RESET}")
     for p in paths:
@@ -99,7 +111,9 @@ def run_ci_init_mode(args: Namespace) -> None:
             print("    2. 在 GitHub Secrets 中设置 SCAN_TARGET")
             print("    3. 推送代码触发扫描")
             print("    4. 在 GitHub → Security → Code scanning 查看结果")
-    except ValueError as e:
+    except (ValueError, OSError) as e:
+        # OSError：makedirs/open 失败（权限/只读文件系统/路径过长），同样给出友好提示
+        logger.warning("CI 配置生成失败", exc_info=True)
         print(f"{RED}[!]{e}{RESET}")
 
 
@@ -110,7 +124,13 @@ def run_wiki_mode(args: Namespace) -> None:
     output_path = args.wiki_output or "vuln_wiki.html"
     print(f"{YELLOW}[*]生成漏洞知识库{RESET}")
     # 同时产出 HTML（浏览器阅读）与 JSON（程序消费）两种形态的知识库
-    paths = generate_wiki(output_path, formats=["html", "json"])
+    # 与其它工具模式一致兜底：文件不可写 / 插件渲染异常不应以 traceback 终止 CLI
+    try:
+        paths = generate_wiki(output_path, formats=["html", "json"])
+    except Exception as e:
+        logger.warning("知识库生成失败", exc_info=True)
+        print(f"{RED}[!]知识库生成失败: {e}{RESET}")
+        return
     print(f"{GREEN}[+]知识库已生成:{RESET}")
     for p in paths:
         print(f"    {p}")
