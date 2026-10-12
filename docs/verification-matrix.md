@@ -3,32 +3,32 @@
 > 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。
 > 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。
 
-**总计 57 个插件**：L3 10 个，L2 11 个，L1 23 个，none 13 个
+**总计 57 个插件**：L3 10 个，L2 11 个，L1 33 个，none 3 个
 
 | 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |
 |------|------|-----|--------|---------|---------|------|
 | none | 默认口令登录 | N/A | high | **否** | — | `plugins/chain/defaultpw_to_webshell_steps.py` |
 | none | SQL注入提取数据库名 | N/A | high | **否** | — | `plugins/chain/sql_to_rce_steps.py` |
-| none | CORS 跨域配置不当 | N/A | medium | **否** | — | `plugins/common/cors_misconfig.py` |
-| none | 目录遍历探测 | N/A | low | **否** | — | `plugins/common/dir_listing.py` |
-| none | .env 配置文件泄露 | N/A | high | **否** | — | `plugins/common/env_leak.py` |
-| none | shiro_rememberme | CVE-2016-4437 | high | **否** | — | `plugins/common/shiro_rememberme.py` |
-| none | IDE/SCM 残留文件泄露 | N/A | medium | **否** | — | `plugins/common/source_leak.py` |
-| none | Swagger API 文档泄露 | N/A | medium | **否** | — | `plugins/common/swagger_leak.py` |
-| none | HTTP 方法探测 | N/A | low | **否** | — | `plugins/common/trace_method.py` |
-| none | JeecgBoot 字典越权 | CVE-2023-1454 | medium | **否** | — | `plugins/jeecgboot/dict_unauth.py` |
-| none | JeecgBoot jmreport 文件上传 | CNVD-2021-27656 | high | **否** | — | `plugins/jeecgboot/file_upload_jmreport.py` |
 | none | JeecgBoot 报表未授权 | CVE-2023-1454 | medium | **否** | — | `plugins/jeecgboot/jmreport_list_unauth.py` |
-| none | JeecgBoot jmreport SQL注入 | CNVD-2022-30348 | high | **否** | — | `plugins/jeecgboot/sql_inject_jmreport.py` |
 | L1 | Nacos未授权访问 | N/A | high | 是 | — | `plugins/chain/nacos_to_dbcreds_steps.py` |
 | L1 | 备份文件泄露 | N/A | medium | 是 | — | `plugins/common/backup_scan.py` |
+| L1 | CORS 跨域配置不当 | N/A | medium | 是 | — | `plugins/common/cors_misconfig.py` |
+| L1 | 目录遍历探测 | N/A | low | 是 | — | `plugins/common/dir_listing.py` |
+| L1 | .env 配置文件泄露 | N/A | high | 是 | — | `plugins/common/env_leak.py` |
 | L1 | .git 源码泄露 | N/A | high | 是 | — | `plugins/common/git_leak.py` |
 | L1 | MinIO 未授权访问 | N/A | medium | 是 | — | `plugins/common/minio_unauth.py` |
 | L1 | Redis 未授权访问 | N/A | high | 是 | — | `plugins/common/redis_unauth.py` |
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
+| L1 | shiro_rememberme | CVE-2016-4437 | high | 是 | — | `plugins/common/shiro_rememberme.py` |
+| L1 | IDE/SCM 残留文件泄露 | N/A | medium | 是 | — | `plugins/common/source_leak.py` |
+| L1 | Swagger API 文档泄露 | N/A | medium | 是 | — | `plugins/common/swagger_leak.py` |
+| L1 | HTTP 方法探测 | N/A | low | 是 | — | `plugins/common/trace_method.py` |
 | L1 | JeecgBoot 默认口令 | N/A | medium | 是 | — | `plugins/jeecgboot/default_password.py` |
+| L1 | JeecgBoot 字典越权 | CVE-2023-1454 | medium | 是 | — | `plugins/jeecgboot/dict_unauth.py` |
 | L1 | JeecgBoot 任意文件读取 | CNVD-2022-39817 | high | 是 | — | `plugins/jeecgboot/file_read_download.py` |
+| L1 | JeecgBoot jmreport 文件上传 | CNVD-2021-27656 | high | 是 | — | `plugins/jeecgboot/file_upload_jmreport.py` |
 | L1 | JeecgBoot 报表 SSTI | N/A | high | 是 | — | `plugins/jeecgboot/freemarker_ssti.py` |
+| L1 | JeecgBoot jmreport SQL注入 | CNVD-2022-30348 | high | 是 | — | `plugins/jeecgboot/sql_inject_jmreport.py` |
 | L1 | JeecgBoot queryUserByDepId SQL注入 | CVE-2022-44153 | high | 是 | — | `plugins/jeecgboot/sql_inject_query_user.py` |
 | L1 | 重置密码页数据权限绕过 | CVE-2025-46174 | high | 是 | — | `plugins/ruoyi/cve_2025_46174_resetpwd_scope.py` |
 | L1 | 部门树越权访问 | CVE-2025-70986 | medium | 是 | — | `plugins/ruoyi/cve_2025_70986_select_dept_tree.py` |
