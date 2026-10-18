@@ -16,10 +16,55 @@ pip install ruoyi-scan
 ```
 
 > A legally authorized **RuoYi-dedicated vulnerability scanner** with a plugin-based architecture and three-state verdict (CONFIRMED / SAFE / UNKNOWN).
-> Supports enterprise-grade features such as batch scanning, multi-format reporting, WAF bypass, exploit chains, and a Web API.
+> Supports enterprise-grade features such as batch scanning, multi-format reporting, WAF bypass (including an adversarial transport layer), exploit chains, and a Web API.
 
-> **Why RuoYi?** RuoYi is one of the most widely used open-source Java admin frameworks in China — countless enterprise, outsourced, and even student projects are built on it, yet it had no dedicated scanner. This tool is purpose-built for its attack surface: version-aware POCs for the RuoYi family (Vue3 / App / Plus / Cloud-Plus) plus Spring Boot.
+> **Why RuoYi?** RuoYi is one of the most widely used open-source Java admin frameworks in China — countless enterprise, outsourced, and even student projects are built on it, yet it had no dedicated scanner. This tool is purpose-built for its attack surface: version-aware POCs for the RuoYi family (Vue3 / App / Plus / Cloud-Plus / Magic) plus Spring Boot.
 > If this tool helps you, please give it a ⭐ — it helps other security folks discover it.
+
+---
+
+## Desktop App · Single EXE, Double-click to Run
+
+> The engine, 53 POCs, and the Web console are embedded into **one executable at build time**. No Python, no Docker, no environment setup.
+
+<p align="center">
+  <img src="docs/images/desktop-01-overview.png" alt="Desktop app overview: three-state verdict distribution, scan trends and latest findings" width="900" />
+</p>
+
+**Overview** — real-time three-state verdict distribution, scan trends, and latest findings. SAFE and UNKNOWN are displayed separately from CONFIRMED by design.
+
+| Form | File | Notes |
+|------|------|-------|
+| Portable | [`ruoyi-scan-desktop.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe) | ~46 MB, no installation required |
+| Installer | [`Ruoyi-Scan_*_x64-setup.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | NSIS installer, ~40 MB, includes uninstall cleanup |
+| CLI | `pip install ruoyi-scan` | For CI / server environments |
+
+Implementation notes:
+
+- **Single-file distribution** — the PyInstaller engine is embedded into the Rust shell at compile time; it self-extracts to `%LOCALAPPDATA%\Ruoyi-Scan\engine\` and upgrades automatically by checksum/version stamp.
+- **Process cleanup** — the engine child process is attached to a Windows JobObject (`KILL_ON_JOB_CLOSE`), so a hard-killed shell leaves no orphan processes.
+- **Uninstall cleanup** — NSIS `installerHooks` removes the extracted engine cache after uninstall.
+
+> See the [desktop documentation](docs/desktop.md) for details.
+
+---
+
+## Why Not a Generic Scanner
+
+> Ruoyi-Scan **complements** nuclei / xray rather than competing with them — they cover breadth; we cover RuoYi-ecosystem depth and verdict discipline.
+
+| Dimension | nuclei | xray | **Ruoyi-Scan** |
+|-----------|--------|------|----------------|
+| Positioning | General POC engine | General Web scanner | **RuoYi / Chinese Java framework specialist** |
+| RuoYi variant identification | — | — | **5 variants** (Vue3 / App / Plus / Cloud-Plus / Magic) |
+| Version-aware POC filtering | — | — | **4.2 / 4.7 / v5 / 3.9.x version matrix** |
+| Handling unconfirmed findings | No such concept | No such concept | **Three-state verdict**: CONFIRMED / SAFE / UNKNOWN |
+| Network anomalies | Error or skip | — | **Forced UNKNOWN — never masquerades as SAFE** |
+| Compliance mapping | — | — | MLPS 2.0 / OWASP **report-level chapters** |
+| Security service deliverables | — | Partial | 7 formats + **docx template engine + remediation retest** |
+| nuclei templates | Native | Unsupported | **Compatible execution** (HTTP protocol subset + safety whitelist) |
+
+**In one sentence**: a generic scanner tells you "there may be something here"; Ruoyi-Scan tells you "this vulnerability exists / does not exist / cannot be determined" — and produces a deliverable report.
 
 ---
 
@@ -37,21 +82,22 @@ pip install ruoyi-scan
 
 | Module | Description |
 |--------|-------------|
-| `plugins/ruoyi/` | 20 RuoYi plugins (including 2 RuoYi-Plus-exclusive; file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus) |
+| `plugins/ruoyi/` | 20 RuoYi plugins (including 2 RuoYi-Plus-exclusive; file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus/Magic) |
 | `plugins/spring/` | 14 Spring Boot POCs (Actuator, Gateway, Jolokia, Spring4Shell, etc.) |
 | `plugins/common/` | Common vulnerability package, 11 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, etc.) |
 | `plugins/jeecgboot/` | JeecgBoot extension plugin package (8 plugins, first non-RuoYi framework extension) |
 | Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven + RuoYi variant subdivision |
 | Component version detection | 20 Java components (fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana etc.) version → CVE mapping (`--components`) |
 | Three-state verdict | CONFIRMED (confirmed present) / SAFE (confirmed absent) / UNKNOWN (cannot be determined) |
-| WAF bypass | 11 bypass strategies + three-state verdict protection matrix + success-rate tracking |
+| WAF bypass | 11 bypass strategies + adversarial transport (Scrapling) fallback + three-state verdict protection matrix + success-rate tracking |
+| Adversarial transport | `--adversarial-transport` — Scrapling fingerprint spoofing / stealth browser to bypass Cloudflare and JS challenges (`[adversarial]` optional extra, see below) |
 | Exploit chains | DAG topological orchestration + conditional branches + 3 built-in chains |
 | nuclei template compatible | Run nuclei-templates YAML directly (`--nuclei`, HTTP protocol subset + safety whitelist) |
 | Plugin template repo | Export/manifest/Ed25519 signing/`--plugin-update` community distribution |
-| AI POC generation | `--ai` natural-language plugin generation (LLM self-verify loop, rule fallback without key) |
+| AI POC generation | `--ai` natural-language plugin generation (LLM self-verify loop, rule fallback without key) + `--ai-validate` validate-on-generate / `--ai-triage` UNKNOWN noise reduction |
 | AI report analysis | `--ai-report zh\|en` auto vulnerability analysis & fix priority |
 | Batch scanning | `-f targets.txt` multi-target + aggregated summary report |
-| Report output | HTML (SVG charts) / JSON / CSV / PDF / Word / Excel / SARIF + version matrix |
+| Report output | HTML (SVG charts) / JSON / CSV / PDF / Word / Excel / SARIF + version matrix + docx template engine + remediation retest (`--remediation`) |
 | Web API | FastAPI REST + WebSocket real-time push + Web console + role-based keys (read/scan/admin) + scheduled scans |
 | Concurrency & rate limiting | ThreadPoolExecutor + token bucket (sleep outside lock, no concurrency degradation) |
 | CAPTCHA handling | Auto-detect / OCR recognition / skip — three modes |
@@ -61,7 +107,7 @@ pip install ruoyi-scan
 | OAST out-of-band detection | Self-hosted callback server + 6 payload templates (SSRF/XXE/blind SQLi/blind RCE/LDAP/command injection) |
 | Business logic detection | IDOR / privilege escalation / parameter tampering / race condition — 4 detector types |
 | Authenticated deep scan | `--auth-surface` login-state API surface inventory + authorization matrix (anonymous replay / low-privilege replay) |
-| CVE sync | NVD + GHSA dual-source + 24h TTL cache + CWE→OWASP/MLPS compliance mapping |
+| CVE sync | NVD + GHSA dual-source fallback + 24h TTL cache + CWE→OWASP/MLPS compliance mapping |
 | SIEM integration | ECS / CEF / LEEF / JSON — 4 export formats + Syslog forwarding |
 | Async engine | ThreadPoolExecutor concurrent scanning + aiohttp optional async HTTP |
 | Distributed scanning | Redis Master-Worker queue + Standalone fallback mode |
@@ -87,6 +133,7 @@ pip install ruoyi-scan
 pip install pyyaml          # --config YAML configuration file
 pip install redis           # --distributed Redis distributed scanning
 pip install aiohttp         # --async async HTTP client
+pip install "ruoyi-scan[adversarial]"  # --adversarial-transport Scrapling adversarial transport
 
 # Run a scan
 ruoyi-scan -p http://target:8080/
@@ -122,8 +169,15 @@ python main.py -u http://target:8080/
 # Generate all-format reports (HTML/JSON/CSV/PDF/Word/Excel)
 python main.py -p http://target:8080/ --report ./reports --report-format all
 
+# docx compliance report template / remediation retest (G5)
+python main.py -p http://target:8080/ --report ./reports --report-template ./templates/compliance.docx
+python main.py -p http://target:8080/ --remediation ./baseline.json --report ./reports
+
 # WAF bypass (auto-enabled when a WAF is detected)
 python main.py -p http://target:8080/ --bypass-waf auto
+
+# Adversarial transport (Scrapling; requires the [adversarial] optional extra)
+python main.py -p http://target:8080/ --adversarial-transport
 
 # Execute exploit chain
 python main.py --chain ruoyi_sql_to_rce -u http://target:8080/
@@ -234,6 +288,8 @@ docker compose down
 | `--rate <n>` | Requests per second (0 = no rate limit) |
 | `--timeout <n>` | Request timeout in seconds |
 | `--debug` | Debug mode (request logs output to stderr) |
+| `--skip-preflight` | Skip target reachability preflight (e.g. through proxies) |
+| `--verify-tls` | Verify target TLS certificates (off by default for internal self-signed certs) |
 
 #### Information Gathering (D14)
 
@@ -261,14 +317,30 @@ docker compose down
 | `--diff <old.json>` | Compare against a historical scan report |
 | `--diff-only <old> <new>` | Only compare two JSON reports |
 | `--save-baseline` | Save this scan result as a baseline |
+| `--report-template <path>` | docx compliance report template (placeholder injection, G5) |
+| `--remediation <baseline.json>` | Remediation retest: compare against a baseline and produce a verification report (G5) |
+| `--no-cta` | Disable the repository call-to-action at the end of a scan |
 
 #### WAF Bypass & Exploit Chains
 
 | Parameter | Description |
 |-----------|-------------|
 | `--bypass-waf <auto\|on\|off>` | WAF bypass strategy (default auto) |
+| `--adversarial-transport` | Enable the adversarial transport layer (Scrapling fingerprint spoofing / stealth browser for CF/JS challenges; requires the `[adversarial]` extra) |
 | `--chain <name>` | Execute an exploit chain |
 | `--chain-list` | List all available exploit chains |
+
+#### Component Detection & nuclei Templates (D4/E2)
+
+| Parameter | Description |
+|-----------|-------------|
+| `--components` | Component version detection (20 Java components → CVE mapping) |
+| `--no-components` | Disable component version detection |
+| `--nuclei <dir\|file>` | Load nuclei YAML templates (repeatable) |
+| `--nuclei-tags <a,b>` | Only load templates containing the given tags |
+| `--nuclei-severity <s>` | Only load templates with the given severity (high/medium/low) |
+| `--nuclei-exclude-tags <a,b>` | Exclude templates containing the given tags |
+| `--nuclei-validate <path>` | Validate nuclei templates without scanning |
 
 #### Authenticated Scanning (D26)
 
@@ -288,6 +360,8 @@ docker compose down
 | `--api-key <key>` | API Key authentication |
 | `--cors-origins <o>` | Allowed CORS origins (comma-separated) |
 | `--db-path <path>` | SQLite task persistence database path |
+| `--schedule <cron>` | Scheduled scan expression (5-field cron or `every:<seconds>`) |
+| `--schedule-target <url>` | Scheduled scan target URL |
 
 > For detailed API endpoint descriptions, request/response examples, and WebSocket event formats, see the [API Usage Guide](docs/api.md).
 > The OpenAPI 3.0 specification can be exported to `docs/openapi.json` via `python scripts/export_openapi.py`.
@@ -317,12 +391,26 @@ docker compose down
 | `--surface-account <user:pass>` | Low-privilege account (vertical privilege comparison, repeatable) |
 | `--surface-output <path>` | Surface asset inventory JSON output path |
 
+#### AI Capabilities (E7/E8/G3)
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ai <desc>` | AI plugin generation (LLM first, rule-template fallback without a key) |
+| `--ai-validate [path]` | Validate-on-generate (signed-lab three-state; no argument = validate after generation) |
+| `--ai-triage` | UNKNOWN noise reduction (cluster routing, optional LLM) |
+| `--ai-name <name>` | AI plugin name (defaults to the description) |
+| `--ai-api-key <key>` | LLM API key (environment variable `RUOYI_AI_API_KEY`) |
+| `--ai-model <model>` | LLM model name (default gpt-4o-mini) |
+| `--ai-retries <n>` | Maximum AI self-validation retry rounds |
+| `--ai-report [zh\|en]` | Generate an AI vulnerability analysis summary after the report (template fallback without a key) |
+
 #### CVE Sync (D32)
 
 | Parameter | Description |
 |-----------|-------------|
-| `--cve-sync` | Sync NVD CVE information |
+| `--cve-sync` | Sync CVE information from NVD / GHSA |
 | `--cve-id <CVE-ID>` | Query a single CVE |
+| `--cve-offline <component>` | Query the offline CVE database by component (intranet mode) |
 | `--nvd-api-key <key>` | NVD API Key (improves rate limit) |
 
 #### SIEM Integration (D33)
@@ -381,9 +469,19 @@ docker compose down
 | Parameter | Description |
 |-----------|-------------|
 | `--plugin-init <name>` | Generate a plugin template |
+| `--plugin-new <name>` | Create a new plugin scaffold |
+| `--plugin-path <dir>` | Load a third-party plugin directory |
 | `--plugin-check <path>` | Validate plugin file integrity |
 | `--plugin-list` | List all loaded plugins |
 | `--category <cat>` | Plugin category ruoyi/spring/common |
+
+#### Plugin Template Repository (E5)
+
+| Parameter | Description |
+|-----------|-------------|
+| `--plugin-export <dir>` | Export plugin sources and metadata to a directory (template repository) |
+| `--plugin-manifest <dir>` | Generate/verify manifest.json (Ed25519 signature) |
+| `--plugin-update [url]` | Update plugins from the template repository (mandatory Ed25519 verification; requires cryptography + a trusted public key) |
 
 #### CI/CD Integration (D28)
 
@@ -406,7 +504,7 @@ docker compose down
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI entry point (~525 lines, pure arg parsing + dispatch)
+├── main.py                  # CLI entry point (542 lines, pure arg parsing + dispatch)
 ├── config/settings.py       # Global configuration
 ├── cli/                     # CLI control layer
 │   ├── dispatcher.py        # Mode dispatch (tool / service / scan)
@@ -430,10 +528,10 @@ Ruoyi-Scan/
 │   ├── jeecgboot/           # 8 JeecgBoot plugins
 │   ├── common/              # 11 common plugins
 │   └── chain/               # 3 exploit chains
-├── lib/                     # Utility library (40 modules)
+├── lib/                     # Utility library (42 modules)
 ├── api/                     # Web API (FastAPI + WebSocket)
 ├── data/                    # Dictionary files
-├── tests/                   # 66 test files / 1000+ test cases
+├── tests/                   # 67 test files / 1300+ test cases
 ├── lab/                     # Lab environments
 ├── web/                     # Web console frontend
 ├── monitoring/              # Grafana + Prometheus
@@ -445,6 +543,23 @@ Ruoyi-Scan/
 ├── LICENSE                  # MIT License
 └── requirements.txt         # Dependency management
 ```
+
+---
+
+## Documentation
+
+> 📖 **[Online documentation](https://xiabai2008.github.io/ruoyi-scan/)** — all docs are organized and published with mkdocs-material.
+
+| Document | Description |
+|----------|-------------|
+| [Quick Start](docs/quickstart.md) | From installation to your first report in 5 minutes |
+| [User Guide](docs/usage.md) | Installation, scan modes, CLI reference |
+| [Plugin Development](docs/plugin_dev.md) | PluginBase, three-state verdicts, entry_points registration |
+| [API Reference](docs/api.md) | REST endpoints, WebSocket events, OpenAPI spec |
+| [Desktop App](docs/desktop.md) | Single portable EXE with an embedded engine |
+| [Contributing](CONTRIBUTING.md) | Development workflow, coding standards, commit conventions |
+| [Changelog](CHANGELOG.md) | Version history and changes |
+| [Roadmap](ROADMAP.md) | G-series plans, community roadmap, metrics |
 
 ---
 
@@ -463,9 +578,35 @@ python tests/regression_spring.py
 
 ---
 
+## Contributing
+
+Contributions of POCs and improvements are welcome:
+
+- **Report a bug / request a POC**: use the [issue templates](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose) (bug / POC request / feature request)
+- **Submit a POC**: `python main.py --plugin-init <name>` → implement `verify()` (three-state verdict) → `--plugin-check` → PR (the template includes a full checklist)
+- **Plugin distribution**: merged plugins are published to the official [ruoyi-scan-templates](https://github.com/xiabai2008/ruoyi-scan-templates) repository (Ed25519 signed)
+- **Development guides**: [docs/plugin_dev.md](docs/plugin_dev.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
+
+> Before contributing a POC, reproduce it on the built-in lab (`lab/`) or an authorized target so the detection signature is reliable.
+
+---
+
 ## Security & Compliance
 
 This tool is intended solely for **authorized** security testing and research. It must not be used against unauthorized targets. Exploitation-related plugins perform existence verification only and do not cause actual damage by default.
+
+The adversarial transport layer (Scrapling) is an **optional extra** (`[adversarial]`) and is not installed by default; when enabled it remains restricted to authorized testing.
+
+**Supply-chain verification**: Release artifacts include SHA256 checksums for independent verification; starting with v1.4.3 they also include SLSA build provenance.
+
+> v1.4.2 and earlier have **no** provenance — the attestation step was merged into `release.yml` 48 minutes after v1.4.2 was released. For those versions, use checksums only; `gh attestation verify` will return not found.
+
+```bash
+# Checksum verification (all versions)
+sha256sum -c checksums.txt
+# SLSA build provenance verification (requires the gh CLI; v1.4.3+ artifacts)
+gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-scan
+```
 
 ---
 
