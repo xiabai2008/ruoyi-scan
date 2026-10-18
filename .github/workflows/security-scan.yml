@@ -61,7 +61,7 @@ jobs:
       - name: Upload SARIF to GitHub Code Scanning
         # 仅当扫描产出了 SARIF 时才上传，避免文件缺失在原始失败之上叠加第二个噪声失败
         if: always() && hashFiles('reports/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v3
         with:
           sarif_file: reports/report.sarif
 
