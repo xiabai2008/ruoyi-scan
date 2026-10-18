@@ -34,6 +34,9 @@
 依赖：Python 3.8+；报告增强（PDF/Word/Excel）与 Web API 为可选依赖，缺失时自动降级
 （详见[用户手册 · 依赖要求](usage.md#依赖要求)）。
 
+> 对抗型传输层（`--adversarial-transport`）为独立可选依赖：
+> `pip install "ruoyi-scan[adversarial]"`（含约 150MB+ 浏览器二进制，默认不安装）。
+
 ## 2. 四种扫描模式
 
 | 模式 | 命令 | 说明 |
@@ -57,6 +60,9 @@ ruoyi-scan -u http://target:8080 --auth login=ruoyi:admin123
 
 # WAF 环境强制绕过策略
 ruoyi-scan -u http://target:8080 --bypass-waf on
+
+# 对抗型传输层（Cloudflare / JS 挑战，需 [adversarial] 可选依赖）
+ruoyi-scan -u http://target:8080 --adversarial-transport
 
 # 指定报告目录与格式
 ruoyi-scan -u http://target:8080 --report ./out --report-format html,pdf,docx
