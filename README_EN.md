@@ -25,7 +25,7 @@ pip install ruoyi-scan
 
 ## Desktop App · Single EXE, Double-click to Run
 
-> The engine, 53 POCs, and the Web console are embedded into **one executable at build time**. No Python, no Docker, no environment setup.
+> The engine, 54 POCs, and the Web console are embedded into **one executable at build time**. No Python, no Docker, no environment setup.
 
 <p align="center">
   <img src="docs/images/desktop-01-overview.png" alt="Desktop app overview: three-state verdict distribution, scan trends and latest findings" width="900" />
@@ -84,7 +84,7 @@ Implementation notes:
 |--------|-------------|
 | `plugins/ruoyi/` | 20 RuoYi plugins (including 2 RuoYi-Plus-exclusive; file read, SQL injection, RCE, SSTI, unauthorized access, etc.) + 5 variant detection (Vue3/App/Plus/Cloud-Plus/Magic) |
 | `plugins/spring/` | 14 Spring Boot POCs (Actuator, Gateway, Jolokia, Spring4Shell, etc.) |
-| `plugins/common/` | Common vulnerability package, 11 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, etc.) |
+| `plugins/common/` | Common vulnerability package, 12 plugins (.git/.env leakage, backup files, CORS, Swagger, middleware unauthorized access, Shiro fingerprint, etc.) |
 | `plugins/jeecgboot/` | JeecgBoot extension plugin package (8 plugins, first non-RuoYi framework extension) |
 | Fingerprinting | favicon hash + signature paths + keywords, multi-CMS data-driven + RuoYi variant subdivision |
 | Component version detection | 20 Java components (fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana etc.) version → CVE mapping (`--components`) |
@@ -526,9 +526,9 @@ Ruoyi-Scan/
 │   ├── ruoyi/               # 20 RuoYi plugins (2 Plus-exclusive)
 │   ├── spring/              # 14 Spring POCs
 │   ├── jeecgboot/           # 8 JeecgBoot plugins
-│   ├── common/              # 11 common plugins
+│   ├── common/              # 12 common plugins
 │   └── chain/               # 3 exploit chains
-├── lib/                     # Utility library (42 modules)
+├── lib/                     # Utility library (41 modules)
 ├── api/                     # Web API (FastAPI + WebSocket)
 ├── data/                    # Dictionary files
 ├── tests/                   # 67 test files / 1300+ test cases

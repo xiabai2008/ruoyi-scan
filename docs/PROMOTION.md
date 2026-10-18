@@ -9,15 +9,15 @@
 
 ### 一句话定位
 
-> 若依（RuoYi）专项漏洞扫描器：53 个检测插件、5 变体识别、三态判定、WAF 绕过、AI 生成 POC、nuclei 模板兼容，并提供**单文件桌面端**（双击即用，无需 Python / Docker）。专为国内使用最广的开源 Java 后台框架打造的扫描工具。
+> 若依（RuoYi）专项漏洞扫描器：54 个检测插件、5 变体识别、三态判定、WAF 绕过、AI 生成 POC、nuclei 模板兼容，并提供**单文件桌面端**（双击即用，无需 Python / Docker）。专为国内使用最广的开源 Java 后台框架打造的扫描工具。
 
 ### 核心卖点数据
 
 - **垂直定位**：若依是国内应用最广的开源 Java 后台框架（政企系统 / 外包项目 / 毕业设计大量二次开发），但此前没有专项扫描器
-- **53 个检测插件**：若依 20（含 2 个 Plus 变体专属）/ Spring Boot 14 / 通用 11 / JeecgBoot 8（首个非若依框架拓展实证）
-- **5 变体识别**（Vue3 / App / Plus / Cloud-Plus），变体感知路由，避免跨变体误报
+- **54 个检测插件**：若依 20（含 2 个 Plus 变体专属）/ Spring Boot 14 / 通用 12 / JeecgBoot 8（首个非若依框架拓展实证）
+- **5 变体识别**（Vue3 / App / Plus / Cloud-Plus / Magic），变体感知路由，避免跨变体误报
 - **三态判定** CONFIRMED / SAFE / UNKNOWN，显著降低误报
-- **桌面端单 exe**：引擎 + 53 个 POC + Web 控制台**编译期嵌入同一文件**，双击即用（Tauri），对没有开发环境的机器最省事
+- **桌面端单 exe**：引擎 + 54 个 POC + Web 控制台**编译期嵌入同一文件**，双击即用（Tauri），对没有开发环境的机器最省事
 - **AI 生成 POC**：自然语言生成插件，LLM 自验证回灌后才入库
 - **nuclei 模板兼容**：直接运行 nuclei-templates YAML（http 协议子集 + 安全白名单）
 - **WAF 绕过** 11 种策略 + **漏洞利用链**（DAG 编排，3 条内置链）
@@ -67,7 +67,7 @@ Ruoyi-Scan 采用插件化架构与三态判定（CONFIRMED / SAFE / UNKNOWN）�
 - **插件系统**：`PluginBase` 抽象基类 + `entry_points` 注册，新增 POC 即插即用
 - **指纹识别**：favicon hash + 特征路径 + 关键字，多数据驱动并对若依变体细分
 - **三态判定**：确认存在 / 确认不存在 / 无法判定，从机制上降低误报
-- **53 个检测插件**：若依 20（含 2 个 Plus 变体专属）+ Spring Boot 14 + 通用 11 + JeecgBoot 8
+- **54 个检测插件**：若依 20（含 2 个 Plus 变体专属）+ Spring Boot 14 + 通用 12 + JeecgBoot 8
 - **WAF 绕过**（11 种策略）与 **漏洞利用链**（DAG 拓扑编排）
 - **AI 生成 POC**：用自然语言描述漏洞，LLM 生成插件并自验证回灌，降低 POC 编写门槛
 - **nuclei 模板兼容**：直接复用 nuclei-templates 生态（http 协议子集 + 安全白名单）
@@ -142,9 +142,9 @@ on it. It had no dedicated scanning tool, so I built one.
 Highlights:
 - Plugin architecture with a three-state verdict (CONFIRMED / SAFE / UNKNOWN)
   to keep false positives down
-- 53 detection plugins: 20 RuoYi (incl. 2 Plus-only) + 14 Spring Boot
-  + 11 generic + 8 JeecgBoot, with fingerprint detection for 5 RuoYi variants
-  (Vue3 / App / Plus / Cloud-Plus)
+- 54 detection plugins: 20 RuoYi (incl. 2 Plus-only) + 14 Spring Boot
+  + 12 generic + 8 JeecgBoot, with fingerprint detection for 5 RuoYi variants
+  (Vue3 / App / Plus / Cloud-Plus / Magic)
 - A single-file desktop app (Tauri) — engine + all plugins + web console are
   embedded at compile time, so it runs with no Python/Docker install
 - WAF bypass (11 strategies) and exploit chains (DAG orchestration)
@@ -192,7 +192,7 @@ MIT licensed. Feedback and POC contributions are welcome.
 
 几个我觉得值得说的点：
 - 三态判定（确认存在 / 确认不存在 / 无法判定），误报率低很多
-- 53 个插件：若依 20 + Spring 14 + 通用 11 + JeecgBoot 8，5 变体识别（Vue3/App/Plus/Cloud-Plus）
+- 54 个插件：若依 20 + Spring 14 + 通用 12 + JeecgBoot 8，5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic）
 - 有单文件 exe 桌面端，双击就能用，不用装 Python 和 Docker
 - 用自然语言描述漏洞，AI 直接生成 POC（会自验证再入库）
 - 能直接跑 nuclei 模板，社区生态白嫖
@@ -250,7 +250,7 @@ MIT licensed. Feedback and POC contributions are welcome.
 ```
 RuoYi is everywhere in China — enterprise, outsourcing, even student projects
 — but it had no dedicated scanner. So I built one:
-53 plugins, 3-state verdict (no more false-positive floods), WAF bypass,
+54 plugins, 3-state verdict (no more false-positive floods), WAF bypass,
 exploit chains, AI-generated POCs, nuclei-template compatibility — and a
 single-file desktop app so you don't need Python or Docker.
 https://github.com/xiabai2008/ruoyi-scan
@@ -300,7 +300,7 @@ dedicated security tool.
 What makes it different from a generic scanner:
 - Three-state verdict (CONFIRMED / SAFE / UNKNOWN) instead of binary hit/miss,
   which keeps false positives manageable at scale
-- 53 detection plugins (20 RuoYi, 14 Spring Boot, 11 generic, 8 JeecgBoot)
+- 54 detection plugins (20 RuoYi, 14 Spring Boot, 12 generic, 8 JeecgBoot)
 - Variant-aware fingerprinting (Vue3 / App / Plus / Cloud-Plus) so plugins
   only run against matching targets
 - AI-assisted POC authoring: describe the vuln in natural language, get a
@@ -339,7 +339,7 @@ Demo GIF in the README. Happy to discuss the architecture.
 | 检出能力矩阵 | `docs/verification-matrix.md` 逐插件公开验证级别 | ✅ 完成 |
 | 供应链证明 | SLSA 构建来源证明 + OpenSSF Scorecard + Ed25519 插件验签 | ✅ 完成 |
 | 徽章完备 | CI / Python / License / Coverage / PyPI 已有 | ✅ 完成 |
-| 仓库描述 | 已含关键词（插件化 / 三态判定 / AI POC / nuclei / 53 插件） | ✅ 完成 |
+| 仓库描述 | 已含关键词（插件化 / 三态判定 / AI POC / nuclei / 54 插件） | ✅ 完成 |
 | 投稿材料 | `contrib/awesome-poc`（Awesome-POC 投稿） | ✅ 完成 |
 
 ### 建议发布节奏（示例）

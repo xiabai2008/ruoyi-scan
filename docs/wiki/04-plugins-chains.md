@@ -20,7 +20,7 @@
 2. 插件的元信息（CVE/CVSS/修复建议/复现命令）与检测逻辑同居一处，不会漂移；
 3. `--plugin-list`、报告、API `/api/plugins` 都能直接从类属性生成，无需额外元数据表。
 
-代价是文件数量：53 个已注册插件 = 53 个文件 + 4 个 `__init__.py`。
+代价是文件数量：54 个已注册插件 = 54 个文件 + 4 个 `__init__.py`。
 
 ---
 
@@ -198,7 +198,7 @@ plugin_list = [
 | 13 | `SpringBootAdmin` | `spring_boot_admin.py` | Boot Admin 暴露 |
 | 14 | `SpringDataRest` | `spring_data_rest.py` | Data REST 暴露 |
 
-### 4.3 `plugins/common` — 11 个（`plugin_list` 登记）
+### 4.3 `plugins/common` — 12 个（`plugin_list` 登记）
 
 | # | 类名 | 文件 | 覆盖点 |
 | --- | --- | --- | --- |
@@ -211,10 +211,14 @@ plugin_list = [
 | 7 | `SourceLeak` | `source_leak.py` | 源码泄露 |
 | 8 | `MinioUnauth` | `minio_unauth.py` | MinIO 未授权 |
 | 9 | `RocketmqUnauth` | `rocketmq_unauth.py` | RocketMQ 未授权 |
-| 10 | `DirListing` | `dir_listing.py` | 目录列表 |
-| 11 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
+| 10 | `ShiroRememberme` | `shiro_rememberme.py` | Shiro rememberMe 指纹（SAFE/UNKNOWN） |
+| 11 | `DirListing` | `dir_listing.py` | 目录列表 |
+| 12 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
 
-> ⚠️ **`shiro_rememberme.py` 存在但未登记进 `plugin_list`**——包内有 12 个 `.py`，只登记了 11 个。该文件的探测思路被 [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py) 的 Shiro 组件版本检测复用。这是文档漂移清单中的一项（见 [README](README.md#五文档与实现的一致性说明)）。
+> `shiro_rememberme` 为**指纹类插件**：只输出 `SAFE`（无 rememberMe 特征）或 `UNKNOWN`
+> （检测到特征，需进一步验证密钥可利用性），设计上永不输出 `CONFIRMED`；其探测思路同时被
+> [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py)
+> 的 Shiro 组件版本检测复用。
 
 ### 4.4 `plugins/jeecgboot` — 8 个
 
@@ -242,16 +246,16 @@ plugin_list = [
 | --- | --- |
 | `plugins.ruoyi` | 20 |
 | `plugins.spring` | 14 |
-| `plugins.common` | 11 |
+| `plugins.common` | 12 |
 | `plugins.jeecgboot` | 8 |
-| **合计** | **53** |
+| **合计** | **54** |
 
 > **插件数量有三个口径，勿混用**：
-> - **57** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含未登记的 `shiro_rememberme.py` 与 `plugins/chain/` 的 3 个链步骤文件）；
-> - **53** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
-> - **51** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
+> - **57** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
+> - **54** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
+> - **52** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
 >
-> README 原先的「51 / 若依 18」即第三种口径，已统一为 53 / 20 并保留 Plus 专属说明。详见 [README 的文档漂移清单](README.md#五文档与实现的一致性说明)。
+> README 原先的「51 / 若依 18」即第三种口径，已统一为 54 / 20 并保留 Plus 专属说明。
 
 ---
 
