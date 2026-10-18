@@ -12,7 +12,7 @@
 [中文](README.md) | [English](README_EN.md)
 
 > 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定（CONFIRMED / SAFE / UNKNOWN）。
-> 支持批量扫描、多格式报告、WAF 绕过、漏洞利用链、Web API 等企业级特性。
+> 支持批量扫描、多格式报告、WAF 绕过（含对抗型传输层）、漏洞利用链、Web API 等企业级特性。
 > **桌面端已上线** —— 单个 exe 双击即用，无需 Python / Docker / 任何环境配置。
 > ⭐ 如果这个工具对你有帮助，欢迎点个 Star 支持一下，让更多人看到它。
 
@@ -147,7 +147,7 @@ pip install ruoyi-scan
 | 维度 | nuclei | xray | **Ruoyi-Scan** |
 |------|--------|------|----------------|
 | 定位 | 通用 POC 引擎 | 通用 Web 扫描器 | **若依 / 国产 Java 框架专项** |
-| 若依变体识别 | — | — | **5 变体**（Vue3 / App / Plus / Cloud / Cloud-Plus） |
+| 若依变体识别 | — | — | **5 变体**（Vue3 / App / Plus / Cloud-Plus / Magic） |
 | 版本感知 POC 过滤 | — | — | **4.2 / 4.7 / v5 / 3.9.x 版本矩阵** |
 | 未确认项的处理 | 无此概念 | 无此概念 | **三态判定**：CONFIRMED / SAFE / UNKNOWN |
 | 网络异常情形 | 报错或跳过 | — | **强制 UNKNOWN，绝不冒充 SAFE** |
@@ -192,21 +192,22 @@ pip install ruoyi-scan
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus） |
+| `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
 | `plugins/common/` | 通用漏洞包 11 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
 | 组件版本检测 | 20 个 Java 组件（fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana 等）版本比对 CVE 映射（`--components`） |
 | 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
-| WAF 绕过 | 11 种绕过策略 + 三态判定保护矩阵 + 成功率追踪 |
+| WAF 绕过 | 11 种绕过策略 + 对抗型传输层（Scrapling）兜底 + 三态判定保护矩阵 + 成功率追踪 |
+| 对抗型传输层 | `--adversarial-transport` —— Scrapling 指纹伪装 / 隐身浏览器解 CF/JS 挑战（`[adversarial]` 可选依赖，见下文） |
 | 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |
 | nuclei 模板兼容 | 直接执行 nuclei-templates YAML 模板（`--nuclei`，http 协议子集 + 安全白名单） |
 | 插件模板仓库 | 导出/manifest/Ed25519 强制验签/`--plugin-update` 社区分发闭环 |
-| AI POC 生成 | `--ai` 自然语言生成插件（LLM 自验证回灌，无 Key 降级规则模板） |
+| AI POC 生成 | `--ai` 自然语言生成插件（LLM 自验证回灌，无 Key 降级规则模板）+ `--ai-validate` 生成即验证 / `--ai-triage` UNKNOWN 智能降噪 |
 | AI 报告解读 | `--ai-report zh\|en` 自动生成漏洞分析与修复优先级 |
 | 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
-| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF + 版本对照表 |
+| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF + 版本对照表 + docx 模板引擎 + 整改复测（`--remediation`） |
 | Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 + 权限分级（read/scan/admin）+ 定时扫描 |
 | 并发限速 | ThreadPoolExecutor + 令牌桶（锁外 sleep，无并发退化） |
 | 验证码处理 | 自动探测 / OCR 识别 / 跳过 三模式 |
@@ -216,7 +217,7 @@ pip install ruoyi-scan
 | OAST 带外检测 | 自建回调服务器 + 6 种 payload 模板（SSRF/XXE/SQL盲注/RCE盲注/LDAP/命令注入） |
 | 业务逻辑检测 | IDOR / 越权 / 参数篡改 / 竞争条件 4 类检测器 |
 | 认证后深度扫描 | `--auth-surface` 登录态接口资产盘点 + 越权矩阵（匿名重放判未授权 / 低权重放判垂直越权） |
-| CVE 同步 | NVD REST API + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
+| CVE 同步 | NVD + GHSA 双源回退 + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
 | SIEM 集成 | ECS / CEF / LEEF / JSON 4 格式导出 + Syslog 转发 |
 | 异步引擎 | ThreadPoolExecutor 并发扫描 + aiohttp 可选异步 HTTP |
 | 分布式扫描 | Redis Master-Worker 队列 + Standalone 降级模式 |
@@ -242,6 +243,7 @@ pip install ruoyi-scan
 pip install pyyaml          # --config YAML 配置文件
 pip install redis           # --distributed Redis 分布式扫描
 pip install aiohttp         # --async 异步 HTTP 客户端
+pip install "ruoyi-scan[adversarial]"  # --adversarial-transport 对抗型传输层（Scrapling）
 
 # 运行扫描
 ruoyi-scan -p http://target:8080/
@@ -277,8 +279,15 @@ python main.py -u http://target:8080/
 # 生成全格式报告（HTML/JSON/CSV/PDF/Word/Excel）
 python main.py -p http://target:8080/ --report ./reports --report-format all
 
+# docx 合规报告模板 / 整改复测（G5）
+python main.py -p http://target:8080/ --report ./reports --report-template ./templates/compliance.docx
+python main.py -p http://target:8080/ --remediation ./baseline.json --report ./reports
+
 # WAF 绕过（检测到 WAF 自动启用）
 python main.py -p http://target:8080/ --bypass-waf auto
+
+# 对抗型传输层（Scrapling；需先安装 [adversarial] 可选依赖）
+python main.py -p http://target:8080/ --adversarial-transport
 
 # 执行漏洞利用链
 python main.py --chain ruoyi_sql_to_rce -u http://target:8080/
@@ -404,6 +413,8 @@ docker compose down
 | `--rate <n>` | 每秒请求数（0=不限速） |
 | `--timeout <n>` | 请求超时秒数 |
 | `--debug` | 调试模式（请求日志输出到 stderr） |
+| `--skip-preflight` | 跳过目标可达性预检（经代理等特殊链路时使用） |
+| `--verify-tls` | 校验目标 TLS 证书（默认不校验，兼容内网自签名证书） |
 
 #### 信息收集（D14）
 
@@ -431,14 +442,30 @@ docker compose down
 | `--diff <old.json>` | 与历史扫描报告对比 |
 | `--diff-only <old> <new>` | 仅对比两个 JSON 报告 |
 | `--save-baseline` | 保存本次扫描结果为基线 |
+| `--report-template <path>` | docx 合规报告模板（占位符注入，G5） |
+| `--remediation <baseline.json>` | 整改复测：与基线对比生成整改验证报告（G5） |
+| `--no-cta` | 关闭扫描结尾的仓库引导提示 |
 
 #### WAF 绕过与利用链
 
 | 参数 | 说明 |
 |------|------|
 | `--bypass-waf <auto\|on\|off>` | WAF 绕过策略（默认 auto） |
+| `--adversarial-transport` | 启用对抗型传输层（Scrapling 指纹伪装 / 隐身浏览器，绕过 CF/JS 挑战；需 `[adversarial]` 可选依赖） |
 | `--chain <name>` | 执行漏洞利用链 |
 | `--chain-list` | 列出所有可用的漏洞利用链 |
+
+#### 组件版本与 nuclei 模板（D4/E2）
+
+| 参数 | 说明 |
+|------|------|
+| `--components` | 组件版本检测（20 个 Java 组件 → CVE 比对） |
+| `--no-components` | 关闭组件版本检测 |
+| `--nuclei <dir\|file>` | 加载 nuclei YAML 模板（可多次指定） |
+| `--nuclei-tags <a,b>` | 仅加载含指定 tag 的模板 |
+| `--nuclei-severity <s>` | 仅加载指定严重度模板（high/medium/low） |
+| `--nuclei-exclude-tags <a,b>` | 排除含指定 tag 的模板 |
+| `--nuclei-validate <path>` | 校验 nuclei 模板（不扫描） |
 
 #### 认证扫描（D26）
 
@@ -458,6 +485,8 @@ docker compose down
 | `--api-key <key>` | API Key 鉴权 |
 | `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
 | `--db-path <path>` | SQLite 任务持久化数据库路径 |
+| `--schedule <cron>` | 定时扫描表达式（cron 5 段式或 `every:<秒>`） |
+| `--schedule-target <url>` | 定时扫描目标 URL |
 
 > 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](docs/api.md)。
 > OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
@@ -487,12 +516,26 @@ docker compose down
 | `--surface-account <user:pass>` | 低权账号（垂直越权对比，可多次指定，取第一个登录成功者） |
 | `--surface-output <path>` | 资产清单 JSON 输出路径 |
 
+#### AI 能力（E7/E8/G3）
+
+| 参数 | 说明 |
+|------|------|
+| `--ai <desc>` | AI 生成插件（LLM 优先，无 Key 降级规则模板） |
+| `--ai-validate [path]` | 生成即验证（签名靶场三态；无参=生成后自动验证） |
+| `--ai-triage` | UNKNOWN 智能降噪（聚类分流，LLM 可选） |
+| `--ai-name <name>` | AI 插件名称（默认取描述） |
+| `--ai-api-key <key>` | LLM API Key（环境变量 `RUOYI_AI_API_KEY`） |
+| `--ai-model <model>` | LLM 模型名（默认 gpt-4o-mini） |
+| `--ai-retries <n>` | AI 自验证最大重试轮数 |
+| `--ai-report [zh\|en]` | 报告生成后 AI 生成漏洞分析摘要（无 Key 降级模板） |
+
 #### CVE 同步（D32）
 
 | 参数 | 说明 |
 |------|------|
-| `--cve-sync` | 同步 NVD CVE 信息 |
+| `--cve-sync` | 同步 NVD / GHSA CVE 信息 |
 | `--cve-id <CVE-ID>` | 查询单个 CVE 信息 |
+| `--cve-offline <component>` | 按组件查询离线 CVE 库（内网模式） |
 | `--nvd-api-key <key>` | NVD API Key（提高速率限制） |
 
 #### SIEM 集成（D33）
@@ -551,9 +594,19 @@ docker compose down
 | 参数 | 说明 |
 |------|------|
 | `--plugin-init <name>` | 生成插件模板 |
+| `--plugin-new <name>` | 创建新插件脚手架 |
+| `--plugin-path <dir>` | 加载第三方插件目录 |
 | `--plugin-check <path>` | 验证插件文件完整性 |
 | `--plugin-list` | 列出所有已加载插件 |
 | `--category <cat>` | 插件类别 ruoyi/spring/common |
+
+#### 插件模板仓库（E5）
+
+| 参数 | 说明 |
+|------|------|
+| `--plugin-export <dir>` | 导出插件源码与元信息到目录（模板仓库） |
+| `--plugin-manifest <dir>` | 生成/校验 manifest.json（Ed25519 签名） |
+| `--plugin-update [url]` | 从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥） |
 
 #### CI/CD 集成（D28）
 
@@ -598,7 +651,7 @@ python main.py -u http://target:8080/
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI 入口（~525 行，纯参数解析+分发）
+├── main.py                  # CLI 入口（542 行，纯参数解析+分发）
 ├── config/settings.py       # 全局配置
 ├── cli/                     # CLI 控制层
 │   ├── dispatcher.py        # 模式分发（工具/服务/扫描三段）
@@ -622,10 +675,10 @@ Ruoyi-Scan/
 │   ├── jeecgboot/           # JeecgBoot 8 个插件
 │   ├── common/              # 通用 11 个插件
 │   └── chain/               # 3 条利用链
-├── lib/                     # 工具库（40 个模块）
+├── lib/                     # 工具库（42 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
-├── tests/                   # 66 个测试文件 / 1000+ 条用例
+├── tests/                   # 67 个测试文件 / 1300+ 条用例
 ├── lab/                     # 靶场环境
 ├── web/                     # Web 控制台前端
 ├── monitoring/              # Grafana + Prometheus
@@ -671,6 +724,8 @@ python tests/regression_spring.py
 ## 安全与合规
 
 本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。
+
+对抗型传输层（Scrapling）为**可选依赖**（`[adversarial]`），默认不安装；启用后同样仅可用于授权测试。
 
 **供应链验证**：Release 产物附带 SHA256 校验和，可独立验证；v1.4.3 起同时提供 SLSA 构建来源证明。
 
