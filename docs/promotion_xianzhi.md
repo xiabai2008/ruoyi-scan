@@ -35,12 +35,12 @@ core/orchestrator.py（扫描编排：recon / vuln / brute 插件分组调度）
 plugins/（每漏洞一插件，继承 PluginBase）
    ├── ruoyi/    若依 20 个插件（含 2 个 Plus 变体专属）+ 5 变体识别
    ├── spring/   Spring Boot 14 个 POC
-   ├── common/   通用漏洞包 11 个插件（.git/.env 泄露、CORS、Swagger 等）
+   ├── common/   通用漏洞包 12 个插件（.git/.env 泄露、CORS、Swagger、Shiro 指纹等）
    ├── jeecgboot/ JeecgBoot 8 个插件（首个非若依框架拓展实证）
    └── chain/    3 条内置利用链
 ```
 
-三种交付形态共用同一引擎：CLI（`pip install ruoyi-scan`）、**单文件桌面端**（Tauri，引擎与 53 个插件编译期嵌入，双击即用，无需 Python/Docker）、Docker 镜像。
+三种交付形态共用同一引擎：CLI（`pip install ruoyi-scan`）、**单文件桌面端**（Tauri，引擎与 54 个插件编译期嵌入，双击即用，无需 Python/Docker）、Docker 镜像。
 
 核心设计原则（对应 `plugins/base.py`）：
 
@@ -209,7 +209,7 @@ docker compose run --rm scanner -p http://lab-ruoyi:8080/ --report /app/reports
 ### 交付形态
 
 - **CLI**：`pip install ruoyi-scan`（PyPI 受信任发布）；
-- **桌面端**：单文件 exe（Tauri），引擎与 53 个插件在编译期嵌入，双击即用，无需 Python / Docker；
+- **桌面端**：单文件 exe（Tauri），引擎与 54 个插件在编译期嵌入，双击即用，无需 Python / Docker；
 - **Docker**：`docker compose up -d` 一键起扫描器 + API + 内置靶场；
 - **在线文档站**：https://xiabai2008.github.io/ruoyi-scan/（mkdocs-material）。
 

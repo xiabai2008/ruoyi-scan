@@ -36,7 +36,8 @@ class ShiroRemembermePlugin(PluginBase):
         "#   -g CommonsBeanutils1 -c 'whoami'\n"
         "# 预期响应：服务端执行命令，DNSLog/OAST 收到回连确认 RCE"
     )
-    affected_versions = "Shiro < 1.2.5（默认密钥）；Shiro < 1.4.2（CBC 模式 Padding Oracle）"
+    # 版本范围由 Shiro 自身版本决定，与若依版本无关；留空表示不参与若依版本过滤
+    affected_versions = ""
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     compliance = "Dengbao2.0:8.1.3;OWASP:A03:2021"
     vuln_type = "rce"

@@ -88,7 +88,7 @@ pip install ruoyi-scan
 
 ## 桌面端 · 单个 exe，双击即用
 
-> 引擎、53 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+> 引擎、54 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
 
 <p align="center">
   <img src="docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
@@ -107,10 +107,10 @@ pip install ruoyi-scan
 <br />
 
 <p align="center">
-  <img src="docs/images/desktop-03-vulndb.png" alt="漏洞库：53 个 POC 插件与 CVE / CNVD 映射" width="900" />
+  <img src="docs/images/desktop-03-vulndb.png" alt="漏洞库：54 个 POC 插件与 CVE / CNVD 映射" width="900" />
 </p>
 
-**漏洞库** —— 53 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+**漏洞库** —— 54 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
 
 <br />
 
@@ -194,7 +194,7 @@ pip install ruoyi-scan
 |------|------|
 | `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
-| `plugins/common/` | 通用漏洞包 11 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权等） |
+| `plugins/common/` | 通用漏洞包 12 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权、Shiro 指纹等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
 | 组件版本检测 | 20 个 Java 组件（fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana 等）版本比对 CVE 映射（`--components`） |
@@ -673,9 +673,9 @@ Ruoyi-Scan/
 │   ├── ruoyi/               # 若依 20 个插件（含 2 个 Plus 变体专属）
 │   ├── spring/              # Spring 14 个 POC
 │   ├── jeecgboot/           # JeecgBoot 8 个插件
-│   ├── common/              # 通用 11 个插件
+│   ├── common/              # 通用 12 个插件
 │   └── chain/               # 3 条利用链
-├── lib/                     # 工具库（42 个模块）
+├── lib/                     # 工具库（41 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
 ├── tests/                   # 67 个测试文件 / 1300+ 条用例
