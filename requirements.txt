@@ -7,7 +7,7 @@
 #   pip install ".[distributed,async,yaml]"   # 按需安装
 
 # === 核心依赖（零系统依赖，必装）===
-requests>=2.28
+requests>=2.34.2
 requests-mock>=1.12.1
 
 # === 靶场环境（lab/）===

@@ -39,7 +39,7 @@ classifiers = [
 
 # 核心依赖（零系统依赖，必装）
 dependencies = [
-    "requests>=2.28",
+    "requests>=2.34.2",
     # requests-mock 仅测试 mock 用，已列在 [project.optional-dependencies].dev（不进运行时分发）
 ]
 
