@@ -100,10 +100,12 @@ dev = [
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.21",
     "pytest-benchmark>=4.0",
-    # lint 工具固定版本（与 .github/workflows/ci.yml 一致）：
-    # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移
-    "ruff==0.16.10",
-    "mypy==2.4.0",
+    # lint 工具固定版本（必须与 .github/workflows/ci.yml 完全一致）：
+    # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移。
+    # 注意：dependabot 曾把这里 bump 到 0.16.10/2.4.0，但 CI 仍固定 0.16.2/2.1.0，
+    # 导致本地 ruff format --check 与 CI 结论不同（42 个文件被要求重排）。两处同步升级时再一起改。
+    "ruff==0.16.2",
+    "mypy==2.1.0",
 ]
 
 # CLI 入口点：安装后可直接 ruoyi-scan -p http://target/
