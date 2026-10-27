@@ -62,7 +62,7 @@ distributed = [
 ]
 # 异步引擎：aiohttp 异步 HTTP 客户端
 async = [
-    "aiohttp>=3.8",
+    "aiohttp>=3.14.5",
 ]
 # YAML 配置文件
 yaml = [
@@ -88,7 +88,7 @@ all = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
     "redis>=4.5",
-    "aiohttp>=3.8",
+    "aiohttp>=3.14.5",
     "pyyaml>=6.0",
     "flask>=3.1.3",
 ]
