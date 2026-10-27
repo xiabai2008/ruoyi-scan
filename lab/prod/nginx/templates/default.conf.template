@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# nginx 1.24 - TLS terminator / reverse proxy for RuoYi
+#
+# Rendered by the official image entrypoint:
+#   /docker-entrypoint.d/20-envsubst-on-templates.sh
+# Only ${NGINX_HTTPS_HOST_PORT} is an environment variable; every other $name
+# is an nginx runtime variable and is left untouched.
+#
+# 80  -> 301 https://<host>:<published https port>
+# 443 -> proxy_pass http://ruoyi:8080
+# 8081 -> plain HTTP upstream for the optional WAF container (not published)
+# ---------------------------------------------------------------------------
+
+server {
+    listen 80;
+    server_name _;
+    # Keep the real nginx Server header (task requirement); nginx emits
+    # "Server: nginx/1.24.x" when server_tokens is on (the default).
+    server_tokens on;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        # Keep the externally published HTTPS port in the redirect target.
+        return 301 https://$host:${NGINX_HTTPS_HOST_PORT}$request_uri;
+    }
+}
+
+# Plain HTTP upstream consumed by the owasp/modsecurity-crs container.
+# It is reachable only on the compose network; no host port is published.
+server {
+    listen 8081;
+    server_name _;
+    # Keep the real nginx Server header (task requirement); nginx emits
+    # "Server: nginx/1.24.x" when server_tokens is on (the default).
+    server_tokens on;
+    client_max_body_size 20m;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://ruoyi:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 8081;
+        proxy_set_header Connection "";
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name _;
+    # Keep the real nginx Server header (task requirement); nginx emits
+    # "Server: nginx/1.24.x" when server_tokens is on (the default).
+    server_tokens on;
+
+    ssl_certificate     /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Required by the spec: RuoYi uploads (10 MB/file, 20 MB/request upstream)
+    client_max_body_size 20m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://ruoyi:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${NGINX_HTTPS_HOST_PORT};
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+}

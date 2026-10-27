@@ -1,0 +1,113 @@
+# ---------------------------------------------------------------------------
+# "harden" comparison target: same RuoYi image, proxy-level 403 for the exact
+# endpoints the scanner probes. This is deliberately NOT an application patch:
+#   * /druid/*
+#   * /monitor/job/edit
+#   * /tool/gen/edit
+#   * /common/download/resource
+# The direct ruoyi:8080 / host :18080 listener still serves the original app,
+# so the comparison is only valid when scanning this nginx endpoint.
+# ---------------------------------------------------------------------------
+
+server {
+    listen 80;
+    server_name _;
+    # Keep the real nginx Server header (task requirement); nginx emits
+    # "Server: nginx/1.24.x" when server_tokens is on (the default).
+    server_tokens on;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://$host:${HARDEN_HTTPS_HOST_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name _;
+    # Keep the real nginx Server header (task requirement); nginx emits
+    # "Server: nginx/1.24.x" when server_tokens is on (the default).
+    server_tokens on;
+
+    ssl_certificate     /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    client_max_body_size 20m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # --- hardened endpoints -------------------------------------------------
+    # SQL-keyword guard for /system/*/list. nginx can reliably inspect the
+    # query string here; POST-body inspection is delegated to the WAF profile
+    # (nginx's $request_body is not available in the rewrite phase). RuoYi
+    # 4.7.8 itself already parameterizes params[dataScope].
+    location ^~ /system/ {
+        default_type text/plain;
+        if ($request_uri ~* "(extractvalue|updatexml|information_schema|benchmark[[:space:]]*\(|sleep[[:space:]]*\(|database[[:space:]]*\(|(^|[^a-z])(union|select)([^a-z]|$))") {
+            return 403 "blocked by harden profile (sql keyword)\n";
+        }
+        proxy_pass http://ruoyi:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${HARDEN_HTTPS_HOST_PORT};
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    location = /druid {
+        default_type text/plain;
+        return 403 "blocked by harden profile\n";
+    }
+    location ^~ /druid/ {
+        default_type text/plain;
+        return 403 "blocked by harden profile\n";
+    }
+    location ^~ /monitor/job/edit {
+        default_type text/plain;
+        return 403 "blocked by harden profile\n";
+    }
+    location ^~ /tool/gen/edit {
+        default_type text/plain;
+        return 403 "blocked by harden profile\n";
+    }
+    location ^~ /common/download/resource {
+        default_type text/plain;
+        return 403 "blocked by harden profile\n";
+    }
+
+    location / {
+        proxy_pass http://ruoyi:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${HARDEN_HTTPS_HOST_PORT};
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+}

@@ -1,0 +1,8 @@
+# Keep the build context small when a manual source drop is used.
+RuoYi/.git
+RuoYi/**/.git
+RuoYi/**/target
+RuoYi/**/*.log
+RuoYi/**/*.iml
+RuoYi/.idea
+Dockerfile

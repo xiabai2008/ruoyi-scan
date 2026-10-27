@@ -1,0 +1,219 @@
+# ---------------------------------------------------------------------------
+# RuoYi 4.7.8 "near-production" lab for ruoyi-scan
+#
+#   mysql (8.0) ── ruoyi (real Spring Boot / Shiro / Thymeleaf, :8080)
+#                        │
+#                        ├── nginx            :8088 (80→443) / :8443 (TLS)
+#                        │      └── waf       profile=waf, :8085 (CRS, PARANOIA=1)
+#                        └── nginx-harden     profile=harden, :8089 / :8444 (403 rules)
+#
+#   redis (profile=redis) is defined for parity with RuoYi-Vue/Cloud labs but
+#   is NOT used by RuoYi 4.7.8 (verified: no RedisTemplate/redis dependency).
+#
+# All published ports bind 127.0.0.1 only. This stack ships default lab
+# credentials and a self-signed certificate: never expose it to a network.
+#
+# Usage (from lab/prod):
+#   cp .env.example .env
+#   make cert && make config && make up && make smoke
+# ---------------------------------------------------------------------------
+name: ruoyi-prod-lab
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ruoyi-prod-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --explicit_defaults_for_timestamp=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RuoYiLabRoot2024}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ry}
+      MYSQL_USER: ${MYSQL_USER:-ruoyi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-RuoYiLabApp2024}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      # Debug-only. Bound to loopback; remove this mapping for a stricter lab.
+      - "127.0.0.1:${MYSQL_PORT:-13306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 01-schema.sql / 02-data.sql run exactly once, on an empty data volume.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - prod
+
+  # Optional: RuoYi 4.7.8 does not need Redis. Kept so the stack can represent
+  # RuoYi-Vue/Cloud deployments and to give the scanner something to fingerprint.
+  redis:
+    image: redis:7-alpine
+    container_name: ruoyi-prod-redis
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - prod
+
+  ruoyi:
+    build:
+      context: ./ruoyi
+      dockerfile: Dockerfile
+      args:
+        RUOYI_VERSION: ${RUOYI_VERSION:-v4.7.8}
+        GITEE_REPO: ${GITEE_REPO:-https://gitee.com/y_project/RuoYi.git}
+        GITHUB_ZIP_URL: ${GITHUB_ZIP_URL:-https://github.com/yangzongzhuan/RuoYi/archive/refs/tags/v4.7.8.tar.gz}
+        MAVEN_MIRROR: ${MAVEN_MIRROR:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+    image: ruoyi-prod-lab/ruoyi:${RUOYI_VERSION:-v4.7.8}
+    container_name: ruoyi-prod-app
+    restart: unless-stopped
+    environment:
+      # Spring Boot relaxed binding -> spring.datasource.druid.master.*
+      SPRING_DATASOURCE_DRUID_MASTER_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ry}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: ${MYSQL_USER:-ruoyi}
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_PASSWORD:-RuoYiLabApp2024}
+      SPRING_DEVTOOLS_RESTART_ENABLED: "false"
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -XX:+UseG1GC -Dfile.encoding=UTF-8}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      # Direct app access, bypasses nginx/WAF/harden on purpose (debugging).
+      # Do not use this port for the harden/waf comparison scans.
+      - "127.0.0.1:${RUOYI_PORT:-18080}:8080"
+    volumes:
+      - ruoyi_uploads:/home/ruoyi/uploadPath
+      - ruoyi_logs:/home/ruoyi/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:8080/login || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    networks:
+      - prod
+
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: ruoyi-prod-nginx
+    restart: unless-stopped
+    environment:
+      # Consumed by the image's envsubst entrypoint and by our template.
+      NGINX_HTTPS_HOST_PORT: ${NGINX_HTTPS_PORT:-8443}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${NGINX_HTTP_PORT:-8088}:80"     # 80 -> 301 https
+      - "127.0.0.1:${NGINX_HTTPS_PORT:-8443}:443"   # self-signed TLS
+    volumes:
+      - ./nginx/templates/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      ruoyi:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - prod
+
+  # "Fixed" comparison target: same RuoYi image, nginx returns 403 for the
+  # endpoints the scanner probes. This is proxy-layer mitigation, not a code
+  # patch -- the app on :18080 remains unchanged.
+  nginx-harden:
+    image: nginx:1.24-alpine
+    container_name: ruoyi-prod-nginx-harden
+    profiles: ["harden"]
+    restart: unless-stopped
+    environment:
+      HARDEN_HTTPS_HOST_PORT: ${HARDEN_HTTPS_PORT:-8444}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${HARDEN_HTTP_PORT:-8089}:80"
+      - "127.0.0.1:${HARDEN_HTTPS_PORT:-8444}:443"
+    volumes:
+      - ./nginx/templates/harden.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      ruoyi:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - prod
+
+  # Optional WAF in front of the plain-HTTP nginx upstream (nginx:8081 is not
+  # published to the host). CRS paranoia 1; anomaly thresholds kept at defaults.
+  waf:
+    image: owasp/modsecurity-crs:nginx-alpine
+    container_name: ruoyi-prod-waf
+    profiles: ["waf"]
+    restart: unless-stopped
+    environment:
+      # This image always renders both an HTTP :8080 server and an HTTPS :8443
+      # server; there is no TLS=off switch. HTTP does not redirect by default.
+      BACKEND: http://nginx:8081
+      PORT: "8080"
+      SSL_PORT: "8443"
+      NGINX_ALWAYS_TLS_REDIRECT: "off"
+      SERVER_NAME: ruoyi-waf-lab
+      PARANOIA: ${WAF_PARANOIA:-1}
+      BLOCKING_PARANOIA: ${WAF_PARANOIA:-1}
+      DETECTION_PARANOIA: ${WAF_PARANOIA:-1}
+      MODSEC_RULE_ENGINE: "on"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${WAF_HTTP_PORT:-8085}:8080"
+      # Published in case the image enables its TLS listener; harmless when off.
+      - "127.0.0.1:${WAF_HTTPS_PORT:-8445}:8443"
+    depends_on:
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      # /healthz is served by nginx:8081 (the WAF BACKEND); it proves both the
+      # WAF process and the proxy chain are up without triggering CRS rules.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - prod
+
+volumes:
+  mysql_data:
+  redis_data:
+  ruoyi_uploads:
+  ruoyi_logs:
+
+networks:
+  prod:
+    driver: bridge
