@@ -28,7 +28,7 @@
 
 ### W1-1 Ed25519 强制验签（fail-closed）
 
-[lib/plugin_repo.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/lib/plugin_repo.py) 中
+[lib/plugin_repo.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/lib/plugin_repo.py) 中
 `download_and_install` / `verify_manifest` 实现：
 
 - 远程安装强制要求 manifest 携带 **Ed25519 签名**，公钥来自本地可信存储
@@ -64,7 +64,7 @@
 
 ### W2-1 API Key 常量时间比较
 
-[api/auth.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/api/auth.py)：
+[api/auth.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/api/auth.py)：
 
 - 所有密钥比较使用 `hmac.compare_digest`，比较耗时与密钥内容无关，消除时序侧信道
 - 多 Key 模式下 `_lookup_scope` **遍历全部密钥且不提前返回**，即使命中仍继续遍历，
@@ -80,17 +80,17 @@
 
 三个带洞靶场服务统一引入 `HOST` 环境变量，默认 `127.0.0.1`：
 
-- [lab/server.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/lab/server.py)（若依签名靶场）
-- [lab/spring_server.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/lab/spring_server.py)（Spring 签名靶场）
-- [lab/real-spring/server.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/lab/real-spring/server.py)（真实漏洞复现靶场）
+- [lab/server.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/lab/server.py)（若依签名靶场）
+- [lab/spring_server.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/lab/spring_server.py)（Spring 签名靶场）
+- [lab/real-spring/server.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/lab/real-spring/server.py)（真实漏洞复现靶场）
 
 容器环境通过 `LAB_HOST=0.0.0.0` 覆盖，保证 scanner/api 容器间互通；宿主端口在
-[docker-compose.yml](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/docker-compose.yml)
+[docker-compose.yml](https://github.com/xiabai2008/ruoyi-scan/blob/main/docker-compose.yml)
 中再收口为 `127.0.0.1:<port>:<port>`，形成"容器内互通 + 宿主仅本机"双层边界。
 
 ### W2-4 WebSocket 鉴权修复
 
-[api/ws/handler.py](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/api/ws/handler.py)：
+[api/ws/handler.py](https://github.com/xiabai2008/ruoyi-scan/blob/main/api/ws/handler.py)：
 
 - 根因：`BaseHTTPMiddleware` 不拦截 WebSocket，`/ws/scan/{task_id}` 原为无鉴权面
 - 修复：`_ws_auth_error` 在 `accept()` 前校验——
@@ -113,7 +113,7 @@ docker-compose.yml 中 Grafana（3000）、Prometheus（9090）宿主端口均�
 ### W2-7 靶场启动安全横幅 + 变更日志收尾
 
 - 三个带洞靶场启动时打印安全横幅：`[!] 安全提示：本靶场含漏洞响应签名，仅限本机/授权测试环境使用，严禁部署到公网或未授权网络`
-- [CHANGELOG.md](file:///c:/Users/HZR/Desktop/HZR_PROJECTS/ruoyi-scan/CHANGELOG.md) `[Unreleased]` 区登记两周安全收口记录
+- [CHANGELOG.md](https://github.com/xiabai2008/ruoyi-scan/blob/main/CHANGELOG.md) `[Unreleased]` 区登记两周安全收口记录
 
 ---
 

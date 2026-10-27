@@ -242,7 +242,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 
 `ALL_EVENTS` 集合用于校验与文档——新增事件需同步登记。
 
-> 注：orchestrator 的 `_emit` 还发了一些未列入 `ALL_EVENTS` 的事件（`recon` / `component` / `auth` / `template` / `plugins_loaded` / `waf_bypass` 等）。`ALL_EVENTS` 是**核心事件集合**，不是穷举。这是 [README 文档漂移清单](README.md#五文档与实现的一致性说明) 之外的又一处口径差异。
+> 注：orchestrator 的 `_emit` 还发了一些未列入 `ALL_EVENTS` 的事件（`recon` / `component` / `auth` / `template` / `plugins_loaded` / `waf_bypass` 等）。`ALL_EVENTS` 是**核心事件集合**，不是穷举。这是与文档口径的另一处差异。
 
 ---
 

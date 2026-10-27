@@ -76,13 +76,16 @@ Java 管理框架**，把指纹、变体、版本矩阵、利用链做透，并�
 # 安装
 pip install ruoyi-scan
 
-# 对目标执行综合扫描（指纹 → WAF → 路由 → POC → 报告）
+# 对目标执行综合扫描（指纹 → 目录扫描 → POC → 弱口令）
 ruoyi-scan -u http://target:8080
 
-# 结果示例
-[+] CONFIRMED  RuoYi 定时任务任意文件读取  severity=high
-[-] SAFE       SnappyData 未授权访问      （已验证不存在）
-[?] UNKNOWN    Druid 未授权               （网络异常，请人工复核）
+# 结果示例（真实输出格式）
+[*]存在任意文件读取
+[*]存在定时任务 RCE（未授权访问）
+[?]无法判定Redis 未授权访问: 连接失败: 由于目标计算机积极拒绝，无法连接。
+[/]不存在MinIO 未授权访问
+[/]不存在Shiro RememberMe 反序列化（指纹）
+[*]扫描摘要：耗时 2.64s 风险分布 高12/中8/低0 合计 20 个漏洞
 ```
 
 [快速上手 :material-arrow-right:](quickstart.md){ .md-button .md-button--primary }

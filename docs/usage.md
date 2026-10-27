@@ -29,6 +29,7 @@
 - [分布式扫描](#分布式扫描)
 - [CI/CD 集成](#cicd-集成)
 - [缓存与性能优化](#缓存与性能优化)
+- [参数速查](#参数速查按功能分组)
 
 ---
 
@@ -319,6 +320,11 @@ ruoyi-scan -l http://target:8080/login --proxy http://127.0.0.1:8080
 - **自动探测**（默认）：检测到验证码自动调用 OCR
 - **OCR 识别**：使用本地 OCR 引擎识别图形验证码
 - **跳过**：忽略验证码字段（适用于无验证码场景）
+
+> 没有可用的 OCR 后端时（提示 `captcha_infra ... 后端=none`），所有需要登录的检测项都会落到
+> `UNKNOWN`——这是正确判定，但不代表目标没问题。两条出路：
+> 1. `pip install "ruoyi-scan[ocr]"` 安装 ddddocr；
+> 2. 用浏览器登录后 `--auth "cookie: JSESSIONID=..."` 复用已有会话（推荐，不依赖识别率）。
 
 ### -f 批量扫描模式
 
@@ -1821,3 +1827,247 @@ A：使用 `--template quick` 减少扫描范围，或增大 CI 任务超时时�
 ---
 
 > **安全声明**：本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。使用本工具进行的所有操作由使用者自行承担法律责任。
+
+---
+
+## 参数速查（按功能分组）
+
+> 完整参数说明请运行 `python main.py -h`。以下按功能分组列出全部参数。
+
+### 核心扫描模式
+
+| 参数 | 说明 |
+|------|------|
+| `-h` | 帮助信息 |
+| `-u <url>` | 综合扫描（目录+漏洞+爆破） |
+| `-m <url>` | 目录扫描 |
+| `-p <url>` | 漏洞检测 |
+| `-l <url>` | 登录爆破 |
+| `-f <file>` | 批量扫描（从文件读取目标列表） |
+| `--cms <ruoyi\|spring>` | 手动指定 CMS（跳过指纹识别） |
+| `--pass-level <lvl>` | 口令字典级别 top100/top1000/full |
+| `--template <name>` | 扫描模板（quick/deep/compliance/dengbao） |
+| `--template-list` | 列出所有可用模板 |
+| `--config <path>` | YAML 配置文件（CLI 参数优先级高于配置） |
+
+### 网络与并发
+
+| 参数 | 说明 |
+|------|------|
+| `--proxy <url>` | 代理地址（如 http://127.0.0.1:8080） |
+| `--proxy-file <f>` | 代理池文件（每行一个代理 URL） |
+| `--proxy-rotate <s>` | 代理轮换策略 round-robin/random/least-fail |
+| `--threads <n>` | 并发线程数 |
+| `--rate <n>` | 每秒请求数（0=不限速） |
+| `--timeout <n>` | 请求超时秒数 |
+| `--time-budget <s>` | 单目标扫描时间预算；超出后剩余插件记为 UNKNOWN（默认 0 = 不限制，慢站/限速目标建议 120–300） |
+| `--debug` | 调试模式（请求日志输出到 stderr） |
+| `--skip-preflight` | 跳过目标可达性预检（经代理等特殊链路时使用） |
+| `--verify-tls` | 校验目标 TLS 证书（默认不校验，兼容内网自签名证书） |
+
+### 信息收集（D14）
+
+| 参数 | 说明 |
+|------|------|
+| `--crawl` | 启用主动爬虫 |
+| `--crawl-depth <n>` | 爬虫最大深度（默认 2） |
+| `--crawl-max-pages <n>` | 爬虫最大页面数（默认 50） |
+| `--subdomain` | 启用子域名枚举 |
+| `--js-extract` | 启用 JS 端点提取 |
+| `--portscan` | 端口扫描 + 服务识别 |
+| `--ports <p1,p2>` | 自定义端口列表（逗号分隔） |
+| `--passive` | 启动被动代理模式 |
+| `--passive-host <addr>` | 代理监听地址（默认 127.0.0.1） |
+| `--passive-port <n>` | 代理监听端口（默认 8080） |
+
+### 报告与输出
+
+| 参数 | 说明 |
+|------|------|
+| `--report <dir>` | 报告输出目录 |
+| `--report-format <f>` | 报告格式 html/json/csv/pdf/docx/xlsx/sarif |
+| `--no-dedup` | 关闭结果去重聚合 |
+| `--lang <zh\|en>` | 报告语言（默认 zh） |
+| `--diff <old.json>` | 与历史扫描报告对比 |
+| `--diff-only <old> <new>` | 仅对比两个 JSON 报告 |
+| `--save-baseline` | 保存本次扫描结果为基线 |
+| `--report-template <path>` | docx 合规报告模板（占位符注入，G5） |
+| `--remediation <baseline.json>` | 整改复测：与基线对比生成整改验证报告（G5） |
+| `--no-cta` | 关闭扫描结尾的仓库引导提示 |
+
+### WAF 绕过与利用链
+
+| 参数 | 说明 |
+|------|------|
+| `--bypass-waf <auto\|on\|off>` | WAF 绕过策略（默认 auto） |
+| `--adversarial-transport` | 启用对抗型传输层（Scrapling 指纹伪装 / 隐身浏览器，绕过 CF/JS 挑战；需 `[adversarial]` 可选依赖） |
+| `--chain <name>` | 执行漏洞利用链 |
+| `--chain-list` | 列出所有可用的漏洞利用链 |
+
+### 组件版本与 nuclei 模板（D4/E2）
+
+| 参数 | 说明 |
+|------|------|
+| `--components` | 组件版本检测（20 个 Java 组件 → CVE 比对） |
+| `--no-components` | 关闭组件版本检测 |
+| `--nuclei <dir\|file>` | 加载 nuclei YAML 模板（可多次指定） |
+| `--nuclei-tags <a,b>` | 仅加载含指定 tag 的模板 |
+| `--nuclei-severity <s>` | 仅加载指定严重度模板（high/medium/low） |
+| `--nuclei-exclude-tags <a,b>` | 排除含指定 tag 的模板 |
+| `--nuclei-validate <path>` | 校验 nuclei 模板（不扫描） |
+
+### 认证扫描（D26）
+
+| 参数 | 说明 |
+|------|------|
+| `--auth <type=value>` | 认证注入（可多次指定） |
+| `--auth-file <path>` | 从文件加载认证信息 |
+| `--auth-login <user:pass>` | 自动登录获取认证 |
+
+### Web API 服务（D9/D11）
+
+| 参数 | 说明 |
+|------|------|
+| `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
+| `--host <addr>` | API 服务监听地址（默认 0.0.0.0） |
+| `--port <n>` | API 服务监听端口（默认 8000） |
+| `--api-key <key>` | API Key 鉴权 |
+| `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
+| `--db-path <path>` | SQLite 任务持久化数据库路径 |
+| `--schedule <cron>` | 定时扫描表达式（cron 5 段式或 `every:<秒>`） |
+| `--schedule-target <url>` | 定时扫描目标 URL |
+
+> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](api.md)。
+> OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
+
+### OAST 带外检测（D30）
+
+| 参数 | 说明 |
+|------|------|
+| `--oast` | 启用 OAST 带外检测 |
+| `--oast-server` | 启动 OAST 回调服务器 |
+| `--oast-host <addr>` | OAST 服务器监听地址 |
+| `--oast-port <n>` | OAST 服务器监听端口 |
+
+### 业务逻辑检测（D31）
+
+| 参数 | 说明 |
+|------|------|
+| `--logic-scan` | 业务逻辑漏洞检测（IDOR/越权/参数篡改/竞争条件） |
+| `--logic-endpoints <file>` | 业务扫描端点列表文件 |
+| `--logic-concurrency <n>` | 竞争条件检测并发数 |
+
+### 认证后深度扫描（G1）
+
+| 参数 | 说明 |
+|------|------|
+| `--auth-surface` | 登录态接口资产盘点 + 越权矩阵（需 `--auth-login user:pass` 高权凭证） |
+| `--surface-account <user:pass>` | 低权账号（垂直越权对比，可多次指定，取第一个登录成功者） |
+| `--surface-output <path>` | 资产清单 JSON 输出路径 |
+
+### AI 能力（E7/E8/G3）
+
+| 参数 | 说明 |
+|------|------|
+| `--ai <desc>` | AI 生成插件（LLM 优先，无 Key 降级规则模板） |
+| `--ai-validate [path]` | 生成即验证（签名靶场三态；无参=生成后自动验证） |
+| `--ai-triage` | UNKNOWN 智能降噪（聚类分流，LLM 可选） |
+| `--ai-name <name>` | AI 插件名称（默认取描述） |
+| `--ai-api-key <key>` | LLM API Key（环境变量 `RUOYI_AI_API_KEY`） |
+| `--ai-model <model>` | LLM 模型名（默认 gpt-4o-mini） |
+| `--ai-retries <n>` | AI 自验证最大重试轮数 |
+| `--ai-report [zh\|en]` | 报告生成后 AI 生成漏洞分析摘要（无 Key 降级模板） |
+
+### CVE 同步（D32）
+
+| 参数 | 说明 |
+|------|------|
+| `--cve-sync` | 同步 NVD / GHSA CVE 信息 |
+| `--cve-id <CVE-ID>` | 查询单个 CVE 信息 |
+| `--cve-offline <component>` | 按组件查询离线 CVE 库（内网模式） |
+| `--nvd-api-key <key>` | NVD API Key（提高速率限制） |
+
+### SIEM 集成（D33）
+
+| 参数 | 说明 |
+|------|------|
+| `--siem-export <fmt>` | 导出 SIEM 格式（ecs/cef/leef/json） |
+| `--siem-output <path>` | SIEM 导出路径 |
+| `--siem-syslog <host:port>` | 发送到 Syslog 服务器 |
+| `--siem-protocol <p>` | Syslog 协议 udp/tcp |
+
+### 异步引擎（D34）
+
+| 参数 | 说明 |
+|------|------|
+| `--async` | 启用异步扫描引擎（ThreadPoolExecutor） |
+| `--async-workers <n>` | 异步并发线程数（默认 10） |
+
+### Web UI 控制台（D35）
+
+| 参数 | 说明 |
+|------|------|
+| `--web-ui` | 生成 Web UI 控制台（单页 HTML） |
+| `--web-ui-output <path>` | Web UI 输出路径 |
+| `--web-ui-api <url>` | Web UI 连接的 API 地址 |
+
+### 分布式扫描（D36）
+
+| 参数 | 说明 |
+|------|------|
+| `--distributed <mode>` | 分布式模式（master/worker/standalone） |
+| `--redis-url <url>` | Redis 连接 URL |
+| `--distributed-rate <n>` | 分布式全局限速（每秒请求数，0 不限速） |
+| `--worker-max-tasks <n>` | Worker 最大任务数（0 不限） |
+| `--distributed-timeout <n>` | 分布式超时秒数（默认 600） |
+
+### 结果缓存（D37）
+
+| 参数 | 说明 |
+|------|------|
+| `--cache` | 启用扫描结果缓存（SQLite） |
+| `--cache-ttl <n>` | 缓存有效期秒数（默认 3600） |
+| `--cache-db <path>` | 缓存数据库路径 |
+| `--cache-stats` | 查看缓存统计 |
+| `--cache-clear` | 清除过期缓存 |
+| `--cache-clear-all` | 清除全部缓存 |
+
+### 通知（D21）
+
+| 参数 | 说明 |
+|------|------|
+| `--notify <type=target>` | 扫描完成通知（可多次指定） |
+
+### 插件 SDK（D25）
+
+| 参数 | 说明 |
+|------|------|
+| `--plugin-init <name>` | 生成插件模板 |
+| `--plugin-new <name>` | 创建新插件脚手架 |
+| `--plugin-path <dir>` | 加载第三方插件目录 |
+| `--plugin-check <path>` | 验证插件文件完整性 |
+| `--plugin-list` | 列出所有已加载插件 |
+| `--category <cat>` | 插件类别 ruoyi/spring/common |
+
+### 插件模板仓库（E5）
+
+| 参数 | 说明 |
+|------|------|
+| `--plugin-export <dir>` | 导出插件源码与元信息到目录（模板仓库） |
+| `--plugin-manifest <dir>` | 生成/校验 manifest.json（Ed25519 签名） |
+| `--plugin-update [url]` | 从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥） |
+
+### CI/CD 集成（D28）
+
+| 参数 | 说明 |
+|------|------|
+| `--ci` | CI 模式（严重度超阈值时退出码非 0） |
+| `--severity-threshold <lvl>` | CI 失败阈值 low/medium/high（默认 high） |
+| `--ci-init <platform>` | 生成 CI 配置（github/gitlab/jenkins） |
+
+### 漏洞知识库（D29）
+
+| 参数 | 说明 |
+|------|------|
+| `--wiki` | 生成漏洞知识库（HTML Wiki + JSON API） |
+| `--wiki-output <path>` | 知识库输出路径 |
