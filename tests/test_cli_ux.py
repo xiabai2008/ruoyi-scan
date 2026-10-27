@@ -117,3 +117,24 @@ def test_scheme_less_target_is_normalized():
     assert ensure_scheme("127.0.0.1:8080") == ("http://127.0.0.1:8080", True)
     assert ensure_scheme("https://target/") == ("https://target/", False)
     assert ensure_scheme("") == ("", False)
+
+
+def test_scheme_less_target_reaches_preflight_with_scheme(monkeypatch, capsys):
+    """CLI 入口实际走一遍：目标补协议、打印提示、交给 preflight（回归 UnboundLocalError）"""
+    import cli.dispatcher as dispatcher
+
+    seen = {}
+
+    def fake_preflight(target, _args):
+        seen["target"] = target
+        return False  # 模拟目标不可达 -> 退出码 3
+
+    monkeypatch.setattr(dispatcher, "preflight_target", fake_preflight)
+
+    from main import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["-p", "127.0.0.1:9", "--no-cta"])
+    assert exc.value.code == 3
+    assert seen["target"] == "http://127.0.0.1:9"
+    assert "按 http://127.0.0.1:9 处理" in capsys.readouterr().out

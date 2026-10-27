@@ -161,7 +161,7 @@ def dispatch(args: Namespace) -> None:
     # 违反"网络异常绝不冒充 SAFE"。
     if target_for:
         from core.http import ensure_scheme
-        from lib.colors import YELLOW
+        from lib.colors import RESET, YELLOW
 
         for _k in list(target_for):
             _fixed, _added = ensure_scheme(target_for[_k])
