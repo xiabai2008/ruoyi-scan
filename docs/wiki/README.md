@@ -1,7 +1,7 @@
 # Ruoyi-Scan Code Wiki
 
 > 面向开发者与维护者的代码结构文档。目标读者：需要读懂、修改、扩展或评审本仓库的人。
-> 文档基于仓库源码（`main` 分支，版本 `1.5.0`）静态分析生成，所有结论均可追溯到具体文件。
+> 文档基于仓库源码（`main` 分支，版本 `1.5.1`）静态分析生成，所有结论均可追溯到具体文件。
 
 ---
 
@@ -18,7 +18,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 
 | 项目 | 值 |
 |------|-----|
-| 版本 | `1.5.0`（`pyproject.toml` / `config/settings.py` / `main.py` banner 三处同步） |
+| 版本 | `1.5.1`（`pyproject.toml` / `config/settings.py` / `main.py` banner 三处同步） |
 | Python | >= 3.8（mypy 分析目标 `3.10`，仅影响类型检查） |
 | 核心依赖 | `requests`、`requests-mock`（零系统依赖） |
 | 入口点 | `ruoyi-scan = "main:main"`（`pyproject.toml` `[project.scripts]`） |

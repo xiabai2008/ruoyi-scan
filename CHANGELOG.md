@@ -4,6 +4,20 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.5.1] - 2026-10-27
+
+### Fixed
+- **桌面端**：修复 v1.5.0 点击「新建扫描」必现白屏——`NewScanDialog` 中 `useRef` 位于提前 return 之后，打开弹窗时 Hook 数量变化触发 `React error #310` 并卸载整棵组件树；已将 Hook 移至提前 return 之前。新增顶层 `ErrorBoundary`：渲染异常降级为可读错误页 + 「重新加载」入口，不再整窗白屏
+- **CLI**：首次使用体验修复——版本号显示、缺少目标时的报错、结论重复输出、插件显示名
+- **CI/验收**：移除已改名插件（`job_invoke_target`）的过期验收基线项，`main` 与 Nightly 门禁恢复全绿（基线 1.0.4）
+
+### Changed
+- **依赖维护**：dependabot 升级 GitHub Actions 组、CodeQL Action、桌面 npm 组、Tauri Cargo 组、pip（requests / setuptools / aiohttp / redis / httpx2）
+
+### Notes
+- 桌面端白屏复现与回归：WebView2 远程调试实测 v1.5.0 报 `React #310`；修复后同一操作路径弹窗完整渲染、无异常
+- 本版为补丁版本，无行为变更；建议所有 v1.5.0 桌面用户立即升级
+
 ## [1.5.0] - 2026-10-12
 
 ### Added
