@@ -7,7 +7,7 @@ from plugins.base import PluginBase
 class ShiroRemembermePlugin(PluginBase):
     """检测 Shiro rememberMe 反序列化 RCE（CVE-2016-4437）：以 rememberMe Cookie 特征作框架指纹"""
 
-    name = "shiro_rememberme"
+    name = "Shiro RememberMe 反序列化（指纹）"
     cve = "CVE-2016-4437"
     severity = "high"
     category = "vuln"

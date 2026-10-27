@@ -48,6 +48,13 @@ def build_parser():
     group.add_argument(
         "--proxy-rotate", choices=["round-robin", "random", "least-fail"], default="round-robin", help="代理轮换策略"
     )
+    group.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"ruoyi-scan {settings.VERSION}",
+        help="显示版本号并退出",
+    )
     group.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
     group.add_argument("--rate", type=int, default=settings.RATE, help="每秒请求数（0 不限速）")
     group.add_argument("--report", default=None, help="报告输出目录")
@@ -58,6 +65,12 @@ def build_parser():
     group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
+    group.add_argument(
+        "--no-pause",
+        action="store_true",
+        default=False,
+        help="扫描结束不等待回车（非交互终端与 CI 环境已自动跳过）",
+    )
     group.add_argument(
         "--skip-preflight",
         action="store_true",
@@ -309,6 +322,7 @@ def print_help():
     print("-p : 漏洞检测")
     print("-l : 登录爆破")
     print("-f : 批量扫描（从文件读取目标列表）")
+    print("-V/--version : 显示版本号并退出")
     print(SEPARATOR)
     print("可选长参数：")
     long_params = [
@@ -323,6 +337,7 @@ def print_help():
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
         ("--no-cta", "关闭扫描结尾的仓库引导提示"),
+        ("--no-pause", "扫描结束不等待回车（CI / 脚本默认不等待）"),
         ("--skip-preflight", "跳过目标可达性预检（经代理等特殊链路时使用）"),
         ("--verify-tls", "校验目标 TLS 证书（默认不校验，兼容内网自签名证书）"),
         ("--portscan", "扫描前执行端口扫描 + 服务识别"),

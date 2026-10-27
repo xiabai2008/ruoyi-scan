@@ -14,11 +14,26 @@ PREFIX_OK = "[*]"  # 正向结果条目
 PREFIX_NO = "[/]"  # 负向结果条目
 
 
+class Finding(str):
+    """「单条漏洞结论」文案标记类型
+
+    ok() / no() 返回的是带颜色的整行结论文案（[*]存在xxx / [/]不存在xxx）。
+    插件在 verify() 里自行 emit 一次，扫描引擎又会按 ScanResult 统一打印一次，
+    同一结论在终端出现两遍。lib.reporter.emit 依据该类型识别结论行，
+    在 CLI 已统一打印结论时（见 reporter.set_findings_muted）跳过插件侧输出，
+    其它进度类文案不受影响。
+
+    继承 str：对既有的拼接 / 打印 / 正则逻辑完全透明。
+    """
+
+    __slots__ = ()
+
+
 def ok(msg):
     """正向结果整行绿色包裹：[*]xxx"""
-    return f"{GREEN}{PREFIX_OK}{msg}{RESET}"
+    return Finding(f"{GREEN}{PREFIX_OK}{msg}{RESET}")
 
 
 def no(msg):
     """负向结果整行红色包裹：[/]xxx"""
-    return f"{RED}{PREFIX_NO}{msg}{RESET}"
+    return Finding(f"{RED}{PREFIX_NO}{msg}{RESET}")
