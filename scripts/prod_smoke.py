@@ -281,12 +281,16 @@ def check_login(session, base, tier, timeout) -> Result:
 def check_captcha(session, base, tier, timeout) -> Result:
     r = Result(
         key="captcha",
-        title="/captcha/captchaImage",
+        title="/captcha/captchaImage?type=math",
         method="GET",
-        path="/captcha/captchaImage",
+        # RuoYi 4.7.8 的 CaptchaController 需要 ?type=math 才生成图片；不带 type 时
+        # image=null 返回 200 空 body（真栈实测：stock/harden/waf 三档 smoke 都误报失败）
+        path="/captcha/captchaImage?type=math",
         expected=expected_text(tier, "captcha"),
     )
-    resp, err = request(session, "GET", url_of(base, "/captcha/captchaImage"), timeout, allow_redirects=False)
+    resp, err = request(
+        session, "GET", url_of(base, "/captcha/captchaImage?type=math"), timeout, allow_redirects=False
+    )
     if err:
         r.note = err
         return r

@@ -92,6 +92,9 @@ services:
       SPRING_DATASOURCE_DRUID_MASTER_USERNAME: ${MYSQL_USER:-ruoyi}
       SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_PASSWORD:-RuoYiLabApp2024}
       SPRING_DEVTOOLS_RESTART_ENABLED: "false"
+      # 让 Spring 识别 nginx 的 X-Forwarded-*（否则 Shiro 绝对重定向丢端口/协议，
+      # 变成 http://127.0.0.1/login，扫描器跟着跳到 80 端口）
+      SERVER_FORWARD_HEADERS_STRATEGY: "framework"
       JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -XX:+UseG1GC -Dfile.encoding=UTF-8}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
