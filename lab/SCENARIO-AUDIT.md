@@ -123,8 +123,8 @@
 ## 6. 仍未修（待排期）
 
 1. 低权账号越权类（部门树、重置密码）依赖第二个账号；靶场只有 `admin`，需要补一套权限矩阵。
-2. `lab/prod` 需要 Docker 镜像源才能拉起真实栈；本机 Docker daemon 不可用，运行时行为未验证
-   （仅 `docker compose config` 通过，见 §7）。
+2. `lab/prod` 的运行时已由独立审计在 Docker Desktop 上验证（stock 栈 healthy，MySQL 20 表、
+   admin 哈希、非 root 运行均核对）；harden/waf 只做了短时验证，CI 无 Docker，运行时回归仍靠手工。
 3. 本机 `~/.ruoyi-scan/plugins/` 存有 2026-08 的旧插件副本，会让同一台机器上的扫描出现重名结论
    （本轮已将其移出备份，验证全程在干净环境跑）。产品侧可考虑对用户插件做「同名/同 id 去重」提示。
 
@@ -135,6 +135,7 @@
 | `python scripts/scenario_audit.py`（8 类场景） | **6/6 PASS**（修好脚本自身 2 处断言：退出码 3 属预期、报告端点应为 `/api/report/{id}/html`） |
 | `python scripts/lab_selftest.py` | **136/136 PASS**（修正一处过时断言：Nacos 已改返回 YAML 正文） |
 | 签名靶场 e2e（CI 同款命令） | total=24 CONFIRMED=20 SAFE=0 UNKNOWN=0 **PASS** |
+| 真实 RuoYi 4.7.8 栈（Docker） | 修复前：nginx `Host $host` 丢端口 → 24 条全 UNKNOWN；修复后重扫：UNKNOWN=8 / SAFE=16，登录墙下的注入/上传/任务/SSTI 均落 UNKNOWN（见 §8.2） |
 | `ruff check` / `ruff format --check`（CI 口径） | 通过 |
 | `mkdocs build --strict` | 通过（0 warning） |
 
@@ -142,3 +143,30 @@
 - 首跑输出噪声以 `-u` 计（目录扫描是噪声大头），`-p` 47 行、`-u` 63 行都低于承诺的 60/200 行阈值；
 - 版本过滤修正后，行为级靶场（4.7.8）会多跑 role/dept/上传/任务 4 个 POC，
   未登录时它们按新规则落到 UNKNOWN（而不是被静默跳过），这是三态纪律的预期结果。
+
+## 8. 独立审计（两名 subagent，2026-10-27 深夜）
+
+### 8.1 陌生人干净安装（fresh-user）
+
+在 `%TEMP%` 全新 venv 里 `pip install` 仓库快照，只按 README/docs 使用（不看源码）：
+
+- **P0 `--help` 直接失败**：只注册了 `-h`，`ruoyi-scan --help` 报 `unrecognized arguments` → 已修（两个 flag 等价，含回归测试）。
+- **P0 无协议目标假 SAFE**：`-p 127.0.0.1:18090` 全部请求 InvalidSchema，报告仍有 1 条 SAFE → 已修（入口补 `http://`，批量文件同理）。
+- 文档口径：`[ocr]` extra 不存在、`python -m lab.run` 不存在、退出码/报告命名/38 vs 54 POC 不符 → 已修；
+  批量 `#` 注释被当目标 → 已按文档跳过。
+- **未修（待排期）**：批量多目标固定 `report.html` 会互相覆盖；同一插件偶发 SAFE+UNKNOWN 双结论（登录链失败路径）；
+  `-u` 耗时随目标差异大（干净环境签名靶场 63 行/约 1 分钟，其快照里 409s/754 行受旧用户插件副本干扰，已清理）。
+
+### 8.2 真实栈 + 判定对抗（prod-auditor）
+
+Docker Desktop 拉起真实 RuoYi 4.7.8 stock 栈：
+
+- **P0 真栈 nginx 头失真**：`Host $host` 丢 8443 → Shiro 302 到 `http://127.0.0.1/login`，扫描 24 条全 UNKNOWN。
+  已修 `Host $http_host` + `SERVER_FORWARD_HEADERS_STRATEGY=framework`，复测跳转已是 `https://127.0.0.1:8443/login`。
+- **P0 登录墙未兜底**：真实 4.7.8 用 302→/login（不是 401），7 个插件+信息泄露类都曾把「没测到」写成 SAFE。
+  已修：`login_wall_reason()` 接入 role/dept/upload/job_rce/file_read/file_read_path/thymeleaf；
+  并新增 `detect_auth_wall()` + `downgrade_auth_wall_safe()` 做统一兜底（明确 404 的 SAFE 保留）。
+- P1 `prod_smoke` 验证码探针缺 `?type=math`（三档 smoke 均 exit=2）→ 已修。
+- P1 `detect_blocked` 误报（随机路径 429/5xx + 根路径正常）→ 已收窄；否定式证据（「未含 Forbidden」）不再误降级。
+- **未修**：`--time-budget` 是软上限（单插件重试可超预算）；ratelimit 下仍有证据为空的 SAFE
+  （插件契约层应要求 SAFE 带证据，下一步统一）。

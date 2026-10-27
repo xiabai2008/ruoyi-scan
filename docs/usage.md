@@ -173,7 +173,7 @@ docker compose down
 | 分布式 Master-Worker | `distributed` | `--distributed master/worker` |
 | 异步扫描引擎 | `async` | `--async` |
 | YAML 配置文件 | `yaml` | `--config config.yaml` |
-| 内置靶场 | `lab` | `python -m lab.run` |
+| 内置靶场 | `lab` | 源码仓库内：`LAB_MODE=vuln python lab/server.py`（`lab/README.md` 有全部档位） |
 | 对抗型传输层 | `adversarial` | `--adversarial-transport` |
 | 其余全部能力 | `all` | 一键全开（不含 `adversarial`） |
 
@@ -191,7 +191,7 @@ Ruoyi-Scan 提供 6 种扫描模式，覆盖从单点验证到全量攻防演练
 - 自动指纹识别（favicon hash + 特征路径 + 关键字）
 - 多版本适配（RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤）
 - 三态判定：CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定）
-- 38 个 POC：若依 16 个 + Spring 14 个 + 通用 8 个
+- 54 个 POC：若依 20 个 + Spring Boot 14 个 + 通用 12 个 + JeecgBoot 8 个
 
 **示例命令**：
 
@@ -228,8 +228,9 @@ ruoyi-scan -p http://target:8080/ --logic-scan
 ```
 
 **输出说明**：
-- 实时输出至 stderr：每个 POC 的执行结果（CONFIRMED/SAFE/UNKNOWN）
-- 退出码：0 = 未发现高危漏洞；非 0 = 发现漏洞或发生错误（CI 模式下根据阈值决定）
+- 实时输出至 stdout：每个 POC 的执行结果（CONFIRMED/SAFE/UNKNOWN）；stderr 只有运行期 WARNING/调试日志
+- 退出码：普通扫描 0 = 扫描完成（无论是否发现漏洞）；`--ci` 模式 0=通过 / 1=发现超阈值漏洞 / 2=扫描异常；
+  参数错误 = 2；目标不可达（预检失败）= 3（`EXIT_UNREACHABLE`）
 - 报告文件：根据 `--report` 与 `--report-format` 生成到指定目录
 
 ### -m 目录扫描模式
@@ -323,7 +324,7 @@ ruoyi-scan -l http://target:8080/login --proxy http://127.0.0.1:8080
 
 > 没有可用的 OCR 后端时（提示 `captcha_infra ... 后端=none`），所有需要登录的检测项都会落到
 > `UNKNOWN`——这是正确判定，但不代表目标没问题。两条出路：
-> 1. `pip install "ruoyi-scan[ocr]"` 安装 ddddocr；
+> 1. `pip install ddddocr` 启用验证码识别（本项目未提供 `[ocr]` extra）；
 > 2. 用浏览器登录后 `--auth "cookie: JSESSIONID=..."` 复用已有会话（推荐，不依赖识别率）。
 
 ### -f 批量扫描模式
@@ -576,7 +577,7 @@ ruoyi-scan --config config.yaml -p http://other-target:8080/ --threads 20
 2. **配置文件中的参数**
    - 例：`config.yaml` 中的 `timeout: 10`
 3. **内置默认值**（最低优先级）
-   - 例：未指定时 `threads` 默认为 5
+   - 例：CLI 未指定时 `threads` 默认为 1（`--template quick/deep` 会覆盖为 5/20）
 
 **优先级规则**：
 - CLI 参数一旦显式指定，配置文件中同名字段失效
@@ -1863,6 +1864,7 @@ A：使用 `--template quick` 减少扫描范围，或增大 CI 任务超时时�
 | `--time-budget <s>` | 单目标扫描时间预算；超出后剩余插件记为 UNKNOWN（默认 0 = 不限制，慢站/限速目标建议 120–300） |
 | `--debug` | 调试模式（请求日志输出到 stderr） |
 | `--skip-preflight` | 跳过目标可达性预检（经代理等特殊链路时使用） |
+| `--no-pause` | 扫描结束不等待回车（非 TTY / CI 环境自动跳过） |
 | `--verify-tls` | 校验目标 TLS 证书（默认不校验，兼容内网自签名证书） |
 
 ### 信息收集（D14）

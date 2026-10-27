@@ -15,7 +15,8 @@
 </p>
 
 > 一次 `-p` 扫描产出的 HTML 报告（真实运行，v1.5.1，对签名靶场）：风险分布、等保 2.0 与 OWASP
-> 条款命中、20 条确认漏洞——报告本身就是可交付物，7 种格式（HTML/JSON/CSV/PDF/Word/Excel/SARIF）。
+> 条款命中、20 条确认漏洞——报告本身就是可交付物，7 种格式（HTML/JSON/CSV/PDF/Word/Excel/SARIF；
+> PDF/Word/Excel 需 `pip install "ruoyi-scan[report]"`）。
 
 ---
 
@@ -54,7 +55,8 @@ ruoyi-scan -u http://target:8080/ --report ./reports --report-format all
 </p>
 
 > 真实输出（v1.5.1，对仓库内置签名靶场执行 `-p`）：每行一条结论，三态配色，末尾给出
-> 摘要、去重统计与报告路径。
+> 摘要、去重统计与报告路径。本地复现：源码仓库根目录 `LAB_MODE=vuln LAB_PORT=8080 python lab/server.py`，
+> 再执行 `ruoyi-scan -p http://127.0.0.1:8080/`（pip 包不含 lab，需 clone 仓库）。
 
 ## 报告与交付
 

@@ -86,15 +86,16 @@ ruoyi-scan -u http://target:8080 --report ./out --report-format html,pdf,docx
 
 ## 4. 报告在哪
 
-默认输出到 `reports/`（可用 `--report` 覆盖），一次扫描同时产出：
+**只有显式指定 `--report <目录>` 才会生成报告文件**（默认目录名用 `reports/`）。文件名为固定的
+`report.<ext>`，同一目录重复扫描会覆盖；多目标请为每个目标单独指定目录：
 
 ```
 reports/
-├── report_<host>_20260910_153045.html    # 交互式报告（SVG 图表）
-├── report_<host>_20260910_153045.json    # 机器可读（CI 集成 / baseline diff）
-├── report_<host>_20260910_153045.pdf     # 交付物（可选依赖）
-├── report_<host>_20260910_153045.docx    # Word 交付物（可选依赖）
-└── ...
+├── report.html    # 交互式报告（SVG 图表）
+├── report.json    # 机器可读（CI 集成 / baseline diff）
+├── report.csv     # 表格
+├── report.sarif   # GitHub Code Scanning
+└── ...            # pdf/docx/xlsx 需 pip install "ruoyi-scan[report]"
 ```
 
 ## 5. Web 控制台（可选）
