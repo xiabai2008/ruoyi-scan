@@ -97,7 +97,9 @@ class TraceMethodPlugin(PluginBase):
                 # WAF 页误判为 TRACE 启用，故额外要求响应首行是 TRACE 请求行
                 first_line = trace_body.lstrip().splitlines()[0] if trace_body.strip() else ""
                 trace_echoed = (
-                    trace_resp.status_code < 400 and probe_value in trace_body and first_line.upper().startswith("TRACE ")
+                    trace_resp.status_code < 400
+                    and probe_value in trace_body
+                    and first_line.upper().startswith("TRACE ")
                 )
             except Exception as e:
                 trace_error = e

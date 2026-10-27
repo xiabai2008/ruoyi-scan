@@ -54,7 +54,9 @@ class JeecgFileReadDownloadPlugin(PluginBase):
         # 状态码门禁：4xx/5xx 错误页、WAF 拦截页一律不参与内容匹配，避免把错误页当文件内容
         if resp.status_code != 200:
             emit(no(f"JeecgBoot 任意文件读取（HTTP {resp.status_code}）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {resp.status_code}")
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"HTTP {resp.status_code}"
+            )
         # 强特征判定：仅当响应含真实 /etc/passwd 行格式（root:x:0:0: / daemon:x:1:1: 等）才算命中。
         # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
         # "root" 更是 HTML/JS/报错页的常客，一份普通 404 页即可满足，造成确定性误报。

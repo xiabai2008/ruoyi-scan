@@ -170,9 +170,7 @@ class NacosConfigExtractPlugin(PluginBase):
                 block.append(nxt)
             return "\n".join(block)
         props = [
-            ln
-            for ln in lines
-            if re.match(r"(?i)^\s*(?:[\w-]+\.)*datasource\.(?:url|username|password)\s*[:=]", ln)
+            ln for ln in lines if re.match(r"(?i)^\s*(?:[\w-]+\.)*datasource\.(?:url|username|password)\s*[:=]", ln)
         ]
         return "\n".join(props) if props else content
 
@@ -233,7 +231,7 @@ class NacosConfigExtractPlugin(PluginBase):
                 continue
 
             # 正则提取数据库连接信息：先在 datasource 配置块内匹配，避免泛化键
-            #（如 nacos.username）串入；url 保留完整 jdbc 串（含 scheme，覆盖
+            # （如 nacos.username）串入；url 保留完整 jdbc 串（含 scheme，覆盖
             # mysql/postgresql/oracle/sqlserver 等），并去掉值两侧引号与行尾标点
             scope = self._db_scope(content)
             url_match = re.search(r"(?im)^\s*(?:[\w-]+\.)*url\s*[:=]\s*[\"']?(jdbc:[^\s\"']+)", scope)

@@ -2,6 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import parse_json_body
 from lib.reporter import emit
 from plugins.base import PluginBase
 

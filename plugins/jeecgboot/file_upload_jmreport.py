@@ -4,6 +4,7 @@ import json
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import parse_json_body
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -105,7 +106,9 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
         if not got_response:
             # 全部候选路径均请求失败：测不到 ≠ 安全，归 UNKNOWN 避免漏报
             emit(no("JeecgBoot jmreport 文件上传（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error)
+            )
         emit(no("不存在 JeecgBoot jmreport 文件上传"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)
 

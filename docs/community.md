@@ -22,9 +22,9 @@ Ruoyi-Scan 从「个人项目」走向「有外部贡献者的社区项目」。
 
 | 插件包 | 数量 | 说明 |
 |--------|------|------|
-| `plugins/ruoyi/` | 18 | 若依专项（文件读取 / SQL 注入 / RCE / SSTI / 未授权等） |
+| `plugins/ruoyi/` | 20 | 若依专项（文件读取 / SQL 注入 / RCE / SSTI / 未授权等） |
 | `plugins/spring/` | 14 | Spring Boot 生态（Actuator / Gateway / Jolokia / Spring4Shell 等） |
-| `plugins/common/` | 11 | 通用泄露与配置（.git / .env / 备份 / CORS / Swagger 等） |
+| `plugins/common/` | 12 | 通用泄露与配置（.git / .env / 备份 / CORS / Swagger / Shiro 指纹等） |
 | `plugins/jeecgboot/` | 8 | JeecgBoot 拓展（首个非若依框架实证，方法论可复制性验证） |
 
 第三方插件通过 `ruoyi_scan.plugins` entry_points 注册，pip 安装即被自动发现——
