@@ -88,8 +88,15 @@ class SpringActuatorUnauthPlugin(PluginBase):
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url_env, evidence=str(e))
 
         # 第二关通过才确认：/actuator 可达但 env 需认证时属“已保护”场景，不算未授权漏洞
-        # Content-Type 同样按 JSON 子类型判定（Actuator 常用 v3/v2 厂商标型）
-        if r2.status_code == 200 and "json" in (r2.headers.get("Content-Type", "") or "").lower():
+        # Content-Type 同样按 JSON 子类型判定（Actuator 常用 v3/v2 厂商标型）；
+        # 并且响应体必须是真实 env 结构（propertySources/activeProfiles 等），
+        # 避免任意 200 JSON 页面（如统一错误 JSON）被误判为未授权
+        env_text = r2.text or ""
+        if (
+            r2.status_code == 200
+            and "json" in (r2.headers.get("Content-Type", "") or "").lower()
+            and match_spring_actuator_env(env_text)
+        ):
             emit(ok("存在 Spring Boot Actuator 未授权访问"))
             return ScanResult(
                 kind="vuln",

@@ -100,9 +100,7 @@ class FileUploadPlugin(PluginBase):
 
         # 控误报：url/fileName 非空且 url 是真实上传路径（显式 scheme 或以 / 开头，
         # 排除 "httpsomething"/"httpx" 这类以 http 开头的任意字符串）
-        url_valid = bool(up_url) and (
-            up_url.startswith(("http://", "https://")) or up_url.startswith("/")
-        )
+        url_valid = bool(up_url) and (up_url.startswith(("http://", "https://")) or up_url.startswith("/"))
         name_valid = bool(file_name)
 
         # 鉴权/权限拦截独立判定（不受 url/fileName 字段存在性影响）：

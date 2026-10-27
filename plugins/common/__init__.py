@@ -9,6 +9,7 @@ from plugins.common.git_leak import GitLeakPlugin
 from plugins.common.minio_unauth import MinioUnauthPlugin
 from plugins.common.redis_unauth import RedisUnauthPlugin
 from plugins.common.rocketmq_unauth import RocketmqUnauthPlugin
+from plugins.common.shiro_rememberme import ShiroRemembermePlugin
 from plugins.common.source_leak import SourceLeakPlugin
 from plugins.common.swagger_leak import SwaggerLeakPlugin
 from plugins.common.trace_method import TraceMethodPlugin
@@ -25,6 +26,7 @@ plugin_list = [
     SourceLeakPlugin,  # IDE/SCM 残留文件泄露
     MinioUnauthPlugin,  # MinIO 未授权（F7 中间件）
     RocketmqUnauthPlugin,  # RocketMQ Dashboard 未授权（F7 中间件）
+    ShiroRemembermePlugin,  # Shiro rememberMe 指纹（CVE-2016-4437，SAFE/UNKNOWN）
     # recon：信息收集
     DirListingPlugin,  # 目录遍历探测
     TraceMethodPlugin,  # HTTP 方法探测（OPTIONS/TRACE）

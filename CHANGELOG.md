@@ -4,6 +4,31 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.5.0] - 2026-10-12
+
+### Added
+- **对抗型传输层（Scrapling）**：新增 `--adversarial-transport` 开关与 `[adversarial]` 可选依赖组（`pip install "ruoyi-scan[adversarial]"`）——隐身浏览器解 CF/JS 挑战 + 指纹伪装，作为 WAF 绕过的引擎级兜底；配套 `lib/scrapling_transport.py` 与 `lab/scrapling_poc/` 契约/端到端验证脚本。默认关闭；依赖需另装约 150MB 浏览器二进制，刻意不并入 `all` 组
+
+### Changed
+- **API 鉴权 fail-closed（行为变更）**：无效 scope（如 `key:raed`）由静默回退 `admin` 改为最小权限 `read`；非 ASCII `X-API-Key` 由 500 改为 401。使用无效 scope 的部署升级后权限会收紧，请核对密钥配置
+- **口令字典扫描级隔离**：`--pass-level` 不再改写进程级 `settings.PASSWORD_DICT`，改为注入本次扫描的 `session.password_dict`（API/批量并发下多任务不再互相覆盖字典）
+- **分布式队列可靠性**：出队改为 `BRPOPLPUSH` + 租约时间戳；Worker 崩溃后遗留任务自动重入队（载荷丢失标记 failed），`collect_results` 不再干等超时
+- **插件判定系统性收紧**：以否定为判据的弱特征改为强特征与结构化校验；网络异常一律 `UNKNOWN`（三态铁律）
+- **工具链**：dependabot 覆盖 `lab/` 与 pip/Actions 分组（codeql 同族防拆分）；Actions 升级 checkout v7 / setup-python v7 / codecov v7.1.1 / codeql v4；`httpx2` 开发依赖恢复；ruff / mypy 锁定版本升级
+
+### Fixed
+- **核心**：会话资源统一 `finally` 释放；验证码探测竞态、限速器令牌、软 404 与 favicon 弱命中误判、报告缓存失效、SARIF 指纹跨运行不稳定、PDF 转义、代理池实际生效、插件加载失败可观测、任务订阅原子化、链超时与 fallback 校验、跳过节点判 `UNKNOWN`
+- **库**：ai_generator 覆盖保护与规则降级落盘、ci_runner 生成的 workflow 花括号与 GitLab junit 绑定、cve_sync 路径穿越、plugin_repo 全清单签名与私钥 0600、scheduler 恢复隔离与重复定时器、SIEM CEF 转义、waf_bypass 变换与共享会话、web_ui 模板花括号、js_extractor / crawler / matcher / tamper 判定修正
+- **插件**：`file_read` / `file_read_download` 改用 `/etc/passwd` 行强判据；jeecgboot（默认口令/文件读取/SSTI/SQL 注入/JMReport）改结构化校验、不确定态返回 `UNKNOWN`；Spring Actuator 与 Spring Boot Admin 结构校验；CORS `*` 降级低危；MinIO / RocketMQ / Swagger / Source / TRACE / Shiro 等判定收紧；无鉴权探测改用独立会话（防认证状态泄漏）；Nacos 链按实际前缀解析；证据凭据打码；CVE 归属修正与硬编码 Cookie 清理
+- **API/CLI**：报告下载 task_id 路径校验、WebSocket 订阅竞态与连接生命周期、批量扫描按目标出报告（不再只出第一个）、`--cache-clear-all` 生效、指纹探测阻塞 IO 移出事件循环
+- **CI/供应链**：`github.ref_name` 注入点改用 env、nuclei 下载校验和、Pages 部署并发策略、pip 缓存、Dockerfile / .dockerignore 加固（非 root、固定 UID、密钥排除、保留 `lab/server.py`）
+- **桌面端**：Tauri CSP 启用与 asset 作用域收窄（移除 `$HOME/**`）、引擎解压/清理与端口释放加固、状态竞态与主题/字体容错、无障碍与图表性能、自定义头像加载失败回退默认形象、版本号统一
+
+### Notes
+- 本版合并两条独立的全库评审修复线（10/5-10/6 与 10/11-10/12），合计处理 800+ 条发现（重叠项按更严格实现收敛）
+- 验证：合并后全量测试 0 失败（含新增并发字典隔离、分布式租约恢复、验收基线等用例）；靶场回归与检出矩阵门禁通过
+- `pypa/gh-action-pypi-publish@release/v1` 与 `skip-existing` 为刻意保留（文件内有注释说明）
+
 ## [1.4.3] - 2026-09-19
 
 ### Added

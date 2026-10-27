@@ -20,6 +20,7 @@ from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
 from core.session import SessionManager
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
+from lib.reporter import is_findings_muted, set_findings_muted
 from lib.star_cta import print_star_cta
 
 logger = get_logger(__name__)
@@ -272,8 +273,20 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi 插件包（阶段一兼容）{RESET}")
 
     elif event_type == "plugins_loaded":
-        common_count = payload.get("common_count", 0)
-        print(f"{YELLOW}[*]通用漏洞检测：已加载 {common_count} 个通用插件{RESET}")
+        # 插件按来源分批加载，每个来源各发一次事件（common / 外部目录 / 用户安装 /
+        # entry_points / nuclei）。此前一律按 common_count 取值：外部来源事件缺该键，
+        # 于是打出一行多余的「已加载 0 个通用插件」，与上一行自相矛盾。
+        sources = (
+            ("common_count", "通用漏洞检测：已加载 {n} 个通用插件"),
+            ("external_count", "外部插件：已加载 {n} 个"),
+            ("user_plugin_count", "用户安装插件：已加载 {n} 个"),
+            ("entry_point_count", "entry_points 插件：已加载 {n} 个"),
+            ("nuclei_count", "nuclei 模板：已加载 {n} 个"),
+        )
+        for key, fmt in sources:
+            count = payload.get(key)
+            if count:
+                print(f"{YELLOW}[*]{fmt.format(n=count)}{RESET}")
 
     elif event_type == "category_start":
         print(SEPARATOR)
@@ -332,7 +345,15 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
     req = _build_scan_request(mode, target, args)
     t0 = time.time()
     orch = ScanOrchestrator()
-    all_results = orch.run_sync(req, on_event=_on_event)
+    # 结论行去重：引擎按 ScanResult 统一打印「存在 / 不存在 / 无法判定」，
+    # 插件在 verify() 里 emit 的同类结论行在此静音，避免一次扫描每条结论打两遍。
+    # --debug 保留插件侧原文（排查误报特征时有用）。
+    muted_before = is_findings_muted()
+    set_findings_muted(not getattr(args, "debug", False))
+    try:
+        all_results = orch.run_sync(req, on_event=_on_event)
+    finally:
+        set_findings_muted(muted_before)
     duration = time.time() - t0
 
     target_normalized = normalize_target(target)
@@ -593,6 +614,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
         return results
 
     total = len(targets)
+
     def _progress(done, total_count, current):
         print(f"\r{YELLOW}[*]进度 [{done}/{total_count}] 当前：{current:<40}{RESET}", end="", flush=True)
 
@@ -634,6 +656,8 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
     # 显式列出失败/无结果目标，杜绝“99 个目标静默显示 0 漏洞”的观感
+    # （_scan_single 异常返回 []，与“扫完确实无漏洞”同为空——统一列入清单提示人工复核）
+    failed_targets = [t for t in targets if not results_by_target.get(t)]
     if failed_targets:
         print(f"{YELLOW}[!]以下 {len(failed_targets)} 个目标无结果（扫描失败或未发现漏洞）：{RESET}")
         for ft in failed_targets:
@@ -726,9 +750,20 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     return batch
 
 
-def final_prompt() -> None:
-    """结尾交互（保留原 input 习惯；非 tty 时自动跳过）"""
-    if not sys.stdin.isatty():
+def final_prompt(no_pause: bool = False) -> None:
+    """结尾交互（保留原 input 习惯；非 tty / CI / --no-pause 时自动跳过）
+
+    Args:
+        no_pause: CLI --no-pause 或 --ci 为真时跳过等待
+    """
+    if no_pause or not sys.stdin.isatty():
+        return
+    # Windows 的 NUL 设备（`cmd < nul`、MSYS `/dev/null`）isatty() 仍返回 True，
+    # 仅看 stdin 会在重定向场景误判为交互终端；stdout 也不是终端时同样不该停。
+    if not sys.stdout.isatty():
+        return
+    # CI 里有时仍分配了 tty（如 docker -t），此时靠环境变量兜底，避免卡住流水线
+    if os.environ.get("CI") or os.environ.get("RUOYI_SCAN_NO_PAUSE"):
         return
     try:
         input("[*]工作完毕,感谢你的使用,回车退出.../")

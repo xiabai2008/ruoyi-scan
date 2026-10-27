@@ -1,11 +1,12 @@
 # JeecgBoot 报表 SQL 注入：/jmreport/queryFieldBySql 自定义 SQL 执行（未授权 RCE 前置）
 # 存在性验证：提交只读探针 select user()，响应回显 user@host 或含 SQL 报错特征即确认
+import json
 import re
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_sql_error
+from lib.matcher import match_sql_error, parse_json_body
 from lib.reporter import emit
 from plugins.base import PluginBase
 

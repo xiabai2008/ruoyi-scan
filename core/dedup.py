@@ -169,7 +169,14 @@ class DedupReport:
 
 
 def _resolve_name(group: List[Any]) -> str:
-    """解析聚合组名称：优先取 vuln_type 中文名；否则取组内最短去括号名"""
+    """解析聚合组名称：优先取 vuln_type 中文名；否则取组内最短去括号名
+
+    单条结果的组直接沿用插件原名（可能含「（role）」「（dept）」「（路径穿越）」
+    这类区分后缀）——去括号后两个不同注入点的条目会同名，报告里无法区分。
+    去括号只在真正发生合并（多条 → 一条）时才用于收敛措辞。
+    """
+    if len(group) == 1:
+        return getattr(group[0], "name", "")
     for r in group:
         extra = getattr(r, "extra", {}) or {}
         vt = extra.get("vuln_type", "")

@@ -284,9 +284,6 @@ class ScanOrchestrator:
         """
         req = task.request
         target = normalize_target(req.target)
-        # 资源清理状态：session 在 try 内创建，必须在 finally 关闭（失败路径同样要关，
-        # 否则异常退出会泄漏连接池）
-        session: Optional[SessionManager] = None
         # 提前初始化结果列表：异常路径也要能返回失败前已收集的部分结果，
         # 而不是静默丢弃（task.results 在失败时可能尚未赋值）
         all_results: List[ScanResult] = []

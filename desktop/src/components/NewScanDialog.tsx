@@ -47,6 +47,10 @@ export function NewScanDialog() {
     api.listPlugins().then((list) => setPlugins(list)).catch(() => { /* 静默 */ });
   }, [dialogOpen, online, plugins.length]);
 
+  // 提交重入保护：disabled 只挡点击，Ctrl+Enter 会直接调 doSubmit（且 state 更新是异步的）。
+  // 必须位于提前 return 之前：Hooks 数量不得随 dialogOpen 变化，否则触发 React #310。
+  const busyRef = useRef(false);
+
   if (!dialogOpen) return null;
 
   const toggleFormat = (f: string) => {
@@ -67,8 +71,6 @@ export function NewScanDialog() {
   };
 
   // 提交重入保护：disabled 只挡点击，Ctrl+Enter 会直接调 doSubmit（且 state 更新是异步的）
-  const busyRef = useRef(false);
-
   const doSubmit = async () => {
     if (busyRef.current || submitting) return;
     const t = target.trim();

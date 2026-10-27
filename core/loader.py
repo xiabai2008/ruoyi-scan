@@ -194,7 +194,7 @@ def load_entry_point_plugins() -> List[type]:
     from common.logger import get_logger
 
     logger = get_logger(__name__)
-    result = []
+    result: List[type] = []
 
     try:
         # Python 3.8+ 使用 importlib.metadata
