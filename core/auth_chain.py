@@ -41,7 +41,7 @@ LOGIN_ERROR = "error"  # 网络异常或响应异常
 # 验证码挡住登录时的下一步动作：只报「识别失败」用户无从下手，
 # 实测（行为级靶场）没有 OCR 后端时注入/上传类全部只能停在 UNKNOWN。
 CAPTCHA_HINT = (
-    '；可执行 pip install "ruoyi-scan[ocr]" 启用 ddddocr 识别，'
+    "；可执行 pip install ddddocr 启用识别（本项目未提供 [ocr] extra），"
     '或用 --auth "cookie: JSESSIONID=..." 复用浏览器已登录会话'
 )
 

@@ -8,6 +8,7 @@ import re
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -111,6 +112,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
         ]
         requests_seen = []  # (url, code) 已拿到响应的请求
         last_200_text = None  # 最近一次 200 响应正文（用于无特征时输出判据原因）
+        auth_wall = ""  # 任一载荷被登录墙拦截：本次没测到，不能判 SAFE
         for resource in resources:
             url = join_url(target, f"/common/download/resource?resource={resource}")
             try:
@@ -120,6 +122,11 @@ class RuoyiFileReadPathPlugin(PluginBase):
                 requests_seen.append((url, 0))
                 continue
 
+            wall = login_wall_reason(resp)
+            if wall:
+                auth_wall = wall
+                requests_seen.append((url, getattr(resp, "status_code", 0)))
+                continue
             text = resp.text or ""
             code = getattr(resp, "status_code", 0)
             requests_seen.append((url, code))
@@ -147,6 +154,17 @@ class RuoyiFileReadPathPlugin(PluginBase):
 
         last_url = requests_seen[-1][0] if requests_seen else join_url(target, "/common/download/resource")
         codes = [code for _, code in requests_seen]
+
+        # 登录墙：目标要求登录才能访问下载接口，本次"没读到"不构成"不存在"
+        if auth_wall:
+            emit(no(f"任意文件读取（登录墙拦截：{auth_wall}）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=last_url,
+                evidence=f"请求被登录墙拦截（{auth_wall}），无法判定路径穿越是否存在",
+            )
 
         # 全部请求网络异常 → UNKNOWN（测不到 ≠ 安全）
         if not any(code for code in codes):

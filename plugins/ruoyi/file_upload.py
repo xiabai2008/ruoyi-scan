@@ -2,6 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -67,6 +68,18 @@ class FileUploadPlugin(PluginBase):
         except Exception as e:
             emit(no("任意文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+
+        # 登录墙（302 -> /login 或 200 登录页）：上传接口没被测到，不能判 SAFE
+        _wall = login_wall_reason(resp)
+        if _wall:
+            emit(no("任意文件上传（登录墙拦截）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"请求被登录墙拦截（{_wall}），无法判定上传接口是否可写",
+            )
 
         # 响应体文本（错误页可能非 JSON，需容错）
         text = resp.text or ""

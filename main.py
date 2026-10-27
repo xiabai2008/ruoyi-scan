@@ -35,7 +35,9 @@ def build_parser():
     # action="store_true"：值从不读取，且避免 nargs="?" 把 `-h <token>` 之后的 token 静默吞掉
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group("核心参数（向后兼容）")
-    group.add_argument("-h", dest="help", action="store_true", help="帮助")
+    # --help 是陌生用户的第一条命令，必须与 -h 等价（此前只注册 -h，argparse 报
+    # "unrecognized arguments: --help"，首用直接失败）
+    group.add_argument("-h", "--help", dest="help", action="store_true", help="帮助")
     group.add_argument("-u", metavar="target", nargs="?", const="__flag__", default=None, help="综合扫描")
     group.add_argument("-m", metavar="target", nargs="?", const="__flag__", default=None, help="目录扫描")
     group.add_argument("-p", metavar="target", nargs="?", const="__flag__", default=None, help="漏洞检测")

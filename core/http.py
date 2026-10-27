@@ -5,6 +5,18 @@ from typing import Tuple
 from urllib.parse import urlsplit
 
 
+def ensure_scheme(url: str) -> Tuple[str, bool]:
+    """缺少协议时补 http://，返回 (URL, 是否补过)。
+
+    CLI 用户常直接粘贴 "127.0.0.1:8080"，原实现会把无协议字符串交给 requests，
+    底层抛 InvalidSchema，而插件只看到"请求异常"，最终可能写出 SAFE 结论——
+    违反"网络异常绝不冒充 SAFE"。在入口处补齐协议，既修语义也改善首用体验。
+    """
+    if not url or "://" in url:
+        return url, False
+    return "http://" + url, True
+
+
 def normalize_target(url: str) -> str:
     """目标归一化：确保以 / 结尾（对齐原 self.url += '/' 逻辑）"""
     if not url:

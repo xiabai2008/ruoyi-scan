@@ -98,3 +98,22 @@ def test_resolve_name_keeps_suffix_for_single_result():
         ]
     )
     assert merged == "任意文件读取"
+
+
+def test_help_flags_are_equivalent(capsys):
+    """--help 与 -h 等价：陌生用户第一条命令不能报 unrecognized arguments"""
+    from main import main
+
+    for flag in ("-h", "--help"):
+        # -h/--help 走 print_help 后正常返回（进程退出码 0），不抛 SystemExit
+        main([flag])
+        assert "-u : 综合扫描" in capsys.readouterr().out
+
+
+def test_scheme_less_target_is_normalized():
+    """无协议目标入口补 http://（此前 requests 抛 InvalidSchema，可能写出假 SAFE）"""
+    from core.http import ensure_scheme
+
+    assert ensure_scheme("127.0.0.1:8080") == ("http://127.0.0.1:8080", True)
+    assert ensure_scheme("https://target/") == ("https://target/", False)
+    assert ensure_scheme("") == ("", False)

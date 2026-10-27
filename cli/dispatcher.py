@@ -156,6 +156,19 @@ def dispatch(args: Namespace) -> None:
             else:
                 target_for[k] = val
 
+    # 目标未带协议（如 127.0.0.1:8080）：在入口补 http://。
+    # 否则 requests 抛 InvalidSchema，插件只看到"请求异常"，可能写出 SAFE，
+    # 违反"网络异常绝不冒充 SAFE"。
+    if target_for:
+        from core.http import ensure_scheme
+        from lib.colors import YELLOW
+
+        for _k in list(target_for):
+            _fixed, _added = ensure_scheme(target_for[_k])
+            if _added:
+                print(f"{YELLOW}[*]目标未带协议，按 {_fixed} 处理{RESET}")
+            target_for[_k] = _fixed
+
     # 批量模式：-f 需配合 -u/-m/-p/-l 开关指定扫描类型，开关位的值本身无意义
     if args.file:
         mode = None

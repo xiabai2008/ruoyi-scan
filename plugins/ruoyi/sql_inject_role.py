@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
+from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -117,6 +118,17 @@ class SqlInjectRolePlugin(PluginBase):
         # 接口要求登录（401/403）或限流（429）时，本次「没测到」不等于「不存在」：
         # 审计实测（行为级若依靶场）：401 JSON 下原实现直接判 SAFE，等于把未测写成安全。
         for _label, _resp in (("基线", control_resp), ("注入", inject_resp)):
+            # 真实若依的登录墙是 302 -> /login（跟随后 200 登录页），不是 401；
+            # 命中时本次"没测到"不能写成 SAFE
+            _wall = login_wall_reason(_resp)
+            if _wall:
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=f"{_label}请求被登录墙拦截（{_wall}），无法判定注入是否存在",
+                )
             # 若依的鉴权失败是 HTTP 200 + {"code":401}，因此状态码与业务码都要看
             _why = f"HTTP {_resp.status_code}" if _resp.status_code in (401, 403, 429) else ""
             _body = (_resp.text or "")[:400]

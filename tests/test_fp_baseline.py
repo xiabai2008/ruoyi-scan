@@ -100,10 +100,7 @@ FALSE_POSITIVE_TRAPS = {
         "<p>如有疑问请联系管理员</p></body></html>"
     ),
     # 框架通用异常页：只有「运行时异常」这类泛化文案，没有任何注入证据
-    "generic_error_page": (
-        "<html><body><h1>500 Internal Server Error</h1>"
-        "<p>运行时异常，请稍后重试</p></body></html>"
-    ),
+    "generic_error_page": ("<html><body><h1>500 Internal Server Error</h1><p>运行时异常，请稍后重试</p></body></html>"),
 }
 
 
@@ -159,16 +156,19 @@ def _assert_baseline_clean(case_name: str, body: str, content_type: str = "text/
         f"这些插件需要加固判定逻辑，而不是把本用例删掉：\n  - " + "\n  - ".join(offenders)
     )
     assert not errors, (
-        f"[{case_name}] 以下插件在良性响应上抛异常（插件应容错并返回 UNKNOWN，不得抛出）：\n  - " + "\n  - ".join(errors)
+        f"[{case_name}] 以下插件在良性响应上抛异常（插件应容错并返回 UNKNOWN，不得抛出）：\n  - "
+        + "\n  - ".join(errors)
     )
 
 
+@pytest.mark.timeout(120)  # Windows CI 偶发整例超过默认 30s（requests 初始化慢），非产品问题
 @pytest.mark.parametrize("case_name,body", sorted(BENIGN_CASES.items()))
 def test_no_false_positive_on_benign_response(case_name, body):
     """良性响应：任何插件都不得判 CONFIRMED"""
     _assert_baseline_clean(case_name, body)
 
 
+@pytest.mark.timeout(120)
 @pytest.mark.parametrize("case_name,body", sorted(FALSE_POSITIVE_TRAPS.items()))
 def test_no_false_positive_on_trap_response(case_name, body):
     """误报陷阱响应：目标本身无漏洞，任何插件都不得判 CONFIRMED"""

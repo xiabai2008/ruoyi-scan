@@ -297,6 +297,16 @@ def _cli_event_handler(event_type: str, payload):
         )
         print(f"{YELLOW}[*]本次 SAFE 结论将统一降级为 UNKNOWN（三态纪律），请更换出口或加 --proxy{RESET}")
 
+    elif event_type == "auth_wall":
+        print(f"{YELLOW}[*]目标存在登录墙：{payload.get('reason', '')}（未登录访问受保护接口会跳登录页）{RESET}")
+        print(
+            f"{YELLOW}[*]登录墙下「没测到」的 SAFE 会改为 UNKNOWN；"
+            f'要拿到完整结论请用 --auth-login 或 --auth "cookie: JSESSIONID=..."{RESET}'
+        )
+
+    elif event_type == "auth_wall_downgrade":
+        print(f"{YELLOW}[*]已把 {payload.get('count', 0)} 条 SAFE 改为 UNKNOWN（登录墙，需登录后判定）{RESET}")
+
     elif event_type == "denied_downgrade":
         print(
             f"{YELLOW}[*]有 {payload.get('count', 0)} 条结论因接口返回 401/403/429 被改为 UNKNOWN"
@@ -703,7 +713,18 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     print(f"{YELLOW}[*]目标文件：{filepath}{RESET}")
 
     with open(filepath, encoding="utf-8") as f:
-        targets = [line.strip() for line in f if line.strip()]
+        raw_lines = [line.strip() for line in f]
+    # 跳过空行与 "#" 注释（usage 文档承诺 # 开头为注释），并对缺协议目标补 http://
+    from core.http import ensure_scheme
+
+    targets = []
+    for line in raw_lines:
+        if not line or line.startswith("#"):
+            continue
+        fixed, added = ensure_scheme(line)
+        if added:
+            print(f"{YELLOW}[*]目标未带协议，按 {fixed} 处理{RESET}")
+        targets.append(fixed)
     if not targets:
         print(f"{RED}[!]目标文件为空{RESET}")
         return

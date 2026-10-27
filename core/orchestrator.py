@@ -218,6 +218,8 @@ class ScanOrchestrator:
         self.last_request_count: int = 0
         # 最近一次 run_sync 的全站拦截探测结果（CLI 出报告时写进 summary）
         self.last_block_info: Dict[str, Any] = {"blocked": False}
+        # 最近一次 run_sync 的登录墙探测结果（报告与 CLI 提示用）
+        self.last_auth_wall: Dict[str, Any] = {"wall": False}
 
     def run_sync(self, req: ScanRequest, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """同步执行扫描（CLI 模式）
@@ -298,6 +300,8 @@ class ScanOrchestrator:
         all_results: List[ScanResult] = []
         # 全站拦截探测结果：SAFE 降级与报告摘要都要用；异常路径保持未拦截
         block_info: Dict[str, Any] = {"blocked": False}
+        # 登录墙探测结果（应用认证要求），异常路径保持无墙
+        auth_wall: Dict[str, Any] = {"wall": False, "reason": ""}
 
         def _emit(event_type: str, payload: Any) -> None:
             """发送事件（同时调用回调 + 通知 registry）"""
@@ -436,6 +440,16 @@ class ScanOrchestrator:
             self.last_block_info = block_info
             if block_info["blocked"]:
                 _emit("blocked", dict(block_info, task_id=task.task_id))
+
+            # 3.6 登录墙探测（应用自身认证要求，与 WAF 拦截不同）
+            # 真实 RuoYi 未认证访问受保护接口是 302 -> /login（跟随后 200 登录页），
+            # 不是 401。插件只看到 200 登录页就会把「没测到」写成 SAFE。
+            from lib.reachability import detect_auth_wall
+
+            auth_wall = detect_auth_wall(session, target)
+            self.last_auth_wall = auth_wall
+            if auth_wall["wall"]:
+                _emit("auth_wall", dict(auth_wall, task_id=task.task_id))
 
             # 4. 指纹识别
             # 性能（P1-C）：自建 FingerprintCache 交给 detect_cms，事后复用给 detect_waf，
@@ -712,12 +726,28 @@ class ScanOrchestrator:
             for cr in component_results:
                 all_results.append(to_scan_result(cr))
             # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
-            from lib.reachability import downgrade_safe_results, upgrade_denied_safe_to_unknown
+            from lib.reachability import (
+                downgrade_auth_wall_safe,
+                downgrade_safe_results,
+                upgrade_denied_safe_to_unknown,
+            )
 
             # 单接口被拒（401/403/429）：只有该接口没测到，不是"漏洞不存在"
             denied = upgrade_denied_safe_to_unknown(all_results)
             if denied:
                 _emit("denied_downgrade", {"count": denied, "task_id": task.task_id})
+
+            # 登录墙：拿到 200 登录页的 SAFE 同样是"没测到"，降级为 UNKNOWN
+            wall_downgraded = downgrade_auth_wall_safe(all_results, auth_wall)
+            if wall_downgraded:
+                _emit(
+                    "auth_wall_downgrade",
+                    {
+                        "count": wall_downgraded,
+                        "reason": auth_wall.get("reason", ""),
+                        "task_id": task.task_id,
+                    },
+                )
 
             downgraded = downgrade_safe_results(all_results, block_info)
             if downgraded:

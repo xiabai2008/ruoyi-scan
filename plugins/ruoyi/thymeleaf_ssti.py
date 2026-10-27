@@ -4,6 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -98,6 +99,7 @@ class ThymeleafSstiPlugin(PluginBase):
         # 全部无 49 判 SAFE；全部网络异常判 UNKNOWN
         got_response = False
         weak_hit = None  # (path, url, text)：记住弱命中候选
+        wall_reasons = []  # 登录墙原因：候选路径被 302/登录页拦截时，SAFE 不成立
         for path in self.CANDIDATE_PATHS:
             # Tomcat/Spring 默认会剥离 URL 路径中的裸花括号 {}，导致 __${7*7}__ 退化成
             # __$7*7__ 而失去求值能力。对探针中的特殊字符做百分号编码，使其在路径中存活，
@@ -110,6 +112,10 @@ class ThymeleafSstiPlugin(PluginBase):
                 # 网络异常不阻断，继续尝试下一个候选路径
                 continue
             got_response = True
+            _wall = login_wall_reason(resp)
+            if _wall:
+                wall_reasons.append(_wall)
+                continue
             text = resp.text or ""
             # 判定：响应含求值结果 49 且含模板引擎强特征即命中。
             # 原文反射（7*7）不再否决强命中：错误页会同时回显原始探针路径与求值后的视图名，
@@ -148,6 +154,17 @@ class ThymeleafSstiPlugin(PluginBase):
                 url=url,
                 evidence=f"响应含 {self.EVAL_RESULT} 但无模板引擎强特征，需人工复核，前 200 字节：{text[:200]}",
                 extra={"probe": path},
+            )
+
+        # 有候选路径被登录墙拦截：至少有一部分没测到，SAFE 不成立
+        if wall_reasons:
+            emit(no("Thymeleaf SSTI：候选路径被登录墙拦截，无法判定"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=join_url(target, self.CANDIDATE_PATHS[0]),
+                evidence=f"候选路径请求被登录墙拦截（{wall_reasons[0]}），无法判定模板注入是否存在",
             )
 
         # 所有候选路径均无 49 出现 → 判 SAFE（无求值迹象）
