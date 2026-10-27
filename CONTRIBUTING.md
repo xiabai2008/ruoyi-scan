@@ -100,6 +100,9 @@ class YourPlugin(PluginBase):
 - 使用 `unittest.TestCase` 或 `pytest` 风格
 - 网络请求必须用 `requests_mock` mock，不得发出真实网络请求
 - 测试命名：`test_<被测功能>_<场景>`
+- 新增或收紧 CONFIRMED 判定时，同步更新 `data/acceptance_baseline.json`
+  （`expected_confirmed` / `allowed_confirmed`）并递增基线 `version`：Nightly Acceptance
+  以基线做漏报 / 误报门禁，未同步会把正常判定报成误报
 
 ```python
 import requests_mock

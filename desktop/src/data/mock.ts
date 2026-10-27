@@ -29,7 +29,7 @@ export const overviewKpis: MockKpi[] = [
   { en: "TARGETS", value: "128", delta: "+12.3% WoW", up: true, tone: "green" as const, zh: "在管资产" },
   { en: "SCANS TODAY", value: "26", delta: "+3 DAILY", up: true, tone: "accent" as const, zh: "今日任务" },
   { en: "CONFIRMED", value: "17", delta: "+2 DAILY", up: true, tone: "red" as const, zh: "已确认漏洞" },
-  { en: "POC LOADED", value: "52", delta: "4 FRAMEWORKS", up: null, tone: "purple" as const, zh: "插件覆盖" },
+  { en: "POC LOADED", value: "54", delta: "4 FRAMEWORKS", up: null, tone: "purple" as const, zh: "插件覆盖" },
 ];
 
 export const trendDates = ["09-03", "09-04", "09-05", "09-06", "09-07", "09-08", "09-09"];
@@ -86,14 +86,14 @@ export const liveLogs: LogLine[] = [
   { time: "09:20:18", level: "confirmed", text: "CONFIRMED  common/shiro-key -> rememberMe RCE" },
   { time: "09:20:22", level: "safe", text: "SAFE      jeecgboot/jmlink-ssti -> patched" },
   { time: "09:20:26", level: "unknown", text: "UNKNOWN   spring/snakeyaml -> slow response" },
-  { time: "09:20:31", level: "route", text: "progress: 23/52 plugins · elapsed 00:12:47" },
+  { time: "09:20:31", level: "route", text: "progress: 23/54 plugins · elapsed 00:12:47" },
   { time: "09:20:33", level: "meiyi", text: "MEIYI: Druid 未授权已确认，深挖数据源配置中…" },
   { time: "09:20:38", level: "safe", text: "SAFE      ruoyi/quartz-ldap -> connection refused" },
   { time: "09:20:44", level: "unknown", text: "UNKNOWN   common/fastjson-1232 -> dnslog no echo, retry 2/3" },
   { time: "09:20:49", level: "safe", text: "SAFE      spring/gateway-spel -> patched" },
   { time: "09:20:55", level: "unknown", text: "UNKNOWN   jeecgboot/freemarker-sst -> echo blocked" },
   { time: "09:20:58", level: "route", text: "tally:   CONFIRMED 7 / SAFE 12 / UNKNOWN 4 (23 run)" },
-  { time: "09:21:00", level: "info", text: "engine:  24/52 plugins · eta 00:09:12" },
+  { time: "09:21:00", level: "info", text: "engine:  24/54 plugins · eta 00:09:12" },
 ];
 
 export const liveStats = [

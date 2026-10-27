@@ -1043,8 +1043,8 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         （nightly 自 2026-09-19 起连续 16 天假阳性即由此而来）。
         """
         self._mock_login(m)
-        m.get(MOCK_TARGET + "/system/dept/treeData/0", text="Whitelabel Error Page", status_code=404)
-        m.get(MOCK_TARGET + "/system/dept/selectDeptTree/0", text="Whitelabel Error Page", status_code=404)
+        m.get(mock_url("/system/dept/treeData/0"), text="Whitelabel Error Page", status_code=404)
+        m.get(mock_url("/system/dept/selectDeptTree/0"), text="Whitelabel Error Page", status_code=404)
         result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"端点缺失应判 UNKNOWN，实际 {result.status}")
         self.assertIn("404", result.evidence, "证据说明端点缺失原因")

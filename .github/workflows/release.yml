@@ -133,12 +133,28 @@ jobs:
             dist/*.tar.gz
             release-assets/*.zip
 
+      # 发布说明：优先采用 release-notes/<tag>.md（面向用户的版本说明）；
+      # 未提供该文件时回退 GitHub 自动生成，避免因缺文件导致发布失败
+      - name: Resolve release notes
+        id: relnotes
+        run: |
+          set -euo pipefail
+          NOTES="release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES" ]; then
+            echo "body_path=$NOTES" >> "$GITHUB_OUTPUT"
+            echo "采用发布说明: $NOTES"
+          else
+            echo "body_path=" >> "$GITHUB_OUTPUT"
+            echo "未找到 $NOTES，回退自动生成说明"
+          fi
+
       - name: Upload artifacts to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')  # 仅 tag 推送（正式发布）时上传
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           name: Release ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: ${{ steps.relnotes.outputs.body_path }}
+          generate_release_notes: ${{ steps.relnotes.outputs.body_path == '' }}
           files: |
             dist/*.whl
             dist/*.tar.gz

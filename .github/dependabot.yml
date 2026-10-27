@@ -47,3 +47,34 @@ updates:
       actions-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+  # 桌面端前端依赖（desktop/package.json + lock，React/Vite 工具链）
+  # 此前仅靠人工月度检查，npm 生态长期不升级易积累安全与兼容债
+  - package-ecosystem: npm
+    directory: "/desktop"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - desktop
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # 桌面端 Rust 壳依赖（desktop/src-tauri/Cargo.toml + lock，Tauri 主版本与前端需成对评估）
+  - package-ecosystem: cargo
+    directory: "/desktop/src-tauri"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - desktop
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

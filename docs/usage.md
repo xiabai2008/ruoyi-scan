@@ -1,6 +1,6 @@
 # Ruoyi-Scan 用户指南
 
-> 版本：1.4.3 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
+> 版本：1.5.0 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
 >
 > 本指南详细说明 Ruoyi-Scan 的安装、各扫描模式、配置、模板、WAF 绕过、利用链、报告输出、Web API、认证扫描、分布式扫描、CI/CD 集成与缓存性能优化等内容。所有示例命令均可直接复制运行。
 
@@ -34,7 +34,7 @@
 
 ## 安装方式
 
-Ruoyi-Scan 采用 PEP 621 元数据规范，提供源码安装与 Docker 安装两种方式。**核心依赖仅 `requests` 与 `requests-mock`，零系统级依赖**，其余能力通过可选依赖组按需启用。
+Ruoyi-Scan 采用 PEP 621 元数据规范，提供源码安装与 Docker 安装两种方式。**核心依赖仅 `requests`（零系统级依赖）**，`requests-mock` 仅用于测试；其余能力通过可选依赖组按需启用。
 
 ### 源码安装
 
@@ -58,6 +58,7 @@ pip install -e ".[distributed]"     # Redis 分布式扫描（master/worker）
 pip install -e ".[async]"           # aiohttp 异步 HTTP 引擎
 pip install -e ".[yaml]"            # --config YAML 配置文件支持
 pip install -e ".[lab]"             # 内置 Flask 靶场环境
+pip install -e ".[adversarial]"     # 对抗型传输层（Scrapling，约 150MB+ 浏览器二进制）
 
 # 5. 组合安装
 pip install -e ".[report,serve,yaml]"
@@ -84,7 +85,8 @@ python tests/regression_spring.py
 | `async` | 异步 HTTP 引擎（高并发场景） | `aiohttp` | 千级目标批量扫描 |
 | `yaml` | `--config` YAML 配置文件 | `pyyaml` | 复杂参数固化 |
 | `lab` | 内置 Flask 靶场（用于测试） | `flask` | 本地验证、POC 开发 |
-| `all` | 上述全部 | 全部 | 全功能体验 |
+| `adversarial` | 对抗型传输层（Scrapling 指纹伪装 / 隐身浏览器，绕过 CF/JS 挑战） | `scrapling[fetchers]`（含 playwright / patchright / curl_cffi，需另装浏览器二进制） | 目标启用 Cloudflare Turnstile / JS 挑战 |
+| `all` | 上述除 `adversarial` 外的全部 | 除 Scrapling 外 | 全功能体验（不含约 150MB+ 浏览器二进制） |
 | `dev` | 测试与开发工具 | `pytest`、`ruff`、`mypy` 等 | 贡献代码、运行测试 |
 
 ### Docker 安装
@@ -171,7 +173,8 @@ docker compose down
 | 异步扫描引擎 | `async` | `--async` |
 | YAML 配置文件 | `yaml` | `--config config.yaml` |
 | 内置靶场 | `lab` | `python -m lab.run` |
-| 全部能力 | `all` | 一键全开 |
+| 对抗型传输层 | `adversarial` | `--adversarial-transport` |
+| 其余全部能力 | `all` | 一键全开（不含 `adversarial`） |
 
 ---
 
@@ -729,6 +732,24 @@ ruoyi-scan -p http://target:8080/ --bypass-waf off
 | 9 | HTTP 参数污染 | HPP 技术（`?id=1&id=1'`） | 参数解析差异 WAF |
 | 10 | 请求方法变换 | GET ↔ POST ↔ PUT 切换 | 方法白名单 WAF |
 | 11 | 头部伪装 | 修改 `User-Agent`、`X-Forwarded-For` 等 | 基于 IP/UA 的 WAF |
+
+### 对抗型传输层（Scrapling）
+
+11 种策略作用于请求内容本身；当目标启用 Cloudflare Turnstile、JS 挑战或更强的浏览器指纹校验时，
+`--bypass-waf` 可能全部失效。此时可启用引擎级兜底：
+
+```bash
+# 1. 安装可选依赖（默认不装，含约 150MB+ 浏览器二进制）
+pip install "ruoyi-scan[adversarial]"
+
+# 2. 扫描时显式开启
+ruoyi-scan -p http://target:8080/ --adversarial-transport
+```
+
+- **能力**：Scrapling 隐身浏览器解 CF/JS 挑战 + TLS / 浏览器指纹伪装
+- **默认关闭**：不安装、不开启时零额外开销
+- **与 WAF 绕过的关系**：`--bypass-waf` 负责 payload 变形，本开关负责传输层 / 浏览器层绕过，二者可叠加
+- **判定纪律不变**：传输层只影响能否拿到响应，最终仍按 CONFIRMED / SAFE / UNKNOWN 三态判定
 
 ### 工作流程
 

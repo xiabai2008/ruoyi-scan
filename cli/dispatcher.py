@@ -177,5 +177,16 @@ def dispatch(args: Namespace) -> None:
                     sys.exit(EXIT_UNREACHABLE)
                 run_mode(k, target_for[k], args)
                 break
+    # 只给了模式开关（如裸 -p）却没有目标：明确报错并返回非 0 退出码。
+    # 此前这种调用会走完全部分支、只留一个 banner 后 exit 0，使用者以为扫过了。
+    elif flag_for:
+        from lib.colors import RED, RESET, YELLOW  # 与其余分支一致的延迟导入
 
-    final_prompt()
+        modes = "/".join(f"-{k}" for k in _MODE_ARGS if k in flag_for)
+        first_mode = next(k for k in _MODE_ARGS if k in flag_for)
+        print(f"{RED}[!]{modes} 缺少扫描目标{RESET}")
+        print(f"{YELLOW}[*]单目标: main.py -{first_mode} http://target:8080{RESET}")
+        print(f"{YELLOW}[*]批量:   main.py -f targets.txt {modes}{RESET}")
+        sys.exit(2)  # 与 argparse 参数错误一致的退出码
+
+    final_prompt(no_pause=getattr(args, "no_pause", False) or getattr(args, "ci", False))

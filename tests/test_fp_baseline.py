@@ -179,3 +179,28 @@ def test_baseline_corpus_not_empty():
     """护栏：语料被清空时本门禁会静默失效，必须显式拦截"""
     assert len(BENIGN_CASES) >= 5, "良性语料不得少于 5 条"
     assert len(FALSE_POSITIVE_TRAPS) >= 2, "误报陷阱语料不得少于 2 条"
+
+
+def test_all_plugin_files_are_registered():
+    """护栏：插件文件存在但未登记进 plugin_list（shiro_rememberme 曾因此长期不参与扫描）"""
+    import importlib
+    import inspect
+    import pkgutil
+
+    from plugins.base import PluginBase
+
+    packages = ("plugins.ruoyi", "plugins.spring", "plugins.common", "plugins.jeecgboot")
+    missing = []
+    for pkg_name in packages:
+        package = importlib.import_module(pkg_name)
+        registered = set(load_plugins(pkg_name))
+        for module_info in pkgutil.iter_modules(package.__path__):
+            if module_info.name.startswith("_"):
+                continue
+            module = importlib.import_module(f"{pkg_name}.{module_info.name}")
+            for _, cls in inspect.getmembers(module, inspect.isclass):
+                if cls is PluginBase or not issubclass(cls, PluginBase):
+                    continue
+                if cls.__module__ == module.__name__ and cls not in registered:
+                    missing.append(f"{pkg_name}.{module_info.name}:{cls.__name__}")
+    assert not missing, f"以下插件文件未登记进 plugin_list，将不参与扫描：{missing}"
