@@ -11,10 +11,10 @@
 > `pip install -U ruoyi-scan`　或　[下载单文件桌面端](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe)（双击即用，无需 Python）
 
 <p align="center">
-  <img src="docs/images/report-overview.png" alt="扫描报告：风险分布 + 等保 2.0 / OWASP 合规映射" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-overview.png" alt="扫描报告：风险分布 + 等保 2.0 / OWASP 合规映射" width="900" />
 </p>
 
-> 一次 `-p` 扫描产出的 HTML 报告（真实运行，v1.5.1，对签名靶场）：风险分布、等保 2.0 与 OWASP
+> 一次 `-p` 扫描产出的 HTML 报告（真实运行，v1.5.2，对签名靶场）：风险分布、等保 2.0 与 OWASP
 > 条款命中、20 条确认漏洞——报告本身就是可交付物，7 种格式（HTML/JSON/CSV/PDF/Word/Excel/SARIF；
 > PDF/Word/Excel 需 `pip install "ruoyi-scan[report]"`）。
 
@@ -51,17 +51,17 @@ ruoyi-scan -u http://target:8080/ --report ./reports --report-format all
 ```
 
 <p align="center">
-  <img src="docs/images/cli-demo.png" alt="命令行输出：绿色=确认存在 / 红色=确认不存在 / 黄色=无法判定" width="780" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-demo.png" alt="命令行输出：绿色=确认存在 / 红色=确认不存在 / 黄色=无法判定" width="780" />
 </p>
 
-> 真实输出（v1.5.1，对仓库内置签名靶场执行 `-p`）：每行一条结论，三态配色，末尾给出
+> 真实输出（v1.5.2，对仓库内置签名靶场执行 `-p`）：每行一条结论，三态配色，末尾给出
 > 摘要、去重统计与报告路径。本地复现：源码仓库根目录 `LAB_MODE=vuln LAB_PORT=8080 python lab/server.py`，
 > 再执行 `ruoyi-scan -p http://127.0.0.1:8080/`（pip 包不含 lab，需 clone 仓库）。
 
 ## 报告与交付
 
 <p align="center">
-  <img src="docs/images/report-findings.png" alt="报告详细结果：11 列，含证据、修复建议、修复详情、复现命令、合规映射" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-findings.png" alt="报告详细结果：11 列，含证据、修复建议、修复详情、复现命令、合规映射" width="900" />
 </p>
 
 每条结果都带：**证据**（状态码 + 命中关键字 / 回显内容）、**修复建议**、**修复详情**（nginx / Apache /
@@ -106,11 +106,18 @@ IIS 配置片段与代码改法）、**复现命令**、**合规映射**（等�
 | 形态 | 获取方式 | 说明 |
 |---|---|---|
 | pip | `pip install -U ruoyi-scan` | 推荐；可选依赖按需装（`ruoyi-scan[report,serve]`） |
-| 单文件 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan-desktop.exe` | 约 46 MB，引擎与 54 个 POC 编译期嵌入，免安装 |
+| 单文件 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan-desktop.exe` | 约 49 MB，引擎与 54 个 POC 编译期嵌入，免安装 |
 | 安装包 | `Ruoyi-Scan_*_x64-setup.exe` | NSIS 安装，含卸载清理 |
 | Docker | `docker build -t ruoyi-scan .` / `docker compose up -d` | 多阶段构建、非 root；compose 自带两个签名靶场 |
 
-桌面端为 Windows Tauri 壳，引擎子进程挂 JobObject，强杀不留孤儿进程；细节见 [docs/desktop.md](docs/desktop.md)。
+## 桌面端
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-app.png" alt="桌面端：任务列表、扫描配置、实时结果与报告" width="900" />
+</p>
+
+> Windows 单文件 exe（Tauri + WebView2）：引擎与 54 个 POC 内置，新建扫描 / 实时结果 / 报告归档在同一窗口完成。
+> 引擎子进程挂 JobObject，强杀不留孤儿进程；细节见 [docs/desktop.md](docs/desktop.md)。
 
 ## 文档
 
