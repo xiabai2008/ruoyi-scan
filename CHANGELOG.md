@@ -9,6 +9,18 @@
 ### Added
 - **桌面端质量门禁**：ESLint `react-hooks/rules-of-hooks` 静态检查（拦截条件 Hook；v1.5.0 白屏同类问题）+ 构建产物 CDP 冒烟（真实点击「新建扫描」并遍历全部导航页，捕获运行时异常）；两项均纳入 CI
 
+## [1.5.2] - 2026-10-28
+
+### Fixed
+- **三态纪律（真实生产形态）**：真实 RuoYi 4.7.8 未认证访问是 302→/login（跟随后 200 登录页）而非 401；7 个插件与统一兜底新增「登录墙」识别，SAFE 不再冒充"确认不存在"；真实 4.7.8 栈复测 16 条假 SAFE → 0
+- **SAFE 必须带证据**：插件返回空 evidence 的 SAFE 统一降级 UNKNOWN（MinIO/RocketMQ 等中间件探测此前 SAFE 无证据）
+- **批量扫描**：按文档承诺为每个目标输出独立报告（`<host_port>_<timestamp>.<ext>`），并跳过 targets.txt 中 `#` 注释；不再出现"多目标只剩一份 report.html"
+- **CLI**：`--help` 与 `-h` 等价；无协议目标自动补 `http://`；登录依赖插件不再输出「SAFE + UNKNOWN」两条矛盾结论
+- **真实栈靶场**：nginx 反代改用 `$http_host` + Spring forward-headers，修复 Shiro 302 丢端口导致真栈扫描全 UNKNOWN；smoke 验证码探针补 `?type=math`
+
+### Changed
+- **README/PyPI**：README 图片改为绝对地址，PyPI 项目页可正常渲染；新增终端与桌面端真实运行截图；文档口径（退出码 / 报告命名 / OCR 安装 / 靶场命令）按实际行为修正
+
 ## [1.5.1] - 2026-10-27
 
 ### Fixed

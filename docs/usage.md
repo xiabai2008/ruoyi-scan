@@ -1,6 +1,6 @@
 # Ruoyi-Scan 用户指南
 
-> 版本：1.5.1 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
+> 版本：1.5.2 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
 >
 > 本指南详细说明 Ruoyi-Scan 的安装、各扫描模式、配置、模板、WAF 绕过、利用链、报告输出、Web API、认证扫描、分布式扫描、CI/CD 集成与缓存性能优化等内容。所有示例命令均可直接复制运行。
 
@@ -232,6 +232,7 @@ ruoyi-scan -p http://target:8080/ --logic-scan
 - 退出码：普通扫描 0 = 扫描完成（无论是否发现漏洞）；`--ci` 模式 0=通过 / 1=发现超阈值漏洞 / 2=扫描异常；
   参数错误 = 2；目标不可达（预检失败）= 3（`EXIT_UNREACHABLE`）
 - 报告文件：根据 `--report` 与 `--report-format` 生成到指定目录
+- 三态纪律：`SAFE` 必须带判定证据；插件返回空证据的 SAFE 会被统一降级为 `UNKNOWN`（不可复核的结论不冒充"确认不存在"）
 
 ### -m 目录扫描模式
 
@@ -373,7 +374,9 @@ ruoyi-scan -f targets.txt -p --ci --severity-threshold high
 ```
 
 **批量报告**：
-- 每个目标生成独立的报告文件（命名：`<target>_<timestamp>.<ext>`）
+- 输出两层报告：
+  - 汇总：`batch_report.html` / `batch_report.csv`；
+  - 每目标：`<host_port>_<YYYYmmdd_HHMMSS>.<ext>`（格式由 `--report-format` 决定，默认 all）
 - 额外生成一份汇总报告 `summary.<ext>`，包含所有目标的漏洞统计
 - 汇总报告包含：目标总数、漏洞总数、按严重度分布、按 CMS 分布、TOP 10 漏洞类型
 
