@@ -51,6 +51,7 @@ import re
 from typing import Any
 
 from common.logger import get_logger
+from lib.colors import Finding
 
 logger = get_logger(__name__)
 
@@ -58,6 +59,27 @@ logger = get_logger(__name__)
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
 _quiet = False
+# 结论行静音开关：CLI 已按 ScanResult 统一打印结论时置 True，避免插件侧 emit 重复
+_findings_muted = False
+
+
+def set_findings_muted(muted: bool = True) -> None:
+    """切换「单条漏洞结论」静音（仅影响 ok()/no() 产生的结论行）
+
+    背景：插件在 verify() 内 emit(ok("存在xxx"))，扫描引擎随后又按 ScanResult
+    打印一行「存在{res.name}」，同一结论在终端出现两遍。CLI 侧保留引擎的
+    统一输出（字段齐全、可去重），插件侧的结论行在静音时降级为 DEBUG 日志。
+
+    Args:
+        muted: True 则丢弃插件侧结论行（进度类文案与 UNKNOWN 说明不受影响）
+    """
+    global _findings_muted
+    _findings_muted = bool(muted)
+
+
+def is_findings_muted() -> bool:
+    """当前是否处于结论行静音状态"""
+    return _findings_muted
 
 
 def set_quiet(quiet: bool = True) -> None:
@@ -95,6 +117,12 @@ def emit(*args: Any, sep: str = " ", end: str = "\n") -> None:
         sep: 多参数分隔符，同 print（静默模式下用于拼接日志文本）
         end: 行尾，同 print（仅 CLI 模式生效，静默模式忽略）
     """
+    # 结论行静音：ok()/no() 产出的整行结论在 CLI 统一打印时不再重复输出。
+    # 放在最前面判定，静音期间连字符串拼接与正则替换都省掉。
+    if _findings_muted and args and isinstance(args[0], Finding):
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(strip_ansi(sep.join(str(a) for a in args)))
+        return
     if not _quiet:
         print(*args, sep=sep, end=end)
         return
