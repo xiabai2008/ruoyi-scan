@@ -4,6 +4,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Added
+- **桌面端质量门禁**：ESLint `react-hooks/rules-of-hooks` 静态检查（拦截条件 Hook；v1.5.0 白屏同类问题）+ 构建产物 CDP 冒烟（真实点击「新建扫描」并遍历全部导航页，捕获运行时异常）；两项均纳入 CI
+
 ## [1.5.1] - 2026-10-27
 
 ### Fixed

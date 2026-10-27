@@ -369,3 +369,50 @@ jobs:
           python scripts/run_e2e.py --target http://127.0.0.1:8080/ \
             --mode p --report-dir /tmp/e2e/real-ruoyi \
             --name real-ruoyi --min-confirmed 5 --timeout 120
+
+  # 桌面端质量门禁 A：React Hooks 静态检查
+  # v1.5.0 的「新建扫描」白屏（useRef 位于提前 return 之后 → React #310）tsc/vite 均无法发现，
+  # 该规则可在静态阶段直接拦截同类条件 Hook。
+  desktop-lint:
+    name: Desktop Lint (react-hooks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+
+  # 桌面端质量门禁 B：构建产物 CDP 冒烟
+  # 加载 dist 后真实点击「新建扫描」并遍历全部导航页；任何未捕获异常/React 控制台错误即失败。
+  desktop-ui-smoke:
+    name: Desktop UI Smoke (CDP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npm run smoke:ui
+      - name: Upload UI smoke failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ui-smoke-failure
+          path: ${{ runner.temp }}/ruoyi-ui-smoke-failure.png
+          if-no-files-found: ignore
