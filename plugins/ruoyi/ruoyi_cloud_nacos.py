@@ -96,13 +96,30 @@ class RuoyiCloudNacosPlugin(PluginBase):
                     evidence="Nacos 配置泄露签名",
                     fix=self.fix,
                 )
+            # 真实 Nacos 单条配置接口（GET /nacos/v1/cs/configs?dataId=&group=）返回的是
+            # 配置**正文**（text/yaml），不是 JSON 信封——只认 pageItems 会漏掉这类真实泄露。
+            raw = resp.text or ""
+            low = raw.lower()
+            if resp.status_code == 200 and "json" not in ct and 0 < len(raw) < 100_000:
+                if any(k in low for k in ("spring.datasource", "spring:", "druid", "password:")):
+                    return ScanResult(
+                        kind=self.category,
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=url,
+                        evidence="Nacos 配置接口返回明文配置正文（含 spring.datasource/password 等关键字）",
+                        fix=self.fix,
+                    )
             return ScanResult(
                 kind=self.category,
                 name=self.name,
                 severity=self.severity,
                 status=STATUS_SAFE,
                 url=url,
-                evidence=f"状态码={resp.status_code}",
+                # 只写「状态码=200」对读者没有信息量：必须说明缺了什么特征，否则看不出是
+                # 「接口不存在」还是「接口在但没有配置结构」
+                evidence=f"状态码={resp.status_code}，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字",
             )
         except Exception as e:
             return ScanResult(kind="error", name=self.name, status=STATUS_UNKNOWN, evidence=f"异常: {e}")

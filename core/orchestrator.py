@@ -123,6 +123,8 @@ class ScanRequest:
     nuclei_tags: Optional[List[str]] = None
     nuclei_severity: Optional[List[str]] = None
     nuclei_exclude_tags: Optional[List[str]] = None
+    # 单目标时间预算（秒）：0=不限制。慢站/限速站点上用于避免「看起来卡死」
+    time_budget: float = 0.0
     # 方案 A：对抗型传输层（--adversarial-transport 启用；默认关闭，向后兼容）
     # 开启后 WAF 绕过编排器会把 L5 引擎策略（Scrapling 指纹/隐身浏览器）作为
     # 兜底追加到尝试序列，用于突破 Cloudflare Turnstile/Interstitial 等 JS 挑战。
@@ -211,6 +213,11 @@ class ScanOrchestrator:
         self.registry = registry
         self._pool: Optional[Any] = None  # 懒加载线程池（API 模式，_DaemonThreadPoolExecutor）
         self._pool_lock = threading.Lock()
+        # 最近一次 run_sync 的实际请求数：session 在 _run 内部已关闭，调用方拿不到
+        # session.request_count，报告里只能写 0。此处留一个只读快照供 CLI 出报告用。
+        self.last_request_count: int = 0
+        # 最近一次 run_sync 的全站拦截探测结果（CLI 出报告时写进 summary）
+        self.last_block_info: Dict[str, Any] = {"blocked": False}
 
     def run_sync(self, req: ScanRequest, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """同步执行扫描（CLI 模式）
@@ -220,14 +227,16 @@ class ScanOrchestrator:
             on_event: 事件回调（None 则无事件输出）
 
         Returns:
-            扫描结果列表
+            扫描结果列表（实际请求数见 self.last_request_count）
         """
         task = ScanTask(
             task_id=uuid.uuid4().hex[:12],
             request=req,
             started_at=time.time(),
         )
-        return self._run(task, on_event)
+        results = self._run(task, on_event)
+        self.last_request_count = task.request_count
+        return results
 
     def submit(self, req: ScanRequest) -> str:
         """异步提交扫描任务（API 模式），返回 task_id
@@ -287,6 +296,8 @@ class ScanOrchestrator:
         # 提前初始化结果列表：异常路径也要能返回失败前已收集的部分结果，
         # 而不是静默丢弃（task.results 在失败时可能尚未赋值）
         all_results: List[ScanResult] = []
+        # 全站拦截探测结果：SAFE 降级与报告摘要都要用；异常路径保持未拦截
+        block_info: Dict[str, Any] = {"blocked": False}
 
         def _emit(event_type: str, payload: Any) -> None:
             """发送事件（同时调用回调 + 通知 registry）"""
@@ -381,7 +392,11 @@ class ScanOrchestrator:
                 timeout=req.timeout,
                 pool_size=req.threads,
             )
-            engine = ScanEngine(threads=req.threads, rate=req.rate)
+            engine = ScanEngine(
+                threads=req.threads,
+                rate=req.rate,
+                deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
+            )
 
             # D26：认证扫描增强（将 auth 配置注入 session）
             if req.auth:
@@ -410,6 +425,17 @@ class ScanOrchestrator:
             if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
                 selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
             session.password_dict = selected_password_dict
+
+            # 3.5 全站拦截探测（WAF / 网关 / 认证墙）
+            # 站点被统一拒绝时，每个插件拿到的都是同一个 403，按插件自身逻辑会落到
+            # 「没命中 = 不存在」，报告会写出「N 项确认不存在」——比漏报更危险的假安全感。
+            # 这里先识别拦截状态，插件跑完后再把 SAFE 统一降级为 UNKNOWN。
+            from lib.reachability import detect_blocked
+
+            block_info = detect_blocked(session, target)
+            self.last_block_info = block_info
+            if block_info["blocked"]:
+                _emit("blocked", dict(block_info, task_id=task.task_id))
 
             # 4. 指纹识别
             # 性能（P1-C）：自建 FingerprintCache 交给 detect_cms，事后复用给 detect_waf，
@@ -685,6 +711,25 @@ class ScanOrchestrator:
             # E2：组件检测结果并入任务结果（报告统计口径：vuln 类 CONFIRMED 计入）
             for cr in component_results:
                 all_results.append(to_scan_result(cr))
+            # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
+            from lib.reachability import downgrade_safe_results, upgrade_denied_safe_to_unknown
+
+            # 单接口被拒（401/403/429）：只有该接口没测到，不是"漏洞不存在"
+            denied = upgrade_denied_safe_to_unknown(all_results)
+            if denied:
+                _emit("denied_downgrade", {"count": denied, "task_id": task.task_id})
+
+            downgraded = downgrade_safe_results(all_results, block_info)
+            if downgraded:
+                _emit(
+                    "blocked_downgrade",
+                    {
+                        "count": downgraded,
+                        "status": block_info.get("status", 0),
+                        "reason": block_info.get("reason", ""),
+                        "task_id": task.task_id,
+                    },
+                )
             task.results = all_results
             # session 关闭统一放到 finally（成功/失败路径共用，避免泄漏）
 
@@ -709,6 +754,7 @@ class ScanOrchestrator:
                         "matched": fp_result.matched,
                     },
                     "version_matrix": version_matrix,
+                    "blocked": block_info,
                 }
                 builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
                 formats = self._parse_formats(req.report_format)

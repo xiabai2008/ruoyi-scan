@@ -1,7 +1,9 @@
 # 目录扫描：读 ruoyi.txt 字典，逐条 GET 并打印 响应码/标题/长度/最终 URL
+import logging
 import re
 from typing import Dict
 
+from common.logger import get_logger
 from common.models import STATUS_UNKNOWN, ScanResult
 from config import settings
 from core.http import join_url
@@ -9,10 +11,17 @@ from lib.colors import GREEN, RED, RESET, YELLOW
 from lib.reporter import emit
 from plugins.base import PluginBase
 
+logger = get_logger(__name__)
+
 # 请求异常消息里的 URL 匹配：requests 把请求地址内嵌在异常文本中（形如
 # "... Max retries exceeded with url: /acm"），去重键必须先剥离它，否则每条路径
 # 都是「新原因」，去重形同虚设。
 _URL_IN_MSG_RE = re.compile(r"(with url:)\s*[^\s)]+|(url=)\S+|https?://[^\s）)]+")
+
+
+def _debug_detail_enabled() -> bool:
+    """--debug（DEBUG 级日志）时才输出目录扫描的全量明细"""
+    return logger.isEnabledFor(logging.DEBUG)
 
 
 class DirectoryScanPlugin(PluginBase):
@@ -79,6 +88,7 @@ class DirectoryScanPlugin(PluginBase):
             )
 
         fail_reasons: Dict[str, int] = {}
+        skipped = 0  # 非 2xx 且无标题的条数（明细不打印，仅计数）
         for path in path_list:
             url = join_url(target, path)
             try:
@@ -109,17 +119,26 @@ class DirectoryScanPlugin(PluginBase):
                 code = f"{GREEN}{code}{RESET}"
             else:
                 code = f"{RED}{code}{RESET}"
+            # 状态码数值化：明细过滤与命中收集共用（原实现只在命中收集处定义）
+            code_num = int(response.status_code) if str(response.status_code).isdigit() else 0
             # 行格式严格保留（[*] 前缀 + 黄色字段标签）
-            emit(
-                f"[*]{YELLOW}响应:[{code}{YELLOW}] -> 标题:[{title}{YELLOW}] -> 长度:[{GREEN}{len(text)}{YELLOW}] -> {response.request.url}{RESET}"
-            )
+            # 逐条明细只在「像是有东西」时打印：2xx/3xx 或解析出真实标题。
+            # 之前 404 也逐条打印，实测对签名靶场一次 -u 就刷出 700+ 行（其中 690 条
+            # 是 404），既淹没真正的命中，也让日志文件失去检索价值。
+            # --debug 下保留全量明细（排查软 404 / 兜底路由时需要）。
+            interesting = 200 <= code_num < 400 or has_real_title
+            if interesting or _debug_detail_enabled():
+                emit(
+                    f"[*]{YELLOW}响应:[{code}{YELLOW}] -> 标题:[{title}{YELLOW}] -> 长度:[{GREEN}{len(text)}{YELLOW}] -> {response.request.url}{RESET}"
+                )
+            else:
+                skipped += 1
             # 收集 2xx / 3xx / 解析出真实标题的条目供报告
             # 修正：原条件用 `"20" in str(status_code)` 做子串匹配，会把 420 / 520 / 1200
             # 等非 2xx 状态码一并判为可用，现改为真正的状态码区间判断。
             # 遗留风险：软 404 页面通常带 <title>，仍会因「有真实标题」被收录，
             # 需要配合响应长度基线判别，勿仅凭 hits 数量判断目录泄露面。
-            code_num = int(response.status_code) if str(response.status_code).isdigit() else 0
-            if 200 <= code_num < 400 or has_real_title:
+            if interesting:
                 hits.append(
                     {
                         "url": response.request.url,
@@ -127,6 +146,10 @@ class DirectoryScanPlugin(PluginBase):
                         "length": len(text),
                     }
                 )
+        if skipped:
+            emit(
+                f"{YELLOW}[*]目录扫描：{len(path_list)} 条路径，{len(hits)} 条命中（{skipped} 条非 2xx 明细已省略，--debug 查看）{RESET}"
+            )
         evidence = f"扫描 {len(path_list)} 条，命中 {len(hits)} 条"
         if fail_reasons:
             # 失败原因进 evidence：目标不可用时命中性判断失去意义，报告需能自证这一点

@@ -180,20 +180,27 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertEqual(len(plugins), 18, f"4.2.0 应跑全部 18 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_7_8(self):
-        """4.7.8 版本：应过滤掉 <4.6 和 <4.7 的 POC（6 个），只跑全版本的（10 个）"""
+        """4.7.8：只过滤真实已修的 3 个（文件读取×2、定时任务调用目标）
+
+        依据 lab/REAL-RUOYI.md（真实 4.7.8 实测）：报错注入 role/dept、任意文件上传、
+        定时任务 RCE 未授权在 4.7.8 上均为 CONFIRMED；路径穿越类为 SAFE。
+        此前把注入/上传也标成 <4.7，导致真实 4.7.8 目标上这些 POC 被版本过滤直接跳过。
+        """
         fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        # 4.7.8 应过滤掉 sql_inject_role/dept(2) + file_read/file_read_path(2) +
-        # file_upload + job_rce + file_read_time(3) = 7 个，剩 9 个全版本
-        # 实际：affected_versions=<4.7 的有 sql_inject_role/dept/file_read/file_read_path/file_upload/job_rce/file_read_time = 7 个
-        self.assertEqual(len(plugins), 11, f"4.7.8 应过滤掉 7 个 <4.7 的 POC，剩 11 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 15, f"4.7.8 应过滤掉 3 个已修 POC，剩 15 个，实际 {len(plugins)}")
 
     def test_filter_by_version_4_6_0(self):
-        """4.6.0 版本：<4.6 的 POC 被过滤（sql_inject_role/dept），<4.7 的保留"""
+        """4.6.0：全部 POC 适用（注入/上传/任务 RCE 已按源码复核取消上界）"""
         fp = FingerprintResult(cms="ruoyi", version="4.6.0", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        # 4.6.0 应过滤掉 sql_inject_role/dept(2)，剩 14 个
-        self.assertEqual(len(plugins), 16, f"4.6.0 应过滤掉 2 个 <4.6 的 POC，剩 16 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 18, f"4.6.0 应跑全部 18 个 POC，实际 {len(plugins)}")
+
+    def test_filter_by_version_4_8_3(self):
+        """4.8.3：源码复核确认注入/上传/任务 RCE 仍适用（13 个），仅越权/路径类被过滤"""
+        fp = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=[])
+        plugins = Router().resolve(fp)
+        self.assertEqual(len(plugins), 13, f"4.8.3 应跑 13 个 POC，实际 {len(plugins)}")
 
     def test_no_version_runs_all(self):
         """版本未识别 → 跑全部 POC（保守策略）"""
@@ -206,10 +213,10 @@ class TestRouterVersionFilter(unittest.TestCase):
         fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
         plugin_names = [cls.name for cls in plugins]
-        # 4.7.8 不应跑的 POC
-        self.assertNotIn("POST型报错注入（role）", plugin_names)
-        self.assertNotIn("第二种POST型报错注入（dept）", plugin_names)
-        self.assertNotIn("任意文件上传漏洞", plugin_names)
+        # 4.7.8 不该跑的：仅真实已修的三类（REAL-RUOYI.md 实测 SAFE）
+        self.assertNotIn("任意文件读取", plugin_names)
+        self.assertNotIn("任意文件读取（路径穿越）", plugin_names)
+        self.assertNotIn("定时任务调用目标未校验", plugin_names)
         # 4.7.8 应跑的 POC
         self.assertIn("Thymeleaf/SpEL 模板注入", plugin_names)
 

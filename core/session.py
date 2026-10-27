@@ -161,6 +161,10 @@ class SessionManager:
         _retry = Retry(
             total=max_retries,
             backoff_factor=0.3,
+            # 不尊重 Retry-After：限速站点常回 `429 + Retry-After: 30`，按它睡眠会让
+            # 每次请求卡 30s、整站扫描从秒级变成"永不结束"（chaos ratelimit 实测 300s 超时）。
+            # 扫描器的正确姿势是快速失败并把结论落成 UNKNOWN，而不是陪站点一起等。
+            respect_retry_after_header=False,
             # 仅重试网关/服务不可用错误（502/503/504），
             # 不重试 500（应用错误可能包含漏洞证据，如 SQL 报错注入）
             status_forcelist=(502, 503, 504),

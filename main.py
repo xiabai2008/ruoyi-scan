@@ -62,6 +62,13 @@ def build_parser():
     group.add_argument(
         "--timeout", type=int, default=settings.TIMEOUT, help=f"请求超时秒数（默认 {settings.TIMEOUT}s）"
     )
+    group.add_argument(
+        "--time-budget",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="单目标扫描时间预算；超出后剩余插件标记为 UNKNOWN（默认 0 = 不限制）",
+    )
     group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")

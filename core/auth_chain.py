@@ -38,6 +38,13 @@ LOGIN_CAPTCHA = "captcha"  # 验证码错误（换图重试有意义）
 LOGIN_CAPTCHA_INFRA = "captcha_infra"  # 验证码接口/OCR 后端故障（换图重试无意义，不重试）
 LOGIN_ERROR = "error"  # 网络异常或响应异常
 
+# 验证码挡住登录时的下一步动作：只报「识别失败」用户无从下手，
+# 实测（行为级靶场）没有 OCR 后端时注入/上传类全部只能停在 UNKNOWN。
+CAPTCHA_HINT = (
+    '；可执行 pip install "ruoyi-scan[ocr]" 启用 ddddocr 识别，'
+    '或用 --auth "cookie: JSESSIONID=..." 复用浏览器已登录会话'
+)
+
 
 @contextmanager
 def isolated_auth_session(
@@ -251,7 +258,10 @@ class RuoYiAuthChain:
                     else:
                         # 接口在但拿不到可识别图片（后端不可用/空图）：基础设施故障，
                         # 换图重试无意义，用独立原因避免 login() 5 次空转
-                        return False, f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name})"
+                        return (
+                            False,
+                            f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name}){CAPTCHA_HINT}",
+                        )
             except Exception as e:
                 return False, f"{LOGIN_CAPTCHA_INFRA}: 探测异常 {e}"
         elif captcha_code:
@@ -344,7 +354,10 @@ class RuoYiAuthChain:
                     if code:
                         validate_code = code
                     else:
-                        return False, f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name})"
+                        return (
+                            False,
+                            f"{LOGIN_CAPTCHA_INFRA}: 接口存在但识别失败(后端={solver.backend_name}){CAPTCHA_HINT}",
+                        )
             except Exception as e:
                 return False, f"{LOGIN_CAPTCHA_INFRA}: 探测异常 {e}"
         elif captcha_code:

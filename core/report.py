@@ -184,6 +184,8 @@ class ReportBuilder:
             "fingerprint": self.summary.get("fingerprint", {}),
             # E3：版本对照矩阵（检测版本 vs 插件适用性，无版本识别时为空列表）
             "version_matrix": self.summary.get("version_matrix", []),
+            # 全站拦截标记：消费者（CI/看板/交付报告）据此判断"未知"是否来自拦截
+            "blocked": self.summary.get("blocked", {}),
             "risk_distribution": dist,
             "vuln_count": dist["total"],
             "results": [r.to_dict() for r in self._effective_results()],
@@ -349,7 +351,7 @@ class ReportBuilder:
                 f'<td class="sev-{r.severity}"><span class="badge" style="background:{color}">{html_module.escape(sev_text)}</span></td>'
                 f"<td>{html_module.escape(r.name)}</td>"
                 f'<td class="url">{html_module.escape(r.url)}</td>'
-                f"<td>{html_module.escape(status_cn)}</td>"
+                f'<td class="status">{html_module.escape(status_cn)}</td>'
                 f'<td class="cve">{cve_text}</td>'
                 f'<td class="cvss">{cvss_text}</td>'
                 f'<td class="evidence">{html_module.escape(r.evidence)}{bypass_badge}</td>'
@@ -384,6 +386,20 @@ class ReportBuilder:
                 '<input type="checkbox" id="filter-confirmed" checked onchange="toggleFilter()">'
                 " 仅显示确认存在的漏洞（隐藏 不存在/未知 行）"
                 "</label></div>"
+            )
+
+        # 全站拦截横幅：报告里「N 项确认不存在」必须配一句"其实没测到"，
+        # 否则读者（尤其是拿报告去交付的安服）会把拦截当成"系统很干净"
+        blocked_html = ""
+        block = (self.summary or {}).get("blocked") or {}
+        if block.get("blocked"):
+            blocked_html = (
+                '<div style="background:#fdecea;border:1px solid #d9534f;color:#a94442;'
+                'padding:10px 14px;border-radius:4px;margin:12px 0;font-size:13px">'
+                f"<b>⚠ 目标疑似被全站拦截</b>：{html_module.escape(str(block.get('reason', '')))}"
+                f"（probe HTTP {block.get('status', 0)} / root HTTP {block.get('root_status', 0)}）。"
+                "本次 SAFE 结论已统一降级为 UNKNOWN——报告里出现大量「未知」不是工具故障，"
+                "而是目标没有给出可判定的响应。</div>"
             )
 
         # 阶段六：风险分布环形图（纯 SVG，零外部依赖）
@@ -430,14 +446,17 @@ class ReportBuilder:
   .risk-medium {{ background: #f0ad4e; }}
   .risk-low {{ background: #5cb85c; }}
   table {{ width: 100%; border-collapse: collapse; background: #fff; }}
+  /* 11 列表格在窄屏会溢出：容器内横向滚动，避免「修复详情/复现命令」被裁掉 */
+  .table-wrap {{ width: 100%; overflow-x: auto; }}
   th, td {{ border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 13px; }}
   th {{ background: #2c3e50; color: #fff; }}
   tr:nth-child(even) {{ background: #f9f9f9; }}
+  td.status {{ white-space: nowrap; }}
   td.url {{ word-break: break-all; color: #2980b9; font-family: Consolas, monospace; }}
-  td.evidence {{ font-family: Consolas, monospace; font-size: 12px; color: #c0392b; }}
+  td.evidence {{ font-family: Consolas, monospace; font-size: 12px; color: #c0392b; width: 240px; overflow-wrap: anywhere; }}
   td.fix {{ color: #27ae60; }}
-  td.fix-detail {{ color: #27ae60; font-size: 12px; white-space: pre-wrap; max-width: 360px; }}
-  td.reproduce {{ font-family: Consolas, monospace; font-size: 11px; color: #2c3e50; background: #f8f9fa; white-space: pre-wrap; max-width: 360px; }}
+  td.fix-detail {{ color: #27ae60; font-size: 12px; white-space: pre-wrap; width: 320px; overflow-wrap: anywhere; }}
+  td.reproduce {{ font-family: Consolas, monospace; font-size: 11px; color: #2c3e50; background: #f8f9fa; white-space: pre-wrap; width: 260px; overflow-wrap: anywhere; }}
   td.cve {{ font-family: Consolas, monospace; font-size: 11px; color: #8e44ad; }}
   td.cvss {{ font-family: Consolas, monospace; font-size: 12px; font-weight: bold; text-align: center; }}
   td.compliance {{ font-size: 11px; color: #555; }}
@@ -469,6 +488,7 @@ function toggleFilter() {{
   <span><b>耗时：</b>{duration:.2f} 秒</span>
   <span><b>请求数：</b>{req_count}</span>
 </div>
+{blocked_html}
 <h2>风险分布（仅统计确认存在的漏洞）</h2>
 <div>
   <span class="risk-box risk-high">高 {dist["high"]}</span>
@@ -481,6 +501,7 @@ function toggleFilter() {{
 {version_html}
 {compliance_html}
 <h2>详细结果</h2>
+<div class="table-wrap">
 <table>
   <thead>
     <tr>
@@ -491,6 +512,7 @@ function toggleFilter() {{
 {rows}
   </tbody>
 </table>
+</div>
 <div class="footer">由 Ruoyi-Scan 自动生成 · 仅用于授权范围内的安全测试 · 觉得有用？<a href="{REPO_URL}" target="_blank" rel="noopener">给个 Star ★</a></div>
 </body>
 </html>"""

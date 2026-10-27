@@ -73,7 +73,6 @@ class SwaggerLeakPlugin(PluginBase):
         "/doc.html",
         "/api-docs",
         "/api.html",
-        "/druid/index.html",  # Druid 监控（也属于信息泄露类）
     ]
 
     # 统一小写后匹配（大小写不敏感）；Swagger/OpenAPI/swagger-ui/'"swagger"' 等重复或被包含项已去重
@@ -82,8 +81,6 @@ class SwaggerLeakPlugin(PluginBase):
         "openapi",
         "api-docs",
         "knife4j",
-        # Druid 监控页不含 swagger/openapi 等词，必须自带关键字否则 /druid/index.html 永不命中
-        "druid",
     ]
 
     def verify(self, target, session) -> ScanResult:
@@ -145,5 +142,5 @@ class SwaggerLeakPlugin(PluginBase):
             severity=self.severity,
             status=STATUS_SAFE,
             url=target,
-            evidence="未发现公开的 Swagger/Druid API 文档",
+            evidence="未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
         )

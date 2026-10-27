@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 class ScanEngine:
     """插件执行引擎：同步或并发运行插件，可选限速"""
 
-    def __init__(self, threads: int = 1, rate: int = 0) -> None:
+    def __init__(self, threads: int = 1, rate: int = 0, deadline: Optional[float] = None) -> None:
         """初始化扫描引擎
 
         Args:
@@ -26,9 +26,13 @@ class ScanEngine:
             rate: 每秒插件启动数上限（0=不限速，令牌桶实现见 _rate_limit）。
                 注意：这是插件级限速，不是逐 HTTP 请求限速——单个插件内部发出
                 的多个请求不受此约束
+            deadline: time.monotonic() 口径的截止时间；超过后不再启动新插件，
+                直接给 UNKNOWN。用于慢站/被限速目标（chaos slow 实测：2–5s/请求的
+                站点会让一次 -p 跑过 5 分钟，操作者以为卡死）。None = 不限制
         """
         self.threads = max(1, threads)
         self.rate = rate  # 每秒插件启动数上限，0 表示不限速
+        self.deadline = deadline  # 单目标时间预算截止点（monotonic）
         self._timestamps: List[float] = []  # 令牌桶：最近 1 秒内的插件启动时间戳
         self._rate_lock = threading.Lock()  # 保护 _rate_limit 的互斥锁（多线程安全）
 
@@ -54,6 +58,14 @@ class ScanEngine:
         results = []
 
         def _exec(cls: type) -> ScanResult:
+            # 时间预算：慢站/被限速时宁可留 UNKNOWN，也不要让整次扫描无限拖长
+            if self.deadline is not None and time.monotonic() > self.deadline:
+                return ScanResult(
+                    kind="info",
+                    name=getattr(cls, "name", cls.__name__),
+                    status=STATUS_UNKNOWN,
+                    evidence="超出扫描时间预算（--time-budget），本项未执行",
+                )
             # 执行前限速（单线程和多线程统一走此路径，线程安全）
             self._rate_limit()
             try:

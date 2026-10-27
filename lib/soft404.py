@@ -129,10 +129,13 @@ class Soft404Baseline:
         probe_path = f"/{_PROBE_PREFIX}_{token}/does-not-exist-{token}.txt"
         try:
             resp = session.get(join_url(target, probe_path))
-        except Exception:
+        except Exception as e:
             # 记录失败原因：degraded 后 looks_like_real_file() 会退化为纯状态码判定，
-            # 必须让操作者能区分「站点无兜底路由」与「基线探测本身失败」
-            logger.warning("软 404 基线探测失败（%s），退化为纯状态码判定", probe_path, exc_info=True)
+            # 必须让操作者能区分「站点无兜底路由」与「基线探测本身失败」。
+            # 不打 traceback：重定向环 / 超时等都是**预期内的目标异常**，整栈回溯会
+            # 让使用者以为工具崩了（审计实测：一个 302 循环刷出两屏 Traceback）。
+            logger.warning("软 404 基线探测失败（%s）：%s: %s", probe_path, type(e).__name__, e)
+            logger.debug("软 404 基线探测异常详情", exc_info=True)
             return cls(reachable=False, probe_path=probe_path)
         body = getattr(resp, "content", None) or b""
         return cls(

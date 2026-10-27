@@ -126,6 +126,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         rate=args.rate,
         proxy=getattr(args, "proxy", "") or "",
         timeout=args.timeout,
+        time_budget=getattr(args, "time_budget", 0.0) or 0.0,
         debug=getattr(args, "debug", False),
         report_dir="",  # CLI 自行处理报告（含基线/差异/通知等后处理）
         report_format=getattr(args, "report_format", "all") or "all",
@@ -288,6 +289,23 @@ def _cli_event_handler(event_type: str, payload):
             if count:
                 print(f"{YELLOW}[*]{fmt.format(n=count)}{RESET}")
 
+    elif event_type == "blocked":
+        # 全站拦截：必须在扫描一开始就让操作者看见，否则报告里的「不存在」会被误读
+        print(
+            f"{RED}[!]目标疑似被 WAF / 网关全站拦截：{payload.get('reason', '')}"
+            f"（probe={payload.get('status', 0)} root={payload.get('root_status', 0)}）{RESET}"
+        )
+        print(f"{YELLOW}[*]本次 SAFE 结论将统一降级为 UNKNOWN（三态纪律），请更换出口或加 --proxy{RESET}")
+
+    elif event_type == "denied_downgrade":
+        print(
+            f"{YELLOW}[*]有 {payload.get('count', 0)} 条结论因接口返回 401/403/429 被改为 UNKNOWN"
+            f"（未登录/无权限，不能算「不存在」）{RESET}"
+        )
+
+    elif event_type == "blocked_downgrade":
+        print(f"{YELLOW}[*]已把 {payload.get('count', 0)} 条 SAFE 降级为 UNKNOWN（全站拦截，无有效响应）{RESET}")
+
     elif event_type == "category_start":
         print(SEPARATOR)
 
@@ -397,7 +415,8 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         summary = {
             "started_at": started_at,
             "duration": duration,
-            "request_count": 0,  # orchestrator 已关闭 session，此处用 0（报告中美化展示）
+            "request_count": getattr(orch, "last_request_count", 0),
+            "blocked": getattr(orch, "last_block_info", {}),
             "mode": report_label,
             "version_matrix": version_matrix,
             "fingerprint": {

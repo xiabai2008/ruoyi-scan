@@ -35,8 +35,12 @@ class SqlInjectRolePlugin(PluginBase):
         "\n"
         '# 预期响应：HTTP 500 + 响应体含 "运行时异常" 或 "database()" 报错特征'
     )
-    # D2：params[dataScope] 注入在 4.6.0 已修复
-    affected_versions = ">=4.0,<4.6"
+    # 版本范围（源码复核 4.6.2–4.8.3）：SysRoleController.list 没有 @DataScope 注解，
+    # DataScopeAspect.clearDataScope 不会执行，外部传入的 params[dataScope] 会原样进入
+    # SysRoleMapper 的 ${params.dataScope} —— 该注入在 4.8.3 上仍然成立。
+    # 原范围 <4.6 会把真实 4.7.8/4.8.x 目标直接跳过（版本过滤反而造成漏报）。
+    # 依据：lab/version_matrix/src/v4.8.3 源码 + lab/REAL-RUOYI.md（4.7.8 实测 CONFIRMED）。
+    affected_versions = ">=4.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"
@@ -95,8 +99,10 @@ class SqlInjectRolePlugin(PluginBase):
         control_data = dict(data)
         control_data["params[dataScope]"] = ""
         try:
-            control_text = session.post(url, headers=headers, data=control_data).text
-            inject_text = session.post(url, headers=headers, data=data).text
+            control_resp = session.post(url, headers=headers, data=control_data)
+            inject_resp = session.post(url, headers=headers, data=data)
+            control_text = control_resp.text
+            inject_text = inject_resp.text
         except Exception as e:
             emit(no("POST型报错注入（role，网络异常）"))
             return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
@@ -108,6 +114,23 @@ class SqlInjectRolePlugin(PluginBase):
         #   历史缺陷一：原判定 `'database()' in text` 会因响应回显载荷原文（载荷里就含
         #     database() 字面量）而自证命中；
         #   历史缺陷二：仅比对单次响应，无法排除「目标任何请求都返回同一张错误页」的情形。
+        # 接口要求登录（401/403）或限流（429）时，本次「没测到」不等于「不存在」：
+        # 审计实测（行为级若依靶场）：401 JSON 下原实现直接判 SAFE，等于把未测写成安全。
+        for _label, _resp in (("基线", control_resp), ("注入", inject_resp)):
+            # 若依的鉴权失败是 HTTP 200 + {"code":401}，因此状态码与业务码都要看
+            _why = f"HTTP {_resp.status_code}" if _resp.status_code in (401, 403, 429) else ""
+            _body = (_resp.text or "")[:400]
+            if not _why and any(f'"code": {c}' in _body or f'"code":{c}' in _body for c in ("401", "403", "429")):
+                _why = "业务码 401/403/429（认证失败）"
+            if _why:
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=f"{_label}请求被拒绝（{_why}），无法判定注入是否存在",
+                )
+
         STRONG_SIG = "XPATH syntax error"
         WEAK_SIG = "运行时异常"
         # 载荷回显特征：出现即说明请求被原样回显（WAF 拦截页 / 框架调试页）
@@ -167,4 +190,10 @@ class SqlInjectRolePlugin(PluginBase):
                 ),
             )
         emit(no("不存在POST型报错注入"))
-        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+        )

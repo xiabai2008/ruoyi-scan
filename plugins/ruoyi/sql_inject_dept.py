@@ -38,8 +38,12 @@ class SqlInjectDeptPlugin(PluginBase):
         "\n"
         '# 预期响应：HTTP 500 + 响应体含 "XPATH syntax error"（extractvalue 求值报错特征），或差分命中的 "运行时异常"'
     )
-    # D2：params[dataScope] 注入在 4.6.0 已修复
-    affected_versions = ">=4.0,<4.6"
+    # 版本范围（源码复核 4.6.2–4.8.3）：SysDeptController.list 没有 @DataScope 注解，
+    # DataScopeAspect.clearDataScope 不会执行，外部传入的 params[dataScope] 会原样进入
+    # SysDeptMapper 的 ${params.dataScope} —— 该注入在 4.8.3 上仍然成立。
+    # 原范围 <4.6 会把真实 4.7.8/4.8.x 目标直接跳过（版本过滤反而造成漏报）。
+    # 依据：lab/version_matrix/src/v4.8.3 源码 + lab/REAL-RUOYI.md（4.7.8 实测 CONFIRMED）。
+    affected_versions = ">=4.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"
@@ -92,12 +96,30 @@ class SqlInjectDeptPlugin(PluginBase):
         # 基线对照请求：同一请求、仅去掉注入 payload，用于区分「目标常驻文案」与「注入报错」
         control_data = {"params[dataScope]": ""}
         try:
-            control_text = session.post(url, headers=headers, data=control_data).text
-            resp = session.post(url, headers=headers, data=data)
-            inject_text = resp.text
+            control_resp = session.post(url, headers=headers, data=control_data)
+            control_text = control_resp.text
+            inject_resp = session.post(url, headers=headers, data=data)
+            inject_text = inject_resp.text
         except Exception as e:
             emit(no("第二种POST型报错注入（网络异常）"))
             return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+
+        # 接口要求登录（401/403）或限流（429）时，本次「没测到」不等于「不存在」：
+        # 审计实测（行为级若依靶场）：401 JSON 下原实现直接判 SAFE，等于把未测写成安全。
+        for _label, _resp in (("基线", control_resp), ("注入", inject_resp)):
+            # 若依的鉴权失败是 HTTP 200 + {"code":401}，因此状态码与业务码都要看
+            _why = f"HTTP {_resp.status_code}" if _resp.status_code in (401, 403, 429) else ""
+            _body = (_resp.text or "")[:400]
+            if not _why and any(f'"code": {c}' in _body or f'"code":{c}' in _body for c in ("401", "403", "429")):
+                _why = "业务码 401/403/429（认证失败）"
+            if _why:
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=f"{_label}请求被拒绝（{_why}），无法判定注入是否存在",
+                )
 
         # 判定（加固版·差分法）：与 sql_inject_role 同一套规则，详见该插件注释。
         STRONG_SIG = "XPATH syntax error"
@@ -158,4 +180,10 @@ class SqlInjectDeptPlugin(PluginBase):
                 ),
             )
         emit(no("不存在其他POST型报错注入"))
-        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+        )

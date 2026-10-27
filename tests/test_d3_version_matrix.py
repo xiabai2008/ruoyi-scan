@@ -31,11 +31,11 @@ def test_versioned_pocs_defined():
     expected = {
         "任意文件读取": ">=4.0,<4.7",
         "定时任务调用目标未校验": ">=4.0,<4.7",
-        "POST型报错注入（role）": ">=4.0,<4.6",
-        "POST型报错注入（dept）": ">=4.0,<4.6",
-        "任意文件上传": ">=4.0,<4.7",
+        "POST型报错注入（role）": ">=4.0",
+        "POST型报错注入（dept）": ">=4.0",
+        "任意文件上传": ">=4.0",
         "任意文件读取（路径穿越）": ">=4.0,<4.7",
-        "定时任务 RCE（未授权访问）": ">=4.0,<4.7",
+        "定时任务 RCE（未授权访问）": ">=4.0",
     }
     plugins = {getattr(cls, "name", ""): cls for cls in _ruoyi_plugins()}
     for name, spec in expected.items():
@@ -56,19 +56,31 @@ def test_old_version_filter():
 
 
 def test_new_version_skip_old_pocs():
-    """检测到 v4.7.8（新版）→ 修复漏洞的 POC 被跳过"""
+    """v4.7.8 / v4.8.3 均保留注入/上传/任务 RCE；只跳过实测已修的 3 个路径类 POC
+
+    4.8.x 的判定依据是源码而非猜测：SysRoleController/SysDeptController 的 /list
+    方法没有 @DataScope 注解 → clearDataScope 不执行 → params[dataScope] 直通
+    mapper 的 ${params.dataScope}，注入在 4.8.3 上仍成立。
+    """
     fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=["test"])
-    plugins = Router().resolve(fp)
-    names = [getattr(cls, "name", "") for cls in plugins]
-    # 4.6 已修复 SQL 注入 → 应跳过
-    assert "POST型报错注入（role）" not in names, f"v4.7.8 不应包含 role 注入 POC: {names}"
-    assert "POST型报错注入（dept）" not in names
-    # 4.7 已修复文件读取 → 应跳过
+    names = [getattr(cls, "name", "") for cls in Router().resolve(fp)]
+    # 4.7.8 实测 CONFIRMED，必须保留
+    assert "POST型报错注入（role）" in names, f"v4.7.8 应包含 role 注入 POC: {names}"
+    assert "POST型报错注入（dept）" in names
+    assert "任意文件上传" in names
+    assert "定时任务 RCE（未授权访问）" in names
+    # 4.7.8 实测已修的路径穿越/任务调用目标类应跳过
     assert "任意文件读取" not in names
-    assert "定时任务任意文件读取" not in names
+    assert "任意文件读取（路径穿越）" not in names
+    assert "定时任务调用目标未校验" not in names
     # 全版本 POC 保留
     assert "后台默认口令" in "".join(names), names
-    print("PASS test_new_version_skip_old_pocs: v4.7.8 → %d 个插件" % len(plugins))
+
+    fp2 = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=["test"])
+    names2 = [getattr(cls, "name", "") for cls in Router().resolve(fp2)]
+    for kept in ("POST型报错注入（role）", "POST型报错注入（dept）", "任意文件上传", "定时任务 RCE（未授权访问）"):
+        assert kept in names2, f"v4.8.3 应包含 {kept}: {names2}"
+    print("PASS test_new_version_skip_old_pocs: v4.7.8 → %d 个插件, v4.8.3 → %d 个" % (len(names), len(names2)))
 
 
 def test_latest_version_matrix():

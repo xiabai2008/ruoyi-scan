@@ -37,8 +37,10 @@ class FileUploadPlugin(PluginBase):
         '  -F "file=@webshell.jsp;type=application/octet-stream"\n'
         "  # 访问返回的 url 即可获得 webshell"
     )
-    # D2：扩展名校验在 4.6.0 加强（但未授权上传仍存在于部分版本，保守标 <4.7）
-    affected_versions = ">=4.0,<4.7"
+    # 版本范围：REAL-RUOYI.md 在 4.7.8 实例上实测 CONFIRMED（上传探针返回
+    # url/fileName，文件真实落盘）；4.8.x 未取得「已修复」证据。
+    # 原范围 <4.7 会把 4.7.8 直接跳过，故放宽为不设上界，由响应证据判定。
+    affected_versions = ">=4.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H"
     compliance = "等保2.0:8.1.4;OWASP:A04:2021"
