@@ -134,7 +134,8 @@ class JobInvokeTargetPlugin(PluginBase):
         ) as (sess, ok_login, reason):
             if not ok_login:
                 hint = "（该验证需要具备 monitor:job:edit 权限的账号）" if reason != LOGIN_CAPTCHA else ""
-                emit(no(f"定时任务调用目标未校验（登录失败：{reason}）{hint}"))
+                # 不在此处 emit 结论行：下方返回 UNKNOWN 会由结果事件统一打印，
+                # 否则终端出现「[/]不存在…」+「[?]无法判定…」两条矛盾结论（审计实测）
                 return ScanResult(
                     kind="info",
                     name=self.name,

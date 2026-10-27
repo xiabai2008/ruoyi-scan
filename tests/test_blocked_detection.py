@@ -191,6 +191,26 @@ def test_detect_auth_wall_and_downgrade_only_200_evidence():
     assert results[2].status == STATUS_CONFIRMED
 
 
+def test_safe_without_evidence_becomes_unknown():
+    """SAFE 必须带判定证据；空证据/纯空白不能宣称"确认不存在"（审计实测 MinIO/RocketMQ）"""
+    from lib.reachability import downgrade_evidence_less_safe
+
+    results = [
+        _result("空证据", STATUS_SAFE),
+        _result("纯空白证据", STATUS_SAFE),
+        _result("有证据", STATUS_SAFE),
+        _result("确认项", STATUS_CONFIRMED),
+    ]
+    results[0].evidence = ""
+    results[1].evidence = "   "
+    results[2].evidence = "状态码=404, 未发现 .git 泄露特征"
+    assert downgrade_evidence_less_safe(results) == 2
+    assert results[0].status == STATUS_UNKNOWN and results[0].extra.get("no_evidence") is True
+    assert results[1].status == STATUS_UNKNOWN
+    assert results[2].status == STATUS_SAFE
+    assert results[3].status == STATUS_CONFIRMED
+
+
 def test_unreachable_safe_becomes_unknown():
     """SAFE 证据显示基线探测/连接失败：网络异常不能冒充 SAFE"""
     r = _result("备份文件泄露", STATUS_SAFE)

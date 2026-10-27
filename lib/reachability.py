@@ -161,6 +161,30 @@ def downgrade_auth_wall_safe(results: List[Any], wall: Dict[str, Any]) -> int:
     return n
 
 
+def downgrade_evidence_less_safe(results: List[Any]) -> int:
+    """把「SAFE 但没有任何判定证据」的结果降级为 UNKNOWN。
+
+    三态纪律里 SAFE = 测过了、排除；如果插件连证据都没给出，读者无从判断
+    「端点不存在」「已修复」「请求根本没发出去」中的哪一种，此时 SAFE 是假安全感。
+    对抗审计实测：MinIO / RocketMQ 等中间件插件在目标无该服务时返回 SAFE + 空证据。
+    """
+    n = 0
+    for r in results:
+        if getattr(r, "status", "") != STATUS_SAFE:
+            continue
+        if str(getattr(r, "evidence", "") or "").strip():
+            continue
+        r.status = STATUS_UNKNOWN
+        r.evidence = "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定"
+        extra = dict(getattr(r, "extra", None) or {})
+        extra["no_evidence"] = True
+        r.extra = extra
+        n += 1
+    if n:
+        logger.warning("缺少证据的 SAFE：%d 条已降级为 UNKNOWN", n)
+    return n
+
+
 def downgrade_safe_results(results: List[Any], block: Dict[str, Any]) -> int:
     """把 SAFE 结果降级为 UNKNOWN（全站拦截时 SAFE 不成立）。
 

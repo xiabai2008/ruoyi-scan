@@ -141,7 +141,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
         """
         if not ok_login:
             hint = "（该验证需要低权限账号，不是 admin）" if reason != LOGIN_CAPTCHA else ""
-            emit(no(f"重置密码页数据权限绕过（登录失败：{reason}）{hint}"))
+            # 只返回 UNKNOWN，不再预先 emit「不存在」结论行（避免同插件两条矛盾结论）
             return ScanResult(
                 kind="info",
                 name=self.name,

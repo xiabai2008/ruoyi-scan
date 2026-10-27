@@ -517,12 +517,13 @@ function toggleFilter() {{
 </body>
 </html>"""
 
-    def render_all(self, out_dir: str, formats: Optional[Any] = None) -> List[str]:
+    def render_all(self, out_dir: str, formats: Optional[Any] = None, stem: str = "report") -> List[str]:
         """渲染多格式到 out_dir，返回生成的文件路径列表
 
         formats: 默认 ['html','json','csv']；D8 起新增 'pdf','docx','xlsx'；'all'=全部 6 种
+        stem: 文件名前缀（默认 report；批量模式传 "<target>_<timestamp>" 生成每目标独立报告）
         未安装可选依赖时自动降级（跳过 PDF/Word/Excel 并打印警告）。
-        文件名：report.json / report.html / report.csv / report.pdf / report.docx / report.xlsx
+        文件名：<stem>.json / <stem>.html / <stem>.csv / <stem>.pdf / ...
         """
         if not out_dir:
             out_dir = settings.REPORT_DIR
@@ -535,17 +536,17 @@ function toggleFilter() {{
 
         paths = []
         if "json" in formats:
-            json_path = os.path.join(out_dir, "report.json")
+            json_path = os.path.join(out_dir, f"{stem}.json")
             with open(json_path, "w", encoding="utf-8") as f:
                 f.write(self.to_json())
             paths.append(json_path)
         if "html" in formats:
-            html_path = os.path.join(out_dir, "report.html")
+            html_path = os.path.join(out_dir, f"{stem}.html")
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(self.to_html())
             paths.append(html_path)
         if "csv" in formats:
-            csv_path = os.path.join(out_dir, "report.csv")
+            csv_path = os.path.join(out_dir, f"{stem}.csv")
             # CSV 用 utf-8-sig 便于 Excel 正确显示中文
             with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
                 f.write(self.to_csv())
@@ -555,7 +556,7 @@ function toggleFilter() {{
             try:
                 from core.report_pdf import render_pdf
 
-                pdf_path = os.path.join(out_dir, "report.pdf")
+                pdf_path = os.path.join(out_dir, f"{stem}.pdf")
                 render_pdf(self, pdf_path)
                 paths.append(pdf_path)
             except ImportError:
@@ -567,7 +568,7 @@ function toggleFilter() {{
             try:
                 from core.report_docx import render_docx
 
-                docx_path = os.path.join(out_dir, "report.docx")
+                docx_path = os.path.join(out_dir, f"{stem}.docx")
                 render_docx(self, docx_path)
                 paths.append(docx_path)
             except ImportError:
@@ -578,7 +579,7 @@ function toggleFilter() {{
             try:
                 from core.report_xlsx import render_xlsx
 
-                xlsx_path = os.path.join(out_dir, "report.xlsx")
+                xlsx_path = os.path.join(out_dir, f"{stem}.xlsx")
                 render_xlsx(self, xlsx_path)
                 paths.append(xlsx_path)
             except ImportError:
@@ -590,7 +591,7 @@ function toggleFilter() {{
             try:
                 from core.report_sarif import render_sarif
 
-                sarif_path = os.path.join(out_dir, "report.sarif")
+                sarif_path = os.path.join(out_dir, f"{stem}.sarif")
                 render_sarif(self, sarif_path)
                 paths.append(sarif_path)
             except Exception as e:

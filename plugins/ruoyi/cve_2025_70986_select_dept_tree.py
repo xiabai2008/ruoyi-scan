@@ -126,7 +126,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
         ) as (sess, ok_login, reason):
             if not ok_login:
                 hint = "（该验证需要低权限账号，不是 admin）" if reason != "captcha" else ""
-                emit(no(f"部门树越权访问（登录失败：{reason}）{hint}"))
+                # 只返回 UNKNOWN，不再预先 emit「不存在」结论行（避免同插件两条矛盾结论）
                 return ScanResult(
                     kind="info",
                     name=self.name,

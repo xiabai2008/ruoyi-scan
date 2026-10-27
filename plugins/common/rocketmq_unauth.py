@@ -87,4 +87,10 @@ class RocketmqUnauthPlugin(PluginBase):
                 evidence=str(last_error),
             )
         emit(no("不存在 RocketMQ Dashboard 未授权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url or target)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=last_url or target,
+            evidence=f"{len(paths)} 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 {last_url or target}）",
+        )

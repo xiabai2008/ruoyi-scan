@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import copy
 import datetime
 import os
+import re
 import sys
 import threading
 import time
@@ -72,6 +74,36 @@ def _parse_report_formats(fmt_str: Optional[str]) -> Optional[List[str]]:
         print(f"{YELLOW}[!]未知报告格式: {invalid}（支持: {sorted(valid)}）{RESET}")
     parts = [p for p in parts if p in valid]
     return parts or None
+
+
+def _safe_report_stem(target: str) -> str:
+    """把目标 URL 变成文件名安全前缀（保留 host:port，去掉协议/路径/非法字符）"""
+    stem = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", "", target)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")
+    return stem[:80] or "target"
+
+
+def _render_batch_target_reports(batch: "BatchReport", out_dir: str, fmt_raw: Optional[str]) -> List[str]:
+    """批量模式：为每个目标单独输出一份报告。
+
+    此前批量只输出 batch_report.html/csv，但 docs/usage.md 明确承诺
+    「每个目标生成独立的报告文件（<target>_<timestamp>.<ext>）」——文档与实现不一致，
+    安服交付时也无法逐目标归档。这里按同一 --report-format 逐目标渲染。
+    """
+    formats = _parse_report_formats(fmt_raw)
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    used = set()
+    paths: List[str] = []
+    for builder in batch.builders:
+        base = f"{_safe_report_stem(builder.target)}_{stamp}"
+        stem = base
+        idx = 2
+        while stem in used:  # 目标列表里可能出现重复目标，避免互相覆盖
+            stem = f"{base}_{idx}"
+            idx += 1
+        used.add(stem)
+        paths.extend(builder.render_all(out_dir, formats=formats, stem=stem))
+    return paths
 
 
 # ── 主扫描流程 ──
@@ -312,6 +344,9 @@ def _cli_event_handler(event_type: str, payload):
             f"{YELLOW}[*]有 {payload.get('count', 0)} 条结论因接口返回 401/403/429 被改为 UNKNOWN"
             f"（未登录/无权限，不能算「不存在」）{RESET}"
         )
+
+    elif event_type == "evidence_downgrade":
+        print(f"{YELLOW}[*]有 {payload.get('count', 0)} 条 SAFE 因缺少判定证据被改为 UNKNOWN（三态纪律）{RESET}")
 
     elif event_type == "blocked_downgrade":
         print(f"{YELLOW}[*]已把 {payload.get('count', 0)} 条 SAFE 降级为 UNKNOWN（全站拦截，无有效响应）{RESET}")
@@ -631,10 +666,15 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     results_by_target: dict = {}
     results_lock = threading.Lock()
 
+    # 批量模式报告统一在最后渲染：给每个目标一份 args 副本并清空 report，
+    # 避免 run_mode 为每个目标重复写 report.html（互相覆盖），也避免多线程共享 args 竞态
+    scan_args = copy.copy(args)
+    scan_args.report = ""
+
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
         try:
-            results = run_mode(mode, target, args, show_cta=False)
+            results = run_mode(mode, target, scan_args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             return []
@@ -678,10 +718,13 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
 
     if batch.builders:
         bpaths = batch.render_all(out_dir)
+        tpaths = _render_batch_target_reports(batch, out_dir, getattr(args, "report_format", "all"))
         print(SEPARATOR)
         print(f"{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}")
         for p in bpaths:
-            print(f"{GREEN}[*]批量报告：{p}{RESET}")
+            print(f"{GREEN}[*]批量汇总报告：{p}{RESET}")
+        if tpaths:
+            print(f"{GREEN}[*]每目标报告：{batch.total_targets} 个目标，共 {len(tpaths)} 个文件（{out_dir}）{RESET}")
     else:
         print(f"{RED}[!]无扫描结果{RESET}")
     # 显式列出失败/无结果目标，杜绝“99 个目标静默显示 0 漏洞”的观感
@@ -740,17 +783,20 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
     skipped: List[str] = []
+    # 批量模式报告统一在最后渲染：单目标扫描不要写 report.html（会被下一个目标覆盖）
+    scan_args = copy.copy(args)
+    scan_args.report = ""
 
     for i, target in enumerate(targets, 1):
         print(f"\n{SEPARATOR}")
         print(f"{YELLOW}[*]进度 [{i}/{len(targets)}] 目标：{target}{RESET}")
         # 逐目标预检：不可用的目标跳过并继续，不中断整批——目标列表里混着下线主机是
         # 常态，因一个目标不可用而中止整批是错的行为
-        if not preflight_target(target, args):
+        if not preflight_target(target, scan_args):
             skipped.append(target)
             continue
         try:
-            results = run_mode(mode, target, args, show_cta=False)
+            results = run_mode(mode, target, scan_args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             continue
@@ -771,6 +817,7 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
 
     if batch.builders:
         bpaths = batch.render_all(out_dir)
+        tpaths = _render_batch_target_reports(batch, out_dir, getattr(args, "report_format", "all"))
         print(SEPARATOR)
         print(f"{YELLOW}[*]批量汇总：{batch.total_targets} 个目标 共 {batch.total_confirmed()} 个确认漏洞{RESET}")
         if skipped:
@@ -780,7 +827,9 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
                 f"{' 等' if len(skipped) > 5 else ''}{RESET}"
             )
         for p in bpaths:
-            print(f"{GREEN}[*]批量报告：{p}{RESET}")
+            print(f"{GREEN}[*]批量汇总报告：{p}{RESET}")
+        if tpaths:
+            print(f"{GREEN}[*]每目标报告：{batch.total_targets} 个目标，共 {len(tpaths)} 个文件（{out_dir}）{RESET}")
         # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
         if not getattr(args, "ci", False):
             print_star_cta(explicit_off=getattr(args, "no_cta", False))

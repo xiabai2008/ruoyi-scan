@@ -57,7 +57,14 @@ class MinioUnauthPlugin(PluginBase):
         minio_signal = "minio" in headers_text or "x-amz" in headers_text or "minio" in body_text
         if code != 200 and not minio_signal:
             emit(no("未检测到 MinIO 服务"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=health_url)
+            # 三态纪律：SAFE 必须带可复核证据（否则统一降级 UNKNOWN）
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_SAFE,
+                url=health_url,
+                evidence=f"健康检查返回 HTTP {code} 且无 MinIO 专有特征（Server/X-Amz/正文），未发现 MinIO 服务",
+            )
         # 2. 无凭证列举 bucket（匿名桶列表）
         root_url = join_url(target, "/minio/")
         try:
@@ -84,4 +91,10 @@ class MinioUnauthPlugin(PluginBase):
                 extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
             )
         emit(no("不存在 MinIO 未授权访问"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=root_url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=root_url,
+            evidence=f"/minio/ 返回 HTTP {resp2.status_code}，未出现匿名 bucket 列表特征",
+        )

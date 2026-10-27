@@ -728,6 +728,7 @@ class ScanOrchestrator:
             # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
             from lib.reachability import (
                 downgrade_auth_wall_safe,
+                downgrade_evidence_less_safe,
                 downgrade_safe_results,
                 upgrade_denied_safe_to_unknown,
             )
@@ -736,6 +737,11 @@ class ScanOrchestrator:
             denied = upgrade_denied_safe_to_unknown(all_results)
             if denied:
                 _emit("denied_downgrade", {"count": denied, "task_id": task.task_id})
+
+            # SAFE 必须带证据：空证据的 SAFE 没有可复核性，不能宣称"确认不存在"
+            no_evidence = downgrade_evidence_less_safe(all_results)
+            if no_evidence:
+                _emit("evidence_downgrade", {"count": no_evidence, "task_id": task.task_id})
 
             # 登录墙：拿到 200 登录页的 SAFE 同样是"没测到"，降级为 UNKNOWN
             wall_downgraded = downgrade_auth_wall_safe(all_results, auth_wall)
