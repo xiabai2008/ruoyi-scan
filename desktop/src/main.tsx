@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
@@ -13,6 +14,8 @@ if (!rootEl) throw new Error("挂载点 #root 不存在：index.html 是否被�
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );
