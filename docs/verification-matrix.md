@@ -19,7 +19,7 @@
 | L1 | MinIO 未授权访问 | N/A | medium | 是 | — | `plugins/common/minio_unauth.py` |
 | L1 | Redis 未授权访问 | N/A | high | 是 | — | `plugins/common/redis_unauth.py` |
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
-| L1 | shiro_rememberme | CVE-2016-4437 | high | 是 | — | `plugins/common/shiro_rememberme.py` |
+| L1 | Shiro RememberMe 反序列化（指纹） | CVE-2016-4437 | high | 是 | — | `plugins/common/shiro_rememberme.py` |
 | L1 | IDE/SCM 残留文件泄露 | N/A | medium | 是 | — | `plugins/common/source_leak.py` |
 | L1 | Swagger API 文档泄露 | N/A | medium | 是 | — | `plugins/common/swagger_leak.py` |
 | L1 | HTTP 方法探测 | N/A | low | 是 | — | `plugins/common/trace_method.py` |
