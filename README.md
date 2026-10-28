@@ -22,7 +22,7 @@ pip install ruoyi-scan
 
 > 不想装 Python？[终端版 `ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe)（命令行，约 38 MB，免安装）或 [桌面端单文件版](https://github.com/xiabai2008/ruoyi-scan/releases)（双击即用）。
 
-> 全部命令与常用组合见 [操作命令手册](docs/promo/ruoyi-scan_操作命令手册.txt)：四种扫描模式、报告、批量、认证、分布式、退出码、FAQ 一页纸速查（可离线保存）。
+> 全部命令与常用组合见 [操作命令手册](docs/promo/ruoyi-scan_操作命令手册.md)：四种扫描模式、报告、批量、认证、分布式、退出码、FAQ 一页纸速查（Release 另附纯文本版）。
 
 ---
 
@@ -172,7 +172,7 @@ pip install ruoyi-scan
 |------|------|
 | [快速上手](docs/quickstart.md) | 5 分钟从安装到出第一份报告 |
 | [用户指南](docs/usage.md) | 安装配置、扫描模式、CLI 参数详解 |
-| [操作命令手册](docs/promo/ruoyi-scan_操作命令手册.txt) | 一页纸命令速查：四模式 / 报告 / 批量 / 认证 / 分布式 / FAQ（纯文本，可离线保存） |
+| [操作命令手册](docs/promo/ruoyi-scan_操作命令手册.md) | 一页纸命令速查：四模式 / 报告 / 批量 / 认证 / 分布式 / FAQ（网页版，Release 另附纯文本） |
 | [插件开发教程](docs/plugin_dev.md) | PluginBase、三态判定、entry_points 注册 |
 | [API 文档](docs/api.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
 | [桌面端](docs/desktop.md) | 单 exe 免安装双击即用（引擎内嵌） |
