@@ -144,6 +144,17 @@ def dispatch(args: Namespace) -> None:
         run_passive_mode(args)
         return
 
+    # D36：分布式扫描（master 分发 / worker 执行 / standalone 本机分发）
+    # 必须排在标准扫描之前：master 与 standalone 同样接受 -f + 模式开关，
+    # 落到下面的批量分支会把任务当成单机批量扫描，分布式参数全部失效。
+    if getattr(args, "distributed", None):
+        from cli.distributed_runner import run_distributed_mode
+
+        code = run_distributed_mode(args)
+        if code:
+            sys.exit(code)
+        return
+
     # ── 标准扫描模式 ──
     # 分别收集"真实目标值"与"纯开关标记"：值为 __flag__ 时仅标记模式，无实际目标
     target_for = {}

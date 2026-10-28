@@ -18,11 +18,11 @@
 #
 # 使用方式：
 #   # Master 模式：分发任务
-#   python main.py --distributed master --redis redis://127.0.0.1:6379 \
-#     -f targets.txt
+#   python main.py --distributed master --redis-url redis://127.0.0.1:6379 \
+#     -f targets.txt -p
 #
 #   # Worker 模式：执行扫描
-#   python main.py --distributed worker --redis redis://127.0.0.1:6379
+#   python main.py --distributed worker --redis-url redis://127.0.0.1:6379
 #
 #   # 独立模式：本机分发 + 执行（无需 Redis）
 #   python main.py --distributed standalone -f targets.txt
@@ -53,6 +53,16 @@ def _redact_redis_url(url: str) -> str:
         return urlunsplit(parts)
     except ValueError:
         return "<invalid-redis-url>"
+
+
+def _is_blocking_timeout(exc: BaseException) -> bool:
+    """是否 Redis 阻塞命令的读超时。
+
+    redis-py 在 BRPOP/BRPOPLPUSH 这类阻塞命令上把「命令自身的阻塞超时」用作 socket 读超时，
+    两者相等时客户端会先抛 TimeoutError，而不是等服务端返回 nil（实测 Worker 空闲 5 秒即崩）。
+    这类异常语义就是「本轮没取到东西」，调用方按 None 处理即可。
+    """
+    return exc.__class__.__name__ == "TimeoutError"
 
 
 # ============================================================
@@ -423,7 +433,12 @@ class DistributedTaskQueue:
         """
         # BRPOPLPUSH：出队的同时把原始载荷保留在 processing 列表（FIFO 语义不变），
         # Worker 崩溃时 recover_stale_tasks() 可据此重入队
-        task_json = self.redis.brpoplpush(TASK_QUEUE_KEY, PROCESSING_LIST_KEY, timeout=timeout)
+        try:
+            task_json = self.redis.brpoplpush(TASK_QUEUE_KEY, PROCESSING_LIST_KEY, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001 - 仅吞阻塞超时，其余照抛
+            if _is_blocking_timeout(exc):
+                return None
+            raise
         if task_json is None:
             return None
         task = ScanTask.from_json(task_json)
@@ -517,7 +532,12 @@ class DistributedTaskQueue:
         Returns:
             TaskResult 或 None
         """
-        result = self.redis.brpop(RESULT_QUEUE_KEY, timeout=timeout)
+        try:
+            result = self.redis.brpop(RESULT_QUEUE_KEY, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001 - 仅吞阻塞超时，其余照抛
+            if _is_blocking_timeout(exc):
+                return None
+            raise
         if result is None:
             return None
         _, result_json = result
@@ -740,7 +760,7 @@ class WorkerNode:
 
     def run(
         self,
-        scan_fn: Callable[[ScanTask], List[Dict]],
+        scan_fn: Callable[..., List[Dict]],
         poll_interval: int = 5,
         max_tasks: int = 0,
         heartbeat_interval: int = 30,
@@ -749,7 +769,7 @@ class WorkerNode:
         """运行 Worker 循环
 
         Args:
-            scan_fn: 扫描函数 fn(task, rate_limiter) → results_list
+            scan_fn: 扫描函数 fn(task, rate_limiter) → results_list（两个参数都必须接受）
             poll_interval: 轮询间隔秒数
             max_tasks: 最大处理任务数（0 表示无限）
             heartbeat_interval: 心跳间隔秒数
@@ -883,20 +903,19 @@ class StandaloneDistributor:
 # ============================================================
 
 
-def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = None) -> int:
+def run_distributed_master_mode(args, targets: List[str], scan_config: Dict = None, mode: str = "full") -> int:
     """分布式 Master 模式入口
 
     Args:
         args: CLI 参数
         targets: 目标列表
         scan_config: 扫描配置
+        mode: 任务模式 full/vuln/dir/brute（由 CLI 接线层从 -u/-p/-m/-l 映射）
 
     Returns:
         0 表示成功
     """
     redis_url = getattr(args, "redis_url", None) or "redis://127.0.0.1:6379"
-    # 当前仅支持 full 模式（原写法 getattr(args, "u", None) and "full" or "full" 恒为 "full"）
-    mode = "full"
 
     try:
         master = MasterNode(redis_url)
