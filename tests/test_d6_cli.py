@@ -70,11 +70,16 @@ def test_get_chain_returns_none_for_unknown():
     assert get_chain("nonexistent_chain") is None
 
 
-def test_register_chain_dynamic():
+def test_register_chain_dynamic(monkeypatch):
     """动态注册链（mock 导入避免依赖未创建的模块）"""
     from unittest.mock import patch
 
+    import chains.registry as chain_registry
     from core.chain import ChainDef
+
+    # 注册表是模块级全局：不隔离就会把 test_dynamic 留给同文件后面的
+    # test_list_chains_returns_list（pytest-randomly 打乱顺序时必挂）
+    monkeypatch.setattr(chain_registry, "_CHAIN_REGISTRY", dict(chain_registry._CHAIN_REGISTRY))
 
     mock_chain = ChainDef(name="mock", display_name="Mock", description="test")
     # mock importlib.import_module 返回含 CHAIN 属性的 mock 对象
