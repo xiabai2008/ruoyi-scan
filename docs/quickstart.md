@@ -31,6 +31,18 @@
     从 [GitHub Releases](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载
     `ruoyi-scan-desktop.exe`，双击即用（引擎内嵌，详见[桌面端文档](desktop.md)）。
 
+=== "终端版 exe（免 Python）"
+
+    从 [GitHub Releases](https://github.com/xiabai2008/Ruoyi-Scan/releases) 下载 `ruoyi-scan.exe`，
+    放到任意目录，在 CMD / PowerShell 里运行（参数与 pip 版完全一致）：
+
+    ```powershell
+    .\ruoyi-scan.exe -V
+    .\ruoyi-scan.exe -p http://target:8080/ --report .\reports\demo
+    ```
+
+    注意：onefile 每次启动需解压（约 2-4 秒）；双击只会打印帮助；未签名可能被 SmartScreen 拦截。
+
 依赖：Python 3.8+；报告增强（PDF/Word/Excel）与 Web API 为可选依赖，缺失时自动降级
 （详见[用户手册 · 依赖要求](usage.md#依赖要求)）。
 
@@ -49,14 +61,15 @@
 常用增强：
 
 ```bash
-# 批量目标
-ruoyi-scan -f targets.txt
+# 批量目标（-f 必须配合 -u/-m/-p/-l 指定扫描模式）
+ruoyi-scan -f targets.txt -p
 
 # 组件版本检测（fastjson/Shiro/Nacos/Log4j 等 20 组件）
 ruoyi-scan -u http://target:8080 --components
 
 # 认证后深度扫描（登录态资产盘点 + 越权矩阵）
-ruoyi-scan -u http://target:8080 --auth login=ruoyi:admin123
+# 账号密码用 --auth-login；--auth 只接受 cookie= / bearer= / header=
+ruoyi-scan -u http://target:8080 --auth-login ruoyi:admin123 --auth-surface
 
 # WAF 环境强制绕过策略
 ruoyi-scan -u http://target:8080 --bypass-waf on

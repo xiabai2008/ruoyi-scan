@@ -1278,7 +1278,7 @@ pip install redis
 
 | 模式 | 角色 | 说明 | 适用场景 |
 |------|------|------|---------|
-| `standalone`（默认） | 单机 | 单进程扫描，无 Redis 依赖 | 小规模扫描（<1000 目标） |
+| `standalone` | 单机 | 本机多线程分发，无 Redis 依赖 | 小规模扫描（<1000 目标） |
 | `master` | 调度节点 | 将目标分发到队列，监控 Worker 状态 | 分布式调度 |
 | `worker` | 执行节点 | 从队列领取任务执行扫描，结果回传 | 分布式执行 |
 
@@ -1378,34 +1378,35 @@ ruoyi-scan --distributed worker --redis-url redis://redis-host:6379/0
 
 ### 全局限速
 
-`--distributed-rate` 控制**所有 Worker 总和**的请求速率，避免对目标网络造成过大压力：
+`--distributed-rate` 控制**所有 Worker 合计的任务启动速率**（每秒进入扫描的目标数），
+用于防止一次性把上万目标全压给目标网络。单目标内部的请求节奏仍由 `--threads` / `--rate` 决定：
 
 ```bash
-# 假设有 10 个 Worker，希望总计 1000 QPS
-# Master 配置全局限速
+# 假设有 10 个 Worker，希望总计每秒只启动 20 个目标
+# 每个 Worker 都传同一个值：令牌桶状态在 Redis 里共享，多传不会叠加
+ruoyi-scan --distributed worker \
+  --redis-url redis://localhost:6379/0 \
+  --distributed-rate 20
+
+# Master 只负责分发与聚合，不需要（也不会）给 Worker 下发速率
 ruoyi-scan --distributed master \
   --redis-url redis://localhost:6379/0 \
-  -f targets.txt -p \
-  --distributed-rate 1000
-
-# 每个 Worker 无需单独配置 rate，由 Master 统一调度
-ruoyi-scan --distributed worker \
-  --redis-url redis://localhost:6379/0
+  -f targets.txt -p
 ```
 
-限速算法：基于 Redis 的分布式令牌桶，确保跨 Worker 的精确限速。
+限速算法：基于 Redis 的分布式令牌桶（key 全局共享），Worker 领到任务后先取令牌再开扫。
 
-### Standalone 降级模式
+### Standalone 模式（不需要 Redis）
 
-当 Redis 不可用时，自动降级为单机模式：
+`standalone` 不是「Redis 挂了自动降级」，而是显式选择的单机多线程分发：
 
 ```bash
-# 显式指定 standalone（默认）
+# 显式指定 standalone（无 Redis 依赖）
 ruoyi-scan --distributed standalone -f targets.txt -p
 
-# Redis 连接失败时自动降级为 standalone
+# master / worker 连不上 Redis 会直接报错并以非 0 退出，不会偷偷降级成单机
 ruoyi-scan --distributed master --redis-url redis://unavailable:6379/0
-# 日志输出：Redis 连接失败，降级为 standalone 模式
+# [!]无法连接 Redis: redis://unavailable:6379/0（退出码 1）
 ```
 
 ### 典型部署架构

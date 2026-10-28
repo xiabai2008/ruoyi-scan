@@ -1,6 +1,6 @@
 # 桌面端（单 exe）
 
-> **一个 exe 双击即用**：无需安装 Python、无需命令行。引擎（FastAPI + 51 POC + 字典 +
+> **一个 exe 双击即用**：无需安装 Python、无需命令行。引擎（FastAPI + 54 POC + 字典 +
 > Web 控制台）经 PyInstaller 冻结后在编译期整块嵌入壳程序，首次运行自动释放并拉起。
 
 ## 下载
@@ -10,8 +10,9 @@
 | 文件 | 适用场景 |
 |------|---------|
 | `ruoyi-scan-desktop.exe`（~48 MB） | **推荐**：单文件版，放到任意目录双击即可 |
+| `ruoyi-scan.exe`（~38 MB） | 终端版：命令行使用，参数与 pip 版完全一致，免 Python（见[快速上手](quickstart.md)） |
 | `Ruoyi-Scan_<version>_x64-setup.exe` | 可选：NSIS 安装包（开始菜单 / 桌面快捷方式，currentUser 免管理员） |
-| `checksums-desktop.txt` | SHA256 校验（供应链完整性） |
+| `checksums-desktop.txt` | SHA256 校验（覆盖安装包 / 桌面端 / 终端版三个 exe） |
 
 ```powershell
 # 校验（可选）
@@ -70,7 +71,7 @@ Ruoyi-Scan.exe                 ← WebView 壳（界面）
 ```python
 import requests
 r = requests.get("http://127.0.0.1:8123/api/plugins")
-print(len(r.json()))  # 51
+print(len(r.json()))  # 54
 ```
 
 端点全表见 [API 文档](api.md)。
