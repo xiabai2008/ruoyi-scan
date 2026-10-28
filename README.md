@@ -8,7 +8,8 @@
 > 合法授权的**若依（RuoYi）专项漏洞扫描器**。54 个 POC、5 变体识别、20 组件 CVE 比对，
 > 结论只有三种：**CONFIRMED 确认存在 / SAFE 确认不存在 / UNKNOWN 无法判定**。
 >
-> `pip install -U ruoyi-scan`　或　[下载单文件桌面端](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe)（双击即用，无需 Python）
+> `pip install -U ruoyi-scan`　或　[下载终端版 `ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe)（命令行，免 Python）、
+> [下载桌面端](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe)（双击即用）
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-overview.png" alt="扫描报告：风险分布 + 等保 2.0 / OWASP 合规映射" width="900" />
@@ -106,6 +107,7 @@ IIS 配置片段与代码改法）、**复现命令**、**合规映射**（等�
 | 形态 | 获取方式 | 说明 |
 |---|---|---|
 | pip | `pip install -U ruoyi-scan` | 推荐；可选依赖按需装（`ruoyi-scan[report,serve]`） |
+| 终端版 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan.exe` | 约 38 MB，单文件免 Python，参数与 pip 版完全一致 |
 | 单文件 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan-desktop.exe` | 约 49 MB，引擎与 54 个 POC 编译期嵌入，免安装 |
 | 安装包 | `Ruoyi-Scan_*_x64-setup.exe` | NSIS 安装，含卸载清理 |
 | Docker | `docker build -t ruoyi-scan .` / `docker compose up -d` | 多阶段构建、非 root；compose 自带两个签名靶场 |

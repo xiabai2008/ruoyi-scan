@@ -1,10 +1,11 @@
-# Desktop Release workflow：tag 推送时构建 Windows 单 exe / NSIS 安装包并上传 GitHub Release
+# Desktop Release workflow：tag 推送时构建 Windows 单 exe / NSIS 安装包 / 终端版 exe
 #
 # 触发条件：推送 v* 格式的 tag（与 release.yml 共用触发条件，两工作流并行运行）
 # 产物：
 #   - Ruoyi-Scan_<version>_x64-setup.exe  （NSIS 安装包：单 exe 壳 + 内嵌引擎，双击即用）
 #   - ruoyi-scan-desktop.exe              （单文件版：引擎已内嵌，免安装直接双击）
-#   - checksums-desktop.txt               （SHA256 供应链校验）
+#   - ruoyi-scan.exe                      （终端版：PyInstaller onefile，console，与 pip 版同一套 CLI）
+#   - checksums-desktop.txt               （SHA256 供应链校验，覆盖上述三个 exe）
 #
 # 零配置体验说明：
 #   引擎（Python 运行时 + 51 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
@@ -112,6 +113,66 @@ jobs:
             Write-Host "ENGINE_SMOKE_CLEANUP_OK (8123 freed)"
           }
 
+      # ---------- 阶段 1.5：终端版单文件 exe（console，与 pip 版同一 CLI）----------
+      # 与桌面引擎的区别：入口是 main.py 的 CLI，--report/--serve/--distributed 全保留，
+      # 产物不嵌进任何壳，直接作为 Release 资产分发。
+      # 可选依赖固定版本：redis(--distributed) / aiohttp(--async) / cryptography(插件验签)
+      - name: Build CLI exe (PyInstaller)
+        run: |
+          pip install redis==8.1.0 aiohttp==3.14.5 cryptography==50.0.2
+          pyinstaller tools/cli_build/ruoyi-scan.spec --noconfirm --distpath tools/cli_build/dist --workpath tools/cli_build/build
+
+      # 隔离目录 + 真扫靶场：证明 exe 自包含（不读工作区的 plugins/data）且 7 格式依赖齐全
+      - name: Smoke test CLI exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = "tools/cli_build/dist/ruoyi-scan.exe"
+          if (-not (Test-Path $exe)) { throw "cli exe not found: $exe" }
+          Write-Host "size: $((Get-Item $exe).Length / 1MB) MB"
+
+          # 复制到仓库外运行：确保插件与字典来自 exe 内部
+          $iso = "$env:RUNNER_TEMP\ruoyi-cli"
+          New-Item -ItemType Directory -Force -Path $iso | Out-Null
+          Copy-Item $exe "$iso/ruoyi-scan.exe"
+
+          $ver = (& "$iso/ruoyi-scan.exe" -V | Out-String).Trim()
+          if ($ver -notmatch 'ruoyi-scan \d+\.\d+\.\d+') { throw "unexpected -V output: $ver" }
+          Write-Host "version: $ver"
+
+          $plugins = & "$iso/ruoyi-scan.exe" --plugin-list | Out-String
+          if ($plugins -notmatch '(?m)^\s*54\s') { throw "plugin list incomplete (expect 54 POC)" }
+          $chains = & "$iso/ruoyi-scan.exe" --chain-list | Out-String
+          if ($chains -notmatch 'ruoyi_sql_to_rce') { throw "--chain-list missing builtin chain" }
+          Write-Host "PLUGINS_OK (54) / CHAINS_OK"
+
+          # 起本地签名靶场（flask 只在 CI 用，不进 exe）
+          pip install flask==3.1.2
+          $env:LAB_MODE = "vuln"
+          $env:LAB_PORT = "18081"
+          $lab = Start-Process -FilePath "python" -ArgumentList "lab/server.py" -PassThru -WindowStyle Hidden
+          try {
+            $up = $false
+            foreach ($i in 1..30) {
+              Start-Sleep -Seconds 1
+              try {
+                if ((Invoke-WebRequest -Uri "http://127.0.0.1:18081/" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { $up = $true; break }
+              } catch { }
+              if ($lab.HasExited) { throw "lab exited early with code $($lab.ExitCode)" }
+            }
+            if (-not $up) { throw "lab not ready on 18081" }
+
+            $out = "$env:RUNNER_TEMP\ruoyi-cli-report"
+            & "$iso/ruoyi-scan.exe" -p http://127.0.0.1:18081/ --report $out --no-pause --no-cta
+            if ($LASTEXITCODE -ne 0) { throw "scan exited with $LASTEXITCODE" }
+            foreach ($f in @("report.html", "report.json", "report.csv", "report.pdf", "report.docx", "report.xlsx", "report.sarif")) {
+              if (-not (Test-Path (Join-Path $out $f))) { throw "missing report file: $f" }
+            }
+            Write-Host "CLI_SCAN_OK (7 report formats)"
+          } finally {
+            Get-Process -Id $lab.Id -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
       # ---------- 阶段 2：Tauri 打包（build.rs 编译期嵌入引擎）----------
       - name: Build Tauri NSIS bundle
         run: |
@@ -138,6 +199,8 @@ jobs:
           }
           if ($null -eq $setup) { throw "NSIS setup exe not found" }
           Copy-Item $setup.FullName "$out/Ruoyi-Scan_${env:REF_NAME}_x64-setup.exe"
+          # 终端版（console，免 Python；与 pip 版同一套 CLI 参数）
+          Copy-Item "tools/cli_build/dist/ruoyi-scan.exe" "$out/ruoyi-scan.exe"
           Get-ChildItem $out | Format-Table Name, Length
 
       # ---------- 阶段 3：单文件版冒烟（免安装直接双击场景）----------
@@ -289,6 +352,7 @@ jobs:
           files: |
             desktop/artifacts/Ruoyi-Scan_*_x64-setup.exe
             desktop/artifacts/ruoyi-scan-desktop.exe
+            desktop/artifacts/ruoyi-scan.exe
             desktop/artifacts/checksums-desktop.txt
 
       # 失败时保留引擎构建日志（webview2/资源缺失等问题的排查线索）

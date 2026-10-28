@@ -82,6 +82,11 @@ desktop/dist/
 desktop/node_modules/
 desktop/artifacts/
 
+# 终端版单文件构建产物（spec 与脚本入库，产物由本地/CI 构建）
+tools/cli_build/.venv-build/
+tools/cli_build/build/
+tools/cli_build/dist/
+
 # mkdocs 文档站构建产物（CI 构建，不入库）
 site/
 
