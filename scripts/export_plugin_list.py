@@ -4,7 +4,8 @@
 # 数据来源与运行时完全一致：core.loader.discover_plugin_packages() + 插件类元信息。
 #
 # 用法：
-#   python scripts/export_plugin_list.py
+#   python scripts/export_plugin_list.py            # 重新生成清单（改完插件后跑）
+#   python scripts/export_plugin_list.py --check    # 只校验清单是否与源码一致（CI 门禁用）
 #
 # 约定：输出不含时间戳——同一版本重复生成应得到完全相同的文件，避免无意义 diff。
 
@@ -77,11 +78,12 @@ def collect() -> list:
     return plugins
 
 
-def main() -> int:
+def build_lines() -> tuple:
+    """组装清单文本行，返回 (lines, 插件数, CVE 数)"""
     plugins = collect()
     if not plugins:
         print("[!] 未收集到任何插件，检查插件包是否可导入", file=sys.stderr)
-        return 1
+        raise SystemExit(1)
 
     cats = {}
     for p in plugins:
@@ -159,10 +161,32 @@ def main() -> int:
     out.append(" 仅限授权测试；插件均只做存在性验证，不做破坏性利用。")
     out.append(bar_eq)
 
-    OUT.write_text("\r\n".join(out) + "\r\n", encoding="utf-8-sig", newline="")
-    print(f"[+] 已生成 {OUT.relative_to(REPO)}：{len(ordered)} 个插件，{len(cves)} 个 CVE")
+    return out, len(ordered), len(cves)
+
+
+def _normalize(text: str) -> str:
+    """比较前统一换行与 BOM，避免 CRLF/LF 差异造成误报"""
+    return text.replace("\ufeff", "").replace("\r\n", "\n").rstrip("\n")
+
+
+def main(argv) -> int:
+    """默认写入清单；--check 只校验与源码是否一致（CI 门禁，不改文件）"""
+    lines, total, cve_total = build_lines()
+    text = "\r\n".join(lines) + "\r\n"
+
+    if "--check" in argv:
+        current = OUT.read_text(encoding="utf-8-sig") if OUT.exists() else ""
+        if _normalize(current) != _normalize(text):
+            print(f"[!] {OUT.relative_to(REPO)} 与插件源码不一致", file=sys.stderr)
+            print("    运行 python scripts/export_plugin_list.py 后提交，再重新打 tag", file=sys.stderr)
+            return 2
+        print(f"[+] {OUT.relative_to(REPO)} 与插件源码一致：{total} 个插件，{cve_total} 个 CVE")
+        return 0
+
+    OUT.write_text(text, encoding="utf-8-sig", newline="")
+    print(f"[+] 已生成 {OUT.relative_to(REPO)}：{total} 个插件，{cve_total} 个 CVE")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

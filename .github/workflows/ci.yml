@@ -36,7 +36,10 @@ jobs:
         # 版本固定：ruff format 的输出随版本演进（引号风格/空行规则），不固定会导致
         # CI 与本地格式化结果漂移（v1.2.3/v1.2.4 期间 CI 连红的根因）。升级时需本地
         # 重跑 ruff format 并同步此处与 pyproject dev 依赖。
-        run: pip install ruff==0.16.2 mypy==2.1.0
+        # 额外装项目本体：插件清单校验要 import plugins/*，插件顶层 import requests。
+        run: |
+          pip install ruff==0.16.2 mypy==2.1.0
+          pip install -e .
       - name: Ruff lint
         # tests/ 纳入 lint 门禁：测试代码同样是仓库主体（65 文件），此前不受约束导致
         # 未用导入与导入顺序持续漂移。scripts/ 同理（含 CI 门禁脚本自身）。
@@ -64,6 +67,11 @@ jobs:
         run: |
           python scripts/verification_matrix.py > /tmp/matrix.md
           diff -u docs/verification-matrix.md /tmp/matrix.md
+
+      - name: 插件清单与插件源码一致
+        # docs/promo/ruoyi-scan-plugins.txt 是 users 判断「覆盖不覆盖我的目标」的依据，
+        # 插件增删改后忘了重新生成，清单就是错的——直接卡住，而不是等发布后才发现。
+        run: python scripts/export_plugin_list.py --check
 
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归

@@ -116,6 +116,11 @@ jobs:
             Write-Host "ENGINE_SMOKE_CLEANUP_OK (8123 freed)"
           }
 
+      # 插件清单随资产分发，必须与插件源码同步：不同步就别打包，免得发出去的覆盖范围是错的。
+      # 失败信息会提示本地重新生成命令；CI 不自动改文件（改了也提交不回去）。
+      - name: Verify plugin list matches plugins
+        run: python scripts/export_plugin_list.py --check
+
       # ---------- 阶段 1.5：终端版单文件 exe（console，与 pip 版同一 CLI）----------
       # 与桌面引擎的区别：入口是 main.py 的 CLI，--report/--serve/--distributed 全保留，
       # 产物不嵌进任何壳，直接作为 Release 资产分发。
