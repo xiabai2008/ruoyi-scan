@@ -25,7 +25,7 @@ ruoyi-scan -f targets.txt -p --report .\reports\batch
 ruoyi-scan --serve --host 127.0.0.1 --port 8123
 ```
 
-提示：只有显式写 --report \<目录\> 才会生成报告文件；不写只打印到屏幕。
+提示：只有显式写 --report &lt;目录&gt; 才会生成报告文件；不写只打印到屏幕。
 
 没有 Python？用终端版单文件 exe，参数完全一样，把 ruoyi-scan 换成 .\ruoyi-scan.exe：
 
@@ -311,7 +311,7 @@ ruoyi-scan -u http://127.0.0.1:8080/ --report .\reports\demo --report-format htm
 
 ### 4.3 报告命名与覆盖规则（重要）
 
-文件名固定为 report.\<ext\>。
+文件名固定为 report.&lt;ext&gt;。
 同一个 --report 目录重复扫描会覆盖上一次结果。
 多目标批量扫描时，程序按目标自动建子目录（target_2、target_3 去重）。
 
