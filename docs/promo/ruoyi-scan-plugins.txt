@@ -1,0 +1,336 @@
+﻿===============================================================================
+ Ruoyi-Scan 插件清单（POC 覆盖范围）
+ 版本：v1.5.2　共 54 个插件
+ 高危 31　中危 18　低危 5　含 CVE 编号 16 个
+ 说明：本清单由 scripts/export_plugin_list.py 从插件源码导出，与运行时一致；
+       装好后可用 ruoyi-scan --plugin-list 实时查看同一份数据。
+===============================================================================
+
+ 按类别：
+   ruoyi       若依专项         20 个
+   spring      Spring 生态    14 个
+   common      通用 Web       12 个
+   jeecgboot   JeecgBoot     8 个
+
+===============================================================================
+ 若依专项（ruoyi）· 20 个
+===============================================================================
+
+ 001  高危  漏洞  CVE-2025-46174
+      名称：重置密码页数据权限绕过
+      影响版本：>=4.0,<=4.8.0
+      说明：RuoYi <=4.8.0 的 GET /system/user/resetPwd/{userId} 缺少数据权限校验，普通用户可越权读取任意用户信息
+      修复：升级至 RuoYi 4.8.2+（官方 commit ea4af7a8 已在进入重置密码页时校验数据权限）
+
+ 002  高危  爆破
+      名称：后台默认口令（admin/admin123）
+      说明：若依后台默认口令 admin/admin123：POST /login 不带验证码尝试登录，响应含 token 或 code:200 即默认口令未修改。验证码场景会显式标记 UNKNOWN
+      修复：强制修改 admin 默认口令为高强度密码；启用登录验证码；限制 admin 仅内网访问；登录失败次数阈值锁定；定期审计用户列表
+
+ 003  高危  爆破
+      名称：Druid 弱口令爆破
+      说明：对 /druid/submitLogin 用 6 个默认用户名 + password.txt 字典爆破，命中 success 即成功
+      修复：修改 Druid 监控默认口令，限制访问来源 IP，关闭未授权的 /druid 路径
+
+ 004  高危  漏洞  CNVD-2021-01931
+      名称：任意文件读取
+      影响版本：>=4.0,<4.7
+      说明：通过 /common/download/resource 的 resource 参数目录穿越读取 /etc/passwd
+      修复：限制 resource 参数路径，禁止 .. 目录穿越，下载接口强制鉴权
+
+ 005  高危  漏洞  CNVD-2021-01931
+      名称：任意文件读取（路径穿越）
+      影响版本：>=4.0,<4.7
+      说明：若依 /common/download/resource?resource= 接口未对 resource 参数做白名单校验，攻击者构造 ../ 路径穿越可读取任意文件
+      修复：resource 参数白名单校验（仅允许 /profile/upload/ 下的文件）；禁止 .. 路径穿越；升级到若依 4.7+ 已修复该漏洞
+
+ 006  高危  漏洞
+      名称：任意文件上传
+      影响版本：>=4.0
+      说明：若依后台 /common/upload 未授权可写：上传无害 .txt 探针，响应 JSON 含 url/fileName 字段即存在
+      修复：强制 /common/upload 鉴权；服务端白名单校验扩展名；上传目录不可执行；按用户隔离存储路径
+
+ 007  高危  漏洞
+      名称：定时任务调用目标未校验
+      影响版本：>=4.0,<4.7
+      说明：RuoYi <=4.6.x 的定时任务 edit 不限制 invokeTarget，可写入任意方法调用（任意文件读取/RCE 前提）
+      修复：升级至 RuoYi 4.7.0+（editSave 增加 ScheduleUtils.whiteList 白名单校验 + JOB_ERROR_STR 黑名单）
+
+ 008  高危  漏洞
+      名称：定时任务 RCE（未授权访问）
+      影响版本：>=4.0
+      说明：若依 /monitor/job/edit 接口未授权可访问：攻击者可编辑 invokeTarget 触发 RCE。本插件仅验证编辑接口未鉴权，不实际修改任务或触发执行（agents.md §7 安全合规）
+      修复：强制 /monitor/job/** 鉴权；白名单校验 invokeTarget 调用目标，禁止 ruoYiConfig 等敏感方法；后台路径接入统一鉴权框架
+
+ 009  高危  漏洞
+      名称：RuoYi-Plus 定时任务未授权
+      适用变体：ruoyi-plus
+      说明：RuoYi-Vue-Plus 定时任务模块 /monitor/job/list 未登录可访问（越权查看/调度任务）
+      修复：确认 /monitor/** 接口已加 Sa-Token 鉴权；移除排除路径白名单
+
+ 010  高危  漏洞  CVE-2021-29441
+      名称：RuoYi-Cloud Nacos 配置泄露
+      说明：RuoYi-Cloud 微服务版使用 Nacos 作为配置中心，若 Nacos 未授权访问可泄露数据库密码、Redis 密码等敏感配置
+      修复：为 Nacos 控制台添加认证，修改默认密码，限制外网访问 Nacos 端口
+
+ 011  高危  漏洞
+      名称：RuoYi 代码生成模块 SSTI
+      说明：RuoYi 代码生成模块中的模板引擎可能存在 SSTI 漏洞，攻击者可通过模板注入实现 RCE
+      修复：升级 RuoYi 至最新版本，对模板变量进行严格过滤
+
+ 012  高危  漏洞  CNVD-2021-01931
+      名称：POST型报错注入（dept）
+      影响版本：>=4.0
+      说明：/system/dept/list 的 params[dataScope] 参数拼接 extractvalue 报错注入，泄露 database()
+      修复：对 dataScope 参数做白名单校验，禁止拼接 SQL，使用参数化查询
+
+ 013  高危  漏洞  CNVD-2021-01931
+      名称：POST型报错注入（role）
+      影响版本：>=4.0
+      说明：/system/role/list 的 params[dataScope] 参数拼接 extractvalue 报错注入，泄露 database()
+      修复：对 dataScope 参数做白名单校验，禁止拼接 SQL，使用参数化查询
+
+ 014  高危  漏洞  CVE-2023-38286
+      名称：Thymeleaf/SpEL 模板注入
+      说明：Thymeleaf 视图名注入：当 URL 路径被作为视图名传给 Thymeleaf 解析时，__${7*7}__::.x 会被求值为 49。本插件仅用算术表达式探针验证，不执行命令
+      修复：禁止将用户可控路径直接作为视图名；使用 @Controller + @ResponseBody 显式标注；升级 Spring/Thymeleaf 修复 CVE-2023-38286 等已知漏洞；URL 白名单路由
+
+ 015  中危  漏洞  CVE-2025-70986
+      名称：部门树越权访问
+      影响版本：>=4.0,<=4.8.0
+      说明：RuoYi <=4.8.0 的部门树接口无权限注解，普通用户可越权查看组织架构
+      修复：升级至 RuoYi 4.8.2+（官方已在 selectDeptTree/treeData 上补 system:dept:list 权限注解）
+
+ 016  中危  漏洞  CVE-2021-29441
+      名称：Nacos 未授权访问
+      说明：若依集成 Nacos 配置中心，/nacos/v1/auth/users 未授权可获取用户列表，导致配置中心账号泄露，可进一步接管服务配置
+      修复：开启 Nacos 身份认证（nacos.core.auth.enabled=true）；修改默认密钥；/nacos/** 路径强制鉴权；生产环境限制 Nacos 端口仅内网访问
+
+ 017  中危  漏洞
+      名称：RuoYi Swagger 未授权访问
+      说明：RuoYi 的 Swagger/Knife4j API 文档可被未授权访问，暴露全部 API 接口及参数
+      修复：在 SecurityConfig 中为 Swagger 相关路径添加认证拦截，或在生产环境禁用 Swagger
+
+ 018  中危  漏洞
+      名称：未授权访问（批量）
+      说明：批量探测若依/Spring 常见未授权端点：Actuator env、Druid 监控、Swagger UI、后台用户列表。任一端点未授权暴露即存在信息泄露风险
+      修复：生产环境关闭 Actuator 或加鉴权；Druid 监控路径限制 IP 白名单并修改默认口令；Swagger 仅在测试环境启用；后台接口接入统一鉴权框架
+
+ 019  低危  信息
+      名称：目录扫描
+      说明：基于 ruoyi.txt 字典的端点探测，输出状态码/标题/长度/URL（沿用原 path_scan 格式）
+      修复：关闭未授权端点，敏感路径强制鉴权，下线调试与监控面板
+
+ 020  低危  漏洞
+      名称：RuoYi-Plus 认证接口探测
+      适用变体：ruoyi-plus
+      说明：RuoYi-Vue-Plus 认证服务 /auth/login 接口探测（Sa-Token 架构确认 + 登录风控检查）
+      修复：确认 /auth/login 启用验证码与登录限流（Plus 需配置 captchaEnabled 与登录失败锁定）
+
+===============================================================================
+ Spring 生态（spring）· 14 个
+===============================================================================
+
+ 021  高危  漏洞
+      名称：Spring Boot Actuator env 配置覆盖 RCE
+      说明：/actuator/env POST 可写配置属性，eureka xstream 反序列化触发 RCE（影响 Spring Cloud）
+      修复：升级 Spring Cloud 至安全版本；为 /actuator/env 配置 POST 认证与 CSRF
+
+ 022  高危  漏洞  CVE-2022-22963
+      名称：CVE-2022-22963 Spring Cloud Function 远程代码执行
+      说明：HTTP 请求头 routing-expression 注入 SpEL 求值，可执行任意命令（Cloud Function 3.x）
+      修复：升级 Spring Cloud Function 至 3.1.7+ / 3.2.3+；或禁用路由功能
+
+ 023  高危  漏洞  CVE-2022-22947
+      名称：CVE-2022-22947 Spring Cloud Gateway 远程代码执行
+      说明：Actuator /gateway/routes/ 端点可匿名创建路由，SPEL Filter 求值触发 RCE
+      修复：升级 Spring Cloud Gateway 至 3.1.1+ / 3.0.7+；为 Actuator 端点配置认证
+
+ 024  高危  漏洞
+      名称：Spring Boot Actuator H2 Console 未授权 JNDI RCE
+      说明：H2 Console 可匿名访问，通过 JNDI 连接字符串执行任意代码（影响 H2 + Actuator）
+      修复：为 /h2-console 配置认证；禁用 H2 Console 生产环境；移除 H2 依赖改用生产级数据库
+
+ 025  高危  漏洞
+      名称：Spring Boot Actuator Jolokia MLet 链远程代码执行
+      说明：Jolokia /actuator/jolokia/list 可被滥用通过 MLet 加载远程 MBean 触发 RCE
+      修复：移除 jolokia 依赖或禁用 Jolokia 端点；为 /actuator/jolokia 配置认证；限制 MBean 加载
+
+ 026  高危  漏洞
+      名称：Spring Boot Actuator Jolokia 远程代码执行
+      说明：Jolokia JMX-HTTP 桥暴露 reloadByURL MBean，可加载远程 XML 配置触发 JNDI RCE
+      修复：移除 jolokia 依赖或禁用 Jolokia 端点；为 /actuator/jolokia 配置认证
+
+ 027  高危  漏洞  CVE-2022-22965
+      名称：CVE-2022-22965 Spring4Shell 远程代码执行
+      说明：JDK9+ 下 DataBinder 可访问 ClassLoader，写 Tomcat 日志 getshell（影响 5.3.x）
+      修复：升级 Spring Framework 至 5.3.18+ / 5.2.20+；或升级 JDK 至不受影响版本
+
+ 028  高危  漏洞  CVE-2020-5410
+      名称：Spring Cloud Config 路径穿越
+      说明：Spring Cloud Config 的/{name}/{profile}/{label}端点存在目录遍历，可读取任意文件
+      修复：升级 Spring Cloud Config 至 ≥2.2.3.RELEASE / ≥2.1.9.RELEASE
+
+ 029  中危  漏洞
+      名称：Spring Boot Actuator 未授权访问
+      说明：Actuator 端点 /actuator/env 可匿名访问，泄露环境变量、配置属性与密钥
+      修复：引入 spring-boot-starter-security 为 Actuator 端点配置认证；或设置 management.endpoints.web.exposure.include 白名单
+
+ 030  中危  漏洞
+      名称：Spring Boot Actuator heapdump 敏感信息泄露
+      说明：/actuator/heapdump 可匿名下载堆转储，内含口令/密钥/Token 等敏感信息
+      修复：为 /actuator/heapdump 端点配置认证；或设置 management.endpoints.web.exposure.exclude=heapdump
+
+ 031  中危  漏洞
+      名称：Spring Boot Actuator /mappings 路由映射泄露
+      说明：/actuator/mappings 暴露全部控制器映射与请求方法，泄露内部 API 结构
+      修复：为 /actuator/mappings 端点配置认证；或设置 management.endpoints.web.exposure.exclude=mappings
+
+ 032  中危  漏洞
+      名称：Spring Boot Admin 未授权访问
+      说明：Spring Boot Admin 监控界面未设置认证，可查看所有注册服务的状态、配置、日志等敏感信息
+      修复：为 Spring Boot Admin Server 添加 spring-boot-admin-server-ui 的登录认证
+
+ 033  中危  漏洞
+      名称：Spring Boot Actuator /trace 请求历史泄露
+      说明：/actuator/trace 暴露最近请求历史，含 headers/cookies/sessions 等敏感信息
+      修复：为 /actuator/trace 端点配置认证；或设置 management.endpoints.web.exposure.exclude=trace,httptrace
+
+ 034  低危  漏洞
+      名称：Spring Data REST 信息泄露
+      说明：Spring Data REST 默认暴露所有 Repository 端点，未设置访问控制时可能泄露数据库实体结构和数据
+      修复：为 Repository 接口添加 @RepositoryRestResource(exported=false) 或设置方法级安全
+
+===============================================================================
+ 通用 Web（common）· 12 个
+===============================================================================
+
+ 035  高危  漏洞
+      名称：.env 配置文件泄露
+      说明：目标 Web 根目录下存在可访问的 .env 文件，其中包含数据库凭据、应用密钥等敏感信息
+      修复：在 Web 服务器配置中禁止对 .env 等配置文件的外网访问，添加规则阻止下载隐藏文件
+
+ 036  高危  漏洞
+      名称：.git 源码泄露
+      说明：目标 Web 根目录下存在可访问的 .git 目录，攻击者可下载源码及提交历史
+      修复：在 Web 服务器配置中禁止对 .git 目录的访问，或在部署时删除 .git 目录
+
+ 037  高危  漏洞
+      名称：Redis 未授权访问
+      说明：Redis 服务未设置认证（requirepass 为空），任意连接可执行 INFO/CONFIG 等命令
+      修复：为 Redis 设置 requirepass；bind 仅内网；禁用 CONFIG 命令
+
+ 038  高危  漏洞  CVE-2016-4437
+      名称：Shiro RememberMe 反序列化（指纹）
+      说明：Apache Shiro rememberMe 反序列化远程代码执行漏洞。Shiro 默认使用 AES-128-CBC 加密 rememberMe Cookie，密钥硬编码为 kPH+bIxk5D2deZiIxcaaaA==。攻击者可利用已知密钥构造恶意序列化对象，实现 RCE。
+      修复：更换 Shiro rememberMe 加密密钥，升级 Shiro 至 1.2.5+，并配置反序列化过滤器
+
+ 039  中危  漏洞
+      名称：备份文件泄露
+      说明：目标服务器上存在可访问的备份文件（.bak/.swp/.DS_Store 等），可能泄露源码或配置
+      修复：禁止 Web 服务器对外提供备份/交换/系统文件的访问，或在部署时清理此类文件
+
+ 040  中危  漏洞
+      名称：CORS 跨域配置不当
+      说明：目标服务器 CORS 配置不当，允许任意 Origin 跨域请求，可被利用发起 CSRF 攻击窃取数据
+      修复：将 Access-Control-Allow-Origin 限制为可信域名白名单，禁止使用 * 或反射任意 Origin
+
+ 041  中危  漏洞
+      名称：MinIO 未授权访问
+      说明：MinIO 对象存储未授权访问（默认配置匿名可列举/读取 bucket）
+      修复：配置 MinIO 访问凭证（AccessKey/SecretKey）；关闭匿名策略
+
+ 042  中危  漏洞  CVE-2023-33246
+      名称：RocketMQ Dashboard 未授权
+      说明：RocketMQ Dashboard 控制台未授权访问（可查看/操作集群）
+      修复：为 RocketMQ Dashboard 配置认证；限制管理端口访问来源
+
+ 043  中危  漏洞
+      名称：IDE/SCM 残留文件泄露
+      说明：目标服务器上存在 IDE 配置或版本控制残留文件，可能泄露项目结构、源码路径等敏感信息
+      修复：禁止 Web 服务器对外提供 .svn/.hg/.idea/.vscode 等隐藏目录的访问，部署时清理这些目录
+
+ 044  中危  漏洞
+      名称：Swagger API 文档泄露
+      说明：目标存在未授权的 API 文档界面，攻击者可了解全部 API 接口、参数及数据结构，辅助进一步攻击
+      修复：为 Swagger/API 文档添加访问认证，或在生产环境中禁用 Swagger 端点
+
+ 045  低危  信息
+      名称：目录遍历探测
+      说明：目标服务器开启了目录列表功能，攻击者可浏览目录结构发现隐藏文件和敏感路径
+      修复：在 Web 服务器配置中关闭目录列表功能（nginx: autoindex off; apache: Options -Indexes）
+
+ 046  低危  信息
+      名称：HTTP 方法探测
+      说明：通过 OPTIONS 请求探测目标支持的 HTTP 方法，检测 TRACE 方法是否开启（可被利用于跨站追踪攻击）
+      修复：在 Web 服务器中禁用 TRACE/TRACK 方法；限制 Allow 头中仅暴露必要方法
+
+===============================================================================
+ JeecgBoot（jeecgboot）· 8 个
+===============================================================================
+
+ 047  高危  漏洞  CNVD-2022-39817
+      名称：JeecgBoot 任意文件读取
+      说明：JeecgBoot /common/download 接口 fileName 参数目录穿越读取任意文件
+      修复：升级 JeecgBoot 至 3.5.1+；download 接口增加路径白名单校验
+
+ 048  高危  漏洞  CNVD-2021-27656
+      名称：JeecgBoot jmreport 文件上传
+      说明：JeecgBoot 报表模块 /jmreport/upload 存在未授权任意文件上传
+      修复：升级 JeecgBoot 至 3.4.2+；报表接口强制鉴权
+
+ 049  高危  漏洞
+      名称：JeecgBoot 报表 SSTI
+      说明：JeecgBoot 报表模块 /jmreport/testConnection 存在 Freemarker 模板注入，可 RCE
+      修复：升级 JeecgBoot 至 3.5.3+；限制报表模块访问权限
+
+ 050  高危  漏洞  CNVD-2022-30348
+      名称：JeecgBoot jmreport SQL注入
+      说明：JeecgBoot 报表模块 /jmreport/queryFieldBySql 可执行任意 SQL（未授权）
+      修复：升级 JeecgBoot 至 3.4.3+；报表接口强制鉴权
+
+ 051  高危  漏洞  CVE-2022-44153
+      名称：JeecgBoot queryUserByDepId SQL注入
+      说明：JeecgBoot /sys/user/queryUserByDepId 的 depId 参数存在报错型 SQL 注入
+      修复：升级 JeecgBoot 至 3.4.4+；对 depId 参数做参数化查询
+
+ 052  中危  爆破
+      名称：JeecgBoot 默认口令
+      说明：JeecgBoot 后台默认口令 admin/123456（未修改则可直接登录）
+      修复：修改默认口令 admin/123456；启用强密码策略
+
+ 053  中危  漏洞  CVE-2023-1454
+      名称：JeecgBoot 字典越权
+      说明：JeecgBoot /sys/dict/list 未授权访问，泄露系统字典配置
+      修复：升级 JeecgBoot；sys 接口强制鉴权
+
+ 054  中危  漏洞  CVE-2023-1454
+      名称：JeecgBoot 报表未授权
+      说明：JeecgBoot 报表模块 /jmreport/list 未授权访问，泄露报表列表与配置
+      修复：升级 JeecgBoot；/jmreport/** 接口强制鉴权
+
+===============================================================================
+ 覆盖的 CVE 索引
+===============================================================================
+
+   CNVD-2021-01931   任意文件读取 / 任意文件读取（路径穿越） / POST型报错注入（dept） / POST型报错注入（role）
+   CNVD-2021-27656   JeecgBoot jmreport 文件上传
+   CNVD-2022-30348   JeecgBoot jmreport SQL注入
+   CNVD-2022-39817   JeecgBoot 任意文件读取
+   CVE-2016-4437     Shiro RememberMe 反序列化（指纹）
+   CVE-2020-5410     Spring Cloud Config 路径穿越
+   CVE-2021-29441    RuoYi-Cloud Nacos 配置泄露 / Nacos 未授权访问
+   CVE-2022-22947    CVE-2022-22947 Spring Cloud Gateway 远程代码执行
+   CVE-2022-22963    CVE-2022-22963 Spring Cloud Function 远程代码执行
+   CVE-2022-22965    CVE-2022-22965 Spring4Shell 远程代码执行
+   CVE-2022-44153    JeecgBoot queryUserByDepId SQL注入
+   CVE-2023-1454     JeecgBoot 字典越权 / JeecgBoot 报表未授权
+   CVE-2023-33246    RocketMQ Dashboard 未授权
+   CVE-2023-38286    Thymeleaf/SpEL 模板注入
+   CVE-2025-46174    重置密码页数据权限绕过
+   CVE-2025-70986    部门树越权访问
+
+-------------------------------------------------------------------------------
+ 项目地址：https://github.com/xiabai2008/Ruoyi-Scan
+ 仅限授权测试；插件均只做存在性验证，不做破坏性利用。
+===============================================================================

@@ -13,8 +13,8 @@ repo_name: xiabai2008/Ruoyi-Scan
 repo_url: https://github.com/xiabai2008/Ruoyi-Scan
 edit_uri: edit/main/docs/
 
-# docs/promo 里既有要发布的命令手册，也有对外无意义的内部材料：
-# 宣传视频脚本是拍摄工作稿；.txt 是给 Release 下载的纯文本副本（网页版是 .md）。
+# docs/promo 下的纯文本（命令手册 / 使用指导 / 插件清单）是随 Release 分发的材料，
+# 宣传视频脚本是拍摄工作稿；都不属于文档站页面，统一排除。
 exclude_docs: |
   promo/宣传视频脚本_v1.5.2.md
   promo/*.txt
@@ -123,7 +123,6 @@ nav:
   - 快速上手: quickstart.md
   - 用户指南:
       - 用户手册: usage.md
-      - 操作命令手册: promo/ruoyi-scan_操作命令手册.md
       - 版本矩阵: version-matrix.md
       - 检出能力矩阵: verification-matrix.md
       - 安全报告说明: security_report.md

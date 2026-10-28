@@ -5,11 +5,13 @@
 #   - Ruoyi-Scan_<version>_x64-setup.exe  （NSIS 安装包：单 exe 壳 + 内嵌引擎，双击即用）
 #   - ruoyi-scan-desktop.exe              （单文件版：引擎已内嵌，免安装直接双击）
 #   - ruoyi-scan.exe                      （终端版：PyInstaller onefile，console，与 pip 版同一套 CLI）
-#   - ruoyi-scan_操作命令手册.txt          （命令速查，随资产分发，下载者无需回仓库翻 README）
+#   - ruoyi-scan-command-manual.txt       （命令速查，随资产分发，下载者无需回仓库翻 README）
+#   - ruoyi-scan-usage-guide.txt          （使用指导：场景 / 技巧 / 合规）
+#   - ruoyi-scan-plugins.txt              （54 个 POC 清单与 CVE 索引）
 #   - checksums-desktop.txt               （SHA256 供应链校验，覆盖上述三个 exe）
 #
 # 零配置体验说明：
-#   引擎（Python 运行时 + 51 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
+#   引擎（Python 运行时 + 54 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
 #   ruoyi-scan-engine.exe，编译期整块嵌入壳二进制（build.rs → include_bytes!）。
 #   首次运行自解压到 %LOCALAPPDATA%\Ruoyi-Scan\engine\ 并拉起 127.0.0.1:8123。
 #   用户：下载 → 双击 → 扫描。无需 Python / Node / Rust，安装器只是可选加分项。
@@ -202,10 +204,11 @@ jobs:
           Copy-Item $setup.FullName "$out/Ruoyi-Scan_${env:REF_NAME}_x64-setup.exe"
           # 终端版（console，免 Python；与 pip 版同一套 CLI 参数）
           Copy-Item "tools/cli_build/dist/ruoyi-scan.exe" "$out/ruoyi-scan.exe"
-          # 命令手册随资产分发：下载者不用回仓库翻 README。
-          # 必须用 ASCII 命名——GitHub 会把资产文件名里的非 ASCII 字符直接抹掉
-          # （实测 ruoyi-scan_操作命令手册.txt 上传后变成 ruoyi-scan_.txt）。
-          Copy-Item "docs/promo/*.txt" "$out/ruoyi-scan-command-manual.txt"
+          # 三份纯文本文档随资产分发：下载者不用回仓库翻 README。
+          # 文件名必须是 ASCII——GitHub 会把资产名里的非 ASCII 字符直接抹掉
+          # （历史教训：ruoyi-scan_操作命令手册.txt 上传后变成 ruoyi-scan_.txt），
+          # 所以 docs/promo 下的源文件也统一用 ASCII 名，复制时保持原名即可。
+          Copy-Item "docs/promo/ruoyi-scan-*.txt" -Destination $out
           Get-ChildItem $out | Format-Table Name, Length
 
       # ---------- 阶段 3：单文件版冒烟（免安装直接双击场景）----------
@@ -359,6 +362,8 @@ jobs:
             desktop/artifacts/ruoyi-scan-desktop.exe
             desktop/artifacts/ruoyi-scan.exe
             desktop/artifacts/ruoyi-scan-command-manual.txt
+            desktop/artifacts/ruoyi-scan-usage-guide.txt
+            desktop/artifacts/ruoyi-scan-plugins.txt
             desktop/artifacts/checksums-desktop.txt
 
       # 失败时保留引擎构建日志（webview2/资源缺失等问题的排查线索）
