@@ -50,6 +50,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      # tag 与代码版本不一致时先停：桌面端产物名、exe 文件属性、报告页脚都取自版本号，
+      # 打错了版本会连带一串资产名错误（历史上出现过 1.5.1 的 wheel 挂在 1.5.2 页面）。
+      - name: Verify version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: python scripts/check_version.py --tag "$env:REF_NAME"
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'

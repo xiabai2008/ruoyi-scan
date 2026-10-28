@@ -73,6 +73,11 @@ jobs:
         # 插件增删改后忘了重新生成，清单就是错的——直接卡住，而不是等发布后才发现。
         run: python scripts/export_plugin_list.py --check
 
+      - name: 版本号一致性（settings / pyproject / 桌面端 / CHANGELOG）
+        # 版本号散落 5 个文件，任何一处漏改都不会让测试失败，但会让用户装到
+        # 「自称 1.5.2、实际 1.5.1」的包。基准是 config/settings.py 的 VERSION。
+        run: python scripts/check_version.py
+
   # ── 单元 + 回归：纯 mock，最快，必跑 ─────────────────────────────
   # G2：增加 Windows matrix——国内使用主力环境之一，防编码（GBK）/路径分隔符回归
   unit:

@@ -73,6 +73,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Verify version matches tag
+        # tag 与代码版本不一致时直接停：否则会打出一个「tag 是 1.5.3、wheel 是 1.5.2」的包，
+        # 而 PyPI 不允许同名版本重发，纠正成本很高。
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: python scripts/check_version.py --tag "$REF_NAME"
+
       - name: Build wheel and sdist
         run: |
           pip install build
