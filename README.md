@@ -1,152 +1,760 @@
-# Ruoyi-Scan · 若依专项漏洞扫描器
+# Ruoyi-Scan — 若依专项漏洞扫描工具
 
-[![CI](https://github.com/xiabai2008/ruoyi-scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/ruoyi-scan/actions/workflows/ci.yml)
+[![CI](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/Ruoyi-Scan/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/ruoyi-scan)](https://pypi.org/project/ruoyi-scan/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/ruoyi-scan)](https://pypi.org/project/ruoyi-scan/)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Coverage](https://codecov.io/gh/xiabai2008/Ruoyi-Scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/Ruoyi-Scan)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/xiabai2008/ruoyi-scan/badge)](https://securityscorecards.dev/viewer/?uri=github.com/xiabai2008/ruoyi-scan)
+[![Star History](https://api.star-history.com/svg?repos=xiabai2008/ruoyi-scan&type=Date)](https://star-history.com/#xiabai2008/ruoyi-scan&Date)
 
-> 合法授权的**若依（RuoYi）专项漏洞扫描器**。54 个 POC、5 变体识别、20 组件 CVE 比对，
-> 结论只有三种：**CONFIRMED 确认存在 / SAFE 确认不存在 / UNKNOWN 无法判定**。
->
-> `pip install -U ruoyi-scan`　或　[下载终端版 `ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe)（命令行，免 Python）、
-> [下载桌面端](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe)（双击即用）
+[中文](README.md) | [English](README_EN.md)
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-overview.png" alt="扫描报告：风险分布 + 等保 2.0 / OWASP 合规映射" width="900" />
-</p>
+> 一款合法授权的**若依（RuoYi）专项漏洞扫描器**，插件化架构，三态判定（CONFIRMED / SAFE / UNKNOWN）。
+> 支持批量扫描、多格式报告、WAF 绕过（含对抗型传输层）、漏洞利用链、Web API 等企业级特性。
+> **桌面端已上线** —— 单个 exe 双击即用，无需 Python / Docker / 任何环境配置。
+> ⭐ 如果这个工具对你有帮助，欢迎点个 Star 支持一下，让更多人看到它。
 
-> 一次 `-p` 扫描产出的 HTML 报告（真实运行，v1.5.2，对签名靶场）：风险分布、等保 2.0 与 OWASP
-> 条款命中、20 条确认漏洞——报告本身就是可交付物，7 种格式（HTML/JSON/CSV/PDF/Word/Excel/SARIF；
-> PDF/Word/Excel 需 `pip install "ruoyi-scan[report]"`）。
+```bash
+pip install ruoyi-scan
+```
+
+> 不想装 Python？[终端版 `ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe)（命令行，约 38 MB，免安装）或 [桌面端单文件版](https://github.com/xiabai2008/ruoyi-scan/releases)（双击即用）。
 
 ---
 
-## 它和通用扫描器的差别：敢说「不存在」
-
-通用扫描器（nuclei / xray）告诉你「这里可能有东西」；Ruoyi-Scan 对每个插件给出**可交付的判定**：
-
-| | 通用扫描器 | Ruoyi-Scan |
-|---|---|---|
-| 未命中 | 报告里不出现，你不知道测没测 | `SAFE` —— 测过了，排除 |
-| 网络异常 / WAF 拦截 / 验证码阻断 | 报错或跳过 | `UNKNOWN` —— **绝不冒充 SAFE**，建议人工复核 |
-| 判定依据 | 特征命中 | 结构化校验 + 回显证据（读到的文件内容、注入标记） |
-
-这条纪律是可验证的：内置签名靶场有 `vuln`（带洞）与 `safe`（全修复）双模式，CI 与 nightly
-验收分别断言「vuln 模式 20 个确认命中」与「safe 模式零误报」；每个插件的验证级别
-（L1 靶场 / L2 真实响应 / L3 真实软件双向验证）公开在
-[docs/verification-matrix.md](docs/verification-matrix.md)。
-
-## 30 秒上手
-
-```bash
-pip install -U ruoyi-scan
-
-# 漏洞检测（最快，只跑 vuln 类插件）
-ruoyi-scan -p http://target:8080/
-
-# 综合扫描（指纹 → 目录扫描 → POC → 弱口令爆破）
-ruoyi-scan -u http://target:8080/
-
-# 出报告：HTML / JSON / CSV / PDF / Word / Excel / SARIF
-ruoyi-scan -u http://target:8080/ --report ./reports --report-format all
-```
+## 演示
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-demo.png" alt="命令行输出：绿色=确认存在 / 红色=确认不存在 / 黄色=无法判定" width="780" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/assets/demo-scan.gif" alt="Ruoyi-Scan 演示" width="720" />
 </p>
 
-> 真实输出（v1.5.2，对仓库内置签名靶场执行 `-p`）：每行一条结论，三态配色，末尾给出
-> 摘要、去重统计与报告路径。本地复现：源码仓库根目录 `LAB_MODE=vuln LAB_PORT=8080 python lab/server.py`，
-> 再执行 `ruoyi-scan -p http://127.0.0.1:8080/`（pip 包不含 lab，需 clone 仓库）。
+> 上图：对内置若依签名靶场执行综合扫描，实时展示风险分布与漏洞列表。
 
-## 报告与交付
+---
+
+## 命令行 · 真实运行截图
+
+> 以下均为对本机签名靶场（[`lab/`](lab/)，vuln / safe 双模式）的真实运行记录：vuln 模式 23 个漏洞全部命中，safe 模式零误报。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-findings.png" alt="报告详细结果：11 列，含证据、修复建议、修复详情、复现命令、合规映射" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-01-help.png" alt="命令行帮助：Banner 与扫描模式一览" width="900" />
 </p>
 
-每条结果都带：**证据**（状态码 + 命中关键字 / 回显内容）、**修复建议**、**修复详情**（nginx / Apache /
-IIS 配置片段与代码改法）、**复现命令**、**合规映射**（等保条款 + OWASP 类别）、CVE / CVSS。
+**帮助** —— `python main.py -h`：5 种扫描模式与全部可选长参数一览。
 
-## 四种扫描模式
-
-| 模式 | 命令 | 说明 |
-|---|---|---|
-| 漏洞检测 | `-p <url>` | 只跑 POC 判定，快，请求量小 |
-| 综合扫描 | `-u <url>` | 指纹 → 目录扫描 → POC → 弱口令爆破 |
-| 目录扫描 | `-m <url>` | 敏感路径 / 后台 / actuator 等探测 |
-| 登录爆破 | `-l <url>` | Druid / 后台默认口令字典爆破（`--pass-level top100` 可收敛） |
-
-批量：`ruoyi-scan -f targets.txt -p --report ./reports`　·　全部参数：[docs/usage.md](docs/usage.md)
-
-## 能力概览
-
-**检测**（54 个 POC 插件）
-
-- 若依 20 个插件 + **5 变体识别**（Vue3 / App / Plus / Cloud-Plus / Magic），变体感知路由
-- Spring Boot 14 个 POC（Actuator / Jolokia / Spring4Shell / Gateway …）、通用 12 个、JeecgBoot 8 个
-- 20 个 Java 组件版本 → CVE 比对（`--components`），兼容执行 nuclei YAML 模板（`--nuclei`）
-- WAF 绕过 11 策略 + 对抗型传输层（`--adversarial-transport`，可选依赖）
-
-**交付**
-
-- 7 种报告格式；等保 2.0 / OWASP 合规映射章节；**docx 模板引擎**（`--report-template`）
-- 整改复测（`--remediation baseline.json`）、版本对照矩阵、SARIF 接 GitHub Code Scanning
-
-**工程**
-
-- Web API + WebSocket + 权限分级 + 定时扫描（`--serve`）；桌面端单 exe；Docker
-- 靶场可复跑：签名靶场 / 行为级仿真（验证码 + CSRF + 差分判定）/ 对抗网络（WAF / 限流 / 软 404）/
-  真实 Docker 栈（4.7.8 + MySQL + nginx + ModSecurity）
-- 8 类真实用法脚本化审计（`scripts/scenario_audit.py`），结论与复现见 [lab/SCENARIO-AUDIT.md](lab/SCENARIO-AUDIT.md)
-- 插件 SDK（`--plugin-init` / `--plugin-check`）、社区模板仓库（Ed25519 强制验签）
-- AI 辅助：自然语言生成 POC 并经靶场自验证（`--ai`）、UNKNOWN 智能降噪（`--ai-triage`）
-
-## 安装形态
-
-| 形态 | 获取方式 | 说明 |
-|---|---|---|
-| pip | `pip install -U ruoyi-scan` | 推荐；可选依赖按需装（`ruoyi-scan[report,serve]`） |
-| 终端版 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan.exe` | 约 38 MB，单文件免 Python，参数与 pip 版完全一致 |
-| 单文件 exe | [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) · `ruoyi-scan-desktop.exe` | 约 49 MB，引擎与 54 个 POC 编译期嵌入，免安装 |
-| 安装包 | `Ruoyi-Scan_*_x64-setup.exe` | NSIS 安装，含卸载清理 |
-| Docker | `docker build -t ruoyi-scan .` / `docker compose up -d` | 多阶段构建、非 root；compose 自带两个签名靶场 |
-
-## 桌面端
+<br />
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-app.png" alt="桌面端：任务列表、扫描配置、实时结果与报告" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-02-scan-running.png" alt="综合扫描进行中：指纹识别、WAF 检测与目录扫描" width="900" />
 </p>
 
-> Windows 单文件 exe（Tauri + WebView2）：引擎与 54 个 POC 内置，新建扫描 / 实时结果 / 报告归档在同一窗口完成。
-> 引擎子进程挂 JobObject，强杀不留孤儿进程；细节见 [docs/desktop.md](docs/desktop.md)。
+**综合扫描（进行中）** —— 自动指纹识别（cms=ruoyi，置信度 0.70）、WAF 特征检测、目录扫描实时输出。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-03-scan-results.png" alt="综合扫描结果：漏洞命中与登录爆破成功" width="900" />
+</p>
+
+**综合扫描（结果）** —— 未授权访问、Nacos 配置泄露、SSTI、任意文件读取、定时任务 RCE 等逐一判定；Druid 弱口令 ruoyi/123456 与后台默认口令 admin/admin123 爆破成功。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-04-bruteforce.png" alt="登录爆破模式：弱口令命中" width="900" />
+</p>
+
+**登录爆破** —— `-l` 模式：Druid 弱口令与后台默认口令一键爆破，命中即判定。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-06-safe-verdicts.png" alt="safe 靶场零误报验证：全部判定不存在" width="900" />
+</p>
+
+**零误报验证** —— 对 safe 靶场（全修复模式）执行漏洞检测：满屏「不存在」，拿不准的如实标注「无法判定」，不凑数、不误报。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-07-report.png" alt="扫描报告生成：HTML/JSON/CSV/PDF/DOCX/XLSX/SARIF" width="900" />
+</p>
+
+**报告生成** —— `--report reports`：扫描摘要（耗时 / 风险分布 / 去重统计）+ 7 种格式报告一键落盘。
+
+---
+
+## 桌面端 · 单个 exe，双击即用
+
+> 引擎、54 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
+</p>
+
+**总览** —— 三态判定实时分布、任务趋势、最新发现。SAFE 与 UNKNOWN 在设计上就与 CONFIRMED 分开展示，不做「结果全红」的扫描器。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-02-livescan.png" alt="扫描现场：WebSocket 实时日志、插件进度与结果明细" width="900" />
+</p>
+
+**扫描现场** —— WebSocket 实时日志流、插件进度、结果明细（可按三态筛选）。下方三态统计卡与引擎在线状态一目了然。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-03-vulndb.png" alt="漏洞库：54 个 POC 插件与 CVE / CNVD 映射" width="900" />
+</p>
+
+**漏洞库** —— 54 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+
+<br />
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-06-settings.png" alt="设置：主题包、主题编辑器与操作员人格" width="900" />
+</p>
+
+**个性化** —— 4 套主题包、6 个核心色派生 30 个设计 token、操作员人格（11 个预设形象 + 自定义代号）、CRT 扫描线与字体模式。
+
+### 下载
+
+| 形态 | 文件 | 说明 |
+|------|------|------|
+| 终端版 | [`ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe) | 约 38 MB，命令行使用，参数与 pip 版完全一致，免 Python |
+| 单文件版 | [`ruoyi-scan-desktop.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan-desktop.exe) | 约 49 MB，**免安装，双击即用** |
+| 安装包 | [`Ruoyi-Scan_*_x64-setup.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | NSIS 安装包，约 40 MB，含卸载清理 |
+| 命令行 | `pip install ruoyi-scan` | 适合 CI / 服务器环境 |
+
+### 实现要点
+
+| 要点 | 说明 |
+|------|------|
+| 单文件分发 | PyInstaller 引擎在 cargo 编译期由 `build.rs` 嵌入壳二进制；运行时自解压到 `%LOCALAPPDATA%\Ruoyi-Scan\engine\`，按校验和版本戳自动覆盖升级 |
+| 进程回收 | 引擎子进程挂 Windows JobObject（`KILL_ON_JOB_CLOSE`），壳被强杀 / 崩溃时引擎树自动回收，不留孤儿进程 |
+| 卸载清理 | NSIS `installerHooks` 在卸载后清除运行时自解压缓存，避免残留约 30 MB 引擎文件 |
+
+> 更多细节见[桌面端文档](docs/desktop.md)。
+
+---
+
+## 为什么不直接用通用扫描器
+
+> Ruoyi-Scan **不与 nuclei / xray 竞争，而是互补** —— 它们负责广度，我们负责若依生态的深度与判定纪律。
+
+| 维度 | nuclei | xray | **Ruoyi-Scan** |
+|------|--------|------|----------------|
+| 定位 | 通用 POC 引擎 | 通用 Web 扫描器 | **若依 / 国产 Java 框架专项** |
+| 若依变体识别 | — | — | **5 变体**（Vue3 / App / Plus / Cloud-Plus / Magic） |
+| 版本感知 POC 过滤 | — | — | **4.2 / 4.7 / v5 / 3.9.x 版本矩阵** |
+| 未确认项的处理 | 无此概念 | 无此概念 | **三态判定**：CONFIRMED / SAFE / UNKNOWN |
+| 网络异常情形 | 报错或跳过 | — | **强制 UNKNOWN，绝不冒充 SAFE** |
+| 合规映射 | — | — | 等保 2.0 / OWASP **报告级章节** |
+| 安服交付物 | — | 部分 | 7 种格式 + **docx 模板引擎 + 整改复测** |
+| nuclei 模板 | 原生 | 不支持 | **兼容执行**（http 协议子集 + 安全白名单） |
+
+**一句话**：通用扫描器告诉你「这里可能有东西」；Ruoyi-Scan 告诉你「这个漏洞确实存在 / 确实不存在 / 无法判定」，并直接产出可交付的报告。
+
+> 若依是国内应用最广的开源 Java 后台框架之一，二次开发项目在政企与外包中大量存在。通用工具在它面前的问题是**不知道对面是什么** —— 指纹粗糙、变体不辨、版本无感，于是误报与漏报同时发生。我们把「扫得准」做在前面。
+
+---
 
 ## 文档
 
-| 文档 | 内容 |
-|---|---|
+> 📖 **[在线文档站](https://xiabai2008.github.io/ruoyi-scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
+
+| 文档 | 说明 |
+|------|------|
 | [快速上手](docs/quickstart.md) | 5 分钟从安装到出第一份报告 |
-| [用户手册](docs/usage.md) | 扫描模式、**全部参数速查**、配置文件、分布式、CI/CD |
-| [插件开发](docs/plugin_dev.md) | `PluginBase` 三态契约、`--plugin-init` 脚手架 |
-| [检出能力矩阵](docs/verification-matrix.md) | 每个插件的验证级别（L1/L2/L3）与证据 |
-| [桌面端](docs/desktop.md) · [API](docs/api.md) · [DevSecOps](docs/devsecops.md) | 单 exe / REST+WebSocket / CI 集成 |
-| [在线文档站](https://xiabai2008.github.io/ruoyi-scan/) | 以上文档的在线阅读版 |
+| [用户指南](docs/usage.md) | 安装配置、扫描模式、CLI 参数详解 |
+| [插件开发教程](docs/plugin_dev.md) | PluginBase、三态判定、entry_points 注册 |
+| [API 文档](docs/api.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
+| [桌面端](docs/desktop.md) | 单 exe 免安装双击即用（引擎内嵌） |
+| [贡献指南](CONTRIBUTING.md) | 开发流程、代码规范、提交约定 |
+| [变更日志](CHANGELOG.md) | 版本历史与变更记录 |
+| [发展路线图](ROADMAP.md) | G 系列版本规划、社区路线、度量指标 |
 
-## 质量与供应链
+---
 
-[![Coverage](https://codecov.io/gh/xiabai2008/ruoyi-scan/branch/main/graph/badge.svg)](https://codecov.io/gh/xiabai2008/ruoyi-scan)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/xiabai2008/ruoyi-scan/badge)](https://securityscorecards.dev/viewer/?uri=github.com/xiabai2008/ruoyi-scan)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+## 项目定位
 
-CI 覆盖 lint（ruff + mypy）/ 4 组单测矩阵（Ubuntu + Windows × py3.11/3.12）/ 签名靶场双模式验收 /
-报告与 API 端到端；Release 产物附 SHA256 校验和与 **SLSA 构建来源证明**
-（`gh attestation verify <file> -R xiabai2008/ruoyi-scan`）。
+- **作者**：XIABAI
+- **版本**：1.5.1
+- **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
+- **技术栈**：Python 3.8+ / requests / FastAPI / Docker
+- **许可**：MIT License
 
-## 合规声明
+---
 
-本工具仅用于**授权范围内**的安全测试与漏洞验证，只做漏洞存在性确认、不做破坏性利用。
-使用者需遵守《网络安全法》及所在地法律法规；未经授权对目标系统进行测试属违法行为。
+## 核心能力
+
+| 模块 | 说明 |
+|------|------|
+| `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic） |
+| `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
+| `plugins/common/` | 通用漏洞包 12 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权、Shiro 指纹等） |
+| `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
+| 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
+| 组件版本检测 | 20 个 Java 组件（fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana 等）版本比对 CVE 映射（`--components`） |
+| 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
+| WAF 绕过 | 11 种绕过策略 + 对抗型传输层（Scrapling）兜底 + 三态判定保护矩阵 + 成功率追踪 |
+| 对抗型传输层 | `--adversarial-transport` —— Scrapling 指纹伪装 / 隐身浏览器解 CF/JS 挑战（`[adversarial]` 可选依赖，见下文） |
+| 漏洞利用链 | DAG 拓扑编排 + 条件分支 + 3 条内置链 |
+| nuclei 模板兼容 | 直接执行 nuclei-templates YAML 模板（`--nuclei`，http 协议子集 + 安全白名单） |
+| 插件模板仓库 | 导出/manifest/Ed25519 强制验签/`--plugin-update` 社区分发闭环 |
+| AI POC 生成 | `--ai` 自然语言生成插件（LLM 自验证回灌，无 Key 降级规则模板）+ `--ai-validate` 生成即验证 / `--ai-triage` UNKNOWN 智能降噪 |
+| AI 报告解读 | `--ai-report zh\|en` 自动生成漏洞分析与修复优先级 |
+| 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
+| 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF + 版本对照表 + docx 模板引擎 + 整改复测（`--remediation`） |
+| Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 + 权限分级（read/scan/admin）+ 定时扫描 |
+| 并发限速 | ThreadPoolExecutor + 令牌桶（锁外 sleep，无并发退化） |
+| 验证码处理 | 自动探测 / OCR 识别 / 跳过 三模式 |
+| 多版本适配 | RuoYi 4.2 / 4.7 / v5 / v3.9.x 版本感知 POC 过滤 |
+| 端口扫描 | TCP 端口扫描 + 服务识别 + Banner 抓取 |
+| 被动代理 | HTTP/HTTPS 代理，捕获流量自动扫描 |
+| OAST 带外检测 | 自建回调服务器 + 6 种 payload 模板（SSRF/XXE/SQL盲注/RCE盲注/LDAP/命令注入） |
+| 业务逻辑检测 | IDOR / 越权 / 参数篡改 / 竞争条件 4 类检测器 |
+| 认证后深度扫描 | `--auth-surface` 登录态接口资产盘点 + 越权矩阵（匿名重放判未授权 / 低权重放判垂直越权） |
+| CVE 同步 | NVD + GHSA 双源回退 + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
+| SIEM 集成 | ECS / CEF / LEEF / JSON 4 格式导出 + Syslog 转发 |
+| 异步引擎 | ThreadPoolExecutor 并发扫描 + aiohttp 可选异步 HTTP |
+| 分布式扫描 | Redis Master-Worker 队列 + Standalone 降级模式 |
+| 结果缓存 | SQLite 持久化 + SHA256 键 + TTL + 命中率统计 |
+| 扫描模板 | quick / deep / compliance / dengbao 4 种预设策略 |
+| 认证扫描 | Cookie / Token / Bearer / 自动登录 4 种认证注入 |
+| 国际化 | 中英文报告切换（`--lang zh|en`） |
+| 插件 SDK | 模板生成 + 验证 + 枚举（`--plugin-init` / `--plugin-check`） |
+| CI/CD 集成 | 严重度阈值退出 + GitHub Code Scanning（SARIF）+ GitLab/Jenkins 模板 |
+| 漏洞知识库 | 离线 HTML Wiki + JSON API |
+
+---
+
+## 快速开始
+
+### 方式一：pip 安装（推荐）
+
+```bash
+# 安装（自动安装核心依赖）
+pip install ruoyi-scan
+
+# 可选功能依赖（按需安装）
+pip install pyyaml          # --config YAML 配置文件
+pip install redis           # --distributed Redis 分布式扫描
+pip install aiohttp         # --async 异步 HTTP 客户端
+pip install "ruoyi-scan[adversarial]"  # --adversarial-transport 对抗型传输层（Scrapling）
+
+# 运行扫描
+ruoyi-scan -p http://target:8080/
+```
+
+### 方式二：从 Release 下载（离线 / 无 Python 环境）
+
+前往 [Releases 页面](https://github.com/xiabai2008/Ruoyi-Scan/releases)：
+
+- **完全不想装 Python**：下载 [`ruoyi-scan.exe`](https://github.com/xiabai2008/ruoyi-scan/releases/latest/download/ruoyi-scan.exe)（终端版，约 38 MB），放到任意目录后在 CMD / PowerShell 里运行，参数与 pip 版一致：
+
+  ```powershell
+  .\ruoyi-scan.exe -V
+  .\ruoyi-scan.exe -u http://target:8080/ --report .\reports\demo
+  ```
+
+- **已有 Python、想离线装包**：下载最新 `.whl`，然后：
+
+  ```bash
+  pip install ruoyi_scan-1.5.2-py3-none-any.whl
+  ```
+
+### 方式三：源码安装
+
+```bash
+git clone https://github.com/xiabai2008/Ruoyi-Scan.git
+cd Ruoyi-Scan
+pip install -r requirements.txt
+
+# 单目标漏洞扫描
+python main.py -p http://target:8080/
+
+# 批量扫描
+python main.py -f targets.txt -p --report ./reports
+
+# 手动指定 CMS（跳过指纹识别）
+python main.py -p http://target:8080/ --cms ruoyi
+
+# 综合扫描（目录扫描 + 漏洞检测 + 登录爆破）
+python main.py -u http://target:8080/
+
+# 生成全格式报告（HTML/JSON/CSV/PDF/Word/Excel）
+python main.py -p http://target:8080/ --report ./reports --report-format all
+
+# docx 合规报告模板 / 整改复测（G5）
+python main.py -p http://target:8080/ --report ./reports --report-template ./templates/compliance.docx
+python main.py -p http://target:8080/ --remediation ./baseline.json --report ./reports
+
+# WAF 绕过（检测到 WAF 自动启用）
+python main.py -p http://target:8080/ --bypass-waf auto
+
+# 对抗型传输层（Scrapling；需先安装 [adversarial] 可选依赖）
+python main.py -p http://target:8080/ --adversarial-transport
+
+# 执行漏洞利用链
+python main.py --chain ruoyi_sql_to_rce -u http://target:8080/
+python main.py --chain list  # 列出可用链
+
+# 组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j → CVE 比对）
+python main.py -p http://target:8080/ --components
+
+# 执行 nuclei 模板（nuclei-templates 生态直接复用）
+python main.py -p http://target:8080/ --nuclei examples/nuclei/
+python main.py --nuclei-validate examples/nuclei/  # 模板校验（不扫描）
+
+# AI 生成插件（LLM 自验证回灌；无 Key 时降级规则模板）
+python main.py --ai "检测若依任意文件读取漏洞" --category ruoyi
+
+# 插件模板仓库（社区分发）
+python main.py --plugin-export ./ruoyi-scan-templates
+python main.py --plugin-manifest ./ruoyi-scan-templates  # 生成/校验 manifest（Ed25519 签名）
+python main.py --plugin-update  # 从官方仓库更新插件
+
+# Web API 服务
+python main.py --serve
+# 访问 http://localhost:8000/ (Web 控制台)
+# 访问 http://localhost:8000/docs (OpenAPI 文档)
+
+# 端口扫描 + 漏洞检测
+python main.py -p http://target:8080/ --portscan
+
+# 被动代理模式
+python main.py --passive --passive-port 8080
+
+# Docker 部署（见下方「Docker 部署」章节）
+# docker-compose up -d
+```
+
+### Docker 部署
+
+Ruoyi-Scan 提供生产就绪的 Docker 镜像（多阶段构建、非 root 用户）。
+
+**构建镜像**
+
+```bash
+docker build -t ruoyi-scan .
+```
+
+**扫描目标**
+
+```bash
+# 基本扫描
+docker run --rm ruoyi-scan -p http://target/
+
+# 扫描并保存报告到宿主机
+docker run --rm -v $(pwd)/reports:/app/reports ruoyi-scan \
+  -p http://target/ --report /app/reports
+```
+
+**Web API 服务**
+
+```bash
+# 启动 FastAPI Web API（端口 8000）
+docker run --rm -p 8000:8000 ruoyi-scan --serve --host 0.0.0.0 --port 8000
+
+# 带认证的 API
+docker run --rm -p 8000:8000 -e RUOYI_SCAN_API_KEY=your-secret ruoyi-scan \
+  --serve --host 0.0.0.0 --port 8000 --api-key your-secret
+```
+
+**Docker Compose 一键部署**
+
+```bash
+# 启动全部服务（扫描器 + API + 2 个签名靶场）
+docker compose up -d
+
+# 扫描内置靶场
+docker compose run --rm scanner -p http://lab-ruoyi:8080/ --report /app/reports
+
+# 启动监控栈（Prometheus + Grafana）
+docker compose --profile monitor up -d
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+
+# 清理
+docker compose down
+```
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| scanner | - | 扫描器 CLI（通过 `docker compose run` 调用） |
+| api | 8000 | FastAPI Web API + WebSocket + Web 控制台 |
+| lab-ruoyi | 8080 | 若依签名靶场（vuln 模式） |
+| lab-spring | 8091 | Spring Boot 签名靶场（vuln 模式） |
+| prometheus | 9090 | 指标采集（`--profile monitor`） |
+| grafana | 3000 | 监控面板（`--profile monitor`） |
+
+### CLI 参数速查
+
+> 完整参数说明请运行 `python main.py -h`。以下按功能分组列出全部参数。
+
+#### 核心扫描模式
+
+| 参数 | 说明 |
+|------|------|
+| `-h` | 帮助信息 |
+| `-u <url>` | 综合扫描（目录+漏洞+爆破） |
+| `-m <url>` | 目录扫描 |
+| `-p <url>` | 漏洞检测 |
+| `-l <url>` | 登录爆破 |
+| `-f <file>` | 批量扫描（从文件读取目标列表） |
+| `--cms <ruoyi\|spring>` | 手动指定 CMS（跳过指纹识别） |
+| `--pass-level <lvl>` | 口令字典级别 top100/top1000/full |
+| `--template <name>` | 扫描模板（quick/deep/compliance/dengbao） |
+| `--template-list` | 列出所有可用模板 |
+| `--config <path>` | YAML 配置文件（CLI 参数优先级高于配置） |
+
+#### 网络与并发
+
+| 参数 | 说明 |
+|------|------|
+| `--proxy <url>` | 代理地址（如 http://127.0.0.1:8080） |
+| `--proxy-file <f>` | 代理池文件（每行一个代理 URL） |
+| `--proxy-rotate <s>` | 代理轮换策略 round-robin/random/least-fail |
+| `--threads <n>` | 并发线程数 |
+| `--rate <n>` | 每秒请求数（0=不限速） |
+| `--timeout <n>` | 请求超时秒数 |
+| `--debug` | 调试模式（请求日志输出到 stderr） |
+| `--skip-preflight` | 跳过目标可达性预检（经代理等特殊链路时使用） |
+| `--verify-tls` | 校验目标 TLS 证书（默认不校验，兼容内网自签名证书） |
+
+#### 信息收集（D14）
+
+| 参数 | 说明 |
+|------|------|
+| `--crawl` | 启用主动爬虫 |
+| `--crawl-depth <n>` | 爬虫最大深度（默认 2） |
+| `--crawl-max-pages <n>` | 爬虫最大页面数（默认 50） |
+| `--subdomain` | 启用子域名枚举 |
+| `--js-extract` | 启用 JS 端点提取 |
+| `--portscan` | 端口扫描 + 服务识别 |
+| `--ports <p1,p2>` | 自定义端口列表（逗号分隔） |
+| `--passive` | 启动被动代理模式 |
+| `--passive-host <addr>` | 代理监听地址（默认 127.0.0.1） |
+| `--passive-port <n>` | 代理监听端口（默认 8080） |
+
+#### 报告与输出
+
+| 参数 | 说明 |
+|------|------|
+| `--report <dir>` | 报告输出目录 |
+| `--report-format <f>` | 报告格式 html/json/csv/pdf/docx/xlsx/sarif |
+| `--no-dedup` | 关闭结果去重聚合 |
+| `--lang <zh\|en>` | 报告语言（默认 zh） |
+| `--diff <old.json>` | 与历史扫描报告对比 |
+| `--diff-only <old> <new>` | 仅对比两个 JSON 报告 |
+| `--save-baseline` | 保存本次扫描结果为基线 |
+| `--report-template <path>` | docx 合规报告模板（占位符注入，G5） |
+| `--remediation <baseline.json>` | 整改复测：与基线对比生成整改验证报告（G5） |
+| `--no-cta` | 关闭扫描结尾的仓库引导提示 |
+
+#### WAF 绕过与利用链
+
+| 参数 | 说明 |
+|------|------|
+| `--bypass-waf <auto\|on\|off>` | WAF 绕过策略（默认 auto） |
+| `--adversarial-transport` | 启用对抗型传输层（Scrapling 指纹伪装 / 隐身浏览器，绕过 CF/JS 挑战；需 `[adversarial]` 可选依赖） |
+| `--chain <name>` | 执行漏洞利用链 |
+| `--chain-list` | 列出所有可用的漏洞利用链 |
+
+#### 组件版本与 nuclei 模板（D4/E2）
+
+| 参数 | 说明 |
+|------|------|
+| `--components` | 组件版本检测（20 个 Java 组件 → CVE 比对） |
+| `--no-components` | 关闭组件版本检测 |
+| `--nuclei <dir\|file>` | 加载 nuclei YAML 模板（可多次指定） |
+| `--nuclei-tags <a,b>` | 仅加载含指定 tag 的模板 |
+| `--nuclei-severity <s>` | 仅加载指定严重度模板（high/medium/low） |
+| `--nuclei-exclude-tags <a,b>` | 排除含指定 tag 的模板 |
+| `--nuclei-validate <path>` | 校验 nuclei 模板（不扫描） |
+
+#### 认证扫描（D26）
+
+| 参数 | 说明 |
+|------|------|
+| `--auth <type=value>` | 认证注入（可多次指定） |
+| `--auth-file <path>` | 从文件加载认证信息 |
+| `--auth-login <user:pass>` | 自动登录获取认证 |
+
+#### Web API 服务（D9/D11）
+
+| 参数 | 说明 |
+|------|------|
+| `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
+| `--host <addr>` | API 服务监听地址（默认 0.0.0.0） |
+| `--port <n>` | API 服务监听端口（默认 8000） |
+| `--api-key <key>` | API Key 鉴权 |
+| `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
+| `--db-path <path>` | SQLite 任务持久化数据库路径 |
+| `--schedule <cron>` | 定时扫描表达式（cron 5 段式或 `every:<秒>`） |
+| `--schedule-target <url>` | 定时扫描目标 URL |
+
+> 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](docs/api.md)。
+> OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
+
+#### OAST 带外检测（D30）
+
+| 参数 | 说明 |
+|------|------|
+| `--oast` | 启用 OAST 带外检测 |
+| `--oast-server` | 启动 OAST 回调服务器 |
+| `--oast-host <addr>` | OAST 服务器监听地址 |
+| `--oast-port <n>` | OAST 服务器监听端口 |
+
+#### 业务逻辑检测（D31）
+
+| 参数 | 说明 |
+|------|------|
+| `--logic-scan` | 业务逻辑漏洞检测（IDOR/越权/参数篡改/竞争条件） |
+| `--logic-endpoints <file>` | 业务扫描端点列表文件 |
+| `--logic-concurrency <n>` | 竞争条件检测并发数 |
+
+#### 认证后深度扫描（G1）
+
+| 参数 | 说明 |
+|------|------|
+| `--auth-surface` | 登录态接口资产盘点 + 越权矩阵（需 `--auth-login user:pass` 高权凭证） |
+| `--surface-account <user:pass>` | 低权账号（垂直越权对比，可多次指定，取第一个登录成功者） |
+| `--surface-output <path>` | 资产清单 JSON 输出路径 |
+
+#### AI 能力（E7/E8/G3）
+
+| 参数 | 说明 |
+|------|------|
+| `--ai <desc>` | AI 生成插件（LLM 优先，无 Key 降级规则模板） |
+| `--ai-validate [path]` | 生成即验证（签名靶场三态；无参=生成后自动验证） |
+| `--ai-triage` | UNKNOWN 智能降噪（聚类分流，LLM 可选） |
+| `--ai-name <name>` | AI 插件名称（默认取描述） |
+| `--ai-api-key <key>` | LLM API Key（环境变量 `RUOYI_AI_API_KEY`） |
+| `--ai-model <model>` | LLM 模型名（默认 gpt-4o-mini） |
+| `--ai-retries <n>` | AI 自验证最大重试轮数 |
+| `--ai-report [zh\|en]` | 报告生成后 AI 生成漏洞分析摘要（无 Key 降级模板） |
+
+#### CVE 同步（D32）
+
+| 参数 | 说明 |
+|------|------|
+| `--cve-sync` | 同步 NVD / GHSA CVE 信息 |
+| `--cve-id <CVE-ID>` | 查询单个 CVE 信息 |
+| `--cve-offline <component>` | 按组件查询离线 CVE 库（内网模式） |
+| `--nvd-api-key <key>` | NVD API Key（提高速率限制） |
+
+#### SIEM 集成（D33）
+
+| 参数 | 说明 |
+|------|------|
+| `--siem-export <fmt>` | 导出 SIEM 格式（ecs/cef/leef/json） |
+| `--siem-output <path>` | SIEM 导出路径 |
+| `--siem-syslog <host:port>` | 发送到 Syslog 服务器 |
+| `--siem-protocol <p>` | Syslog 协议 udp/tcp |
+
+#### 异步引擎（D34）
+
+| 参数 | 说明 |
+|------|------|
+| `--async` | 启用异步扫描引擎（ThreadPoolExecutor） |
+| `--async-workers <n>` | 异步并发线程数（默认 10） |
+
+#### Web UI 控制台（D35）
+
+| 参数 | 说明 |
+|------|------|
+| `--web-ui` | 生成 Web UI 控制台（单页 HTML） |
+| `--web-ui-output <path>` | Web UI 输出路径 |
+| `--web-ui-api <url>` | Web UI 连接的 API 地址 |
+
+#### 分布式扫描（D36）
+
+| 参数 | 说明 |
+|------|------|
+| `--distributed <mode>` | 分布式模式（master/worker/standalone） |
+| `--redis-url <url>` | Redis 连接 URL |
+| `--distributed-rate <n>` | 分布式全局限速（每秒请求数，0 不限速） |
+| `--worker-max-tasks <n>` | Worker 最大任务数（0 不限） |
+| `--distributed-timeout <n>` | 分布式超时秒数（默认 600） |
+
+#### 结果缓存（D37）
+
+| 参数 | 说明 |
+|------|------|
+| `--cache` | 启用扫描结果缓存（SQLite） |
+| `--cache-ttl <n>` | 缓存有效期秒数（默认 3600） |
+| `--cache-db <path>` | 缓存数据库路径 |
+| `--cache-stats` | 查看缓存统计 |
+| `--cache-clear` | 清除过期缓存 |
+| `--cache-clear-all` | 清除全部缓存 |
+
+#### 通知（D21）
+
+| 参数 | 说明 |
+|------|------|
+| `--notify <type=target>` | 扫描完成通知（可多次指定） |
+
+#### 插件 SDK（D25）
+
+| 参数 | 说明 |
+|------|------|
+| `--plugin-init <name>` | 生成插件模板 |
+| `--plugin-new <name>` | 创建新插件脚手架 |
+| `--plugin-path <dir>` | 加载第三方插件目录 |
+| `--plugin-check <path>` | 验证插件文件完整性 |
+| `--plugin-list` | 列出所有已加载插件 |
+| `--category <cat>` | 插件类别 ruoyi/spring/common |
+
+#### 插件模板仓库（E5）
+
+| 参数 | 说明 |
+|------|------|
+| `--plugin-export <dir>` | 导出插件源码与元信息到目录（模板仓库） |
+| `--plugin-manifest <dir>` | 生成/校验 manifest.json（Ed25519 签名） |
+| `--plugin-update [url]` | 从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥） |
+
+#### CI/CD 集成（D28）
+
+| 参数 | 说明 |
+|------|------|
+| `--ci` | CI 模式（严重度超阈值时退出码非 0） |
+| `--severity-threshold <lvl>` | CI 失败阈值 low/medium/high（默认 high） |
+| `--ci-init <platform>` | 生成 CI 配置（github/gitlab/jenkins） |
+
+#### 漏洞知识库（D29）
+
+| 参数 | 说明 |
+|------|------|
+| `--wiki` | 生成漏洞知识库（HTML Wiki + JSON API） |
+| `--wiki-output <path>` | 知识库输出路径 |
+
+---
+
+## 扫描模式速览
+
+核心命令只有两个：`-p`（单目标漏洞扫描）和 `-u`（综合扫描）。两者区别：
+
+| 对比项 | `-p` 单目标漏洞扫描 | `-u` 综合扫描 |
+|--------|----------------------|----------------|
+| 执行内容 | 仅执行 `vuln` 类插件（RCE、文件读取、越权、信息泄露等漏洞判定） | 全流程依次执行：`recon` 信息收集（目录扫描、目录列表探测）→ `vuln` 漏洞检测 → `brute` 弱口令爆破（Druid、默认口令等） |
+| 特点 | 速度快、请求量小，单点漏洞确认 | 完整风险评估，耗时较长 |
+| 适合场景 | 已知目标，只想快速确认是否存在漏洞 | 需要对目标做一次全面评估 |
+
+```bash
+# 仅快速确认漏洞（单目标）
+python main.py -p http://target:8080/
+
+# 完整评估（目录 + 漏洞 + 爆破）
+python main.py -u http://target:8080/
+```
+
+> 仍不清楚该选哪种？可参考 [issue #1 的讨论](https://github.com/xiabai2008/ruoyi-scan/issues/1)（两种模式的区别详解）。
+
+---
+
+## 目录结构
+
+```
+Ruoyi-Scan/
+├── main.py                  # CLI 入口（542 行，纯参数解析+分发）
+├── config/settings.py       # 全局配置
+├── cli/                     # CLI 控制层
+│   ├── dispatcher.py        # 模式分发（工具/服务/扫描三段）
+│   ├── runner.py            # 扫描模式执行器（参数 → ScanRequest）
+│   └── ...                  # preflight / serve_runner / chain_runner 等
+├── core/                    # 核心引擎层
+│   ├── orchestrator.py      # 扫描编排器（CLI 与 Web API 共用）
+│   ├── engine.py            # 并发编排+令牌桶限速
+│   ├── models.py            # 数据模型（三态判定）
+│   ├── loader.py            # 插件动态发现
+│   ├── fingerprint.py       # 指纹识别
+│   ├── router.py            # 指纹→插件路由
+│   ├── session.py           # 会话封装
+│   ├── chain.py             # 漏洞利用链引擎
+│   ├── report.py            # 报告渲染（HTML/JSON/CSV）
+│   └── ...                  # 更多核心模块
+├── plugins/                 # 插件系统
+│   ├── base.py              # PluginBase 抽象基类
+│   ├── ruoyi/               # 若依 20 个插件（含 2 个 Plus 变体专属）
+│   ├── spring/              # Spring 14 个 POC
+│   ├── jeecgboot/           # JeecgBoot 8 个插件
+│   ├── common/              # 通用 12 个插件
+│   └── chain/               # 3 条利用链
+├── lib/                     # 工具库（41 个模块）
+├── api/                     # Web API（FastAPI + WebSocket）
+├── data/                    # 字典文件
+├── tests/                   # 67 个测试文件 / 1300+ 条用例
+├── lab/                     # 靶场环境
+├── web/                     # Web 控制台前端
+├── monitoring/              # Grafana + Prometheus
+├── desktop/                 # Tauri 桌面端（React 前端 + Rust 壳 + 内嵌引擎）
+├── scripts/                 # 构建 / 验收 / OpenAPI 导出脚本
+├── .github/workflows/       # CI 配置
+├── Dockerfile               # Docker 镜像
+├── docker-compose.yml       # Docker 编排
+├── LICENSE                  # MIT License
+└── requirements.txt         # 依赖管理
+```
+
+---
+
+## 测试
+
+```bash
+# 全量测试
+python -m pytest tests/ -q
+
+# 若依插件回归
+python tests/regression_ruoyi.py
+
+# Spring 插件回归
+python tests/regression_spring.py
+```
+
+---
+
+## 贡献
+
+欢迎贡献 POC 与改进：
+
+- **报告 Bug / 请求 POC**：使用 [Issue 模板](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose)（Bug / POC 请求 / 功能请求）
+- **提交 POC**：`python main.py --plugin-init <name>` 生成骨架 → 实现 `verify()`（三态判定）→ `--plugin-check` 验证 → PR（模板含完整 checklist）
+- **插件分发**：合入后自动进入 [ruoyi-scan-templates](https://github.com/xiabai2008/ruoyi-scan-templates) 官方仓库（Ed25519 签名）
+- **开发指南**：[docs/plugin_dev.md](docs/plugin_dev.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
+
+> 贡献 POC 前请先在自建靶场（`lab/`）或授权目标上复现，确保判定特征真实可靠。
+
+---
+
+## 安全与合规
+
+本工具仅用于**授权范围内**的安全测试与学习研究。不得用于未授权目标。涉及利用的插件默认仅做存在性验证，不做实际破坏。
+
+对抗型传输层（Scrapling）为**可选依赖**（`[adversarial]`），默认不安装；启用后同样仅可用于授权测试。
+
+**供应链验证**：Release 产物附带 SHA256 校验和，可独立验证；v1.4.3 起同时提供 SLSA 构建来源证明。
+
+> v1.4.2 及更早版本**没有**来源证明——证明步骤在 v1.4.2 发布后 48 分钟才合入 `release.yml`。
+> 对这些版本请只用校验和验证，`gh attestation verify` 会返回 not found。
+
+```bash
+# 校验和验证（所有版本）
+sha256sum -c checksums.txt
+# SLSA 构建来源验证（需 gh CLI，v1.4.3+ 产物）
+gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-scan
+```
+
+---
 
 ## License
 
-[MIT](LICENSE) © XIABAI
+MIT License © 2026 XIABAI
+
+---
+
+我是雪山盟成员，师从雪山乘客，他是转子女神的作者，[Rotor-Goddess](https://github.com/Snow-Mountain-Passengers/Rotor-Goddess)。
