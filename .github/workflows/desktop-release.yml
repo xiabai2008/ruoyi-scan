@@ -5,6 +5,7 @@
 #   - Ruoyi-Scan_<version>_x64-setup.exe  （NSIS 安装包：单 exe 壳 + 内嵌引擎，双击即用）
 #   - ruoyi-scan-desktop.exe              （单文件版：引擎已内嵌，免安装直接双击）
 #   - ruoyi-scan.exe                      （终端版：PyInstaller onefile，console，与 pip 版同一套 CLI）
+#   - ruoyi-scan_操作命令手册.txt          （命令速查，随资产分发，下载者无需回仓库翻 README）
 #   - checksums-desktop.txt               （SHA256 供应链校验，覆盖上述三个 exe）
 #
 # 零配置体验说明：
@@ -201,6 +202,10 @@ jobs:
           Copy-Item $setup.FullName "$out/Ruoyi-Scan_${env:REF_NAME}_x64-setup.exe"
           # 终端版（console，免 Python；与 pip 版同一套 CLI 参数）
           Copy-Item "tools/cli_build/dist/ruoyi-scan.exe" "$out/ruoyi-scan.exe"
+          # 命令手册随资产分发：下载者不用回仓库翻 README。
+          # 必须用 ASCII 命名——GitHub 会把资产文件名里的非 ASCII 字符直接抹掉
+          # （实测 ruoyi-scan_操作命令手册.txt 上传后变成 ruoyi-scan_.txt）。
+          Copy-Item "docs/promo/*.txt" "$out/ruoyi-scan-command-manual.txt"
           Get-ChildItem $out | Format-Table Name, Length
 
       # ---------- 阶段 3：单文件版冒烟（免安装直接双击场景）----------
@@ -353,6 +358,7 @@ jobs:
             desktop/artifacts/Ruoyi-Scan_*_x64-setup.exe
             desktop/artifacts/ruoyi-scan-desktop.exe
             desktop/artifacts/ruoyi-scan.exe
+            desktop/artifacts/ruoyi-scan-command-manual.txt
             desktop/artifacts/checksums-desktop.txt
 
       # 失败时保留引擎构建日志（webview2/资源缺失等问题的排查线索）
