@@ -20,6 +20,17 @@
 > MLPS 2.0 / OWASP clause hits, 20 confirmed findings — the report itself is the deliverable, in 7 formats
 > (HTML/JSON/CSV/PDF/Word/Excel/SARIF).
 
+> **⚠️ Maturity notice & how to contribute**
+> Ruoyi-Scan is currently validated mainly against the **bundled signature lab and real version stacks**;
+> it has not yet been through large-scale field use, so **no guarantee is made on detection rate
+> (yield), false negatives, or false positives** — anything it can't decide is reported as `UNKNOWN`, never padded.
+> The project will keep iterating in small steps, tightening verdict quality release by release.
+> Contributions are welcome: open an [Issue](https://github.com/xiabai2008/ruoyi-scan/issues/new/choose)
+> or a [PR](https://github.com/xiabai2008/ruoyi-scan/pulls). You're also free to fork and build your own
+> version — under the MIT License, the only requirement is **crediting the original source
+> (XIABAI / Ruoyi-Scan)** in derivative works; no extra permission needed, commercial or closed-source
+> redistribution allowed. If your fork is broadly useful, feel free to send it back as a PR.
+
 ---
 
 ## Why not just use nuclei / xray?

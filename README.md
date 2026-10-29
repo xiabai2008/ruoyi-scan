@@ -25,6 +25,13 @@ pip install ruoyi-scan
 > 不知道什么时候该用它？先看 [使用指导](docs/promo/ruoyi-scan-usage-guide.txt)（六个真实场景 + 20 条实战技巧）；
 > 全部命令见 [操作命令手册](docs/promo/ruoyi-scan-command-manual.txt)，能覆盖哪些漏洞见 [插件清单](docs/promo/ruoyi-scan-plugins.txt)。
 
+> **⚠️ 成熟度声明与共建邀请**
+> Ruoyi-Scan 目前以**内置签名靶场与真实版本栈**为主要验证环境，尚未经过大规模实战项目检验，
+> 因此**不对漏洞检出率（产出率）、漏报率与误报率做任何承诺** —— 拿不准的项一律如实标注 UNKNOWN，不凑数。
+> 项目会保持小步快跑的迭代节奏，判定质量逐版本持续收敛。
+> 欢迎共建：提交 [Issue](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose) 或 [PR](https://github.com/xiabai2008/Ruoyi-Scan/pulls)；
+> 也欢迎自行 fork 二次开发 —— 基于 MIT License，衍生作品**标注原版出处（XIABAI / Ruoyi-Scan）**即可。
+
 ---
 
 ## 演示
@@ -188,7 +195,7 @@ pip install ruoyi-scan
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.5.1
+- **版本**：1.5.2
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
@@ -734,6 +741,10 @@ python tests/regression_spring.py
 - **开发指南**：[docs/plugin_dev.md](docs/plugin_dev.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
 
 > 贡献 POC 前请先在自建靶场（`lab/`）或授权目标上复现，确保判定特征真实可靠。
+
+**自行二次开发**：欢迎 fork 后按自己的场景改造（加私有 POC、换判定规则、接入内部系统）。
+本项目采用 MIT License，**唯一要求是衍生作品中标注原版出处**（XIABAI / Ruoyi-Scan，附仓库链接即可），
+不需要额外申请授权，也不限制商用或闭源分发。改造后如果对社区有价值，欢迎回提 PR。
 
 ---
 
