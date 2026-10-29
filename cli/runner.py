@@ -333,7 +333,7 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{YELLOW}[*]目标存在登录墙：{payload.get('reason', '')}（未登录访问受保护接口会跳登录页）{RESET}")
         print(
             f"{YELLOW}[*]登录墙下「没测到」的 SAFE 会改为 UNKNOWN；"
-            f'要拿到完整结论请用 --auth-login 或 --auth "cookie: JSESSIONID=..."{RESET}'
+            f'要拿到完整结论请用 --auth-login 或 --auth "cookie=JSESSIONID=..."{RESET}'
         )
 
     elif event_type == "auth_wall_downgrade":

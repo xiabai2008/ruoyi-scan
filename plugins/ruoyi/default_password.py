@@ -1,4 +1,6 @@
 # 后台默认口令：POST /login 尝试 admin/admin123，按 token/code:200/Set-Cookie 判定
+from typing import Any
+
 import requests
 
 from common.logger import get_logger
@@ -78,6 +80,31 @@ class DefaultPasswordPlugin(PluginBase):
         "authentication failed",
     ]
 
+    # 提交方式不匹配的特征：出现即说明服务端不认当前提交格式，应换另一种重试。
+    # 「运行时异常」是单机版收到 JSON body 的典型响应（rememberMe 拆箱 NPE 被全局异常处理器兜住），
+    # 不能当成「口令错误」——否则默认口令假阴性。
+    SUBMIT_MISMATCH_KEYWORDS = (
+        "运行时异常",
+        "required request body is missing",
+        "unsupported media type",
+        "httpmediatypenotsupportedexception",
+    )
+
+    def _is_submit_mismatch(self, resp: Any) -> bool:
+        """判断响应是否因「提交格式不被接受」而产生（需要换另一种方式重试）
+
+        Args:
+            resp: 登录响应对象
+
+        Returns:
+            True 表示应改用另一种提交格式重试
+        """
+        code = getattr(resp, "status_code", 0)
+        if code in (400, 415):
+            return True
+        text = (getattr(resp, "text", "") or "").lower()
+        return any(k in text for k in self.SUBMIT_MISMATCH_KEYWORDS)
+
     def verify(self, target, session):
         """用默认口令（admin/admin123）无验证码登录后台并判定是否命中
 
@@ -87,16 +114,27 @@ class DefaultPasswordPlugin(PluginBase):
         @return: ScanResult——命中为 CONFIRMED，明确失败为 SAFE，验证码拦截或特征不明为 UNKNOWN
         """
         url = join_url(target, "login")
-        # RuoYi /login 接收 JSON body（Content-Type: application/json）
-        # 部分版本也接受 form 表单，这里用 JSON 兼容主流前后端分离版本
-        data = {
+        # RuoYi 两种登录形态，提交方式不能混用：
+        #   单机版（4.x Thymeleaf + Shiro）：表单参数绑定 username/password/rememberMe/validateCode
+        #   前后端分离版（Vue）：@RequestBody JSON {"username","password","code","uuid"}
+        # 旧实现一律用 JSON 提交，单机版收到后 `Boolean rememberMe` 为 null 触发拆箱 NPE，
+        # 返回 {"msg":"运行时异常:null","code":500}，被判定链的「code==500」分支当成
+        # 「口令已修改」→ admin/admin123 假阴性（2026-10-29 真实靶场实测）。
+        # 现改为表单优先，服务端明确不认表单（400/415/运行时异常）才退回 JSON。
+        form_data = {
             "username": self.USERNAME,
             "password": self.PASSWORD,
-            # 不传 code/uuid：若服务端启用验证码，会返回验证码错误（标记 UNKNOWN）
+            "rememberMe": "false",
+            "validateCode": "",  # 不带验证码：启用验证码的服务端会返回「验证码错误」→ UNKNOWN
         }
-        headers = {"Content-Type": "application/json"}
         try:
-            resp = session.post(url, json=data, headers=headers)
+            resp = session.post(url, data=form_data)
+            if self._is_submit_mismatch(resp):
+                resp = session.post(
+                    url,
+                    json={"username": self.USERNAME, "password": self.PASSWORD},
+                    headers={"Content-Type": "application/json"},
+                )
         except requests.RequestException as e:
             # 仅捕获传输异常：编程错误不再被静默分类为网络异常 UNKNOWN
             emit(no("后台默认口令（网络异常）"))

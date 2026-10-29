@@ -9,6 +9,7 @@ from config import settings
 from core.http import join_url
 from lib.colors import GREEN, RED, RESET, YELLOW
 from lib.reporter import emit
+from lib.soft404 import Soft404Baseline
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -89,6 +90,13 @@ class DirectoryScanPlugin(PluginBase):
 
         fail_reasons: Dict[str, int] = {}
         skipped = 0  # 非 2xx 且无标题的条数（明细不打印，仅计数）
+        # 软 404 基线：先用随机不存在路径取一份「兜底页」指纹，后续响应与它逐字节一致时
+        # 判为同一个兜底页而非独立路径。否则「命中 N 条」这个数字会被登录墙放大——
+        # 若依对任意受保护路径一律 302 到 /login，跟随重定向后都是 200 + 登录页正文，
+        # 与真正不存在的路径完全无法区分（2026-10-29 真实靶场实测：/actuator/env 与
+        # 随机不存在路径的响应体 md5 完全相同）。
+        baseline = Soft404Baseline.probe(target, session)
+        soft_removed = 0  # 与兜底页一致的条数（已剔除，不计入命中）
         for path in path_list:
             url = join_url(target, path)
             try:
@@ -136,9 +144,15 @@ class DirectoryScanPlugin(PluginBase):
             # 收集 2xx / 3xx / 解析出真实标题的条目供报告
             # 修正：原条件用 `"20" in str(status_code)` 做子串匹配，会把 420 / 520 / 1200
             # 等非 2xx 状态码一并判为可用，现改为真正的状态码区间判断。
-            # 遗留风险：软 404 页面通常带 <title>，仍会因「有真实标题」被收录，
-            # 需要配合响应长度基线判别，勿仅凭 hits 数量判断目录泄露面。
             if interesting:
+                # 与兜底页逐字节一致的响应不是独立路径：有登录墙时几乎全体命中此项，
+                # 剔除后「命中 N 条」才反映真实的目录暴露面。
+                # 仅在「基线可用且站点确为兜底路由」时比对内容；基线不可用则保持原判定
+                # （不因基线探测失败而漏报），非 2xx 响应（如 403 Forbidden）仍算路径存在。
+                if baseline.is_catch_all and 200 <= code_num < 300:
+                    if not baseline.looks_like_real_file(response):
+                        soft_removed += 1
+                        continue
                 hits.append(
                     {
                         "url": response.request.url,
@@ -151,6 +165,10 @@ class DirectoryScanPlugin(PluginBase):
                 f"{YELLOW}[*]目录扫描：{len(path_list)} 条路径，{len(hits)} 条命中（{skipped} 条非 2xx 明细已省略，--debug 查看）{RESET}"
             )
         evidence = f"扫描 {len(path_list)} 条，命中 {len(hits)} 条"
+        if soft_removed:
+            evidence += f"；剔除兜底页 {soft_removed} 条（与基线响应逐字节一致，非独立路径）"
+        if baseline.reachable:
+            evidence += f"；{baseline.describe()}"
         if fail_reasons:
             # 失败原因进 evidence：目标不可用时命中性判断失去意义，报告需能自证这一点
             detail = "；".join(f"{r} × {n}" for r, n in fail_reasons.items())
@@ -161,5 +179,10 @@ class DirectoryScanPlugin(PluginBase):
             status=STATUS_UNKNOWN,
             url=target,
             evidence=evidence,
-            extra={"hits": hits, "fail_reasons": fail_reasons},
+            extra={
+                "hits": hits,
+                "fail_reasons": fail_reasons,
+                "soft_removed": soft_removed,
+                "baseline": baseline.describe() if baseline.reachable else "",
+            },
         )

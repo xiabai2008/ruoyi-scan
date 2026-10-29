@@ -225,8 +225,17 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
         for item in f.get("strong_paths", []):
             try:
                 r = _get(target + item["path"].lstrip("/"))
-                if _expect_ok(r, item.get("expect", "any")):
-                    hits += 1
+                if not _expect_ok(r, item.get("expect", "any")):
+                    continue
+                # 通配 200 防护（与 negative_paths、detect_cms 保持一致）：
+                # expect="any" 的强特征路径在有登录墙时**必然**命中——若依对任意受保护
+                # 路径一律 302 到 /login，跟随重定向后与根路径是同一份登录页正文。
+                # 不做同内容比对时，单机版 4.x 会被误判成 ruoyi-plus（2026-10-29 真实
+                # 靶场实测：/auth/logout 用的是 expect="any"，命中后 variant 判成 plus）。
+                # 真正的 Plus 站点靠 /auth/login（expect="json"）判定，不受影响。
+                if item.get("expect", "any") == "any" and root_ok and (r.text or "") == root_body:
+                    continue
+                hits += 1
             except Exception:
                 continue
         if hits > 0 and hits > best_hits:
