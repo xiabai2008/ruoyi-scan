@@ -8,6 +8,18 @@
 
 ### Added
 - **桌面端质量门禁**：ESLint `react-hooks/rules-of-hooks` 静态检查（拦截条件 Hook；v1.5.0 白屏同类问题）+ 构建产物 CDP 冒烟（真实点击「新建扫描」并遍历全部导航页，捕获运行时异常）；两项均纳入 CI
+- **依赖清单一致性门禁**：`scripts/check_deps.py` 校验 requirements.txt / requirements-dev.txt 与 pyproject.toml 的依赖声明一致（测试专用依赖不得混入必装清单），已接入 CI
+- **`EXIT_PARTIAL = 4`**：批量扫描时有目标未扫到时返回，区别于「一个都没扫到」（`EXIT_UNREACHABLE = 3`）
+
+### Fixed
+- **批量 + `--ci` 假覆盖（假覆盖级别）**：`run_mode` 的 CI 分支会 `sys.exit()`，而批量对每个目标调 `run_mode` —— 第一个目标命中高危即整批中断，后续目标根本没扫，用户拿到的是「只覆盖 1/N 目标」的报告却以为整批都扫过。改为批量路径禁用单目标 CI 退出码、整批跑完后统一判定（同步与异步两条路径均修）
+- **`--serve` 默认监听 0.0.0.0**：安全工具的 Web API 默认暴露整个网段。改为默认 127.0.0.1（与 lab/ 靶场 v1.2.0 的安全收口一致），可用 `RUOYI_SCAN_HOST` 环境变量覆盖（容器/反代场景），对外监听仍可显式 `--host 0.0.0.0`；桌面端本就显式传 127.0.0.1，不受影响
+- **批量模式退出码语义缺失**：全部目标不可达时退出码为 0，CI/脚本会误判为「扫描完成」。现与单目标对齐（3 = 一个都没扫到，4 = 扫到但覆盖面不全）；`-f` 不带 `-u/-m/-p/-l` 时也从 0 改为 2（参数错误）
+- **依赖清单漂移**：`requirements.txt` 把测试专用的 `requests-mock` 列进「核心依赖（必装）」段，与 pyproject 已注明它只属 `[dev]` 矛盾。改为 requirements.txt 只含核心依赖、其余指向 pip extras；requirements-dev.txt 补齐原先靠 requirements.txt 间接带入的 fastapi/uvicorn/flask
+
+### Changed
+- **README**：目录树 `models.py` 位置修正（实为 `common/models.py`）并补齐 `common/` 段；末尾个人宣言移至 `AUTHOR.md`；与 nuclei/xray 对比表补 3 行诚实短板（模板存量 / 跨框架广度 / 社区规模），与「互补而非竞争」定位对齐
+- **退出码文档**：统一 0/1/2/3/4 五种语义，修正 `docs/usage.md` 中「3 = 配置错误」的错误表述（配置错误是 2，3 是目标不可达）
 
 ## [1.5.2] - 2026-10-28
 
