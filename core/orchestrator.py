@@ -531,6 +531,27 @@ class ScanOrchestrator:
                     },
                 )
 
+            # 5.5 API 前缀探测（前后端分离部署）
+            # 分离版标准 nginx 只反代 /prod-api/，根路径下所有后端路径都会落到 SPA 的
+            # index.html（200 HTML）→ 按根路径拼 URL 的插件拿不到后端真实响应，
+            # 该报的 Druid/Actuator/默认口令/定时任务全部落空 = 系统性漏报。
+            # 实测 2026-10-29 R7（严格只反代 /prod-api/）：除宿主级 Redis 外无任何命中。
+            # 根路径已直连后端（单机版）时 detect_api_base 返回空串，行为不变。
+            plugin_target = target
+            try:
+                from core.basepath import detect_api_base
+
+                api_base = detect_api_base(target, session)
+            except Exception:
+                logger.debug("API 前缀探测失败", exc_info=True)
+                api_base = ""
+            if api_base:
+                plugin_target = target.rstrip("/") + api_base + "/"
+                _emit(
+                    "basepath",
+                    {"base": api_base, "plugin_target": plugin_target, "task_id": task.task_id},
+                )
+
             # 6. 插件加载 + 路由
             if not all_plugins:
                 all_plugins = load_plugins("plugins.ruoyi")
@@ -717,7 +738,11 @@ class ScanOrchestrator:
                     },
                 )
                 engine.run(
-                    classes, target, session, on_result=_on_result, waf_bypass_coordinator=waf_bypass_coordinator
+                    classes,
+                    plugin_target,
+                    session,
+                    on_result=_on_result,
+                    waf_bypass_coordinator=waf_bypass_coordinator,
                 )
 
             task.results = all_results

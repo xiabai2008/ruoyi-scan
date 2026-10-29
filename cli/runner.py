@@ -336,6 +336,14 @@ def _cli_event_handler(event_type: str, payload):
             f'要拿到完整结论请用 --auth-login 或 --auth "cookie=JSESSIONID=..."{RESET}'
         )
 
+    elif event_type == "basepath":
+        # 前后端分离版只反代 /prod-api/ 时，根路径探测全落在 SPA 兜底页上
+        print(
+            f"{YELLOW}[*]检测到 API 前缀 {payload.get('base', '')}/："
+            f"后续插件探测以 {payload.get('plugin_target', '')} 为基准"
+            f"（前后端分离部署，根路径只有前端静态页）{RESET}"
+        )
+
     elif event_type == "auth_wall_downgrade":
         print(f"{YELLOW}[*]已把 {payload.get('count', 0)} 条 SAFE 改为 UNKNOWN（登录墙，需登录后判定）{RESET}")
 

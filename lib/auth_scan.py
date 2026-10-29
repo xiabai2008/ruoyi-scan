@@ -227,6 +227,26 @@ def auto_login(
             payload = {username_field: username, password_field: password}
             resp = session.post(login_url, data=payload, timeout=10)
 
+        def _extract_token(r: Any) -> str:
+            """从登录响应里取 token（顶层或 data 子对象）"""
+            try:
+                d = r.json()
+            except Exception:
+                return ""
+            if not isinstance(d, dict):
+                return ""
+            tok = d.get("token") or (d.get("data") or {}).get("token", "")
+            return str(tok or "")
+
+        token = _extract_token(resp)
+        # 表单提交拿不到 token 时，用 JSON 再试一次。
+        # RuoYi-Vue 前后端分离版（3.x / 5.x）的 /login 是 @RequestBody，**只认 JSON**；
+        # 用表单提交会得到「用户不存在/密码错误」，token 永远拿不到，
+        # 结果是分离版站点一律登录失败（实测 2026-10-29：若依 v3.9.2 靶场）。
+        if not token and login_type != "json":
+            resp = session.post(login_url, json=payload, timeout=10)
+            token = _extract_token(resp)
+
         # 登录成功判据：POST 后新增/变更的 Cookie（排除预登录 GET 已下发的会话 Cookie）
         post_login_cookies = dict(session.cookies)
         new_cookies = {k: v for k, v in post_login_cookies.items() if pre_login_cookies.get(k) != v}
@@ -238,18 +258,12 @@ def auto_login(
             "type": "cookie",
         }
 
-        # 尝试从响应中提取 token
-        try:
-            data = resp.json()
-            # RuoYi 响应结构：token 可能在顶层也可能在 data 子对象中，双路径提取
-            token = data.get("token") or data.get("data", {}).get("token", "")
-            if token:
-                config["headers"]["Authorization"] = f"Bearer {token}"
-                config["type"] = "bearer"
-                if verbose:
-                    emit("  [+]登录成功，获取到 Bearer Token")
-        except Exception:
-            logger.debug("从登录响应中提取 Token 失败", exc_info=True)
+        # 使用从响应中提取到的 token
+        if token:
+            config["headers"]["Authorization"] = f"Bearer {token}"
+            config["type"] = "bearer"
+            if verbose:
+                emit("  [+]登录成功，获取到 Bearer Token")
 
         if not config["headers"].get("Authorization"):
             # 无 token 时以「HTTP 非错误 + 出现新 Cookie」作为登录成功信号，

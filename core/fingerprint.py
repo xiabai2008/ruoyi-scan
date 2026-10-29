@@ -23,6 +23,53 @@ class Fingerprint:
         raise NotImplementedError
 
 
+def _response_text(resp: Any) -> str:
+    """取响应正文字符串，缺省 charset 时按中文站常见编码回退解码
+
+    requests 对 Content-Type 未声明 charset 的响应按 RFC 2616 默认用 ISO-8859-1 解码，
+    中文页面会把 UTF-8 字节整体解成乱码，导致中文关键字（如「若依管理系统」）永不命中。
+    实测 2026-10-29 靶场 R6（RuoYi-Vue）：nginx 未配 charset 时首页返回 `text/html` 无 charset，
+    <title>若依管理系统</title> 的 login_keywords 全部落空；若依单机版同样走 nginx 反代，
+    存在同类隐患。
+
+    解码策略：声明了 charset 就完全尊重站点声明；未声明时按 UTF-8 → GB18030 依次尝试，
+    都失败才退回 requests 的默认解码结果。
+    """
+    text = resp.text
+    if isinstance(text, (bytes, bytearray)):  # 个别 mock/适配层把 text 直接放成 bytes
+        text = bytes(text).decode("utf-8", errors="replace")
+    text = text or ""
+    ctype = (resp.headers.get("Content-Type") or "").lower()
+    if "charset" in ctype:
+        return text
+    content = getattr(resp, "content", b"")
+    if not isinstance(content, (bytes, bytearray)) or not content:
+        # 无原始字节（mock/已解码适配层）时以 text 为准，避免误清空正文
+        return text
+    for enc in ("utf-8", "gb18030"):
+        try:
+            return content.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return text
+
+
+# 若依的「认证失败」统一 JSON：受保护路径未带凭证时返回 HTTP 200 +
+#   {"msg":"请求访问：/app/，认证失败，无法访问系统资源","code":401}
+# 这类响应只说明「有登录墙」，对**变体**识别没有任何区分度（RuoYi 各分离版变体
+# 逐字节相同），因此不能算作变体强特征命中。实测 2026-10-29：R6（RuoYi-Vue 3.9.2）
+# 无会话扫描时 /prod-api/app/ 返回 code=401 被当成 ruoyi-app 移动端强特征 → 变体误判。
+# 注：主 CMS 判定不受此限制——该 msg 文案（请求访问：X，认证失败）是若依框架专有，
+# 仍是有效的「这是若依」证据。
+_AUTH_FAIL_STATUS_RE = re.compile(r'"(?:code|status)"\s*:\s*(?:401|403)\b')
+_AUTH_FAIL_MSG_RE = re.compile(r"认证失败|无法访问系统资源|请先登录|未登录", re.IGNORECASE)
+
+
+def _is_auth_failure_json(body: str) -> bool:
+    """判断响应是否为「认证失败」统一 JSON（登录墙产物，不是接口存在性证据）"""
+    return bool(_AUTH_FAIL_STATUS_RE.search(body) or _AUTH_FAIL_MSG_RE.search(body))
+
+
 class FeatureBasedFingerprint(Fingerprint):
     """基于特征库的通用多特征交叉判定
 
@@ -67,7 +114,7 @@ class FeatureBasedFingerprint(Fingerprint):
         # 1. 主页特征：GET 根路径，检查标题与响应体关键字
         try:
             resp = _get(target)
-            text = resp.text or ""
+            text = _response_text(resp)
             root_body = text
             root_ok = True
             title_m = re.findall(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
@@ -96,9 +143,9 @@ class FeatureBasedFingerprint(Fingerprint):
                 if r.status_code != 200:
                     continue
                 ct = (r.headers.get("Content-Type") or "").lower()
-                body = r.text or ""
+                body = _response_text(r)
                 if expect == "json":
-                    ok = ("json" in ct) and ("code" in body or "msg" in body)
+                    ok = _looks_like_api_json(ct, body)
                 elif expect == "image":
                     ok = "image" in ct
                 else:
@@ -150,6 +197,25 @@ class RuoyiFingerprint(FeatureBasedFingerprint):
         super().__init__("ruoyi")
 
 
+def _looks_like_api_json(ct: str, body: str) -> bool:
+    """判断响应是否像一个「接口的 JSON 响应」，而不是错误包装页
+
+    若依（v4.8.3 起使用 Spring Boot 4）会把**不存在的资源**包装成
+    HTTP 200 + JSON：
+        {"msg":"No static resource druid/index.html for request '/druid/index.html'","code":500}
+    若只按「Content-Type 含 json 且正文含 code/msg」判定，任何不存在的路径
+    都会被当成 JSON 接口——于是单机版会被误判成 ruoyi-app 变体
+    （实测 2026-10-29：/prod-api/app/ 与 /app/login 都命中变体强特征）。
+
+    因此排除 code=500 的错误包装页；只有真正成功的接口响应才判定为 JSON 接口。
+    """
+    if "json" not in ct:
+        return False
+    if '"code":500' in body or "'code':500" in body:
+        return False
+    return ("code" in body) or ("msg" in body)
+
+
 def detect_variant(target: str, session: SessionManager, cache: Any = None) -> str:
     """E1：若依变体细分识别（仅在主 CMS=ruoyi 确认后调用）
 
@@ -177,9 +243,10 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
         if r.status_code != 200:
             return False
         ct = (r.headers.get("Content-Type") or "").lower()
-        body = r.text or ""
+        body = _response_text(r)
         if expect == "json":
-            return ("json" in ct) and ("code" in body or "msg" in body)
+            # 登录墙下的「认证失败」JSON 对变体没有区分度（见 _is_auth_failure_json）
+            return _looks_like_api_json(ct, body) and not _is_auth_failure_json(body)
         if expect == "image":
             return "image" in ct
         return True
@@ -194,7 +261,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
         root_resp = _get(target)
         if root_resp is not None and getattr(root_resp, "status_code", 0) == 200:
             root_ok = True
-            root_body = root_resp.text or ""
+            root_body = _response_text(root_resp)
     except Exception:
         logger.debug("变体识别根路径基线获取失败", exc_info=True)
 
@@ -213,7 +280,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
                 r = _get(target + item["path"].lstrip("/"))
                 if not _expect_ok(r, item.get("expect", "any")):
                     continue
-                if root_ok and (r.text or "") == root_body:
+                if root_ok and _response_text(r) == root_body:
                     continue  # 与根路径同内容 → 通配 200，不作为排除依据
                 excluded = True
                 break
@@ -233,7 +300,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
                 # 不做同内容比对时，单机版 4.x 会被误判成 ruoyi-plus（2026-10-29 真实
                 # 靶场实测：/auth/logout 用的是 expect="any"，命中后 variant 判成 plus）。
                 # 真正的 Plus 站点靠 /auth/login（expect="json"）判定，不受影响。
-                if item.get("expect", "any") == "any" and root_ok and (r.text or "") == root_body:
+                if item.get("expect", "any") == "any" and root_ok and _response_text(r) == root_body:
                     continue
                 hits += 1
             except Exception:
@@ -290,14 +357,14 @@ def detect_cms(target: str, session: SessionManager, cache: Any = None) -> Finge
             try:
                 login_resp = cache.get(join_url(target, "/login"))
                 if login_resp:
-                    cached_version = extract_version(login_resp.text or "")
+                    cached_version = extract_version(_response_text(login_resp))
             except Exception:
                 logger.debug("/login 版本号提取失败", exc_info=True)
             if not cached_version and target in set(cache.keys()):
                 try:
                     root_resp = cache.get(target)
                     if root_resp:
-                        cached_version = extract_version(root_resp.text or "")
+                        cached_version = extract_version(_response_text(root_resp))
                 except Exception:
                     logger.debug("根路径缓存版本号提取失败", exc_info=True)
             if cached_version:

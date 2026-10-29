@@ -31,6 +31,7 @@
 """
 
 import hashlib
+import re
 import uuid
 from typing import Any, Optional
 
@@ -52,10 +53,49 @@ def _digest(body: bytes) -> str:
     return hashlib.sha256(body[:_DIGEST_BYTES]).hexdigest()
 
 
+# 响应体里的路径 token：至少两段、以字母数字开头（可带前导斜杠）。
+# 前导斜杠必须可选——若依回显的资源名是 "druid/index.html"（无前导斜杠），
+# 只匹配 "/xxx" 会漏掉它，归一化后同一类错误页仍然对不上。
+_PATH_TOKEN_RE = re.compile(rb"[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+")
+
+
+def _digest_canonical(body: bytes) -> str:
+    """把响应体里的路径片段归一化后再算摘要
+
+    为什么需要：兜底错误页常把请求路径回显在正文里。Spring Boot 4（若依 v4.8.3
+    使用）对不存在的资源返回 **HTTP 200** + JSON：
+        {"msg":"No static resource druid/index.html for request '/druid/index.html'","code":500}
+    正文随请求路径变化，逐字节摘要必然不同 → 软 404 保护失效 → 目录扫描把
+    几百条「资源不存在」全判成命中（实测 v4.8.3 靶场 696 条里报出 672 条命中）。
+
+    归一化后同一类错误页的摘要一致，可重新比对。
+    """
+    canon = _PATH_TOKEN_RE.sub(b"*", body[:_DIGEST_BYTES])
+    return hashlib.sha256(canon).hexdigest()
+
+
+# 框架自带的「资源不存在」错误页标记。这类页面在 Spring Boot 4（若依 v4.8.3）
+# 下返回 HTTP 200 + JSON，正文里回显请求路径 → 逐字节与归一化比对都可能失效
+# （单段路径名不含斜杠时归一化也匹配不上）。命中标记即判为「不是独立资源」。
+_MISSING_RESOURCE_RE = re.compile(
+    rb"no static resource|no handler found|resource not found",
+    re.IGNORECASE,
+)
+
+# 登录墙的「认证失败」JSON 也不能当作「文件存在」的证据。
+# 若依前后端分离版未认证访问任意受保护路径返回 HTTP 200 +
+#   {"msg":"请求访问：/index.bak，认证失败，无法访问系统资源","code":401}
+# 正文回显请求路径 → 逐字节摘要和归一化摘要都对不上基线，会被判成「独立文件」。
+# 实测 2026-10-29 R7（RuoYi-Vue 3.8.9，nginx 只反代 /prod-api/）：
+#   backup_scan 报出 60 个「备份文件」（全是 401 回显）、目录扫描 696 条报 240 条命中。
+# 注意：bytes 正则不能直接写中文（SyntaxError），只匹配 ASCII 的 code 字段。
+_AUTH_FAILURE_RE = re.compile(rb'"(?:code|status)"\s*:\s*(?:401|403)\b')
+
+
 class Soft404Baseline:
     """软 404 基线：记录随机不存在路径的响应特征，用于判别兜底路由"""
 
-    __slots__ = ("reachable", "status_code", "length", "digest", "probe_path")
+    __slots__ = ("reachable", "status_code", "length", "digest", "probe_path", "canonical_digest")
 
     def __init__(
         self,
@@ -64,12 +104,15 @@ class Soft404Baseline:
         length: int = 0,
         digest: str = "",
         probe_path: str = "",
+        canonical_digest: str = "",
     ) -> None:
         self.reachable = reachable  # 基线请求是否成功拿到响应
         self.status_code = status_code
         self.length = length
         self.digest = digest
         self.probe_path = probe_path
+        # 路径归一化后的摘要：用于识别「正文随请求路径变化」的兜底错误页
+        self.canonical_digest = canonical_digest
 
     @property
     def is_catch_all(self) -> bool:
@@ -95,11 +138,22 @@ class Soft404Baseline:
         if not body:
             # 部分框架对未知路径统一返回空 200，无内容不足以证明文件存在
             return False
+        # 登录墙产物：先于一切「内容有差异」判断排除——它对任何路径都返回同一类
+        # 「认证失败」JSON，与「文件存在」无关（见 _AUTH_FAILURE_RE 注释）
+        if _AUTH_FAILURE_RE.search(body):
+            return False
         if not self.is_catch_all:
             # 站点无兜底路由：状态码 2xx + 非空即视为真实文件
             return True
         # 站点有兜底路由：与基线页完全一致 → 判定为同一个兜底页，不是独立文件
         if len(body) == self.length and _digest(body) == self.digest:
+            return False
+        # 正文随请求路径变化的兜底错误页：归一化后摘要一致 → 仍是同一个兜底页
+        if self.canonical_digest and _digest_canonical(body) == self.canonical_digest:
+            return False
+        # 框架自带的「资源不存在」错误页：正文随请求路径变化时两种比对都可能失效，
+        # 靠标记判定更稳（Spring Boot 4 / 若依 v4.8.3 实测）
+        if _MISSING_RESOURCE_RE.search(body):
             return False
         # 内容与兜底页不同 → 确有差异，保守放行（由插件继续做关键字校验）
         return True
@@ -143,5 +197,6 @@ class Soft404Baseline:
             status_code=getattr(resp, "status_code", 0),
             length=len(body),
             digest=_digest(body) if body else "",
+            canonical_digest=_digest_canonical(body) if body else "",
             probe_path=probe_path,
         )

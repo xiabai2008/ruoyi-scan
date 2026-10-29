@@ -94,12 +94,28 @@ class UnauthBatchPlugin(PluginBase):
     AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源"]
 
     def verify(self, target, session):
-        """批量探测多个常见未授权端点，对每个端点单独评定（已鉴权 / 未授权 / 网络异常）。
+        """批量探测多个常见未授权端点（在**完全未认证**的会话上探测）
 
         @param target: 目标站点根 URL
-        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @param session: 共享 HTTP 会话（仅作为配置来源，实际探测走匿名克隆）
         @return: ScanResult — 任一端点未授权暴露则 CONFIRMED；全部已保护则 SAFE；全部网络异常则 UNKNOWN
         """
+        # 本插件判定的是「未授权暴露」，必须在**完全未认证**的会话上探测。
+        # 复用共享会话时若调用方注入了 cookie/token（--auth / --auth-login），
+        # /system/user/list 会以管理员身份返回 {"code":200,"rows":[...]}，
+        # 命中 "rows"/"code":200 等关键字 → 把「已鉴权的正常业务响应」误判成未授权暴露。
+        # 实测 2026-10-29 R6（RuoYi-Vue 3.9.2）：带 admin token 时 CONFIRMED，
+        # 匿名同端点返回 code=401「认证失败」→ 接口鉴权正常。
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_anonymous(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_anonymous(self, target, probe):
+        """在匿名会话 probe 上做实际探测（verify 负责生命周期管理）"""
         hit_endpoints = []  # 命中端点详情
         all_status = []  # 各端点状态（CONFIRMED/SAFE/UNKNOWN）
         got_response = False
@@ -107,7 +123,7 @@ class UnauthBatchPlugin(PluginBase):
         for ep in self.ENDPOINTS:
             url = join_url(target, ep["path"])
             try:
-                resp = session.get(url)
+                resp = probe.get(url)
             except Exception:
                 all_status.append((ep["name"], "UNKNOWN", "网络异常"))
                 continue

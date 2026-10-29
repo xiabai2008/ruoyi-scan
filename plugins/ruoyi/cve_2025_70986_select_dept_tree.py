@@ -60,6 +60,7 @@ from core.auth_chain import isolated_auth_session
 from core.http import join_url
 from core.session import SessionManager
 from lib.colors import no, ok
+from lib.matcher import is_missing_resource_page
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -74,6 +75,15 @@ TREE_PAGE_MARKER = 'id="treeName"'
 TREE_NAME_RE = re.compile(r'(?:id|name)="treeName"[^>]*value="([^"]*)"')
 # 登录页标记（会话失效守卫）
 LOGIN_PAGE_MARKER = "登录若依系统"
+# 前后端分离版（RuoYi-Vue）的权限拒绝不是单机版 Thymeleaf 的 "RuoYi - 403" 页面，
+# 而是 HTTP 200 + {"msg":"没有权限，请联系管理员授权","code":403}。
+# 只认 HTML 标记会让分离版永远「未命中权限门」→ 把「权限注解已生效」误判成 CONFIRMED
+# （实测 2026-10-29 R6：RuoYi-Vue 3.9.2 的 SysDeptController 明确带
+#  @PreAuthorize("@ss.hasPermi('system:dept:list')")，插件却判了越权）。
+JSON_DENIED_RE = re.compile(r'"code"\s*:\s*403\b')
+# 分离版的「认证失败」统一 JSON（HTTP 200 + {"msg":"请求访问：...，认证失败，无法访问系统资源","code":401}）：
+# 说明探针会话没生效，**不是**权限门拦截，必须按 UNKNOWN 处理（否则会把失效会话当成「已被拒绝」）
+AUTH_FAIL_RE = re.compile(r'"code"\s*:\s*401\b|认证失败|无法访问系统资源')
 
 
 class Cve202570986SelectDeptTreePlugin(PluginBase):
@@ -172,10 +182,13 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             # 属不可判定情形，按铁律返回 UNKNOWN。
             # 缺这道守卫时，任何不含 403 标记的响应（如 Whitelabel 404 页）都会落进
             # 「全部未命中权限门」分支被判成 CONFIRMED——实测签名靶场未实现该端点即触发假阳性。
+            # 端点缺失有两种形态：显式 404；以及若依（Spring Boot 4 / Vue 版）对
+            # 不存在的路径返回 HTTP 200 + {"msg":"No static resource ...","code":500}。
+            # 后者若只按 404 判断会漏过守卫 → 直接落进「未命中权限门」被判 CONFIRMED。
             missing = [
                 label
                 for label, resp in (("treeData", r_data), ("selectDeptTree", r_page))
-                if getattr(resp, "status_code", 0) == 404
+                if getattr(resp, "status_code", 0) == 404 or is_missing_resource_page(getattr(resp, "text", "") or "")
             ]
             if missing:
                 emit(no(f"部门树越权访问（端点不存在：{'、'.join(missing)}）"))
@@ -190,8 +203,8 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     ),
                 )
 
-            # 会话失效守卫：响应是登录页说明认证态丢了，不能据此判定
-            if any(LOGIN_PAGE_MARKER in b for b in bodies.values()):
+            # 会话失效守卫：响应是登录页、或是分离版的「认证失败」JSON，说明认证态丢了，不能据此判定
+            if any(LOGIN_PAGE_MARKER in b or AUTH_FAIL_RE.search(b) for b in bodies.values()):
                 emit(no("部门树越权访问（会话失效，响应为登录页）"))
                 return ScanResult(
                     kind="info",
@@ -201,7 +214,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     evidence="低权请求返回登录页，会话未生效，不予判定",
                 )
 
-            denied = {k: DENIED_MARKER in b for k, b in bodies.items()}
+            denied = {k: (DENIED_MARKER in b) or bool(JSON_DENIED_RE.search(b)) for k, b in bodies.items()}
             if all(denied.values()):
                 emit(no("不存在部门树越权访问"))
                 return ScanResult(
@@ -211,7 +224,8 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     url=url_data,
                     evidence=(
                         f"无 system:dept:list 权限的账号 {settings.RuoYiLowPriv.USERNAME} 访问 "
-                        f"treeData 与 selectDeptTree 均被拒（RuoYi - 403 权限页）⇒ 权限注解已生效"
+                        f"treeData 与 selectDeptTree 均被拒（403：单机版为 RuoYi - 403 权限页，"
+                        f"分离版为 JSON code=403）⇒ 权限注解已生效"
                     ),
                 )
             if any(denied.values()):

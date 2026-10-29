@@ -435,6 +435,70 @@ def test_f6_plus_job_safe():
     print("PASS test_f6_plus_job_safe")
 
 
+# === 2026-10-29 靶场实测：中文解码 + 认证失败 JSON 两处缺陷的回归测试 ===
+
+
+def test_fp_utf8_body_without_charset_matches_chinese_keyword():
+    """Content-Type 无 charset 时按 UTF-8 回退解码，中文关键字仍能命中
+
+    requests 对未声明 charset 的 text/html 按 ISO-8859-1 解码，中文页面整体乱码，
+    「若依管理系统」等中文 login_keywords 会全部失配（2026-10-29 R6 靶场实测）。
+    """
+    html = "<html><head><title>若依管理系统</title></head><body>RuoYi</body></html>"
+    raw = html.encode("utf-8")
+    garbled = raw.decode("iso-8859-1")  # 模拟 requests 的默认误解码
+    sess = FakeSession(
+        {"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)}
+    )
+    res = RuoyiFingerprint().detect("http://target/", sess)
+    assert res.cms == "ruoyi", res.cms
+    assert any("login" in m for m in res.matched), res.matched
+    print("PASS test_fp_utf8_body_without_charset_matches_chinese_keyword: %s" % res.matched)
+
+
+def test_fp_gbk_body_without_charset_matches_chinese_keyword():
+    """无 charset 的 GBK/GB18030 页面同样按 UTF-8→GB18030 回退解码（中文站常见编码）"""
+    html = "<html><head><title>若依管理系统</title></head><body>若依</body></html>"
+    raw = html.encode("gb18030")
+    garbled = raw.decode("iso-8859-1")
+    sess = FakeSession(
+        {"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)}
+    )
+    res = RuoyiFingerprint().detect("http://target/", sess)
+    assert res.cms == "ruoyi", res.cms
+    print("PASS test_fp_gbk_body_without_charset_matches_chinese_keyword")
+
+
+def test_fp_auth_failure_json_not_variant_evidence():
+    """登录墙下的「认证失败」JSON 不能作为变体强特征
+
+    2026-10-29 R6（RuoYi-Vue 3.9.2）无会话扫描：/prod-api/app/ 返回
+    200 + {code:401,msg:认证失败} 被当成 ruoyi-app 移动端强特征 → 变体误判。
+    该响应只说明有登录墙，对变体没有任何区分度。
+    """
+    from core.fingerprint import detect_variant
+
+    body = '{"msg":"请求访问：/app/，认证失败，无法访问系统资源","code":401}'
+    sess = FakeSession(
+        {"http://target/prod-api/app/": FakeResp(body, 200, {"Content-Type": "application/json"})}
+    )
+    variant = detect_variant("http://target/", sess)
+    assert variant == "", f"认证失败 JSON 不应命中变体，实际 {variant}"
+    print("PASS test_fp_auth_failure_json_not_variant_evidence")
+
+
+def test_fp_auth_failure_json_still_identifies_cms():
+    """但「认证失败」JSON 仍有效：msg 文案（请求访问：X，认证失败）是若依框架专有"""
+    body = '{"msg":"请求访问：/getInfo，认证失败，无法访问系统资源","code":401}'
+    sess = FakeSession(
+        {"http://target/getInfo": FakeResp(body, 200, {"Content-Type": "application/json"})}
+    )
+    res = RuoyiFingerprint().detect("http://target/", sess)
+    assert res.cms == "ruoyi", res.cms
+    assert res.variant == "", res.variant
+    print("PASS test_fp_auth_failure_json_still_identifies_cms")
+
+
 if __name__ == "__main__":
     test_ruoyi_login_page_keyword()
     test_ruoyi_captcha_image()

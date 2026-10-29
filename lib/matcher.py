@@ -1,9 +1,60 @@
 # 降误报判定工具：正向关键字 + 负向排除联合判定（见 agents.md §5）
 import re
 
+# 框架自带的「资源不存在」错误页标记。
+# 若依 v4.8.3（Spring Boot 4）对**任意**路径都返回 HTTP 200 + JSON：
+#   {"msg":"No static resource rocketmq for request '/rocketmq/'.","code":500}
+# 正文里回显了请求路径 → 组件探测类插件若拿路径名当关键字（/rocketmq/、/minio/…），
+# 会 100% 误判成「组件存在且未授权」（实测 2026-10-29：R5 上 RocketMQ Dashboard
+# 未授权误报，靶场根本没装 RocketMQ）。
+_MISSING_RESOURCE_MARKERS = (
+    "no static resource",
+    "no handler found",
+    "resource not found",
+)
+
+# 登录墙的「认证失败」JSON 同样不是「组件存在」的证据：
+# 若依前后端分离版未认证访问任意受保护路径返回 HTTP 200 +
+#   {"msg":"请求访问：/rocketmq/，认证失败，无法访问系统资源","code":401}
+# 正文回显请求路径 → 拿路径名当关键字的组件探测插件 100% 误判。
+# 实测 2026-10-29 R7（只反代 /prod-api/）：/prod-api/rocketmq/ 返回 401 回显，
+# 「RocketMQ Dashboard 未授权」被误报（靶场根本没装 RocketMQ）。
+_AUTH_FAILURE_RE = re.compile(r'"(?:code|status)"\s*:\s*(?:401|403)\b|认证失败|无法访问系统资源')
+
+# 例外：当「正向关键字」本身就是鉴权拦截文案时（未授权类插件用它判定「已鉴权」），
+# 不能把 401 响应一律排除，否则这些插件会把「被拦截」误判成「未命中」。
+_AUTH_BLOCK_KEYWORDS = frozenset(
+    {"认证失败", "无法访问系统资源", "请先登录", "未登录", "登录", "unauthorized", "未授权"}
+)
+
+
+def is_auth_failure_page(text) -> bool:
+    """判断正文是否是登录墙返回的「认证失败」统一响应（不是资源/组件存在证据）"""
+    if not text:
+        return False
+    return bool(_AUTH_FAILURE_RE.search(text))
+
+
+def is_missing_resource_page(text) -> bool:
+    """判断响应正文是否是「资源不存在」错误页
+
+    Args:
+        text: 响应文本
+
+    Returns:
+        True 表示这是框架回显的「找不到该资源」页面，不含任何有效组件特征
+    """
+    if not text:
+        return False
+    low = text.lower()
+    return any(m in low for m in _MISSING_RESOURCE_MARKERS)
+
 
 def match_positive(text, positives, negatives=None):
     """正向命中：text 含任一 positives 且不含任何 negatives
+
+    「资源不存在」错误页一律判负：它只是把请求路径回显在正文里，
+    对组件探测类插件是纯噪声。
 
     Args:
         text: 响应文本
@@ -11,6 +62,10 @@ def match_positive(text, positives, negatives=None):
         negatives: 负向排除关键字列表（命中任一即判为噪声/WAF/错误页）
     """
     if text is None:
+        return False
+    if is_missing_resource_page(text):
+        return False
+    if is_auth_failure_page(text) and not any(p in _AUTH_BLOCK_KEYWORDS for p in positives):
         return False
     if not any(p in text for p in positives):
         return False

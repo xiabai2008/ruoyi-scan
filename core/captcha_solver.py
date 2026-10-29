@@ -52,6 +52,7 @@ CAPTCHA_PATHS = [
     "/captcha/captchaImage?type=char",  # RuoYi 4.x 标准（推荐：session 存的就是渲染文本）
     "/captcha/captchaImage?type=math",  # 算术验证码（需本地求值，见 _normalize_code）
     "/captcha/captchaImage",  # 兜底：无参（部分定制版仍可用）
+    "/captchaImage",  # RuoYi-Vue 3.x 前后端分离版（**无 /captcha 前缀**，返回 JSON + base64）
     "/captcha/image",  # 部分旧版/定制版
     "/code",  # RuoYi 5.x（前后端分离，返回 base64 JSON）
 ]

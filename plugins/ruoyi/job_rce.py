@@ -93,7 +93,17 @@ class JobRcePlugin(PluginBase):
             "status": "1",
         }
         try:
-            resp = session.post(url, data=data)
+            # 「未授权可达性」必须在**完全未认证**的状态下探测：复用共享会话时，
+            # 若调用方注入了 cookie（--auth / --auth-login），请求会直达业务层，
+            # 服务端对不存在 jobId 返回的 code=500 业务错误会被误读成
+            # 「已绕过鉴权进入业务层」→ 假阳性（实测 2026-10-29：5 个站点全误报）。
+            anon = getattr(session, "anonymous", None)
+            probe = anon() if callable(anon) else session
+            try:
+                resp = probe.post(url, data=data)
+            finally:
+                if probe is not session:
+                    probe.close()
         except Exception as e:
             emit(no("定时任务 RCE（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))

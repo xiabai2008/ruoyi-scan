@@ -63,8 +63,19 @@ class FileUploadPlugin(PluginBase):
         url = join_url(target, "common/upload")
         # multipart/form-data：RuoYi 默认字段名为 file
         files = {"file": (self.PROBE_NAME, self.PROBE_CONTENT, "text/plain")}
+        # 本插件判定的是「**未授权**可写」，必须在完全未认证的会话上探测。
+        # 复用共享会话时若调用方注入了 cookie/token（--auth / --auth-login），
+        # 上传会以管理员身份成功并返回 code=200 + fileName，被误判成任意文件上传。
+        # 实测 2026-10-29 R6（RuoYi-Vue 3.9.2）：admin token 下探针上传成功 → CONFIRMED，
+        # 同一请求匿名提交则是 code=401「认证失败，无法访问系统资源」→ 接口鉴权正常。
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
         try:
-            resp = session.post(url, files=files)
+            try:
+                resp = probe.post(url, files=files)
+            finally:
+                if probe is not session:
+                    probe.close()
         except Exception as e:
             emit(no("任意文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
@@ -121,7 +132,7 @@ class FileUploadPlugin(PluginBase):
         # 鉴权/权限拦截独立判定（不受 url/fileName 字段存在性影响）：
         # 拦截响应可能带 code!=401（如 403）或字符串 "401"，必须在 CONFIRMED 之前排除
         msg = str(data.get("msg", ""))
-        if any(kw in msg for kw in ["登录", "请先登录", "unauthorized", "未授权"]):
+        if any(kw in msg for kw in ["登录", "请先登录", "unauthorized", "未授权", "认证失败", "无法访问系统资源"]):
             emit(no("不存在任意文件上传漏洞（接口已鉴权）"))
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应 msg={msg}（疑似拦截）"

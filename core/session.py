@@ -323,6 +323,34 @@ class SessionManager:
         """通用 HTTP 请求（支持 OPTIONS/TRACE 等非标准方法）"""
         return self._send(method, url, headers=headers, **kwargs)
 
+    def anonymous(self) -> "SessionManager":
+        """返回一个同配置但**不带任何认证 cookie**的独立会话
+
+        用途：判定「未授权可达性」的插件必须在**完全未认证**的状态下探测。
+        复用共享会话时，若调用方注入了 cookie（--auth / --auth-login），请求会直达
+        业务层，服务端返回的业务错误（例如若依定时任务编辑接口对不存在的 jobId
+        返回 code=500「定时任务不存在」）会被误读成「已绕过鉴权进入业务层」
+        → 未授权可达性假阳性（实测 2026-10-29：若依 v4.8.3 靶场上「定时任务 RCE
+        （未授权访问）」在 5 个站点全部误报）。
+
+        与 core.auth_chain.isolated_auth_session 的区别：那个是**带凭据登录**的
+        隔离会话，用于「低权账号对照」类插件；这里要的是**完全匿名**的会话。
+
+        Returns:
+            新的 SessionManager 实例，配置（代理/超时/UA/TLS 策略）与当前一致，
+            但 cookie 为空。调用方负责 close()。
+        """
+        clone = SessionManager(
+            proxy=self.proxy,
+            timeout=self.timeout,
+            ua=self.session.headers.get("User-Agent"),
+            debug=self.debug,
+            proxy_pool=self.proxy_pool,
+            verify=self.verify,
+            breaker_threshold=self._breaker_threshold,
+        )
+        return clone
+
     def close(self) -> None:
         """关闭底层 session（释放 keep-alive 连接与连接池）"""
         self.session.close()

@@ -166,7 +166,7 @@ class DirectoryScanPlugin(PluginBase):
             )
         evidence = f"扫描 {len(path_list)} 条，命中 {len(hits)} 条"
         if soft_removed:
-            evidence += f"；剔除兜底页 {soft_removed} 条（与基线响应逐字节一致，非独立路径）"
+            evidence += f"；剔除兜底页 {soft_removed} 条（与基线响应等价，非独立路径）"
         if baseline.reachable:
             evidence += f"；{baseline.describe()}"
         if fail_reasons:
