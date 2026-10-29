@@ -10,6 +10,7 @@
 - **桌面端质量门禁**：ESLint `react-hooks/rules-of-hooks` 静态检查（拦截条件 Hook；v1.5.0 白屏同类问题）+ 构建产物 CDP 冒烟（真实点击「新建扫描」并遍历全部导航页，捕获运行时异常）；两项均纳入 CI
 - **依赖清单一致性门禁**：`scripts/check_deps.py` 校验 requirements.txt / requirements-dev.txt 与 pyproject.toml 的依赖声明一致（测试专用依赖不得混入必装清单），已接入 CI
 - **`EXIT_PARTIAL = 4`**：批量扫描时有目标未扫到时返回，区别于「一个都没扫到」（`EXIT_UNREACHABLE = 3`）
+- **顶层包名冲突检测**（`lib/namespace_guard.py`）：本项目以非 src-layout 分发，site-packages 下会出现 `core` / `common` / `lib` / `cli` 等 9 个顶层名。用户项目若有同名包且排在 sys.path 前面，扫描器内部的 `from core.http import join_url` 会导入到**用户的**模块——实测轻则报难以定位的 TypeError，重则静默调用到错误实现（签名恰好兼容时）。CLI 启动时检测并给出可操作建议（独立虚拟环境等）；自查命令 `python -m lib.namespace_guard`
 
 ### Fixed
 - **批量 + `--ci` 假覆盖（假覆盖级别）**：`run_mode` 的 CI 分支会 `sys.exit()`，而批量对每个目标调 `run_mode` —— 第一个目标命中高危即整批中断，后续目标根本没扫，用户拿到的是「只覆盖 1/N 目标」的报告却以为整批都扫过。改为批量路径禁用单目标 CI 退出码、整批跑完后统一判定（同步与异步两条路径均修）

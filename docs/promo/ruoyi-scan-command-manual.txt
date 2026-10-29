@@ -719,6 +719,14 @@ Q12 想扫若依之外的 Spring 站点
     ruoyi-scan -u http://target:8080/ --cms spring
     54 个插件里含 14 个 Spring Boot 专项与 12 个通用插件。
 
+Q13 启动时提示「检测到顶层包名冲突」
+    你的项目里可能也有 core / common / lib 等同名包，且排在 sys.path 前面，
+    会让扫描器内部的 from core.xxx 导入到你的模块。推荐用独立虚拟环境：
+        python -m venv .venv
+        .venv/Scripts/pip install ruoyi-scan
+    也可确认当前目录下没有同名目录。自查：python -m lib.namespace_guard
+    桌面端单文件版不受影响。
+
 
 ===============================================================================
  17. 参数速查（按功能）

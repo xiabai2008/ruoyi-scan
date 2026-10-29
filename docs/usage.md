@@ -1828,6 +1828,29 @@ A：使用 `--bypass-waf auto` 启用 WAF 绕过，或降低并发与速率：`-
 
 A：使用 `--template quick` 减少扫描范围，或增大 CI 任务超时时间。
 
+**Q6：启动时提示「检测到顶层包名冲突」**
+
+A：本项目以非 src-layout 方式分发，安装后 `site-packages` 下会出现 `core` / `common` / `lib` /
+`cli` 等顶层包名。如果**你的项目里也有同名包**，且它排在 `sys.path` 前面（常见于在项目根目录
+直接运行、或用 `python main.py` 启动的场景），扫描器内部的 `from core.http import join_url`
+会导入到**你的**模块——轻则调用时报难以定位的 `TypeError`，重则静默调用到错误实现。
+
+解决办法（推荐第一条）：
+
+```bash
+# 1. 用独立虚拟环境安装（最推荐）
+python -m venv .venv
+.venv/Scripts/pip install ruoyi-scan     # Windows
+.venv/bin/pip install ruoyi-scan         # Linux / macOS
+
+# 2. 确认当前工作目录（以及你运行脚本的目录）下没有 core/ common/ lib/ 等同名目录
+
+# 3. 桌面端单文件版不受影响（引擎已内嵌，无命名空间暴露问题）
+```
+
+自查命令：`python -m lib.namespace_guard`，无冲突时返回「未检测到顶层包名冲突」并以退出码 0 结束；
+有冲突时打印冲突详情并返回退出码 1。
+
 ### 技术支持
 
 - 仓库：https://github.com/xiabai2008/Ruoyi-Scan

@@ -70,6 +70,7 @@ a = Analysis(
         "api.auth",
         "api.deps",
         "lib.scheduler",
+        "lib.namespace_guard",  # 顶层包名冲突检测（冻结环境会自动跳过，但需在包内避免构建告警）
         "lib.plugin_sdk",
         "lib.nuclei_loader",
         "core.orchestrator",

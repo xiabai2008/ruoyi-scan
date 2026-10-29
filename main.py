@@ -6,6 +6,30 @@ P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻�
 
 import argparse
 import os
+import sys
+
+# ── 顶层包名冲突检测（必须在任何项目内部导入之前执行）──────────────────────
+# 本项目以非 src-layout 分发，site-packages 下会出现 core / common / lib / cli
+# 等顶层名。若用户项目里存在同名包且排在 sys.path 前面，扫描器内部的
+# `from core.http import join_url` 会导入到**用户的**模块 —— 轻则调用时报
+# 难以定位的 TypeError，重则静默调用到错误实现。
+#
+# 检测必须早于 `from common.console import ...` 等内部导入，否则等到 import
+# 发生时冲突早已生效；而检测代码本身又不能依赖 lib/ 可导入（lib 可能已被劫持），
+# 所以按文件路径独立加载。详见 lib/namespace_guard.py。
+# 任何异常都不得影响主流程 —— 检测是提示，不是拦截。
+try:
+    _guard_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "namespace_guard.py")
+    if os.path.isfile(_guard_path) and not getattr(sys, "frozen", False):
+        import importlib.util as _ilu
+
+        _spec = _ilu.spec_from_file_location("_ruoyi_scan_ns_guard", _guard_path)
+        if _spec is not None and _spec.loader is not None:
+            _guard = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_guard)
+            _guard.check_early()
+except Exception:  # noqa: BLE001 — 检测失败绝不阻断 CLI
+    pass
 
 from common.console import force_utf8_stdio
 from common.logger import setup_logging
