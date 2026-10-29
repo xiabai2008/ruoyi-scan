@@ -13,7 +13,7 @@ import time
 from argparse import Namespace
 from typing import List, Optional
 
-from cli.preflight import preflight_target
+from cli.preflight import EXIT_PARTIAL, EXIT_UNREACHABLE, preflight_target
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from config import settings
@@ -670,6 +670,10 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     # 避免 run_mode 为每个目标重复写 report.html（互相覆盖），也避免多线程共享 args 竞态
     scan_args = copy.copy(args)
     scan_args.report = ""
+    # 同 run_mode_batch：批量内禁用单目标 CI 退出码，否则第一个超阈值目标就 sys.exit()，
+    # 并发场景下会让整批只扫到一部分目标。整批结束后统一判定。
+    if getattr(args, "ci", False):
+        scan_args.ci = False
 
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
@@ -737,6 +741,28 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     # 批量收尾统一输出一次引导（每个目标各输出一次会刷屏）
     if not getattr(args, "ci", False):
         print_star_cta(explicit_off=getattr(args, "no_cta", False))
+
+    # 退出码语义与同步批量路径保持一致（见 run_mode_batch）
+    if not batch.builders:
+        sys.exit(EXIT_UNREACHABLE)
+    if getattr(args, "ci", False):
+        from lib.ci_runner import get_ci_exit_code
+
+        merged_results: List[ScanResult] = []
+        for target in targets:
+            merged_results.extend(results_by_target.get(target, []))
+        ci_code = get_ci_exit_code(
+            merged_results,
+            getattr(args, "severity_threshold", "high"),
+            has_error=bool(failed_targets),
+        )
+        if ci_code != 0:
+            sys.exit(ci_code)
+        if failed_targets:
+            sys.exit(EXIT_PARTIAL)
+    if failed_targets:
+        sys.exit(EXIT_PARTIAL)
+
     return batch
 
 
@@ -783,9 +809,18 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     batch = BatchReport()
     out_dir = args.report or settings.REPORT_DIR
     skipped: List[str] = []
+    failed: List[str] = []
+    all_results: List[ScanResult] = []
     # 批量模式报告统一在最后渲染：单目标扫描不要写 report.html（会被下一个目标覆盖）
     scan_args = copy.copy(args)
     scan_args.report = ""
+    # 批量 + --ci 必须禁用「单目标 CI 退出码」：run_mode 里的 CI 分支会 sys.exit()，
+    # 命中第一个超阈值目标就整批中断，后续目标根本没扫——用户拿到的却是
+    # 「只覆盖 1/N 目标」的报告，却以为整批都扫过了（2026-10-29 真实靶场实测）。
+    # 改为整批跑完后由本函数统一汇总判定退出码。
+    batch_ci = bool(getattr(args, "ci", False))
+    if batch_ci:
+        scan_args.ci = False
 
     for i, target in enumerate(targets, 1):
         print(f"\n{SEPARATOR}")
@@ -799,8 +834,10 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
             results = run_mode(mode, target, scan_args, show_cta=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
+            failed.append(target)
             continue
 
+        all_results.extend(results)
         builder = ReportBuilder(
             results=results,
             target=target,
@@ -826,6 +863,11 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
                 f"{RED}[!]因目标不可用跳过 {len(skipped)} 个：{', '.join(skipped[:5])}"
                 f"{' 等' if len(skipped) > 5 else ''}{RESET}"
             )
+        if failed:
+            print(
+                f"{RED}[!]扫描异常失败 {len(failed)} 个：{', '.join(failed[:5])}"
+                f"{' 等' if len(failed) > 5 else ''}{RESET}"
+            )
         for p in bpaths:
             print(f"{GREEN}[*]批量汇总报告：{p}{RESET}")
         if tpaths:
@@ -835,6 +877,33 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
             print_star_cta(explicit_off=getattr(args, "no_cta", False))
     elif skipped:
         print(f"\n{RED}[!]全部 {len(skipped)} 个目标均不可用，未产生任何扫描结果{RESET}")
+
+    # ── 退出码语义（批量）──────────────────────────────────────────────
+    # 与单目标对齐：全部扫不到 → 3（EXIT_UNREACHABLE，与单目标预检失败同码）；
+    # 部分扫不到 → 4（EXIT_PARTIAL，表示「扫到了但覆盖面不全」）；
+    # 全部扫到 → 0。--ci 模式下还要叠加漏洞阈值判定（有超阈值漏洞 → 1）。
+    if not batch.builders:
+        # 一个目标都没扫成：整批不可用（含全部异常），与单目标预检失败同码
+        sys.exit(EXIT_UNREACHABLE)
+
+    if batch_ci:
+        from lib.ci_runner import get_ci_exit_code
+
+        # has_error：批量内个别目标抛异常说明覆盖面有缺口，按扫描异常处理
+        ci_code = get_ci_exit_code(
+            all_results,
+            getattr(args, "severity_threshold", "high"),
+            has_error=bool(failed),
+        )
+        if ci_code != 0:
+            sys.exit(ci_code)
+        # CI 判定通过但仍有目标没扫到：退出码需体现覆盖不全（4），否则流水线
+        # 会把「只扫了 3/10 个目标」当成全量通过
+        if skipped or failed:
+            sys.exit(EXIT_PARTIAL)
+
+    if skipped or failed:
+        sys.exit(EXIT_PARTIAL)
 
     return batch
 

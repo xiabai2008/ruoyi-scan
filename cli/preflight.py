@@ -20,6 +20,10 @@ from argparse import Namespace
 # 使脚本能辨别「扫描未完成」与「扫出漏洞」两种失败
 EXIT_UNREACHABLE = 3
 
+# 批量模式下「部分目标未扫到」的退出码：整批已完成且有结果，但有目标因不可用被跳过。
+# 与 EXIT_UNREACHABLE 区分：前者是「扫到了但不全」，后者是「一个都没扫到」。
+EXIT_PARTIAL = 4
+
 
 def preflight_target(target: str, args: Namespace) -> bool:
     """确认目标可扫描：TCP 可连且 HTTP 有响应。

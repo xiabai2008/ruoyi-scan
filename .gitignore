@@ -72,8 +72,11 @@ lab_*.log
 # 构建脚本在仓库根生成的日期报告（不再匹配任意层级同名文件）
 /生成日期*
 
-# 盲测本地汇总脚本（硬编码本机靶场路径，不入库）
+# 盲测本地脚本（硬编码本机靶场路径，不入库）
 scripts/baseline_summary.py
+scripts/compare_summary.py
+scripts/full_rescan.py
+scripts/scan_with_auth.py
 
 # 桌面端构建产物（引擎冻结产物与 Tauri 产物均不入库，由 CI 构建）
 desktop/engine/.venv-build/

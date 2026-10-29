@@ -5,6 +5,7 @@ P0 重构：main.py 仅保留 CLI 参数解析与模式分发，业务编排逻�
 """
 
 import argparse
+import os
 
 from common.console import force_utf8_stdio
 from common.logger import setup_logging
@@ -144,7 +145,14 @@ def build_parser():
 
     group = parser.add_argument_group("D9 Web API 服务")
     group.add_argument("--serve", action="store_true", default=False, help="启动 Web API 服务")
-    group.add_argument("--host", default="0.0.0.0", help="API 监听地址")
+    # 安全收口：默认仅绑定本机回环，避免 Web API 暴露到整个网段（与 lab/ 靶场同一策略）。
+    # 需要对外提供服务时显式指定 --host 0.0.0.0，或用 RUOYI_SCAN_HOST 环境变量覆盖
+    # （容器 / 反向代理 / 局域网共享场景）。
+    group.add_argument(
+        "--host",
+        default=os.environ.get("RUOYI_SCAN_HOST", "127.0.0.1"),
+        help="API 监听地址（默认 127.0.0.1，仅本机可访问；对外监听需显式指定 --host 0.0.0.0）",
+    )
     group.add_argument("--port", type=int, default=8000, help="API 监听端口")
 
     group = parser.add_argument_group("D11 API 鉴权")
@@ -370,7 +378,7 @@ def print_help():
         ("--bypass-waf <m>", "WAF 绕过策略：auto/on/off（默认 auto）"),
         ("--adversarial-transport", "启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战"),
         ("--serve", "启动 Web API 服务（FastAPI + WebSocket + Web 控制台）"),
-        ("--host <addr>", "API 服务监听地址（默认 0.0.0.0）"),
+        ("--host <addr>", "API 服务监听地址（默认 127.0.0.1，仅本机；对外需显式指定 0.0.0.0）"),
         ("--port <n>", "API 服务监听端口（默认 8000）"),
         ("--api-key <key>", "API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）"),
         ("--cors-origins <o>", "允许的 CORS 源（逗号分隔）"),

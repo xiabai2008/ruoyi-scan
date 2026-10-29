@@ -1,35 +1,58 @@
 # Ruoyi-Scan 依赖清单
-# 完整可选项请参考 pyproject.toml [project.optional-dependencies]
 #
-# 安装方式：
-#   pip install -r requirements.txt           # 核心 + 报告 + Web API（推荐）
-#   pip install ".[all]"                      # 全部可选依赖
-#   pip install ".[distributed,async,yaml]"   # 按需安装
+# 本文件与 pyproject.toml [project.optional-dependencies] 严格对齐，
+# 由 scripts/check_deps.py 做一致性门禁（CI 强制执行）。
+# 改动依赖时请两处一起改，否则 CI 会红。
+#
+# ── 安装方式（推荐用 pip 的 extras，不要用本文件）────────────────────────────
+#   pip install ruoyi-scan                 # 仅核心依赖
+#   pip install "ruoyi-scan[report]"       # + PDF / Word / Excel 报告
+#   pip install "ruoyi-scan[serve]"        # + Web API 服务
+#   pip install "ruoyi-scan[distributed]"  # + Redis 分布式
+#   pip install "ruoyi-scan[async]"        # + aiohttp 异步
+#   pip install "ruoyi-scan[yaml]"         # + YAML 配置
+#   pip install "ruoyi-scan[all]"          # 全部（不含 adversarial，见下）
+#   pip install "ruoyi-scan[adversarial]"  # + Scrapling 对抗型传输层（见下）
+#
+# 本文件仅供以下场景使用：
+#   1. 源码部署：pip install -r requirements.txt
+#   2. 离线环境：pip download -r requirements.txt
+#
+# ── 关于「核心依赖」的界定 ───────────────────────────────────────────────────
+# 核心 = 扫描器运行时必需，即 pyproject 的 [project].dependencies。
+# requests-mock 是**测试专用**的 mock 库，只在 [dev] 里，不属于核心依赖，
+# 更不该出现在本文件的必装段（此前误列为「核心依赖（必装）」，
+# 会让陌生用户以为跑扫描器也需要它）。
 
-# === 核心依赖（零系统依赖，必装）===
+# === 核心依赖（必装，与 pyproject [project].dependencies 一致）===
 requests>=2.34.2
-requests-mock>=1.12.1
 
-# === 靶场环境（lab/）===
-flask>=3.1.3
-
-# === D8 报告增强（可选，缺时自动降级为 HTML/JSON/CSV）===
-# 安装：pip install ".[report]"
-# PDF 报告（reportlab 内置 STSong-Light CJK 字体，零系统字体依赖）
-reportlab>=4.0
-# Word 报告（python-docx 数据驱动，无需模板文件）
-python-docx>=1.1
-# Excel 报告（openpyxl 可读+写，原生图表+条件格式）
-openpyxl>=3.1.5
-
-# === D9 Web API（可选，仅 --serve 模式需要）===
-# 安装：pip install ".[serve]"
-# FastAPI + uvicorn 提供 REST API + WebSocket + Web 控制台
-fastapi>=0.100
-uvicorn[standard]>=0.23
-
-# === 以下可选依赖未包含在 requirements.txt，按需安装 ===
-# pip install ".[yaml]"         → pyyaml>=6.0      # --config YAML 配置文件
-# pip install ".[distributed]"  → redis>=4.5       # --distributed Redis 分布式扫描
-# pip install ".[async]"        → aiohttp>=3.8     # --async 异步 HTTP 客户端
-# pip install ".[dev]"          → pytest/ruff/mypy # 开发与测试
+# === 以下依赖按需安装，默认不装 ===
+#
+# pip install "ruoyi-scan[report]"       → reportlab / python-docx / openpyxl
+#     PDF 报告（reportlab 内置 STSong-Light CJK 字体，零系统字体依赖）
+#     Word 报告（python-docx 数据驱动，无需模板文件）
+#     Excel 报告（openpyxl 可读+写，原生图表+条件格式）
+#
+# pip install "ruoyi-scan[serve]"        → fastapi / uvicorn[standard]
+#     FastAPI + uvicorn 提供 REST API + WebSocket + Web 控制台
+#
+# pip install "ruoyi-scan[distributed]"  → redis>=8.1.0
+#     --distributed Redis 分布式扫描（Master-Worker 队列）
+#
+# pip install "ruoyi-scan[async]"        → aiohttp>=3.14.5
+#     --async 异步 HTTP 客户端
+#
+# pip install "ruoyi-scan[yaml]"         → pyyaml>=6.0
+#     --config YAML 配置文件
+#
+# pip install "ruoyi-scan[lab]"          → flask>=3.1.3
+#     lab/ 靶场环境（源码部署时需要）
+#
+# pip install "ruoyi-scan[dev]"          → pytest / ruff / mypy / requests-mock
+#     开发与测试依赖（CI 用），详见 requirements-dev.txt
+#
+# pip install "ruoyi-scan[adversarial]"  → scrapling[fetchers]>=0.4.15
+#     --adversarial-transport 对抗型传输层。刻意不并入 all：
+#     该依赖会拉入 playwright/patchright/curl_cffi 并需另打浏览器二进制
+#     （约 150MB+），只应由需要对抗能力的用户显式安装。

@@ -165,6 +165,14 @@ pip install ruoyi-scan
 | 合规映射 | — | — | 等保 2.0 / OWASP **报告级章节** |
 | 安服交付物 | — | 部分 | 7 种格式 + **docx 模板引擎 + 整改复测** |
 | nuclei 模板 | 原生 | 不支持 | **兼容执行**（http 协议子集 + 安全白名单） |
+| **模板存量** | **数千个社区模板** | 内置规则库 | **54 个专项 POC**（数量级劣势） |
+| **跨框架广度** | **数十种框架** | 通用 Web | **若依 / Spring Boot / JeecgBoot**（仅 Java 生态） |
+| **社区规模** | **数千贡献者** | 活跃社区 | **单人维护**（响应与迭代速度受限） |
+
+> **把话说全**：模板存量、跨框架广度、社区规模这三项我们**明确落后** —— nuclei 数千个模板的存量与
+> 多框架覆盖是真护城河，本项目短期内追不上，也不打算追。我们做的是**另一件事**：
+> 在若依生态里给出「这个漏洞确实存在 / 确实不存在 / 无法判定」的判定与可交付报告。
+> 两者是互补关系：先用通用工具铺开广度，再对疑似目标用本工具做深度确认与合规交付。
 
 **一句话**：通用扫描器告诉你「这里可能有东西」；Ruoyi-Scan 告诉你「这个漏洞确实存在 / 确实不存在 / 无法判定」，并直接产出可交付的报告。
 
@@ -503,7 +511,7 @@ docker compose down
 | 参数 | 说明 |
 |------|------|
 | `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
-| `--host <addr>` | API 服务监听地址（默认 0.0.0.0） |
+| `--host <addr>` | API 服务监听地址（默认 127.0.0.1，仅本机可访问；对外监听需显式指定 0.0.0.0） |
 | `--port <n>` | API 服务监听端口（默认 8000） |
 | `--api-key <key>` | API Key 鉴权 |
 | `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |
@@ -683,7 +691,6 @@ Ruoyi-Scan/
 ├── core/                    # 核心引擎层
 │   ├── orchestrator.py      # 扫描编排器（CLI 与 Web API 共用）
 │   ├── engine.py            # 并发编排+令牌桶限速
-│   ├── models.py            # 数据模型（三态判定）
 │   ├── loader.py            # 插件动态发现
 │   ├── fingerprint.py       # 指纹识别
 │   ├── router.py            # 指纹→插件路由
@@ -691,6 +698,10 @@ Ruoyi-Scan/
 │   ├── chain.py             # 漏洞利用链引擎
 │   ├── report.py            # 报告渲染（HTML/JSON/CSV）
 │   └── ...                  # 更多核心模块
+├── common/                  # 共享基础层
+│   ├── models.py            # 数据模型（三态判定）
+│   ├── console.py           # 控制台编码处理
+│   └── logger.py            # 日志配置
 ├── plugins/                 # 插件系统
 │   ├── base.py              # PluginBase 抽象基类
 │   ├── ruoyi/               # 若依 20 个插件（含 2 个 Plus 变体专属）
@@ -774,4 +785,4 @@ MIT License © 2026 XIABAI
 
 ---
 
-我是雪山盟成员，师从雪山乘客，他是转子女神的作者，[Rotor-Goddess](https://github.com/Snow-Mountain-Passengers/Rotor-Goddess)。
+作者背景与致谢见 [AUTHOR.md](AUTHOR.md)。

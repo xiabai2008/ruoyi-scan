@@ -18,3 +18,12 @@ httpx2>=2.13.1
 reportlab>=4.0
 python-docx>=1.1
 openpyxl>=3.1.5
+
+# D9/D11 Web API 测试依赖（test_api_* / test_metrics / test_api_ws 需要）
+# 此前靠 requirements.txt 间接带入，但 requirements.txt 已与 pyproject 对齐
+# 只保留核心依赖，这里必须显式列出，否则 CI 的 API 测试全部 ImportError
+fastapi>=0.100
+uvicorn[standard]>=0.23
+
+# 靶场环境（lab/ 冒烟与 e2e 用）
+flask>=3.1.3

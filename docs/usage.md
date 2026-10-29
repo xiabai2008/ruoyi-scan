@@ -536,7 +536,7 @@ cache_db: ./cache/scan_cache.db   # 缓存数据库路径
 
 # ── Web API 服务 ──
 serve: false
-host: 0.0.0.0
+host: 127.0.0.1          # 默认仅本机；对外监听改为 0.0.0.0
 port: 8000
 api_key: your-secret-key
 cors_origins: "https://scanner.internal,https://admin.internal"
@@ -1049,10 +1049,10 @@ pip install "ruoyi-scan[serve]"
 ### 启动服务
 
 ```bash
-# 1. 基本启动（默认 0.0.0.0:8000）
+# 1. 基本启动（默认 127.0.0.1:8000，仅本机可访问）
 ruoyi-scan --serve
 
-# 2. 自定义监听地址与端口
+# 2. 自定义监听地址与端口（对外提供服务需显式指定 0.0.0.0）
 ruoyi-scan --serve --host 0.0.0.0 --port 9000
 
 # 3. 启用 API Key 鉴权
@@ -1935,7 +1935,7 @@ A：使用 `--template quick` 减少扫描范围，或增大 CI 任务超时时�
 | 参数 | 说明 |
 |------|------|
 | `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
-| `--host <addr>` | API 服务监听地址（默认 0.0.0.0） |
+| `--host <addr>` | API 服务监听地址（默认 127.0.0.1，仅本机可访问） |
 | `--port <n>` | API 服务监听端口（默认 8000） |
 | `--api-key <key>` | API Key 鉴权 |
 | `--cors-origins <o>` | 允许的 CORS 源（逗号分隔） |

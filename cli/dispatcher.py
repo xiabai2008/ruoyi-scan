@@ -191,7 +191,9 @@ def dispatch(args: Namespace) -> None:
             from lib.colors import RED, RESET  # 与上方 --ai-triage 分支一致的延迟导入
 
             print(f"{RED}[!]-f 批量扫描需配合 -u/-m/-p/-l 指定扫描模式，如：main.py -f targets.txt -p{RESET}")
-            return
+            # 参数错误 → 退出码 2（与 argparse 行为一致）；此前 return 会留下退出码 0，
+            # 脚本里 -f 不带模式会被误判为「批量扫描完成」
+            sys.exit(2)
         run_mode_batch(args.file, mode, args)
     # 单目标模式按 u→m→p→l 顺序取第一个有效目标执行（优先级隐含在元组顺序中）
     elif target_for:
