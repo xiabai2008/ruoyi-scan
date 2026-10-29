@@ -627,6 +627,24 @@ class TestDefaultPassword(unittest.TestCase):
         self.assertEqual(result.extra.get("password"), "admin123")
 
     @requests_mock.Mocker()
+    def test_hit_cloud_auth_login(self, m):
+        """R8/RuoYi-Cloud：/login 端点不存在时回退 /auth/login（token 在 data.access_token）"""
+        m.post(
+            mock_url("login"),
+            headers={"Content-Type": "application/json"},
+            text='{"code":500,"msg":"404 NOT_FOUND \\"No static resource login for request \'/login\'.\\""}',
+        )
+        m.post(
+            mock_url("auth/login"),
+            headers={"Content-Type": "application/json"},
+            text='{"code":200,"data":{"access_token":"eyJhbGciOiJIUzUxMiJ9.payload.sig"},"msg":null}',
+        )
+        plugin = DefaultPasswordPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"Cloud /auth/login 应判 CONFIRMED，实际 {result.status}")
+        self.assertIn("auth/login", result.url)
+
+    @requests_mock.Mocker()
     def test_safe_password_error(self, m):
         """安全：返回密码错误（code=500）"""
         url = mock_url("login")

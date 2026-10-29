@@ -7,7 +7,7 @@ from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_positive
+from lib.matcher import is_missing_resource_page, match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -105,6 +105,19 @@ class DefaultPasswordPlugin(PluginBase):
         text = (getattr(resp, "text", "") or "").lower()
         return any(k in text for k in self.SUBMIT_MISMATCH_KEYWORDS)
 
+    def _is_missing_login_endpoint(self, resp: Any) -> bool:
+        """判断响应是否是「/login 端点不存在」（需要改用 Cloud 的 /auth/login）
+
+        实测 2026-10-29 R8（RuoYi-Cloud v3.6.8）：网关没有 /login 路由，
+        POST /prod-api/login 返回 HTTP 200 +
+        {"code":500,"msg":"404 NOT_FOUND \\"No static resource login for request ...\\""}。
+        旧逻辑把 code=500 当成「登录失败」→ 默认口令假阴性。
+        """
+        code = getattr(resp, "status_code", 0)
+        if code in (404, 405):
+            return True
+        return is_missing_resource_page(getattr(resp, "text", "") or "")
+
     def verify(self, target, session):
         """用默认口令（admin/admin123）无验证码登录后台并判定是否命中
 
@@ -140,6 +153,22 @@ class DefaultPasswordPlugin(PluginBase):
             emit(no("后台默认口令（网络异常）"))
             return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
 
+        # Cloud 形态（RuoYi-Cloud v3.6.8）：网关没有 /login，登录接口是 /auth/login。
+        # 先按单机版/分离版探测；拿到「端点不存在」再切换，不影响原有站点行为。
+        if self._is_missing_login_endpoint(resp):
+            alt_url = join_url(target, "auth/login")
+            try:
+                alt = session.post(
+                    alt_url,
+                    json={"username": self.USERNAME, "password": self.PASSWORD},
+                    headers={"Content-Type": "application/json"},
+                )
+            except requests.RequestException:
+                alt = None
+            if alt is not None and not self._is_missing_login_endpoint(alt):
+                resp = alt
+                url = alt_url
+
         text = resp.text or ""
         code = getattr(resp, "status_code", 0)
         set_cookie = ""
@@ -158,6 +187,11 @@ class DefaultPasswordPlugin(PluginBase):
         token = body.get("token") if isinstance(body, dict) else ""
         r_code = body.get("code") if isinstance(body, dict) else None
         msg = str(body.get("msg", "")) if isinstance(body, dict) else ""
+        # RuoYi-Cloud 把 token 包在 data 里：{"code":200,"data":{"access_token":"..."}}
+        if not token and isinstance(body, dict):
+            data = body.get("data")
+            if isinstance(data, dict):
+                token = data.get("access_token") or data.get("token") or ""
 
         # 排除「code:200 但 msg 含错误」的误报（部分版本错误也返 200）
         msg_lower = msg.lower()

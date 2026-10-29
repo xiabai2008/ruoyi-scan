@@ -3,7 +3,7 @@ from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_positive
+from lib.matcher import is_missing_resource_page, match_positive
 from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
@@ -121,6 +121,23 @@ class JobRcePlugin(PluginBase):
             )
         text = resp.text or ""
         code = getattr(resp, "status_code", 0)
+
+        # 0) 框架「资源不存在」包装页 → 探测路径本身不存在，不能当作「进入业务层」。
+        #    实测 2026-10-29 R8（RuoYi-Cloud v3.6.8）：网关对 /prod-api/monitor/job/edit
+        #    返回 HTTP 200 + {"code":500,"msg":"404 NOT_FOUND \"No static resource
+        #    monitor/job/edit for request ...\""} —— 它是 AjaxResult 形态且 code=500，
+        #    旧逻辑据此判 CONFIRMED（假阳性）。Cloud 的定时任务路由与单机版不同，
+        #    该探测路径在网关下根本不存在，故只能 UNKNOWN（不能宣称已绕过鉴权，
+        #    也不能宣称接口已加固）。
+        if is_missing_resource_page(text):
+            emit(no("定时任务 RCE：探测路径不存在（资源不存在包装页），无法判定"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"探测路径不存在（框架资源不存在包装页，HTTP {code}）：{text[:200]}",
+            )
 
         # 解析 JSON 响应（RuoYi AjaxResult 通常含 code/msg）；非对象 JSON 不算业务形态
         is_json = False

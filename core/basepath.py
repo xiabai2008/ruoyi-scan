@@ -24,6 +24,15 @@ logger = get_logger(__name__)
 # 候选前缀：RuoYi-Vue 官方脚手架为 /prod-api/，其余为常见改法
 CANDIDATES = ("/prod-api", "/dev-api", "/api")
 
+# 验证码接口（用来确认「这个前缀确实通到若依后端」）
+#   RuoYi-Vue（3.8.x/3.9.x）: /captchaImage  -> {"code":200,"captchaEnabled":...}
+#   RuoYi-Cloud（3.6.x）    : /code           -> 网关 RouterFunction 返回同样结构
+# 实测（2026-10-29 R8 RuoYi-Cloud v3.6.8）：只探测 /captchaImage 时，
+# /prod-api/captchaImage 在网关上是 404（Cloud 没有该端点），前缀探测失败 →
+# 插件全部退回根路径 → 命中的只有 SPA 的 index.html → 整站系统性漏报（含
+# /prod-api/actuator/env、/prod-api/v3/api-docs 这类真实暴露项）。
+CAPTCHA_PATHS = ("/captchaImage", "/code")
+
 
 def _looks_like_ruoyi_api(resp: Any) -> bool:
     """判断响应是否是若依验证码接口的 JSON（证明「这个前缀通到后端」）
@@ -48,6 +57,17 @@ def _looks_like_ruoyi_api(resp: Any) -> bool:
         return False
 
 
+def _probe_api_base(base: str, session: Any) -> bool:
+    """在给定前缀下依次尝试各验证码接口，任一命中即说明该前缀通到若依后端"""
+    for path in CAPTCHA_PATHS:
+        try:
+            if _looks_like_ruoyi_api(session.get(base + path)):
+                return True
+        except Exception:
+            logger.debug("验证码接口探测失败: %s%s", base, path, exc_info=True)
+    return False
+
+
 def detect_api_base(target: str, session: Any) -> str:
     """探测需要在 target 后追加的 API 前缀
 
@@ -58,16 +78,10 @@ def detect_api_base(target: str, session: Any) -> str:
     if not base:
         return ""
     # 1) 根路径就能拿到后端验证码 JSON → 不需要前缀（单机版 / 根路径反代）
-    try:
-        if _looks_like_ruoyi_api(session.get(base + "/captchaImage")):
-            return ""
-    except Exception:
-        logger.debug("根路径验证码探测失败", exc_info=True)
+    if _probe_api_base(base, session):
+        return ""
     # 2) 逐候选前缀探测
     for cand in CANDIDATES:
-        try:
-            if _looks_like_ruoyi_api(session.get(base + cand + "/captchaImage")):
-                return cand
-        except Exception:
-            logger.debug("API 前缀探测失败: %s", cand, exc_info=True)
+        if _probe_api_base(base + cand, session):
+            return cand
     return ""

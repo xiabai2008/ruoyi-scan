@@ -59,3 +59,24 @@ def test_basepath_ignores_spa_200_html():
         }
     )
     assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_detects_cloud_code_endpoint():
+    """RuoYi-Cloud 网关的验证码是 /code（没有 /captchaImage）→ 仍能识别 /prod-api
+
+    2026-10-29 R8 实测：Cloud v3.6.8 的 /prod-api/captchaImage 是 404，
+    只有 /prod-api/code 返回 {"code":200,"captchaEnabled":false}。
+    """
+    sess = FakeSession({"http://target/prod-api/code": FakeResp(CAPTCHA_JSON, 200)})
+    assert detect_api_base("http://target/", sess) == "/prod-api"
+
+
+def test_basepath_cloud_code_not_confused_with_generic_json():
+    """普通 JSON（无 captchaEnabled/img/uuid）不算验证码接口"""
+    sess = FakeSession(
+        {
+            "http://target/code": FakeResp('{"code":200,"msg":"ok"}', 200),
+            "http://target/prod-api/code": FakeResp('{"code":200,"msg":"ok"}', 200),
+        }
+    )
+    assert detect_api_base("http://target/", sess) == ""

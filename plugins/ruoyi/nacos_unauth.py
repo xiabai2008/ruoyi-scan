@@ -53,6 +53,37 @@ def _is_nacos_user_list(text):
     return True, f"未授权获取用户列表：{names}"
 
 
+def _is_nacos_service_list(text):
+    """判定响应是否为 Nacos 未授权服务列表（Nacos 3.x 形态）
+
+    背景（2026-10-29 R8 实测）：Nacos 3.0.2 下线了 v1 的部分运维接口：
+    - GET /nacos/v1/auth/users        -> 400 Invalid request parameters
+    - GET /nacos/v1/cs/configs?dataId= -> 400（空 dataId 不再允许列表查询）
+    但 **服务发现 v1 接口仍可匿名读取**：
+    GET /nacos/v1/ns/service/list?namespaceId=public
+      -> {"count":6,"doms":["ruoyi-auth","ruoyi-system",...]}
+    这是「未开启鉴权」的直接证据（Nacos 2.x 同样适用，非 3.x 专属）。
+
+    Returns:
+        (hit: bool, evidence: str)
+    """
+    if not text:
+        return False, "空响应"
+    try:
+        data = _json.loads(text)
+    except (ValueError, TypeError):
+        return False, "响应非 JSON"
+    if not isinstance(data, dict):
+        return False, "响应非 JSON 对象"
+    doms = data.get("doms")
+    if not isinstance(doms, list) or not doms:
+        return False, "JSON 无服务列表"
+    names = [str(x) for x in doms[:5] if isinstance(x, str) and x]
+    if not names:
+        return False, "服务列表条目非字符串"
+    return True, f"未授权获取服务列表：{names}"
+
+
 class RuoyiNacosUnauthPlugin(PluginBase):
     name = "Nacos 未授权访问"
     cve = "CVE-2021-29441"
@@ -105,23 +136,24 @@ class RuoyiNacosUnauthPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session):
-        """GET /nacos/v1/auth/users 未授权用户列表接口，按真实响应特征判定
+        """探测 Nacos 未授权：v1 用户列表（2.x）+ v1 服务发现列表（3.x 兼容）
 
         @param target: 目标主机（可含端口），用于拼接接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——200 且响应含真实 Nacos 用户列表特征为 CONFIRMED，否则 SAFE
+        @return: ScanResult——任一接口返回真实「未授权列表」特征为 CONFIRMED
         """
         url = join_url(target, "/nacos/v1/auth/users?pageNo=1&pageSize=10")
+        text = ""
+        code = 0
+        conn_err = ""
         try:
             resp = session.get(url)
+            text = resp.text or ""
+            code = getattr(resp, "status_code", 0)
         except Exception as e:
-            emit(no("Nacos 未授权访问（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+            conn_err = str(e)
 
-        text = resp.text or ""
-        code = getattr(resp, "status_code", 0)
         reason_200 = ""  # 200 时首次判据解析出的原因，SAFE 分支复用
-
         # 200 + 真实 Nacos 用户列表特征 → CONFIRMED
         if code == 200:
             hit, reason_200 = _is_nacos_user_list(text)
@@ -137,15 +169,53 @@ class RuoyiNacosUnauthPlugin(PluginBase):
                     fix=self.fix,
                 )
 
-        # 401/403 → 鉴权拦截；404 → 端点不存在；其余 → 无用户列表特征
+        # Nacos 3.x 兼容：v1/auth/users 已下线（400），但服务发现 v1 接口仍匿名可读。
+        # 没有这一步时，3.x 上「鉴权未开启」会被判成 SAFE（2026-10-29 R8 实测）。
+        svc_url = join_url(target, "/nacos/v1/ns/service/list?pageNo=1&pageSize=10&namespaceId=public")
+        svc_reason = "未探测"
+        svc_err = ""
+        try:
+            svc = session.get(svc_url)
+            svc_code = getattr(svc, "status_code", 0)
+            if svc_code == 200:
+                svc_hit, svc_reason = _is_nacos_service_list(svc.text or "")
+                if svc_hit:
+                    emit(ok("存在 Nacos 未授权访问漏洞"))
+                    return ScanResult(
+                        kind="vuln",
+                        name=self.name,
+                        severity=self.severity,
+                        status=STATUS_CONFIRMED,
+                        url=svc_url,
+                        evidence=f"{svc_reason}（Nacos 3.x v1 服务发现接口匿名可读）",
+                        fix=self.fix,
+                    )
+            else:
+                svc_reason = f"HTTP {svc_code}"
+        except Exception as e:
+            svc_err = str(e)
+            svc_reason = f"异常: {e}"
+
+        # 两个接口都拿不到响应才算网络异常；只要有一个拿到了响应，就能给出 SAFE 证据
+        if conn_err and svc_err:
+            emit(no("Nacos 未授权访问（网络异常）"))
+            return ScanResult(
+                kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=f"{conn_err}; {svc_err}"
+            )
+
         if code in (401, 403):
             reason = f"HTTP {code} 鉴权拦截"
         elif code == 404:
             reason = "HTTP 404 端点不存在"
         elif code == 200:
-            # 复用上方首次解析结果，避免重复 JSON 解析
             reason = f"200 但{reason_200}"
         else:
             reason = f"HTTP {code} 非 200 响应"
-        emit(no(f"不存在 Nacos 未授权访问漏洞（{reason}）"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=reason)
+        emit(no(f"不存在 Nacos 未授权访问漏洞（{reason}；服务列表接口：{svc_reason}）"))
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence=f"{reason}；服务列表接口：{svc_reason}",
+        )

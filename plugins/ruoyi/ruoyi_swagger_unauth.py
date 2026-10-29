@@ -61,7 +61,9 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
         # P3 三态补全：所有请求异常 → UNKNOWN，不误判为 SAFE
         any_success = False
         # 依次覆盖三种文档形态：springfox（swagger-ui.html）、knife4j（doc.html）、OpenAPI JSON（v2/api-docs）
-        for path in ["/swagger-ui.html", "/doc.html", "/v2/api-docs"]:
+        # SpringDoc / RuoYi-Cloud 用 /swagger-ui/index.html（3.6.8 实测：200 + 真 Swagger UI 页面，
+        # 而 /swagger-ui.html 不存在），漏掉这条会把真实暴露判成 SAFE。
+        for path in ["/swagger-ui.html", "/swagger-ui/index.html", "/doc.html", "/v2/api-docs"]:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
