@@ -28,12 +28,12 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip  # pip 缓存：nightly 免去重复下载依赖，降低 PyPI 抖动影响
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Build & start lab targets (vuln + safe)
         run: |

@@ -178,9 +178,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: "requirements.txt"  # 该 job 装的是根 requirements.txt（nuclei + lab 运行依赖）
+          cache-dependency-path: "requirements-dev.txt"  # 该 job 装的是 dev 依赖（nuclei + lab 运行依赖）
       - name: Install lab dependencies
-        run: pip install -r requirements.txt
+        # 必须装 requirements-dev.txt 而非 requirements.txt：
+        # requirements.txt 现已与 pyproject 对齐、只含核心依赖（requests），
+        # flask（lab 靶场运行依赖）已移入 requirements-dev.txt 的 lab 段。
+        # 装错会导致 lab/server.py import flask 失败 → 靶场起不来 →
+        # "lab on port 18080 not healthy"。
+        run: pip install -r requirements-dev.txt
       - name: Install nuclei (pinned)
         run: |
           curl -sSL -o nuclei.zip https://github.com/projectdiscovery/nuclei/releases/download/v3.11.1/nuclei_3.11.1_linux_amd64.zip
