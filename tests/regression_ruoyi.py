@@ -54,6 +54,7 @@ from plugins.ruoyi.job_rce import JobRcePlugin
 from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
 from plugins.ruoyi.plus_auth_login import PlusAuthLoginProbePlugin
 from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
+from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
 from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
 from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
@@ -1066,6 +1067,18 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"端点缺失应判 UNKNOWN，实际 {result.status}")
         self.assertIn("404", result.evidence, "证据说明端点缺失原因")
+
+
+class TestSwaggerSpaFalsePositive(unittest.TestCase):
+    """SPA 首页的图标名里带 swagger（如 icon-swagger）不应被判成 Swagger 未授权"""
+
+    @requests_mock.Mocker()
+    def test_spa_icon_swagger_not_confirmed(self, m):
+        spa = '<html><body><svg><symbol id="icon-swagger"></symbol></svg><div id="app"></div></body></html>'
+        for path in ["swagger-ui.html", "swagger-ui/index.html", "doc.html", "v2/api-docs"]:
+            m.get(mock_url(path), status_code=200, text=spa)
+        result = RuoyiSwaggerUnauthPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_SAFE, f"SPA 图标名不应判 CONFIRMED，实际 {result.status}")
 
 
 def run_all():

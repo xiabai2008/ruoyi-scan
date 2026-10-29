@@ -76,7 +76,19 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 # 匹配整个响应体（resp.text 已物化，[:500] 截断会在大型文档上漏掉标题标记）；
                 # 统一转小写比较，覆盖 "Swagger UI" 等大写形态；原 '"swagger"' 为 "swagger" 的子串冗余
                 body = (resp.text or "").lower()
-                if any(kw in body for kw in ["swagger", "knife4j", "接口文档"]):
+                if any(
+                    kw in body
+                    for kw in [
+                        "swagger-ui",
+                        "swagger ui",
+                        "swagger-ui-bundle",
+                        "swagger-resources",
+                        "knife4j",
+                        "接口文档",
+                        '"swagger"',
+                        '"openapi"',
+                    ]
+                ):
                     return ScanResult(
                         kind=self.category,
                         name=self.name,
