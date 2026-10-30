@@ -1,163 +1,64 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, MODE_LABEL, type ScheduleJob, type ScanMode } from "../services/backend";
+import { useEffect, useState } from "react";
+import { api, type ScheduleJob } from "../services/backend";
 import { useApp } from "../state/AppCtx";
 
-/** 调度列表轮询间隔（ms） */
-const POLL_MS = 10_000;
-
-const CRON_PRESETS = [
-  { label: "每 5 分钟", cron: "*/5 * * * *" },
-  { label: "每 30 分钟", cron: "*/30 * * * *" },
-  { label: "每小时", cron: "0 * * * *" },
-  { label: "每天 09:00", cron: "0 9 * * *" },
-  { label: "每 10 分钟", cron: "every:600" },
-];
-
 /**
- * 定时扫描面板（E9）：列出/创建/删除调度任务。
- * 调度表达式支持 cron 5 段式 与 every:<秒> 两种语法（lib/scheduler.py）。
+ * LiveScan 右栏的定时任务摘要卡。
+ *
+ * 旧实现在 300px 窄栏里做“列表 + 新建表单”的折叠面板：展开后表单落在视口外，
+ * 用户只看到 ▲ 变了；删除失败还被静默吞掉。现在完整管理能力移到独立页面，
+ * 这里只保留状态摘要与入口。
  */
 export function SchedulePanel() {
-  const { online } = useApp();
-  const [open, setOpen] = useState(false);
+  const { online, setView } = useApp();
   const [jobs, setJobs] = useState<ScheduleJob[]>([]);
-  const [cron, setCron] = useState("*/30 * * * *");
-  const [target, setTarget] = useState("");
-  const [mode, setMode] = useState<ScanMode>("u");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  const load = useCallback(() => {
-    if (!online) return;
-    api.listSchedules().then(setJobs).catch(() => setJobs([]));
-  }, [online]);
 
   useEffect(() => {
-    load();
-    if (!online) return;
-    const t = setInterval(load, POLL_MS);
-    return () => clearInterval(t);
-  }, [online, load]);
-
-  const create = async () => {
-    const t = target.trim();
-    if (!t || !cron.trim()) {
-      setErr("cron 与目标必填");
+    if (!online) {
+      setJobs([]);
       return;
     }
-    setBusy(true);
-    setErr("");
-    try {
-      await api.createSchedule({ cron: cron.trim(), target: t, mode });
-      setTarget("");
-      load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+    let alive = true;
+    const load = () =>
+      api.listSchedules()
+        .then((list) => { if (alive) setJobs(list); })
+        .catch(() => { if (alive) setJobs([]); });
+    load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [online]);
 
-  const remove = async (jobId: string) => {
-    try {
-      await api.deleteSchedule(jobId);
-      load();
-    } catch {
-      /* ignore */
-    }
-  };
+  const degraded = jobs.filter((j) => j.degraded).length;
+  const paused = jobs.filter((j) => j.paused).length;
 
   return (
-    <div className="flex flex-col rounded-lg border border-edge-soft bg-cardsoft">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center justify-between px-3 py-2"
-      >
-        <span className="font-mono text-[8px] tracking-wider text-ink-3">
-          SCHEDULED SCANS · {jobs.length}
+    <button
+      onClick={() => setView("schedules")}
+      className="flex w-full flex-col gap-1.5 rounded-lg border border-edge-soft bg-cardsoft p-3 text-left transition-colors hover:bg-card"
+      title="打开定时任务管理页"
+    >
+      <span className="flex items-center justify-between">
+        <span className="font-mono text-[8px] tracking-wider text-ink-3">SCHEDULED SCANS</span>
+        <span className="font-mono text-[9px] text-accent">管理 →</span>
+      </span>
+      <span className="flex items-baseline gap-2">
+        <span className="font-mono text-[20px] font-semibold text-ink">{jobs.length}</span>
+        <span className="text-[10px] text-ink-2">个定时任务</span>
+      </span>
+      {!online ? (
+        <span className="font-mono text-[9px] text-ink-3">引擎离线</span>
+      ) : degraded > 0 || paused > 0 ? (
+        <span className="font-mono text-[9px]" style={{ color: "var(--c-sem-amber)" }}>
+          {degraded > 0 ? `${degraded} 个降级` : ""}
+          {degraded > 0 && paused > 0 ? " · " : ""}
+          {paused > 0 ? `${paused} 个已暂停` : ""}
         </span>
-        <span className="font-mono text-[9px] text-accent">{open ? "▲" : "▼"}</span>
-      </button>
-
-      {open ? (
-        <div className="flex flex-col gap-2 border-t border-edge-soft px-3 pb-3 pt-2.5">
-          {/* 现有任务 */}
-          {jobs.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              {jobs.map((j) => (
-                <div key={j.job_id} className="flex items-center gap-1.5 rounded border border-edge bg-card px-2 py-1.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-[9.5px] text-ink" title={j.target}>
-                      {j.target.replace(/^https?:\/\//, "")}
-                    </p>
-                    <p className="font-mono text-[8.5px] text-ink-3">
-                      {j.cron} · {MODE_LABEL[j.mode as ScanMode]?.split(" ")[0] || j.mode}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => remove(j.job_id)}
-                    className="shrink-0 rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[8.5px] text-ink-3 hover:text-red"
-                    title="删除调度"
-                  >
-                    DEL
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="font-mono text-[9.5px] text-ink-3">{online ? "暂无定时任务" : "引擎离线"}</p>
-          )}
-
-          {/* 新建表单 */}
-          <select
-            className="h-[26px] rounded-sm border border-edge bg-card px-2 font-mono text-[10px] text-ink outline-none"
-            value={CRON_PRESETS.some((p) => p.cron === cron) ? cron : "custom"}
-            onChange={(e) => {
-              // 选「自定义」→ 清空为占位，下方自定义输入框才会出现（空值提交仍会被必填校验拦下）
-              setCron(e.target.value === "custom" ? "" : e.target.value);
-            }}
-          >
-            {CRON_PRESETS.map((p) => (
-              <option key={p.cron} value={p.cron}>{p.label}（{p.cron}）</option>
-            ))}
-            <option value="custom">自定义…</option>
-          </select>
-          {!CRON_PRESETS.some((p) => p.cron === cron) ? (
-            <input
-              className="h-[26px] rounded-sm border border-edge bg-card px-2 font-mono text-[10px] text-ink outline-none placeholder:text-ink-3"
-              placeholder="cron 5 段式 或 every:秒"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-            />
-          ) : null}
-          <input
-            className="h-[26px] rounded-sm border border-edge bg-card px-2 font-mono text-[10px] text-ink outline-none placeholder:text-ink-3"
-            placeholder="目标 http://host:port/"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            spellCheck={false}
-          />
-          <div className="flex items-center gap-2">
-            <select
-              className="h-[26px] flex-1 rounded-sm border border-edge bg-card px-2 font-mono text-[10px] text-ink outline-none"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as ScanMode)}
-            >
-              {(["u", "p", "m", "l"] as ScanMode[]).map((m) => (
-                <option key={m} value={m}>{MODE_LABEL[m]}</option>
-              ))}
-            </select>
-            <button
-              onClick={create}
-              disabled={busy || !online}
-              className="h-[26px] rounded-sm bg-accent px-3 font-mono text-[10px] font-semibold text-btntext disabled:opacity-50"
-            >
-              {busy ? "…" : "添加调度"}
-            </button>
-          </div>
-          {err ? <p className="font-mono text-[9px] text-red">{err}</p> : null}
-        </div>
-      ) : null}
-    </div>
+      ) : (
+        <span className="font-mono text-[9px] text-ink-3">全部按计划执行</span>
+      )}
+    </button>
   );
 }

@@ -26,7 +26,7 @@ from config import settings
 from core.cache import FingerprintCache
 from core.engine import ScanEngine
 from core.fingerprint import detect_cms, detect_waf
-from core.http import normalize_target
+from core.http import normalize_scan_target, normalize_target, preflight
 from core.loader import load_plugins
 from core.report import ReportBuilder
 from core.router import Router
@@ -187,6 +187,14 @@ class ScanTask:
 EventHandler = Callable[[str, Any], None]
 
 
+class TaskCancelled(Exception):
+    """任务被用户取消（协作式：执行线程在检查点抛出，保留已收集结果）"""
+
+
+class TargetUnreachable(Exception):
+    """扫描前预检失败（目标不可达 / HTTP 层无响应）"""
+
+
 class ScanOrchestrator:
     """扫描编排器：封装完整扫描流程，CLI 与 API 共用
 
@@ -213,6 +221,9 @@ class ScanOrchestrator:
         self.registry = registry
         self._pool: Optional[Any] = None  # 懒加载线程池（API 模式，_DaemonThreadPoolExecutor）
         self._pool_lock = threading.Lock()
+        # 协作式取消：每个任务一个 Event，执行线程在阶段边界/插件入口检查
+        self._cancel_events: Dict[str, threading.Event] = {}
+        self._cancel_lock = threading.Lock()
         # 最近一次 run_sync 的实际请求数：session 在 _run 内部已关闭，调用方拿不到
         # session.request_count，报告里只能写 0。此处留一个只读快照供 CLI 出报告用。
         self.last_request_count: int = 0
@@ -257,6 +268,8 @@ class ScanOrchestrator:
             request=req,
             started_at=time.time(),
         )
+        with self._cancel_lock:
+            self._cancel_events[task_id] = threading.Event()
         if self.registry:
             self.registry.register(task_id, task.to_dict())
             self.registry.notify(task_id, "status", {"status": "pending", "task_id": task_id})
@@ -268,7 +281,7 @@ class ScanOrchestrator:
             with self._pool_lock:
                 if self._pool is None:
                     self._pool = _DaemonThreadPoolExecutor(max_workers=4, thread_name_prefix="scan")
-                self._pool.submit(self._run, task, None)
+                self._pool.submit(self._run_task, task)
         except Exception as e:
             # 提交失败（如并发 shutdown 后线程池已关闭：RuntimeError: cannot schedule
             # new futures after shutdown）不能只抛给调用方——注册表条目会永久停留在
@@ -281,7 +294,51 @@ class ScanOrchestrator:
             if self.registry:
                 self.registry.update_task_dict(task_id, task.to_dict())
                 self.registry.notify(task_id, "status", {"status": "failed", "task_id": task_id})
+            self._forget_cancel(task_id)
         return task_id
+
+    def _run_task(self, task: ScanTask) -> None:
+        """线程池入口：执行扫描并在结束后清理取消标志"""
+        try:
+            self._run(task, None)
+        finally:
+            self._forget_cancel(task.task_id)
+
+    def _forget_cancel(self, task_id: str) -> None:
+        with self._cancel_lock:
+            self._cancel_events.pop(task_id, None)
+
+    def cancel(self, task_id: str) -> bool:
+        """请求取消任务（协作式）
+
+        - 置 Event：执行线程在阶段边界/每个插件入口检查，停止启动新插件；
+        - 立即把 registry 状态置为 cancelled 并落盘，UI 不必等线程退出；
+        - 返回 False 表示任务不在执行队列中（已完成/不存在）。
+        正在执行的单个插件无法被强杀（requests 不支持中断），最多等一个 HTTP 超时。
+        """
+        with self._cancel_lock:
+            ev = self._cancel_events.get(task_id)
+        if ev is None:
+            return False
+        ev.set()
+        if self.registry:
+            self.registry.mark_status(task_id, "cancelled")
+            self.registry.notify(task_id, "status", {"status": "cancelled", "task_id": task_id})
+        return True
+
+    def _cancelled(self, task_id: str) -> bool:
+        with self._cancel_lock:
+            ev = self._cancel_events.get(task_id)
+        return ev is not None and ev.is_set()
+
+    def _raise_if_cancelled(self, task_id: str) -> None:
+        if self._cancelled(task_id):
+            raise TaskCancelled
+
+    def is_task_active(self, task_id: str) -> bool:
+        """任务是否仍在执行队列中（调度器防堆积用）"""
+        with self._cancel_lock:
+            return task_id in self._cancel_events
 
     def _run(self, task: ScanTask, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """实际扫描逻辑（同步，从 main.py run_mode 抽取）
@@ -294,7 +351,9 @@ class ScanOrchestrator:
             扫描结果列表
         """
         req = task.request
-        target = normalize_target(req.target)
+        # 执行层再校验一次：API 已有 Pydantic 校验，CLI/调度路径也要拦住畸形目标，
+        # 否则 requests 只会抛 InvalidSchema，最终被插件吞成 UNKNOWN
+        target = normalize_target(normalize_scan_target(req.target))
         # 提前初始化结果列表：异常路径也要能返回失败前已收集的部分结果，
         # 而不是静默丢弃（task.results 在失败时可能尚未赋值）
         all_results: List[ScanResult] = []
@@ -328,8 +387,30 @@ class ScanOrchestrator:
         session: Optional[SessionManager] = None
 
         try:
+            # 任务可能在排队期间就被取消：先检查，避免先广播 running 再 cancelled
+            self._raise_if_cancelled(task.task_id)
             task.status = "running"
             _emit("status", {"status": "running", "task_id": task.task_id})
+            self._raise_if_cancelled(task.task_id)
+
+            # 0. 可达性预检：目标不可达时立即给出可读原因，而不是 0/0 干等
+            # 配了代理时跳过直连探测（经代理可达的目标会被误判为不可达，与 CLI 语义一致）
+            if not req.proxy:
+                ok, stage, reason = preflight(target, timeout=min(float(req.timeout), 8.0))
+                _emit(
+                    "preflight",
+                    {
+                        "ok": ok,
+                        "stage": stage,
+                        "reason": reason,
+                        "target": target,
+                        "task_id": task.task_id,
+                    },
+                )
+                if not ok:
+                    raise TargetUnreachable(reason)
+
+            self._raise_if_cancelled(task.task_id)
 
             # 1. 端口扫描（可选）
             if req.portscan:
@@ -396,6 +477,7 @@ class ScanOrchestrator:
                 timeout=req.timeout,
                 pool_size=req.threads,
             )
+            self._raise_if_cancelled(task.task_id)
             engine = ScanEngine(
                 threads=req.threads,
                 rate=req.rate,
@@ -557,7 +639,11 @@ class ScanOrchestrator:
                 all_plugins = load_plugins("plugins.ruoyi")
                 _emit(
                     "plugin_fallback",
-                    {"task_id": task.task_id},
+                    {
+                        "plugin": fp_result.cms or req.cms or "auto",
+                        "reason": "未匹配专用插件包，回退加载默认 ruoyi 包",
+                        "task_id": task.task_id,
+                    },
                 )
 
             # 通用漏洞检测包
@@ -702,18 +788,14 @@ class ScanOrchestrator:
                 """引擎结果回调：推送事件 + 计数"""
                 all_results.append(res)
                 done_count[0] += 1
-                _emit(
-                    "result",
-                    {
-                        "name": res.name,
-                        "status": res.status,
-                        "severity": res.severity,
-                        "url": res.url,
-                        "evidence": res.evidence,
-                        "extra": res.extra if isinstance(res.extra, dict) else {},
-                        "task_id": task.task_id,
-                    },
-                )
+                # 发完整结果（to_dict 含 fix/reproduce/cve/cvss/compliance），
+                # 结果详情抽屉与持久化共用同一形状；task_id 由 _emit 补齐
+                payload = res.to_dict() if hasattr(res, "to_dict") else {"name": getattr(res, "name", "")}
+                payload = {**payload, "task_id": task.task_id}
+                _emit("result", payload)
+                # 每 25 条增量落盘：进程异常退出时也能保住大部分证据
+                if len(all_results) % 25 == 0:
+                    self._persist_results(task.task_id, all_results)
                 percent = (done_count[0] / total_plugins * 100) if total_plugins > 0 else 0
                 _emit(
                     "progress",
@@ -726,6 +808,7 @@ class ScanOrchestrator:
                 )
 
             for cat in categories:
+                self._raise_if_cancelled(task.task_id)
                 classes = plugins_by_cat.get(cat, [])
                 if not classes:
                     continue
@@ -743,6 +826,7 @@ class ScanOrchestrator:
                     session,
                     on_result=_on_result,
                     waf_bypass_coordinator=waf_bypass_coordinator,
+                    should_stop=lambda: self._cancelled(task.task_id),
                 )
 
             task.results = all_results
@@ -792,6 +876,9 @@ class ScanOrchestrator:
                     },
                 )
             task.results = all_results
+            # 三态降级全部完成后再落一次完整快照（增量落盘只覆盖到第 25n 条）
+            self._persist_results(task.task_id, all_results)
+            self._raise_if_cancelled(task.task_id)
             # session 关闭统一放到 finally（成功/失败路径共用，避免泄漏）
 
             # 8. 报告生成（可选）
@@ -819,7 +906,7 @@ class ScanOrchestrator:
                 }
                 builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
                 formats = self._parse_formats(req.report_format)
-                paths = builder.render_all(req.report_dir, formats=formats)
+                paths = builder.render_all(req.report_dir, formats=formats, stem=task.task_id)
                 task.report_paths = paths
                 _emit(
                     "report",
@@ -848,6 +935,29 @@ class ScanOrchestrator:
 
             return all_results
 
+        except TaskCancelled:
+            # 用户取消：保留已收集结果，不再生成报告（半程报告会误导），
+            # 状态以 cancelled 收尾；执行线程退出后释放线程池槽位
+            task.status = "cancelled"
+            task.finished_at = time.time()
+            task.duration = task.finished_at - task.started_at
+            task.results = task.results or all_results
+            self._persist_results(task.task_id, task.results)
+            _emit("status", {"status": "cancelled", "task_id": task.task_id})
+            return task.results
+
+        except TargetUnreachable as e:
+            # 预检失败：不给“0/0 无事件”让用户干等，直接失败并说明原因
+            task.status = "failed"
+            task.error = f"目标不可达：{e}"
+            task.finished_at = time.time()
+            task.duration = task.finished_at - task.started_at
+            task.results = all_results
+            self._persist_results(task.task_id, all_results)
+            _emit("error", {"error": task.error, "code": "unreachable", "task_id": task.task_id})
+            _emit("status", {"status": "failed", "task_id": task.task_id})
+            return all_results
+
         except Exception as e:
             # CLI 模式下 _emit 可能没有任何消费者（无 on_event 且无 registry），
             # 不落日志会让「扫描崩溃」与「扫描无发现」无法区分
@@ -858,6 +968,7 @@ class ScanOrchestrator:
             task.duration = task.finished_at - task.started_at
             # 保留失败前已收集的部分结果（引擎中途异常时 task.results 可能尚未赋值）
             task.results = task.results or all_results
+            self._persist_results(task.task_id, task.results)
             _emit(
                 "error",
                 {
@@ -1085,6 +1196,21 @@ class ScanOrchestrator:
         parts = [f.strip() for f in fmt_str.split(",") if f.strip()]
         parts = [p for p in parts if p in valid]
         return parts or None
+
+    def _persist_results(self, task_id: str, results: List[ScanResult]) -> None:
+        """把结果明细落盘（失败仅记录 debug，不阻断扫描）
+
+        事件表有 500 条上限，长任务的结果会被截断；findings 表按 seq 保序
+        存完整快照，重启后 /api/scan/{id}/results 与报告重建都从这里取。
+        """
+        storage = getattr(self.registry, "storage", None) if self.registry else None
+        if storage is None:
+            return
+        try:
+            rows = [r.to_dict() if hasattr(r, "to_dict") else dict(r) for r in results]
+            storage.save_results(task_id, rows)
+        except Exception:
+            logger.debug("结果明细落盘失败 task=%s", task_id, exc_info=True)
 
     def shutdown(self) -> None:
         """关闭线程池（API 模式停服 / 测试清理时调用）

@@ -15,6 +15,28 @@ from common.logger import get_logger
 
 logger = get_logger(__name__)
 
+# 任务终态：到达后不会再有新事件，WS 补播完即可关闭连接
+TERMINAL_STATUSES = ("done", "failed", "cancelled", "interrupted")
+
+
+def _canonical_event(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """把持久化事件归一化为 WS/前端契约形状 {type,data,task_id,timestamp}
+
+    SQLite events 表存的是 event_type/payload，而 notify() 推送与前端消费的是
+    type/data。恢复时若不转换，WS 补播会发出 event_type/payload → 前端
+    `e.type` 为 undefined，终端显示 "undefined:"，结果接口也读不到 result 事件。
+    幂等：已是 {type,data} 形状的直接返回。
+    """
+    if "type" in raw and "data" in raw:
+        return raw
+    payload = raw.get("payload")
+    return {
+        "type": raw.get("event_type", ""),
+        "data": payload if isinstance(payload, dict) else {"data": payload},
+        "task_id": raw.get("task_id", ""),
+        "timestamp": raw.get("timestamp", 0.0),
+    }
+
 
 @dataclass
 class TaskRecord:
@@ -207,7 +229,7 @@ class TaskRegistry:
         expired = []
         with self._lock:
             for task_id, record in list(self._tasks.items()):
-                if record.status in ("done", "failed"):
+                if record.status in TERMINAL_STATUSES:
                     finished_at = record.task_dict.get("finished_at") or record.created_at
                     if now - finished_at > self.retention_seconds:
                         expired.append(task_id)
@@ -219,6 +241,30 @@ class TaskRegistry:
         """当前任务数"""
         with self._lock:
             return len(self._tasks)
+
+    def mark_status(self, task_id: str, status: str, error: str = "") -> None:
+        """更新并持久化任务状态（不广播事件）
+
+        取消/重启归一化等“非执行线程”路径使用：旧实现只改 record.status，
+        task_dict 与 SQLite 仍是旧状态，导致 GET /api/scan 仍显示 running，
+        重启后又把已取消任务恢复成 running。
+        """
+        with self._lock:
+            record = self._tasks.get(task_id)
+            if record is None:
+                return
+            record.status = status
+            td = dict(record.task_dict or {})
+            td["status"] = status
+            if error:
+                td["error"] = error
+            record.task_dict = td
+            task_dict = dict(td)
+        if self.storage:
+            try:
+                self.storage.save_task(task_id, task_dict)
+            except Exception:
+                logger.debug("任务状态落盘失败", exc_info=True)
 
     # === D11：SQLite 持久化恢复 ===
 
@@ -237,8 +283,24 @@ class TaskRegistry:
                 # 历史任务状态以持久化字段为准；缺失时按 pending 恢复，
                 # 不臆断为 done（否则未完成任务在重启后被静默标记为已完成）
                 status = td.get("status") or "pending"
-                # 恢复事件历史
-                events = storage.get_events(task_id, limit=self.max_events_per_task)
+                # 引擎重启后，pending/running 任务已经没有执行线程：保持 running 会让
+                # UI 永远显示“进行中”，且取消接口也无法真正结束它。归一化为 interrupted，
+                # 并立即回写，避免下次重启重复显示为旧状态。
+                if status in ("pending", "running"):
+                    status = "interrupted"
+                    td = {
+                        **td,
+                        "status": status,
+                        "error": "引擎重启，任务已中断（结果可能不完整）",
+                    }
+                    try:
+                        storage.save_task(task_id, td)
+                    except Exception:
+                        logger.debug("中断状态回写失败", exc_info=True)
+                # 恢复事件历史：统一成 {type,data} 契约（P0-1 根因），
+                # 并只取最近 max_events_per_task 条
+                raw_events = storage.get_events(task_id, limit=self.max_events_per_task, canonical=True)
+                events = [_canonical_event(e) for e in raw_events]
                 with self._lock:
                     self._tasks[task_id] = TaskRecord(
                         task_id=task_id,
@@ -246,7 +308,7 @@ class TaskRegistry:
                         # created_at 优先取自身持久化字段：TTL 清理按 created_at 计算，
                         # 借用 started_at（或 time.time()）会失真
                         created_at=td.get("created_at") or td.get("started_at") or time.time(),
-                        events=events,
+                        events=events[-self.max_events_per_task :],
                         task_dict=td,
                     )
         except Exception:

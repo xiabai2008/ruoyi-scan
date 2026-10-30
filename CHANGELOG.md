@@ -22,6 +22,40 @@
 - **README**：目录树 `models.py` 位置修正（实为 `common/models.py`）并补齐 `common/` 段；末尾个人宣言移至 `AUTHOR.md`；与 nuclei/xray 对比表补 3 行诚实短板（模板存量 / 跨框架广度 / 社区规模），与「互补而非竞争」定位对齐
 - **退出码文档**：统一 0/1/2/3/4 五种语义，修正 `docs/usage.md` 中「3 = 配置错误」的错误表述（配置错误是 2，3 是目标不可达）
 
+## [1.5.3] - 2026-10-30
+
+桌面端体验测评（v1.5.2）问题修复版：P0 数据可信性 3 项、P1 核心功能 8 项、P2 一致性与体验 12 项。
+
+### Fixed
+- **重启后历史任务终端全是 `undefined:` / 结果明细丢失（P0）**：SQLite 事件以 `event_type/payload` 落盘，恢复时原样塞进回放列表，而 WS/前端只认 `type/data`。恢复口统一归一化为 `{type,data,task_id,timestamp}`，并按最近 N 条回放；结果接口在事件缺失时从新增的 `findings` 表兜底，三态统计不再归零，也不再给出“暂无确认项，安全”的错误结论
+- **所有任务共用 `reports/api/report.*`，历史报告张冠李戴（P0）**：报告改为按 `{task_id}.{ext}` 命名；删除对共享 `report.{ext}` 的全局回退；`report_paths` 只认文件名含本 task_id 的路径。新增 `POST /api/report/{task_id}/rebuild`，旧任务可从持久化结果重建报告
+- **重启后 pending/running 任务永久显示运行中**：恢复时归一化为新增的 `interrupted` 状态并回写数据库，UI 显示“任务因引擎重启中断”
+- **停止/取消不生效，任务堆积后新扫描卡死（P1）**：取消改为协作式 Event，引擎在每个插件入口检查并停止启动新插件；取消立即置 cancelled 并持久化，`GET /api/scan` 统一以 `record.status` 为准（旧实现只改内存状态，列表仍显示 running）
+- **不可达目标 1 分钟 0/0 无反馈（P1）**：扫描前执行 TCP + HTTP 可达性预检（配代理时跳过），失败直接 failed 并给出“目标不可达：连接 … 失败”；新增 `GET /api/system/probe` 与新建扫描“连通性”按钮
+- **非法目标直接开扫（P1）**：前后端共用目标校验——仅 http/https、host/端口合法、缺协议自动补 `http://`；`file://`、畸形端口在 API 入口 422
+- **离线提交永久“提交中…”/ 指纹探测卡 40s（P1）**：前端所有请求增加 AbortController 超时与可读网络错误；离线禁用提交按钮；指纹探测支持服务端 `timeout` 参数
+- **定时任务陷阱（P1）**：job_id 改 UUID（不再含 `*/`）；DELETE 支持路径/查询参数两种形式，历史 id 也能删除；cron 降级在 API/UI 显式展示；APScheduler 纳入 `[schedule]` extra 与引擎打包；上一轮仍运行时跳过本轮；目标连续 3 次不可达自动暂停并可恢复
+- **漏洞库 CVE 计数/筛选失真（P1）**：后端把插件元数据中的 `N/A/n/a/-` 归一化为空串，前端 `hasCve()` 统一判断，CVE 计数与筛选恢复真实值
+- **SUPPORT 气泡文字不可见（P1）**：补齐 Tailwind `--color-bubbletext` 映射，改用 `text-bubbletext`
+- **报告中心下载链接无反应（P1）**：弃用 `target="_blank"`，改 Tauri 原生保存对话框 + 写盘（Rust `save_report`），保存后可定位文件；HTML 报告支持应用内预览
+- **P2 一致性收口**：顶栏“插件”计数与 WS 实时状态徽标；指纹未识别文案；`plugin_fallback` 负载；结果表行可点击并打开证据/复现/修复详情抽屉；总览搜索真正过滤、“最新发现”按时间倒序；任务标签 × 命中区与自动滚动；资产页 `CANCELLED` 文案；VulnDb“用筛选结果扫描”预置插件；离线侧边栏/问候语；主题编辑器与当前主题同步；快捷键列表只保留真实行为（新增 Ctrl+K 聚焦搜索）；新建扫描占位符与模式重置
+- **桌面端真实走查（R9 19109）补充修复**：提交后新任务未自动选中（列表刷新竞态会把选中态改回旧任务）；旧任务“重建报告”只查 findings 表且旧事件缺 `kind/name` 字段会 500；重建报告“扫描时间”显示为 Unix 时间戳；目标校验把 `abc` 误判为 IPv6 而放行；Widgets 浮窗遮挡调度表单“添加调度”和报告预览关闭按钮
+
+### Added
+- `ScanResult` 完整字段（`fix/fix_detail/reproduce/cve/cvss/compliance`）写入结果事件、REST DTO 与持久化表，供结果详情抽屉与报告重建使用
+- `findings` 表（SQLite，`CREATE TABLE IF NOT EXISTS`，无破坏性迁移）
+- 定时任务独立页面（`06 定时任务`），含降级/暂停/上次执行状态
+- `[schedule]` 可选依赖组（APScheduler）与引擎 PyInstaller hiddenimports
+
+### Changed
+- 报告文件命名从共享 `report.*` 改为 `{task_id}.*`；历史共享文件不再被猜测性归属
+- `GET /api/scan`、`GET /api/scan/{id}/results` 的状态/明细以 `record.status` 与 findings 表为权威来源
+- 桌面端版本号同步至 1.5.3
+
+### Notes
+- 升级后旧任务的共享 `report.*` 无法判断归属，报告中心会显示“重建报告”；事件仍在 500 条窗口内或 findings 已落盘的任务可恢复结果明细
+- 取消为协作式：正在执行的单个插件会等到自身 HTTP 超时结束，之后线程释放
+
 ## [1.5.2] - 2026-10-28
 
 ### Fixed

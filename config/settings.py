@@ -137,7 +137,7 @@ class WafBypass:
 
 
 # 工具版本与作者（同步 banner）
-VERSION = "1.5.2"
+VERSION = "1.5.3"
 AUTHOR = "XIABAI"
 GITHUB = "https://github.com/xiabai2008/Ruoyi-Scan"
 CONTACT = "https://github.com/xiabai2008"

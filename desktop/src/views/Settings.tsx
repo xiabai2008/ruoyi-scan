@@ -17,9 +17,9 @@ import { api, fetchMetrics, setApiBase, type MetricsSnapshot } from "../services
 
 const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: "Ctrl + Enter", desc: "提交扫描" },
-  { keys: "Ctrl + K", desc: "快速搜索目标 / POC" },
-  { keys: "Esc", desc: "关闭弹窗 / 取消" },
-  { keys: "Enter", desc: "查看选中任务详情" },
+  { keys: "Ctrl + K", desc: "聚焦总览搜索" },
+  { keys: "Esc", desc: "关闭弹窗 / 详情抽屉" },
+  { keys: "Enter", desc: "指纹探测输入框内执行探测" },
 ];
 
 const FONT_MODES: { id: FontMode; label: string; hint: string }[] = [
@@ -28,14 +28,20 @@ const FONT_MODES: { id: FontMode; label: string; hint: string }[] = [
   { id: "pixel", label: "像素街机", hint: "Silkscreen · Y2K" },
 ];
 
-const emptyDraft = (): CustomThemeDraft => ({
-  bgPage: "#F2F7FD",
-  accentPrimary: "#2F6FED",
-  accentPink: "#F25CA2",
-  semRed: "#E5484D",
-  semGreen: "#1FA971",
-  semAmber: "#C77414",
+/** 从任意完整主题回填 6 个可控色：主题编辑器初值必须与当前主题一致 */
+const draftFromTheme = (t: Theme): CustomThemeDraft => ({
+  bgPage: t.bgPage,
+  accentPrimary: t.accentPrimary,
+  accentPink: t.accentPink,
+  semRed: t.semRed,
+  semGreen: t.semGreen,
+  semAmber: t.semAmber,
 });
+
+function themeTokens(theme: ThemeName): Theme {
+  if (theme === "custom") return loadCustomTheme() ?? THEMES.bluewhite;
+  return THEMES[theme];
+}
 
 export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: ThemeName) => void }) {
   const { engine, online, apiBase, refreshHealth, lastError } = useApp();
@@ -51,8 +57,14 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
   const [customHint, setCustomHint] = useState("");
 
   /* 主题编辑器 */
-  const [draft, setDraft] = useState<CustomThemeDraft>(emptyDraft);
+  const [draft, setDraft] = useState<CustomThemeDraft>(() => draftFromTheme(themeTokens(theme)));
   const customReady = hasCustomTheme();
+
+  // 当前主题变化时回填编辑器：旧实现始终显示浅色默认值，
+  // 切到暗夜霓虹后仍显示 #F2F7FD，点“应用自定义主题”会把界面切回浅色（测评 P2-14）。
+  useEffect(() => {
+    setDraft(draftFromTheme(themeTokens(theme)));
+  }, [theme]);
 
   /* 视觉签名 */
   const [visual, setVisualState] = useState(getVisual());
@@ -393,7 +405,9 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
           <div className="rounded border bg-cardsoft p-3" style={{ borderColor: "var(--c-border)" }}>
             <div className="flex items-center justify-between pb-2">
               <span className="text-[11.5px] font-semibold text-ink">主题编辑器 / THEME EDITOR</span>
-              <span className="font-mono text-[9px] text-ink-3">6 个核心色 → 派生 30 token</span>
+              <span className="font-mono text-[9px] text-ink-3">
+                当前：{theme === "custom" ? "D 自定义" : THEME_META[theme].label} · 6 色派生 30 token
+              </span>
             </div>
             <div className="grid grid-cols-6 gap-2.5">
               {CUSTOM_DRAFT_FIELDS.map((f) => (
@@ -440,10 +454,10 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
                 导入 JSON
               </button>
               <button
-                onClick={() => setDraft(emptyDraft())}
+                onClick={() => setDraft(draftFromTheme(themeTokens(theme)))}
                 className="h-[30px] rounded-sm border border-edge px-3 text-[11px] text-ink-2 hover:bg-card"
               >
-                重置
+                重置为当前主题
               </button>
               <span className="ml-auto font-mono text-[9px]" style={{ color: derived ? "var(--c-sem-green)" : "var(--c-sem-red)" }}>
                 {derived ? "配色合法 · 可应用" : "存在非法色值（需 #RRGGBB）"}

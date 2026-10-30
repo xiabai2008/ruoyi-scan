@@ -37,6 +37,10 @@ requests>=2.34.2
 # pip install "ruoyi-scan[serve]"        → fastapi / uvicorn[standard]
 #     FastAPI + uvicorn 提供 REST API + WebSocket + Web 控制台
 #
+# pip install "ruoyi-scan[schedule]"     → apscheduler>=3.10
+#     cron 5 段式定时扫描。不装时 cron 会降级为每 5 分钟间隔，
+#     API/桌面端会显式返回并展示降级警告（不再静默降级）。
+#
 # pip install "ruoyi-scan[distributed]"  → redis>=8.1.0
 #     --distributed Redis 分布式扫描（Master-Worker 队列）
 #

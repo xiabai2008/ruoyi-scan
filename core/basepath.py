@@ -27,11 +27,15 @@ CANDIDATES = ("/prod-api", "/dev-api", "/api")
 # 验证码接口（用来确认「这个前缀确实通到若依后端」）
 #   RuoYi-Vue（3.8.x/3.9.x）: /captchaImage  -> {"code":200,"captchaEnabled":...}
 #   RuoYi-Cloud（3.6.x）    : /code           -> 网关 RouterFunction 返回同样结构
+#   RuoYi-Vue-Plus（5.x）   : /auth/code      -> {"code":200,"data":{"captchaEnabled":...}}
 # 实测（2026-10-29 R8 RuoYi-Cloud v3.6.8）：只探测 /captchaImage 时，
 # /prod-api/captchaImage 在网关上是 404（Cloud 没有该端点），前缀探测失败 →
 # 插件全部退回根路径 → 命中的只有 SPA 的 index.html → 整站系统性漏报（含
 # /prod-api/actuator/env、/prod-api/v3/api-docs 这类真实暴露项）。
-CAPTCHA_PATHS = ("/captchaImage", "/code")
+# 实测（2026-10-29 R9 RuoYi-Vue-Plus v5.6.2）：同理，Plus 的验证码端点是
+# /auth/code，缺这一条时 base-path 探测失败 → R9 首扫只出 1 条 CONFIRMED，
+# 而 /prod-api/v3/api-docs 实际返回 312KB 的 OpenAPI 文档。
+CAPTCHA_PATHS = ("/captchaImage", "/code", "/auth/code")
 
 
 def _looks_like_ruoyi_api(resp: Any) -> bool:
@@ -52,7 +56,14 @@ def _looks_like_ruoyi_api(resp: Any) -> bool:
         data = json.loads(text)
         if not isinstance(data, dict):
             return False
-        return "captchaEnabled" in data or ("code" in data and ("img" in data or "uuid" in data))
+        if "captchaEnabled" in data or ("code" in data and ("img" in data or "uuid" in data)):
+            return True
+        # RuoYi-Vue-Plus 5.x 把业务字段包在 data 里：
+        #   {"code":200,"msg":"操作成功","data":{"captchaEnabled":false,"uuid":null,"img":null}}
+        inner = data.get("data")
+        if isinstance(inner, dict) and "captchaEnabled" in inner:
+            return True
+        return False
     except Exception:
         return False
 

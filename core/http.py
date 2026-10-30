@@ -26,6 +26,41 @@ def normalize_target(url: str) -> str:
     return url
 
 
+def normalize_scan_target(raw: str) -> str:
+    """校验并归一化扫描目标（API / 调度 / 执行层共用）
+
+    - 去空白；拒绝空白字符与控制字符混入的畸形串
+    - 缺协议补 http://（与 CLI 的 ensure_scheme 语义一致）
+    - 仅允许 http/https；host 必须可解析；端口越界直接报错
+    - 统一补尾部 /，与 normalize_target 的既有约定保持一致
+
+    Raises:
+        ValueError: 目标非法（调用方转 422 / 400，不能把错误目标送进扫描）
+    """
+    s = (raw or "").strip()
+    if not s:
+        raise ValueError("目标不能为空")
+    if any(c.isspace() for c in s) or any(ord(c) < 0x20 for c in s):
+        raise ValueError("目标包含空白或控制字符")
+    s, _ = ensure_scheme(s)
+    try:
+        parts = urlsplit(s)
+        scheme = (parts.scheme or "").lower()
+    except ValueError as e:
+        raise ValueError(f"目标无法解析：{e}") from e
+    if scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(f"仅支持 http/https，收到 {scheme or '空'}://")
+    if not parts.hostname:
+        raise ValueError("无法从目标中解析出主机名")
+    try:
+        port = parts.port
+    except ValueError as e:
+        raise ValueError(f"端口非法：{e}") from e
+    if port is not None and not (1 <= port <= 65535):
+        raise ValueError("端口需在 1-65535 之间")
+    return s if s.endswith("/") else s + "/"
+
+
 def join_url(base: str, path: str) -> str:
     """拼接 URL，处理双斜杠（对齐原 path_scan 归一化逻辑）
 
@@ -163,3 +198,20 @@ def probe_http_responsive(url: str, timeout: float = 5.0) -> Tuple[bool, str]:
     # 不吞 TypeError/AttributeError 这类程序缺陷，避免把内部 bug 误报为目标不可达
     except requests.exceptions.RequestException as exc:
         return False, f"HTTP 请求失败（{exc}）"
+
+
+def preflight(url: str, timeout: float = 5.0) -> Tuple[bool, str, str]:
+    """扫描前可达性预检：TCP 握手 → HTTP 响应性
+
+    CLI（cli/preflight.py）与 API/orchestrator 共用同一实现，避免两处判定漂移。
+    不可达时立即失败并给出可读原因，替代“1 分钟 0/0 无任何事件”。
+
+    Returns:
+        (ok, stage, reason)：ok=True 时 stage=""、reason=""；
+        失败时 stage 为 "tcp" / "http"，reason 为可展示给用户的原因。
+    """
+    ok, reason = probe_reachable(url, timeout=timeout)
+    if not ok:
+        return False, "tcp", reason
+    ok, reason = probe_http_responsive(url, timeout=timeout)
+    return ok, "http", reason

@@ -15,6 +15,7 @@ const todayStr = () => {
 export function Overview() {
   const { tasks, online, engine, openDialog, apiBase } = useApp();
   const [pluginCount, setPluginCount] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!online) {
@@ -71,12 +72,16 @@ export function Overview() {
           <>
             <div className="flex h-[34px] w-[220px] items-center gap-2 rounded border border-edge bg-cardsoft px-3">
               <input
-                placeholder="搜索目标 / POC"
+                id="rs-global-search"
+                aria-label="搜索目标、漏洞名称或 URL"
+                placeholder="搜索目标 / 漏洞 / URL（Ctrl+K）"
                 className="w-full bg-transparent text-[11px] text-ink outline-none placeholder:text-ink-3"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <button
-              onClick={openDialog}
+              onClick={() => openDialog()}
               className="flex h-[34px] items-center gap-1.5 rounded-sm bg-accent px-3.5 text-[12px] font-semibold text-btntext"
             >
               <PlusIcon /> 新建扫描
@@ -151,13 +156,16 @@ export function Overview() {
         </div>
       </div>
 
-      <RecentFindings tasks={tasks} online={online} />
+      <RecentFindings tasks={tasks} online={online} query={query} />
     </div>
   );
 }
 
-function RecentFindings({ tasks, online }: { tasks: ScanTask[]; online: boolean }) {
-  const [rows, setRows] = useState<{ sev: Severity; name: string; tag: string; verdict: MockVerdict; time: string; url: string }[]>([]);
+function RecentFindings({ tasks, online, query }: { tasks: ScanTask[]; online: boolean; query: string }) {
+  const { setView, selectTask } = useApp();
+  const [rows, setRows] = useState<
+    { sev: Severity; name: string; tag: string; verdict: MockVerdict; time: string; url: string; taskId: string; seq: number; taskFinishedAt: number }[]
+  >([]);
 
   useEffect(() => {
     if (!online) {
@@ -182,30 +190,45 @@ function RecentFindings({ tasks, online }: { tasks: ScanTask[]; online: boolean 
       }),
     ).then((groups) => {
       if (!alive) return;
+      // 显式按「任务结束时间 + 结果序号」倒序：旧实现 flatMap 后 slice(-12).reverse()
+      // 取到的是最旧任务的结果，首行时间反而早于末行（测评 P2-17）。
       const all = groups
         .flatMap(({ t, items }) =>
-          items.map((r) => ({
+          items.map((r, seq) => ({
             sev: sevToUi(r.severity) as Severity,
             name: r.name || "(unnamed)",
             tag: r.url ? hostOf(r.url) : t.mode + ":" + t.task_id.slice(0, 4),
             verdict: (["CONFIRMED", "SAFE", "UNKNOWN"].includes(r.status) ? r.status : "UNKNOWN") as MockVerdict,
             time: t.finished_at ? fmtClock(t.finished_at) : "",
             url: r.url,
+            taskId: t.task_id,
+            seq,
+            taskFinishedAt: t.finished_at || t.started_at,
           })),
         )
-        .slice(-12)
-        .reverse();
+        .sort((a, b) => b.taskFinishedAt - a.taskFinishedAt || b.seq - a.seq)
+        .slice(0, 12);
       setRows(all);
     });
     return () => { alive = false; };
   }, [tasks, online]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.name, r.url, r.tag, r.taskId].some((v) => (v || "").toLowerCase().includes(q)),
+    );
+  }, [rows, query]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6 pb-5 pt-4">
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-card" style={{ borderColor: "var(--c-border)" }}>
         <div className="flex items-center justify-between px-3.5 py-3">
           <h2 className="text-[12px] font-semibold text-ink">最新发现 / RECENT FINDINGS</h2>
-          <span className="font-mono text-[10px] text-ink-3">{rows.length > 0 ? `${rows.length} ROWS` : online ? "无结果" : "后端离线"}</span>
+          <span className="font-mono text-[10px] text-ink-3">
+            {query.trim() ? `${visible.length} / ${rows.length} MATCH` : rows.length > 0 ? `${rows.length} ROWS` : online ? "无结果" : "后端离线"}
+          </span>
         </div>
         <div className="flex items-center gap-2 bg-cardsoft px-3.5 py-1.5">
           {["严重度", "漏洞名称", "触发 URL / 任务", "三态判定", "时间"].map((h, i) => (
@@ -215,19 +238,33 @@ function RecentFindings({ tasks, online }: { tasks: ScanTask[]; online: boolean 
           ))}
         </div>
         <div className="thin-scroll min-h-0 flex-1 overflow-auto">
-          {rows.length === 0 ? (
+          {visible.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <span className="font-mono text-[11px] text-ink-3">{online ? "暂无扫描结果 —— 发起一次扫描后这里会实时出现发现项" : "引擎离线 —— 无法加载结果"}</span>
+              <span className="font-mono text-[11px] text-ink-3">
+                {!online
+                  ? "引擎离线 —— 无法加载结果"
+                  : query.trim()
+                    ? `没有匹配“${query.trim()}”的发现`
+                    : "暂无扫描结果 —— 发起一次扫描后这里会实时出现发现项"}
+              </span>
             </div>
           ) : (
-            rows.map((f, i) => (
-              <div key={`${f.name}-${i}`} className={`flex items-center gap-2 px-3.5 py-2 ${i % 2 === 1 ? "bg-zebra" : ""}`}>
+            visible.map((f, i) => (
+              <button
+                key={`${f.taskId}-${f.name}-${i}`}
+                onClick={() => {
+                  selectTask(f.taskId);
+                  setView("livescan");
+                }}
+                className={`flex w-full items-center gap-2 px-3.5 py-2 text-left hover:bg-cardsoft ${i % 2 === 1 ? "bg-zebra" : ""}`}
+                title="查看该任务的结果详情"
+              >
                 <span className="w-[84px]"><SeverityText s={f.sev} /></span>
                 <span className="flex-1 truncate text-[11.5px] text-ink" title={f.url || f.name}>{f.name}</span>
                 <span className="w-[200px] truncate font-mono text-[10.5px] text-ink-2">{f.tag}</span>
                 <span className="w-[108px]"><VerdictChip v={f.verdict} /></span>
                 <span className="w-[96px] font-mono text-[10.5px] text-ink-3">{f.time}</span>
-              </div>
+              </button>
             ))
           )}
         </div>

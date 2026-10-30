@@ -7,6 +7,8 @@
 //
 // 开发回退：引擎未嵌入（0 字节）时回退 python main.py --serve（仓库根，M1 开发体验）。
 
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine as _;
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -297,11 +299,79 @@ fn spawn_backend() -> Option<Child> {
     }
 }
 
+/// 保存报告到用户选择的路径（原生保存对话框 + 写盘）
+///
+/// 路径只来自原生对话框，前端无法指定任意路径；内容上限 50MB，
+/// 避免误传大文件把 WebView2 内存占满。
+#[tauri::command]
+async fn save_report(
+    app: tauri::AppHandle,
+    default_name: String,
+    data_b64: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+
+        let bytes = B64.decode(data_b64.as_bytes()).map_err(|e| format!("报告解码失败: {e}"))?;
+        if bytes.len() > 50 * 1024 * 1024 {
+            return Err("报告超过 50MB，已拒绝写入".to_string());
+        }
+        let picked = app
+            .dialog()
+            .file()
+            .set_file_name(&default_name)
+            .blocking_save_file();
+        let Some(file_path) = picked else {
+            return Ok(String::new()); // 用户取消
+        };
+        let path = file_path.into_path().map_err(|e| format!("无法解析保存路径: {e}"))?;
+        std::fs::write(&path, &bytes).map_err(|e| format!("写入失败: {e}"))?;
+        Ok(path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("保存任务异常: {e}"))?
+}
+
+/// 在资源管理器中定位已保存的文件
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,\"{}\"", path))
+            .spawn()
+            .map_err(|e| format!("无法打开资源管理器: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("无法打开 Finder: {e}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = std::path::Path::new(&path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("无法打开文件管理器: {e}"))?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![save_report, reveal_path])
         .setup(|app| {
             let child = spawn_backend();
             app.manage(BackendChild(Mutex::new(child)));

@@ -203,7 +203,7 @@ function DraggableCard({ id, pos, onMove }: { id: WidgetId; pos: { x: number; y:
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onLostPointerCapture={endDrag}
-      className="fixed z-50 select-none rounded-lg border bg-card p-2.5"
+      className="fixed z-30 select-none rounded-lg border bg-card p-2.5"
       style={{
         left: pos.x,
         top: pos.y,

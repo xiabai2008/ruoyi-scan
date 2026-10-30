@@ -78,6 +78,17 @@ def _quiet_reporter():
 # ── P0: mock_router / mock_network ──────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _disable_real_preflight(monkeypatch):
+    """测试默认不做真实网络预检（autouse）
+
+    orchestrator 在扫描前会做 TCP/HTTP 预检；测试里的 example.com/target 并不可达，
+    真实探测会让每个扫描用例等满超时。默认放行；需要验证失败路径的用例可在
+    测试内再次 monkeypatch.setattr("core.orchestrator.preflight", ...) 覆盖。
+    """
+    monkeypatch.setattr("core.orchestrator.preflight", lambda url, timeout=5.0: (True, "", ""))
+
+
 @pytest.fixture
 def mock_router():
     """Mock core.orchestrator.Router，避免真实插件加载
@@ -105,7 +116,13 @@ def mock_network(mock_router):
 
     with patch("core.orchestrator.detect_cms") as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
         "core.orchestrator.load_plugins"
-    ) as mock_load, patch("lib.plugin_repo.load_user_installed_plugins", return_value=[]):
+    ) as mock_load, patch("lib.plugin_repo.load_user_installed_plugins", return_value=[]), patch(
+        "lib.reachability.detect_blocked", return_value={"blocked": False}
+    ), patch(
+        "lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}
+    ), patch(
+        "core.basepath.detect_api_base", return_value=""
+    ):
         mock_cms.return_value = FingerprintResult(cms="", version="", confidence=0, matched=[])
         mock_waf.return_value = {"waf": "", "display": "", "bypass_hint": ""}
         mock_load.return_value = []

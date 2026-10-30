@@ -25,8 +25,16 @@ def _mock_router():
 
     未 mock Router 时 router.resolve() 会返回 16 个真实 RuoYi 插件，
     对 http://example.com/ 发起真实 HTTP 请求，导致 CI D9 任务超时。
+    同时隔离 basepath/拦截探测：开启系统代理或本机靶场在跑时，
+    这两步会发起真实 HTTP 请求并可能挂满超时。
     """
-    with patch("core.orchestrator.Router") as mock_router:
+    with patch("core.orchestrator.Router") as mock_router, patch(
+        "lib.reachability.detect_blocked", return_value={"blocked": False}
+    ), patch(
+        "lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}
+    ), patch(
+        "core.basepath.detect_api_base", return_value=""
+    ):
         mock_router.return_value.resolve.return_value = []
         mock_router.return_value.resolve_by_name.return_value = []
         yield mock_router

@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruoyi-scan"
-version = "1.5.2"
+version = "1.5.3"
 description = "若依（RuoYi）专项漏洞扫描器 — 插件化架构 / 三态判定 / 54 检测插件 / OAST / 业务逻辑 / 分布式 / SIEM"
 readme = "README.md"
 license = "MIT"
@@ -56,6 +56,10 @@ serve = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
 ]
+# 定时扫描：cron 5 段式支持（不装时 cron 降级为每 5 分钟，UI/API 会显式提示）
+schedule = [
+    "apscheduler>=3.10,<4",
+]
 # 分布式扫描：Redis Master-Worker 队列
 distributed = [
     "redis>=8.1.0",
@@ -87,6 +91,7 @@ all = [
     "openpyxl>=3.1.5",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
+    "apscheduler>=3.10,<4",
     "redis>=8.1.0",
     "aiohttp>=3.14.5",
     "pyyaml>=6.0",

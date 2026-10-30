@@ -18,12 +18,14 @@ export function Sidebar() {
   else base = "引擎在线，随时可以开工！";
 
   let engineStatus: string;
-  if (!online) engineStatus = "OFFLINE";
+  if (!online) engineStatus = "—";
   else if (running > 0) engineStatus = `${running} RUNNING`;
   else if (queued > 0) engineStatus = `${queued} QUEUED`;
   else engineStatus = "IDLE";
 
-  const greeting = operator.greet ? `${base}${base.endsWith("。") ? "" : ""} ${operator.greet}！` : base;
+  // 离线时不再追加口头禅：旧实现同时出现 ENGINE OFFLINE / OFFLINE，
+  // 问候语还是“引擎未连接…回眸一笑，扫描开跑！”（测评 P2-17）。
+  const greeting = online && operator.greet ? `${base} ${operator.greet}！` : base;
 
   return (
     <aside className="flex h-full w-[216px] shrink-0 flex-col border-r border-line bg-sidebar">

@@ -6,6 +6,7 @@ import { LiveScan } from "./views/LiveScan";
 import { VulnDb } from "./views/VulnDb";
 import { Assets } from "./views/Assets";
 import { Reports } from "./views/Reports";
+import { Schedules } from "./views/Schedules";
 import { Settings } from "./views/Settings";
 import { applyTheme } from "./tokens";
 import { AppProvider, useApp } from "./state/AppCtx";
@@ -22,9 +23,24 @@ function sanitizeWidgetPrefs(raw: unknown): WidgetPrefs {
 
 /** 主体直接铺满 Tauri 窗口（不再做 1440×900 画布缩放） */
 function Shell() {
-  const { theme, setTheme, view } = useApp();
+  const { theme, setTheme, view, setView } = useApp();
   useVisualBoot();
   useEffect(() => applyTheme(theme), [theme]);
+
+  // Ctrl+K：聚焦总览搜索（旧设置页把 Ctrl+K 列成快捷键，但全前端没有 handler）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setView("overview");
+        requestAnimationFrame(() => {
+          document.getElementById("rs-global-search")?.focus();
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setView]);
   // Widgets 偏好做成 state：Settings 里开关 → 立即驱动 WidgetsLayer 重渲染
   const [widgetPrefs, setWidgetPrefs] = useState<WidgetPrefs>(() => loadWidgetPrefs());
   useEffect(() => {
@@ -66,6 +82,7 @@ function Shell() {
         {view === "vulndb" && <VulnDb />}
         {view === "assets" && <Assets />}
         {view === "reports" && <Reports theme={theme} />}
+        {view === "schedules" && <Schedules />}
         {view === "settings" && <Settings theme={theme} onTheme={setTheme} />}
       </main>
 

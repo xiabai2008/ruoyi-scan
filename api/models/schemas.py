@@ -1,7 +1,9 @@
 # D9 API 请求/响应模型（Pydantic）
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from core.http import normalize_scan_target
 
 # === 扫描任务模型 ===
 
@@ -26,6 +28,16 @@ class ScanCreateRequest(BaseModel):
         False, description="启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战，需安装 [adversarial]"
     )
     plugins: Optional[List[str]] = Field(None, description="指定插件名列表（空=全部）")
+
+    @field_validator("target")
+    @classmethod
+    def _validate_target(cls, v: str) -> str:
+        """入口处拒绝畸形目标（缺协议自动补 http://）
+
+        旧实现只校验非空，`abc` 会被当成合法目标建任务并跑出 UNKNOWN；
+        这里与 CLI/前端共用 normalize_scan_target，非法目标直接 422。
+        """
+        return normalize_scan_target(v)
 
 
 class ScanCreateResponse(BaseModel):
@@ -58,14 +70,27 @@ class ScanTaskDTO(BaseModel):
 
 
 class ScanResultDTO(BaseModel):
-    """扫描结果 DTO"""
+    """扫描结果 DTO（与 common.models.ScanResult.to_dict() 对齐）
 
+    旧 DTO 只保留 6 个字段，把证据之外的复现命令/修复详情/CVE 全丢了；
+    结果详情抽屉与报告重建都依赖完整字段。
+    """
+
+    kind: str = ""
     name: str
     status: str
     severity: str = "low"
+    severity_cn: str = ""
     url: str = ""
     evidence: str = ""
     extra: dict = {}
+    fix: str = ""
+    fix_detail: str = ""
+    reproduce: str = ""
+    cve: str = ""
+    cvss_score: float = 0.0
+    cvss_vector: str = ""
+    compliance: dict = {}
 
 
 # === 报告模型 ===

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Topbar } from "../components/Topbar";
 import { KpiCard } from "../components/ui";
 import { useApp } from "../state/AppCtx";
-import { api, MODE_LABEL, type ScanMode, type ScanTask } from "../services/backend";
+import { api, MODE_LABEL, TASK_STATUS_COLOR, TASK_STATUS_LABEL, type ScanMode, type ScanTask } from "../services/backend";
 
 interface AssetRow {
   target: string;
@@ -14,13 +14,7 @@ interface AssetRow {
   lastTaskId: string;
 }
 
-const statusLabel: Record<string, string> = {
-  done: "DONE",
-  failed: "FAILED",
-  cancelled: "STOPPED",
-  running: "RUNNING",
-  pending: "QUEUED",
-};
+const statusLabel = TASK_STATUS_LABEL;
 
 function hostOf(url: string): string {
   try {
@@ -41,6 +35,7 @@ export function Assets() {
   const { tasks, online, setView, selectTask } = useApp();
   const [groupMode, setGroupMode] = useState<"host" | "status" | "cms">("host");
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [actionErr, setActionErr] = useState("");
 
   // 按目标聚合任务历史 → 资产清单
   const assets = useMemo<AssetRow[]>(() => {
@@ -113,12 +108,13 @@ export function Assets() {
   };
 
   const rescan = async (a: AssetRow) => {
+    setActionErr("");
     try {
       const r = await api.submitScan({ target: a.target, mode: "u", threads: 8, timeout: 10, report_format: "json,html,csv" });
       selectTask(r.task_id);
       setView("livescan");
-    } catch {
-      /* 后端异常静默，任务页可见 */
+    } catch (e) {
+      setActionErr(`重扫提交失败：${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -143,6 +139,12 @@ export function Assets() {
           </div>
         }
       />
+
+      {actionErr ? (
+        <div className="mx-6 mt-1 rounded border px-3 py-1.5 font-mono text-[10px] text-red" style={{ borderColor: "var(--c-alert-stroke)" }}>
+          {actionErr}
+        </div>
+      ) : null}
 
       <div className="flex gap-3.5 px-6 pt-1">
         <KpiCard en="TARGETS" value={String(kpis.assets)} delta="FROM TASKS" up={null} tone="green" zh="历史扫描目标" />
@@ -200,13 +202,7 @@ export function Assets() {
                   <span className="w-[170px] truncate text-[10.5px] text-ink-2">{a.cms || "—"}</span>
                   <span
                     className="w-[80px] font-mono text-[9.5px]"
-                    style={{
-                      color:
-                        a.lastStatus === "done" ? "var(--c-sem-green)"
-                          : a.lastStatus === "failed" ? "var(--c-sem-red)"
-                            : a.lastStatus === "running" || a.lastStatus === "pending" ? "var(--c-accent-primary)"
-                              : "var(--c-text-muted)",
-                    }}
+                    style={{ color: TASK_STATUS_COLOR[a.lastStatus] || "var(--c-text-muted)" }}
                   >
                     {statusLabel[a.lastStatus] || a.lastStatus}
                   </span>

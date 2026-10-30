@@ -45,6 +45,9 @@
   --color-zebra: var(--c-zebra);
   --color-deep: var(--c-deep);
   --color-bubble: var(--c-bubble-bg);
+  /* 气泡文字色：旧实现只映射了 --color-bubble（背景），text-bubble 于是生成
+     与背景同色的文字色，SUPPORT 气泡永远一片空白（测评 P1-5）。 */
+  --color-bubbletext: var(--c-bubble-text);
   --color-activetab: var(--c-active-nav);
   --color-line: var(--c-divider);
   --color-edge: var(--c-border);

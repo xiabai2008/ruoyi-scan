@@ -9,7 +9,8 @@ export const NAV = [
   { id: "vulndb", num: "03", label: "漏洞库" },
   { id: "assets", num: "04", label: "资产管理" },
   { id: "reports", num: "05", label: "报告中心" },
-  { id: "settings", num: "06", label: "设置" },
+  { id: "schedules", num: "06", label: "定时任务" },
+  { id: "settings", num: "07", label: "设置" },
 ] as const;
 
 export type ViewId = (typeof NAV)[number]["id"];

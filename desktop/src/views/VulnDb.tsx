@@ -3,7 +3,7 @@ import { Topbar } from "../components/Topbar";
 import { SearchIcon, PlusIcon } from "../components/icons";
 import { SeverityText } from "../components/ui";
 import { useApp } from "../state/AppCtx";
-import { api, sevToUi, type PluginMeta } from "../services/backend";
+import { api, hasCve, sevToUi, type PluginMeta } from "../services/backend";
 
 const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
@@ -15,7 +15,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export function VulnDb() {
-  const { online, openDialog, setView } = useApp();
+  const { online, openDialog } = useApp();
   const [plugins, setPlugins] = useState<PluginMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -52,7 +52,7 @@ export function VulnDb() {
     medium: plugins.filter((p) => p.severity === "medium").length,
     low: plugins.filter((p) => p.severity === "low").length,
     waf: plugins.filter((p) => p.supports_waf_bypass).length,
-    cve: plugins.filter((p) => p.cve).length,
+    cve: plugins.filter((p) => hasCve(p.cve)).length,
   }), [plugins]);
 
   const filtered = useMemo(() => {
@@ -61,7 +61,7 @@ export function VulnDb() {
       if (sevFilter === "waf") {
         if (!p.supports_waf_bypass) return false;
       } else if (sevFilter === "cve") {
-        if (!p.cve) return false;
+        if (!hasCve(p.cve)) return false;
       } else if (sevFilter !== "all" && p.severity !== sevFilter) {
         return false;
       }
@@ -97,7 +97,7 @@ export function VulnDb() {
               />
             </div>
             <button
-              onClick={openDialog}
+              onClick={() => openDialog()}
               className="flex h-[34px] items-center gap-1.5 rounded-sm bg-accent px-3.5 text-[12px] font-semibold text-btntext"
             >
               <PlusIcon /> 新建扫描
@@ -122,10 +122,12 @@ export function VulnDb() {
         ))}
         <span className="mx-1 h-4 w-px bg-line" />
         <button
-          onClick={() => setView("livescan")}
-          className="flex h-[28px] items-center rounded-sm border border-edge bg-cardsoft px-2.5 text-[11px] text-ink-2 hover:bg-card"
+          onClick={() => openDialog({ plugins: filtered.map((p) => p.name) })}
+          disabled={filtered.length === 0}
+          className="flex h-[28px] items-center rounded-sm border border-edge bg-cardsoft px-2.5 text-[11px] text-ink-2 hover:bg-card disabled:opacity-40"
+          title={filtered.length === 0 ? "当前筛选没有插件" : `把当前筛选的 ${filtered.length} 个插件带进新建扫描`}
         >
-          用这些 POC 扫描 →
+          用筛选结果扫描 →
         </button>
       </div>
 
@@ -164,7 +166,7 @@ export function VulnDb() {
                   <span className="w-[64px]"><SeverityText s={sevToUi(p.severity)} /></span>
                   <span className="flex-1 truncate text-[11.5px] text-ink" title={p.description}>{p.name}</span>
                   <span className="w-[150px] truncate font-mono text-[10.5px] text-ink-2">
-                    {p.cve ? <span style={{ color: "var(--c-accent-primary)" }}>{p.cve}</span> : CATEGORY_LABEL[p.category] || p.category}
+                    {hasCve(p.cve) ? <span style={{ color: "var(--c-accent-primary)" }}>{p.cve}</span> : CATEGORY_LABEL[p.category] || p.category}
                     {p.vuln_type ? <span className="ml-1.5 text-ink-3">{p.vuln_type}</span> : null}
                   </span>
                   <span className="w-[170px] truncate font-mono text-[10px] text-ink-3">{p.affected_versions || "—"}</span>
@@ -200,7 +202,7 @@ function PluginDetail({ p, onClose }: { p: PluginMeta; onClose: () => void }) {
     ["名称", p.name],
     ["严重度", p.severity],
     ["分类", `${p.category}${p.vuln_type ? " · " + p.vuln_type : ""}`],
-    ["CVE", p.cve || "—"],
+    ["CVE", hasCve(p.cve) ? p.cve : "—"],
     ["影响版本", p.affected_versions || "—"],
     ["WAF 绕过", p.supports_waf_bypass ? "支持" : "不支持"],
     ["描述", p.description || "—"],

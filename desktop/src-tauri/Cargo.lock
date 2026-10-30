@@ -2870,8 +2870,9 @@ dependencies = [
 
 [[package]]
 name = "ruoyi-scan-desktop"
-version = "1.5.1"
+version = "1.5.3"
 dependencies = [
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "tauri",

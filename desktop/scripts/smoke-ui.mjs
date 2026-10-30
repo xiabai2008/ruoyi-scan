@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
-const NAV_LABELS = ["总览", "扫描任务", "漏洞库", "资产管理", "报告中心", "设置"];
+const NAV_LABELS = ["总览", "扫描任务", "漏洞库", "资产管理", "报告中心", "定时任务", "设置"];
 const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
 const MIME = {
@@ -347,7 +347,7 @@ async function run() {
       throw new Error(`发现运行时错误：\n- ${issues.join("\n- ")}`);
     }
 
-    console.log("[ui-smoke] OK：新建扫描弹窗 + 6 个导航页均正常，未发现运行时异常");
+    console.log(`[ui-smoke] OK：新建扫描弹窗 + ${NAV_LABELS.length} 个导航页均正常，未发现运行时异常`);
   } catch (err) {
     if (cdp) {
       try {

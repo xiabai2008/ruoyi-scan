@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Topbar } from "../components/Topbar";
 import { StatIcon, StopIcon, PlusIcon } from "../components/icons";
 import { SchedulePanel } from "../components/SchedulePanel";
+import { ResultDetail } from "../components/ResultDetail";
 import { useApp } from "../state/AppCtx";
 import { usePersona, operatorAvatarSrc, type MeiSay } from "../state/PersonaCtx";
 import { useScanConsole, type LogLevel } from "../state/useScanConsole";
 import { VerdictChip, SeverityText } from "../components/ui";
 import {
-  api, fmtClock, fmtDuration, MODE_LABEL, sevToUi,
+  api, fmtClock, fmtDuration, MODE_LABEL, sevToUi, TASK_STATUS_COLOR, TASK_STATUS_LABEL,
   type ScanMode, type ScanResultItem, type ScanTask,
 } from "../services/backend";
 
@@ -19,14 +20,6 @@ const logColor: Record<LogLevel, string> = {
   unknown: "#FFB84D",
   error: "#FF4D5E",
   meiyi: "#FF3EC8",
-};
-
-const statusColor: Record<string, string> = {
-  pending: "var(--c-sem-amber)",
-  running: "var(--c-accent-primary)",
-  done: "var(--c-sem-green)",
-  failed: "var(--c-sem-red)",
-  cancelled: "var(--c-text-muted)",
 };
 
 function useNow(ms: number | null) {
@@ -41,8 +34,25 @@ function useNow(ms: number | null) {
 }
 
 /** 水平任务切换条 */
-function TaskBar({ activeId, onPick }: { activeId: string | null; onPick: (t: ScanTask) => void }) {
-  const { tasks, openDialog } = useApp();
+function TaskBar({
+  tasks,
+  activeId,
+  onPick,
+}: {
+  tasks: ScanTask[];
+  activeId: string | null;
+  onPick: (t: ScanTask) => void;
+}) {
+  const { openDialog, dismissTask } = useApp();
+
+  // 新任务加入/切换选中时自动滚到可见位置：旧实现滚动条不动，
+  // 选中标签会被裁在左侧（测评 P2-20）。
+  useEffect(() => {
+    if (!activeId) return;
+    const el = document.getElementById(`task-tab-${activeId}`);
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
   if (tasks.length === 0) return null;
   return (
     <div className="flex items-center gap-2 px-6 pb-1 pt-1">
@@ -51,28 +61,44 @@ function TaskBar({ activeId, onPick }: { activeId: string | null; onPick: (t: Sc
           const sel = t.task_id === activeId;
           const isRun = t.status === "running" || t.status === "pending";
           return (
-            <button
+            <div
               key={t.task_id}
-              onClick={() => onPick(t)}
-              className="flex h-[28px] shrink-0 items-center gap-2 rounded-sm border px-2.5 font-mono text-[10px] transition-colors"
+              id={`task-tab-${t.task_id}`}
+              className="flex h-[28px] shrink-0 items-center rounded-sm border transition-colors"
               style={{
                 borderColor: sel ? "var(--c-accent-primary)" : "var(--c-border)",
                 background: sel ? "var(--c-bubble-bg)" : "var(--c-card-soft)",
-                color: sel ? "var(--c-accent-primary)" : "var(--c-text-secondary)",
               }}
-              title={t.target}
             >
-              <i className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor[t.status] }} />
-              <span>{t.task_id.slice(0, 6)}</span>
-              <span className="text-ink-3">{MODE_LABEL[t.mode as ScanMode]?.split(" ")[0]}</span>
-              <span className="max-w-[150px] truncate text-ink">{t.target.replace(/^https?:\/\//, "")}</span>
-              {isRun ? <i className="h-1 w-1 animate-pulse rounded-full bg-accent" /> : null}
-            </button>
+              <button
+                onClick={() => onPick(t)}
+                className="flex h-full items-center gap-2 px-2.5 font-mono text-[10px]"
+                style={{ color: sel ? "var(--c-accent-primary)" : "var(--c-text-secondary)" }}
+                title={t.target}
+              >
+                <i className="h-1.5 w-1.5 rounded-full" style={{ background: TASK_STATUS_COLOR[t.status] }} />
+                <span>{t.task_id.slice(0, 6)}</span>
+                <span className="text-ink-3">{MODE_LABEL[t.mode as ScanMode]?.split(" ")[0]}</span>
+                <span className="max-w-[150px] truncate text-ink">{t.target.replace(/^https?:\/\//, "")}</span>
+                {isRun ? <i className="h-1 w-1 animate-pulse rounded-full bg-accent" /> : null}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dismissTask(t.task_id);
+                }}
+                className="flex h-full w-6 items-center justify-center rounded-r-sm pb-px text-[13px] leading-none text-ink-3 transition-colors hover:bg-cardsoft hover:text-accent"
+                title="关闭此任务标签"
+                aria-label={`关闭任务 ${t.task_id.slice(0, 8)} 的标签`}
+              >
+                ×
+              </button>
+            </div>
           );
         })}
       </div>
       <button
-        onClick={openDialog}
+        onClick={() => openDialog()}
         className="flex h-[28px] shrink-0 items-center gap-1.5 rounded-sm border border-edge-ghost px-3 text-[11px] text-ink-2 transition-colors hover:bg-cardsoft"
       >
         <PlusIcon /> 新建
@@ -82,58 +108,87 @@ function TaskBar({ activeId, onPick }: { activeId: string | null; onPick: (t: Sc
 }
 
 export function LiveScan() {
-  const { tasks, online, openDialog, engine, refreshTasks, selectedTaskId, selectTask } = useApp();
+  const { tasks, online, openDialog, engine, refreshTasks, selectedTaskId, selectTask, dismissed } = useApp();
   const { operator, lastSay } = usePersona();
+  // 只在未被关闭的标签中选任务：旧实现回退到 tasks[0]（含已关闭任务），
+  // 选中态会落在不可见的标签上，表现为“关掉后又选中/关不掉”（测评 P2-18）。
+  const visibleTasks = useMemo(() => tasks.filter((t) => !dismissed.has(t.task_id)), [tasks, dismissed]);
   const active = useMemo(
-    () => tasks.find((t) => t.task_id === selectedTaskId) ?? tasks[0] ?? null,
-    [tasks, selectedTaskId],
+    () => visibleTasks.find((t) => t.task_id === selectedTaskId) ?? visibleTasks[0] ?? null,
+    [visibleTasks, selectedTaskId],
   );
   const console = useScanConsole(active, active?.task_id ?? "none");
   const boxRef = useRef<HTMLDivElement>(null);
+  const [actionError, setActionError] = useState("");
   const now = useNow(
     active && (active.status === "running" || active.status === "pending") ? active.started_at : null,
   );
-  const running = active && (active.status === "running" || active.status === "pending");
+  // 徽标以 WS 实时状态为准：列表轮询有 2.5s 延迟，旧实现会出现
+  // “WS 已 running，徽标仍 PENDING”（测评 P2-12）。
+  const liveStatus = active ? (console.status || active.status) : "";
+  const running = liveStatus === "running" || liveStatus === "pending";
 
-  // 到达页面时若从未选过任务，默认聚焦最新一个
+  // 到达页面时若从未选过任务（或选中的已被关闭），聚焦最新可见任务。
+  // 注意：刚提交的新任务可能还没进入 tasks 列表（refreshTasks 尚未返回），
+  // 此时不能因为“选中的 id 暂时不在列表里”就改选 tasks[0]，否则新扫描已经
+  // 在后台运行，界面却一直显示旧任务的 DONE 结果（实测 v1.5.3 提交后复现）。
   useEffect(() => {
-    if (!selectedTaskId && tasks.length > 0) selectTask(tasks[0].task_id);
-  }, [selectedTaskId, tasks, selectTask]);
+    if (selectedTaskId && dismissed.has(selectedTaskId)) {
+      selectTask(visibleTasks[0]?.task_id ?? null);
+      return;
+    }
+    if (!selectedTaskId && visibleTasks.length > 0) {
+      selectTask(visibleTasks[0].task_id);
+    }
+  }, [visibleTasks, selectedTaskId, dismissed, selectTask]);
 
   useEffect(() => {
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight });
   }, [console.lines]);
 
   const elapsed = active
-    ? console.status === "done" || console.status === "failed" || console.status === "cancelled"
+    ? liveStatus === "done" || liveStatus === "failed" || liveStatus === "cancelled" || liveStatus === "interrupted"
       ? fmtDuration(active.duration)
       : fmtDuration((now - active.started_at * 1000) / 1000)
     : "00:00:00";
 
   const stop = async () => {
     if (!active) return;
-    if (!window.confirm(`确认停止任务 ${active.task_id.slice(0, 8)}？运行中的插件将在一轮后自行退出。`)) return;
+    if (!window.confirm(`确认停止任务 ${active.task_id.slice(0, 8)}？已收集的结果会保留，不再启动后续插件。`)) return;
+    setActionError("");
     try {
       await api.cancelScan(active.task_id);
       await refreshTasks();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const pct = running ? console.progress.percent : console.status === "done" ? (console.progress.percent || 100) : console.progress.percent;
 
+  // 结论措辞必须跟着数据走：缺结果、被中断、失败时都不能说“安全”
   const meiMsg = !online
-    ? "引擎掉线了，快回设置页看看连接吧！"
+    ? "引擎掉线了，请到设置页检查连接。"
     : !active
       ? "还没有扫描任务，点右上角「新建扫描」吧！"
       : running
         ? console.wsState === "open"
           ? `${console.progress.done}/${console.progress.total} 插件跑完啦，保持这个节奏！`
           : "正在连接任务事件流…"
-        : console.tally.CONFIRMED > 0
-          ? `扫描完成！发现 ${console.tally.CONFIRMED} 个已确认问题，快看报告吧！`
-          : "本轮扫描完成，暂无确认项，安全！";
+        : liveStatus === "cancelled"
+          ? "任务已停止，已收集的结果保留在下方。"
+          : liveStatus === "interrupted"
+            ? "任务因引擎重启中断，已保留可读到的结果。"
+            : liveStatus === "failed" || active.error
+              ? `任务失败：${(active.error || console.error || "未知原因").slice(0, 60)}`
+              : console.resultCount === 0
+                ? "本轮扫描完成，没有产生结果。"
+                : console.tally.CONFIRMED > 0
+                  ? `扫描完成！发现 ${console.tally.CONFIRMED} 个已确认问题，快看报告吧！`
+                  : `本轮扫描完成：${console.tally.SAFE} 项无风险证据，${console.tally.UNKNOWN} 项待复核。`;
+
+  const taskError = active?.error || "";
+  const errBanner = actionError || console.error || (liveStatus === "failed" || liveStatus === "interrupted" ? taskError : "");
 
   const logArea = active ? console.lines : [];
 
@@ -143,7 +198,7 @@ export function LiveScan() {
         title="扫描现场 · LIVE SCAN"
         sub={
           active
-            ? `TARGET ${active.target} · ${MODE_LABEL[active.mode as ScanMode]} · ${(console.status || active.status).toUpperCase()} · ELAPSED ${elapsed}`
+            ? `TARGET ${active.target} · ${MODE_LABEL[active.mode as ScanMode]} · ${TASK_STATUS_LABEL[liveStatus] || liveStatus} · ELAPSED ${elapsed}`
             : "NO TASK · 点击新建扫描开始"
         }
         pulse={!!running}
@@ -152,18 +207,18 @@ export function LiveScan() {
             {active ? (
               <span
                 className="flex h-[30px] items-center rounded-sm border bg-bubble px-2.5 font-mono text-[10.5px]"
-                style={{ borderColor: statusColor[active.status], color: statusColor[active.status] }}
+                style={{ borderColor: TASK_STATUS_COLOR[liveStatus], color: TASK_STATUS_COLOR[liveStatus] }}
               >
-                {active.status.toUpperCase()}
+                {TASK_STATUS_LABEL[liveStatus] || liveStatus.toUpperCase()}
               </span>
             ) : null}
             {running ? (
               <span className="flex h-[30px] items-center rounded-sm border border-edge bg-bubble px-2.5 font-mono text-[10.5px] text-accent">
-                {console.progress.done}/{console.progress.total} POC
+                {console.progress.done}/{console.progress.total} 插件
               </span>
             ) : null}
             <button
-              onClick={openDialog}
+              onClick={() => openDialog()}
               className="flex h-[34px] items-center gap-1.5 rounded-sm bg-accent px-3.5 text-[12px] font-semibold text-btntext"
             >
               <PlusIcon /> 新建扫描
@@ -180,9 +235,22 @@ export function LiveScan() {
         }
       />
 
-      <TaskBar activeId={active?.task_id ?? null} onPick={(t) => selectTask(t.task_id)} />
+      <TaskBar tasks={visibleTasks} activeId={active?.task_id ?? null} onPick={(t) => selectTask(t.task_id)} />
 
-      {tasks.length === 0 ? (
+      {errBanner ? (
+        <div
+          className="mx-6 mt-1 flex items-start gap-2 rounded border px-3 py-2"
+          style={{ borderColor: "var(--c-alert-stroke)", background: "var(--c-sem-red-tint)" }}
+        >
+          <span className="font-mono text-[10px] font-semibold text-red">ERROR</span>
+          <span className="min-w-0 flex-1 break-words text-[11px] text-ink" title={errBanner}>{errBanner}</span>
+          {actionError ? (
+            <button onClick={() => setActionError("")} className="font-mono text-[10px] text-ink-3 hover:text-ink">✕</button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {visibleTasks.length === 0 ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
           <div className="rounded border bg-card p-8 text-center" style={{ borderColor: "var(--c-border)" }}>
             <p className="mb-1 font-mono text-[9px] tracking-wider text-ink-3">NO SCAN TASK</p>
@@ -191,7 +259,7 @@ export function LiveScan() {
             </p>
             {online ? (
               <button
-                onClick={openDialog}
+                onClick={() => openDialog()}
                 className="h-[36px] rounded-sm bg-accent px-5 text-[12px] font-semibold text-btntext"
               >
                 新建扫描
@@ -265,7 +333,7 @@ export function LiveScan() {
                   />
                 </div>
                 <div className="w-full rounded-lg bg-bubble p-2">
-                  <p className="text-[10.5px] leading-[15px] text-bubble">{meiMsg}</p>
+                  <p className="text-[10.5px] leading-[15px] text-bubbletext">{meiMsg}</p>
                 </div>
                 {operator.speak && lastSay ? <MeiToast say={lastSay} /> : null}
               </div>
@@ -305,25 +373,26 @@ export function LiveScan() {
   );
 }
 
-/** 任务结果明细表：从 /api/scan/{id}/results 拉取，扫描中实时追加 */
+/** 任务结果明细表：从 /api/scan/{id}/results 拉取，行点击打开证据详情 */
 function ResultsTable({ taskId, refreshKey }: { taskId: string; refreshKey: string }) {
-  const [open, setOpen] = useState(false);
+  // 本组件只在扫描结束（调用方用 !running 控制）时才挂载，
+  // 默认展开 = 「扫描完成后自动打开结果」，用户手动折叠后同一任务内保持折叠
+  const [open, setOpen] = useState(true);
   const [rows, setRows] = useState<ScanResultItem[]>([]);
   const [filter, setFilter] = useState<"ALL" | "CONFIRMED" | "SAFE" | "UNKNOWN">("ALL");
+  const [detail, setDetail] = useState<ScanResultItem | null>(null);
 
   useEffect(() => {
     let alive = true;
     api.taskResults(taskId)
       .then((r) => { if (alive) setRows(r); })
-      .catch(() => { /* ignore */ });
+      .catch(() => { if (alive) setRows([]); });
     return () => { alive = false; };
   }, [taskId, refreshKey]);
 
   const visible = filter === "ALL" ? rows : rows.filter((r) => r.status === filter);
   const tally = { ALL: rows.length, CONFIRMED: 0, SAFE: 0, UNKNOWN: 0 } as Record<string, number>;
   for (const r of rows) if (r.status in tally) tally[r.status] += 1;
-
-  if (rows.length === 0) return null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6 pb-4 pt-3">
@@ -356,20 +425,39 @@ function ResultsTable({ taskId, refreshKey }: { taskId: string; refreshKey: stri
               <span className="w-[60px] text-[10px] text-ink-3">严重度</span>
               <span className="flex-1 text-[10px] text-ink-3">漏洞名称</span>
               <span className="w-[240px] text-[10px] text-ink-3">触发 URL</span>
+              <span className="w-[16px] text-[10px] text-ink-3" />
             </div>
-            <div className="thin-scroll min-h-0 flex-1 overflow-auto">
-              {visible.map((r, i) => (
-                <div key={`${r.name}-${r.url}-${i}`} className={`flex items-center gap-2 px-3.5 py-1.5 hover:bg-cardsoft ${i % 2 === 1 ? "bg-zebra" : ""}`}>
-                  <span className="w-[76px]"><VerdictChip v={r.status} /></span>
-                  <span className="w-[60px]"><SeverityText s={sevToUi(r.severity)} /></span>
-                  <span className="flex-1 truncate text-[11px] text-ink" title={r.evidence || r.name}>{r.name}</span>
-                  <span className="w-[240px] truncate font-mono text-[10px] text-ink-2" title={r.url}>{r.url || "—"}</span>
-                </div>
-              ))}
-            </div>
+            {visible.length === 0 ? (
+              <div className="flex min-h-[90px] flex-1 items-center justify-center">
+                <span className="font-mono text-[11px] text-ink-3">
+                  {rows.length === 0
+                    ? "该任务没有结果明细（历史任务可到报告中心尝试重建报告）"
+                    : `当前筛选（${filter}）下没有结果`}
+                </span>
+              </div>
+            ) : (
+              <div className="thin-scroll min-h-0 flex-1 overflow-auto">
+                {visible.map((r, i) => (
+                  <button
+                    key={`${r.name}-${r.url}-${i}`}
+                    type="button"
+                    onClick={() => setDetail(r)}
+                    className={`flex w-full items-center gap-2 px-3.5 py-1.5 text-left transition-colors hover:bg-cardsoft focus:bg-cardsoft focus:outline-none ${i % 2 === 1 ? "bg-zebra" : ""}`}
+                    title="点击查看证据 / 复现命令 / 修复建议"
+                  >
+                    <span className="w-[76px]"><VerdictChip v={r.status} /></span>
+                    <span className="w-[60px]"><SeverityText s={sevToUi(r.severity)} /></span>
+                    <span className="flex-1 truncate text-[11px] text-ink" title={r.evidence || r.name}>{r.name}</span>
+                    <span className="w-[240px] truncate font-mono text-[10px] text-ink-2" title={r.url}>{r.url || "—"}</span>
+                    <span className="w-[16px] font-mono text-[11px] text-ink-3">›</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         ) : null}
       </section>
+      {detail ? <ResultDetail item={detail} onClose={() => setDetail(null)} /> : null}
     </div>
   );
 }

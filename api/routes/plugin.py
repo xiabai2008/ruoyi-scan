@@ -21,6 +21,18 @@ def _load_all_plugins():
     return plugins
 
 
+# 插件元数据占位符：插件模板默认 cve="N/A"，前端 `p.cve` 真值判断会把
+# “没有 CVE”当成“有 CVE”，导致 CVE 计数/筛选全量命中（测评 P1-11）。
+# 归一化在后端完成，所有消费方（桌面端/Web/第三方）看到同一契约。
+_META_PLACEHOLDERS = {"", "n/a", "na", "none", "null", "-", "—"}
+
+
+def _clean_meta(value) -> str:
+    """清理插件元数据占位符，空值统一返回空串"""
+    text = str(value or "").strip()
+    return "" if text.lower() in _META_PLACEHOLDERS else text
+
+
 def _to_dto(cls) -> PluginDTO:
     """插件类 → PluginDTO（list/get 两个端点共用，字段构造只保留一处）"""
     return PluginDTO(
@@ -30,8 +42,8 @@ def _to_dto(cls) -> PluginDTO:
         category=getattr(cls, "category", ""),
         severity=getattr(cls, "severity", "low"),
         description=getattr(cls, "description", ""),
-        cve=getattr(cls, "cve", ""),
-        affected_versions=getattr(cls, "affected_versions", ""),
+        cve=_clean_meta(getattr(cls, "cve", "")),
+        affected_versions=_clean_meta(getattr(cls, "affected_versions", "")),
         vuln_type=getattr(cls, "vuln_type", ""),
         supports_waf_bypass=getattr(cls, "supports_waf_bypass", False),
     )

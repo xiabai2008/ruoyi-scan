@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../state/AppCtx";
 import { api, MODE_LABEL, type PluginMeta, type ScanMode, type ScanSubmitPayload } from "../services/backend";
+import { validateTarget } from "../services/target";
 import { Toggle } from "./ui";
 
 const inputCls =
@@ -22,7 +23,7 @@ const MODES: ScanMode[] = ["u", "p", "m", "l"];
 const REPORT_FORMATS = ["html", "json", "csv", "pdf", "docx", "xlsx"] as const;
 
 export function NewScanDialog() {
-  const { dialogOpen, closeDialog, submitting, submitScan, online } = useApp();
+  const { dialogOpen, dialogPreset, closeDialog, submitting, submitScan, online } = useApp();
   const [target, setTarget] = useState("");
   const [mode, setMode] = useState<ScanMode>("u");
   const [cms, setCms] = useState<"" | "ruoyi" | "spring">("");
@@ -40,6 +41,24 @@ export function NewScanDialog() {
   const [picked, setPicked] = useState<Set<string>>(new Set()); // 空 = 全部插件
   const [showPlugins, setShowPlugins] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [probing, setProbing] = useState(false);
+  const [probeMsg, setProbeMsg] = useState("");
+  const [probeOk, setProbeOk] = useState<boolean | null>(null);
+
+  // 每次打开：清空目标/错误，恢复默认模式；VulnDb 可预置插件子集。
+  // 旧实现会记住上次的爆破模式但清空目标，重开后很容易误用旧模式（测评 P2-23）。
+  useEffect(() => {
+    if (!dialogOpen) return;
+    setTarget("");
+    setErr("");
+    setNote("");
+    setProbeMsg("");
+    setProbeOk(null);
+    setShowPlugins(false);
+    setMode(dialogPreset?.mode ?? "u");
+    setPicked(new Set(dialogPreset?.plugins ?? []));
+  }, [dialogOpen, dialogPreset]);
 
   // 弹窗打开时拉一次插件列表（供选择）
   useEffect(() => {
@@ -73,11 +92,18 @@ export function NewScanDialog() {
   // 提交重入保护：disabled 只挡点击，Ctrl+Enter 会直接调 doSubmit（且 state 更新是异步的）
   const doSubmit = async () => {
     if (busyRef.current || submitting) return;
-    const t = target.trim();
-    if (!t) {
-      setErr("目标 URL 不能为空");
+    if (!online) {
+      setErr("引擎离线，无法提交扫描。请确认后端已启动（设置页可重新探测）");
       return;
     }
+    const check = validateTarget(target);
+    if (!check.ok) {
+      setErr(check.error);
+      setNote("");
+      return;
+    }
+    const t = check.url;
+    setNote(check.note ?? "");
     const portTokens = ports.split(",").map((p) => p.trim()).filter(Boolean);
     const badPorts = portTokens.filter((p) => !/^\d+$/.test(p) || Number(p) < 1 || Number(p) > 65535);
     if (badPorts.length > 0) {
@@ -123,6 +149,37 @@ export function NewScanDialog() {
     }
   };
 
+  const doProbe = async () => {
+    const check = validateTarget(target);
+    if (!check.ok) {
+      setProbeOk(false);
+      setProbeMsg(check.error);
+      return;
+    }
+    if (!online) {
+      setProbeOk(false);
+      setProbeMsg("引擎离线，无法检查连通性");
+      return;
+    }
+    setProbing(true);
+    setProbeOk(null);
+    setProbeMsg("正在检查 TCP/HTTP…");
+    try {
+      const r = await api.probe(check.url);
+      setProbeOk(r.ok);
+      setProbeMsg(
+        r.ok
+          ? `目标可达（${r.elapsed_ms}ms）`
+          : `不可达（${r.stage.toUpperCase()}）：${r.reason}`,
+      );
+    } catch (e) {
+      setProbeOk(false);
+      setProbeMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProbing(false);
+    }
+  };
+
   const field = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") closeDialog();
     if (e.key === "Enter" && e.ctrlKey) doSubmit();
@@ -147,15 +204,39 @@ export function NewScanDialog() {
 
         {/* 目标 */}
         <Field label="扫描目标" hint="http(s)://host:port/">
-          <input
-            autoFocus
-            className={inputCls}
-            placeholder="http://10.211.55.3:8080/"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            spellCheck={false}
-          />
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              className={inputCls}
+              placeholder="https://demo.example.com/"
+              value={target}
+              onChange={(e) => {
+                setTarget(e.target.value);
+                setErr("");
+                setProbeMsg("");
+                setProbeOk(null);
+              }}
+              spellCheck={false}
+            />
+            <button
+              onClick={doProbe}
+              disabled={probing || !online}
+              className="h-[30px] shrink-0 rounded-sm border border-edge px-2.5 font-mono text-[10px] text-ink-2 hover:bg-cardsoft disabled:opacity-50"
+              title="扫描前检查目标 TCP/HTTP 是否可达"
+            >
+              {probing ? "检查中…" : "连通性"}
+            </button>
+          </div>
         </Field>
+        {note ? <div className="font-mono text-[9.5px] text-ink-3">{note}</div> : null}
+        {probeMsg ? (
+          <div
+            className="font-mono text-[9.5px]"
+            style={{ color: probeOk === true ? "var(--c-sem-green)" : probeOk === false ? "var(--c-sem-red)" : "var(--c-text-muted)" }}
+          >
+            {probeMsg}
+          </div>
+        ) : null}
 
         {/* 模式 + CMS */}
         <div className="flex flex-col gap-1">
@@ -321,10 +402,10 @@ export function NewScanDialog() {
             </button>
             <button
               onClick={doSubmit}
-              disabled={submitting}
+              disabled={submitting || !online}
               className="flex h-[34px] items-center gap-2 rounded-sm bg-accent px-4 text-[12px] font-semibold text-btntext disabled:opacity-50"
             >
-              {submitting ? <span className="font-mono text-[11px]">提交中…</span> : "开始扫描"}
+              {!online ? "引擎离线" : submitting ? <span className="font-mono text-[11px]">提交中…</span> : "开始扫描"}
             </button>
           </div>
         </div>

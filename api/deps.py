@@ -1,7 +1,8 @@
-# D9 依赖注入：获取 orchestrator/registry 实例
+# D9 依赖注入：获取 orchestrator/registry/storage 实例
 from fastapi import HTTPException, Request
 
 from core.orchestrator import ScanOrchestrator
+from core.storage import Storage
 from core.task_registry import TaskRegistry
 
 
@@ -12,6 +13,14 @@ def get_registry(request: Request) -> TaskRegistry:
     if registry is None:
         raise HTTPException(status_code=503, detail="TaskRegistry 未初始化")
     return registry
+
+
+def get_storage(request: Request) -> Storage:
+    """获取 Storage 实例（结果明细兜底查询 / 报告重建用）"""
+    storage = getattr(request.app.state, "storage", None)
+    if storage is None:
+        raise HTTPException(status_code=503, detail="Storage 未初始化")
+    return storage
 
 
 def get_orchestrator(request: Request) -> ScanOrchestrator:

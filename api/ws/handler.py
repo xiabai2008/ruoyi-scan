@@ -134,7 +134,7 @@ async def scan_ws(websocket: WebSocket, task_id: str):
             await websocket.send_json(event)
 
         # 如果任务已完成，发送完历史后保持连接（客户端可主动关闭）
-        if record.status in ("done", "failed", "cancelled"):
+        if record.status in ("done", "failed", "cancelled", "interrupted"):
             await websocket.send_json(
                 {
                     "type": "connection_closed",
@@ -177,6 +177,7 @@ async def scan_ws(websocket: WebSocket, task_id: str):
                 "done",
                 "failed",
                 "cancelled",
+                "interrupted",
             ):
                 await asyncio.sleep(0.5)
                 await websocket.close(code=1000, reason="任务结束")

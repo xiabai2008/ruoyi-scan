@@ -1,12 +1,17 @@
 # D9 报告路由：查询/下载报告
 import os
 import re
+import time
+from dataclasses import fields as dataclass_fields
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from api.deps import get_registry
+from api.deps import get_registry, get_storage
 from api.models.schemas import ReportMetadataDTO
+from common.models import ScanResult
+from core.report import ReportBuilder
+from core.storage import Storage
 from core.task_registry import TaskRegistry
 
 router = APIRouter(tags=["报告"])
@@ -26,14 +31,13 @@ def _find_report_file(task_id: str, fmt: str, registry: TaskRegistry = None, dir
     """查找任务报告文件路径
 
     查找顺序：
-        1. 从 registry 的 task_dict.report_paths 中匹配扩展名（最准确）
+        1. 从 registry 的 task_dict.report_paths 中匹配扩展名（最准确，且文件名须含 task_id）
         2. reports/api/{task_id}.{ext}（按 task_id 命名）
-        3. reports/api/report.{ext}（ReportBuilder 默认命名，仅当任务在 registry 中存在）
-        4. 扫描 reports/api/ 目录下文件名含 task_id（后接 / 或边界）且扩展名匹配的文件
+        3. 扫描 reports/api/ 目录下文件名含 task_id（后接 / 或边界）且扩展名匹配的文件
 
-    注意：步骤 3 的 report.{ext} 回退仅在任务存在于 registry 时生效，
-    避免对不存在的 task_id 误返回已有报告文件；步骤 4 要求 task_id 后
-    紧跟路径边界，避免短 id（如 "1"）误命中其他任务的文件（如 "task10_report.html"）。
+    不再回退到共享的 report.{ext}：该文件属于“最后一次扫描”，无法判断归属，
+    回退会把最新报告当成任意历史任务的报告（测评 P0-2）。步骤 3 要求 task_id
+    后紧跟路径边界，避免短 id（如 "1"）误命中其他任务的文件（如 "task10_report.html"）。
 
     Args:
         dir_listing: 可选的 reports/api 目录清单。多格式批量查询时由调用方
@@ -47,14 +51,16 @@ def _find_report_file(task_id: str, fmt: str, registry: TaskRegistry = None, dir
     # 未登记格式按 .<fmt> 兜底扩展名（未来新增格式无需改映射表）
     ext = _FORMAT_EXT.get(fmt, f".{fmt}")
 
-    # 检查任务是否在 registry 中存在
-    task_exists = False
+    # 1. 从 task_dict.report_paths 匹配（API 模式生成的实际路径）
     if registry:
         record = registry.get(task_id)
-        task_exists = record is not None
-        # 1. 从 task_dict.report_paths 匹配（API 模式生成的实际路径）
         if record and record.task_dict:
             for path in record.task_dict.get("report_paths", []):
+                # 归属校验：旧版本把共享的 reports/api/report.html 写进每个任务，
+                # 只按扩展名匹配会把最新报告当成任意历史任务的报告（测评 P0-2）。
+                # 任务 id 后必须是路径边界，避免 "abc" 命中 "abc123.html"。
+                if not re.search(re.escape(task_id) + r"(?:$|[._-])", os.path.basename(path)):
+                    continue
                 if path.endswith(ext):
                     if os.path.exists(path):
                         return path
@@ -68,13 +74,8 @@ def _find_report_file(task_id: str, fmt: str, registry: TaskRegistry = None, dir
     if os.path.exists(filepath):
         return filepath
 
-    # 3. reports/api/report.{ext}（ReportBuilder 默认命名，仅当任务存在）
-    if task_exists:
-        filepath = os.path.join(report_dir, f"report{ext}")
-        if os.path.exists(filepath):
-            return filepath
-
-    # 4. 扫描目录下文件名含 task_id（按路径边界匹配，防止 "1" 命中 "task10_report.html"）
+    # 3. 扫描目录下文件名含 task_id（按路径边界匹配，防止 "1" 命中 "task10_report.html"）
+    # 不再回退到共享的 report.{ext}：无法判断它属于哪个任务，宁可 404 也不串号
     if dir_listing is not None:
         listing = dir_listing
     elif os.path.isdir(report_dir):
@@ -129,12 +130,21 @@ def get_report_metadata(task_id: str, registry: TaskRegistry = Depends(get_regis
 
 
 @router.get("/report/{task_id}/html", summary="下载 HTML 报告")
-def download_html_report(task_id: str, registry: TaskRegistry = Depends(get_registry)):
-    """下载 HTML 格式报告"""
+def download_html_report(
+    task_id: str,
+    inline: bool = Query(False, description="true=浏览器内联预览；false=作为附件下载"),
+    registry: TaskRegistry = Depends(get_registry),
+):
+    """下载/预览 HTML 格式报告"""
     filepath = _resolve_report(task_id, "html", registry)
     if not filepath:
         raise HTTPException(status_code=404, detail="HTML 报告未生成")
-    return FileResponse(filepath, media_type="text/html", filename=f"{task_id}_report.html")
+    return FileResponse(
+        filepath,
+        media_type="text/html",
+        filename=f"{task_id}_report.html",
+        content_disposition_type="inline" if inline else "attachment",
+    )
 
 
 @router.get("/report/{task_id}/json", summary="下载 JSON 报告")
@@ -189,3 +199,75 @@ def download_xlsx_report(task_id: str, registry: TaskRegistry = Depends(get_regi
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=f"{task_id}_report.xlsx",
     )
+
+
+def _collect_task_results(record, storage: Storage) -> list:
+    """取任务结果明细：内存/恢复事件优先，findings 表兜底
+
+    旧版本任务没有 findings 行（表是 v1.5.3 新增的），但事件表里的 result 事件
+    在恢复时已归一化。只查 findings 会让“重建报告”对历史任务必然失败
+    （实测 6a9fb7ee：/results 有 32 条，重建却提示没有结果）。
+    """
+    rows = []
+    for event in (record.events or []):
+        if event.get("type") == "result" and isinstance(event.get("data"), dict):
+            rows.append(event["data"])
+    if not rows:
+        try:
+            rows = storage.get_results(record.task_id)
+        except Exception:
+            rows = []
+    return rows
+
+
+@router.post("/report/{task_id}/rebuild", summary="用持久化结果重建报告")
+def rebuild_report(
+    task_id: str,
+    registry: TaskRegistry = Depends(get_registry),
+    storage: Storage = Depends(get_storage),
+):
+    """从事件/findings 重建该任务的报告（修复历史任务报告被共享文件覆盖的问题）
+
+    旧版本所有任务写同一个 reports/api/report.*，后续扫描会覆盖前者，历史报告
+    无法追溯。结果明细已持久化，因此可以按当前任务的 target/summary 重新生成
+    `{task_id}_report.{ext}`，避免继续依赖不可归属的旧文件。
+    """
+    record = registry.get(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+    rows = _collect_task_results(record, storage)
+    if not rows:
+        raise HTTPException(status_code=409, detail="该任务没有可重建的结果明细")
+
+    # 只取 ScanResult 的 dataclass 字段：落盘快照含 severity_cn 等展示字段。
+    # 旧版本事件没有 kind/name 必填字段（v1.5.3 之前 _on_result 只发 6 个字段），
+    # 必须补默认值，否则 ScanResult(**payload) 直接 TypeError → 500。
+    allowed = {f.name for f in dataclass_fields(ScanResult)}
+    results = []
+    for r in rows:
+        payload = {k: v for k, v in r.items() if k in allowed}
+        payload.setdefault("kind", "")
+        payload.setdefault("name", "")
+        results.append(ScanResult(**payload))
+    td = record.task_dict or {}
+    started = td.get("started_at", "")
+    if isinstance(started, (int, float)) and started:
+        # ReportBuilder 的 summary.started_at 是展示字符串；直接塞 Unix 时间戳
+        # 会让重建报告显示 1793290940.86（实测）。
+        started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(started))
+    summary = {
+        "started_at": started,
+        "duration": td.get("duration", 0),
+        "request_count": td.get("request_count", 0),
+        "mode": td.get("mode", "u"),
+        "fingerprint": td.get("fingerprint") or {},
+        "blocked": {"blocked": False},
+        "rebuilt": True,
+    }
+    builder = ReportBuilder(results=results, target=td.get("target", ""), summary=summary, dedup=True)
+    try:
+        paths = builder.render_all(os.path.join("reports", "api"), formats=["html", "json", "csv"], stem=task_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"报告重建失败: {e}") from e
+    registry.update_task_dict(task_id, {**td, "report_paths": paths})
+    return {"task_id": task_id, "paths": paths}

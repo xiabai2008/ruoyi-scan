@@ -1,6 +1,7 @@
 # 网络异常 → UNKNOWN（三态铁律）契约测试：批量覆盖插件的异常分支
 # 背景：覆盖率棘轮发现大量 except→UNKNOWN 分支无常驻用例；本文件以最小替身统一守护该契约。
 import importlib
+from unittest.mock import patch
 
 import pytest
 import requests
@@ -74,7 +75,11 @@ class _StaticSession:
 @pytest.mark.parametrize("module,klass", CANDIDATES)
 def test_network_error_returns_unknown(module, klass):
     cls = getattr(importlib.import_module(module), klass)
-    result = cls().verify("http://127.0.0.1:1/", _RaisingSession())
+    # 部分中间件插件（Redis/RocketMQ 等）绕过 HTTP 会话直连 socket；
+    # 本机恰好在跑这些服务时会把“网络异常”用例变成真实探测，结果依赖环境。
+    # 统一把 socket 连接也置为失败，保证该契约在任何机器上都可重复。
+    with patch("socket.create_connection", side_effect=OSError("target unreachable")):
+        result = cls().verify("http://127.0.0.1:1/", _RaisingSession())
     assert result.status == STATUS_UNKNOWN, f"{klass} 网络异常应判 UNKNOWN，实际 {result.status}"
 
 

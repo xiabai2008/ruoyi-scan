@@ -86,15 +86,42 @@ export function useScanConsole(task: ScanTask | null, key: string) {
           const s = String(d.status);
           push("info", `status: ${s}`, e.timestamp);
           setSt((prev) => ({ ...prev, status: s as TaskStatus }));
+          if (s === "done" || s === "failed" || s === "cancelled" || s === "interrupted") {
+            setSt((prev) => ({ ...prev, taskDone: true }));
+          }
           break;
         }
-        case "fingerprint":
+        case "preflight": {
+          const ok = d.ok === true;
+          if (ok) {
+            push("info", `preflight: ${d.stage || "tcp"} OK`, e.timestamp);
+          } else {
+            push(
+              "error",
+              `preflight: 目标不可达（${String(d.stage || "tcp").toUpperCase()}）${d.reason ? " · " + d.reason : ""}`,
+              e.timestamp,
+            );
+          }
+          break;
+        }
+        case "fingerprint": {
+          const cms = String(d.cms ?? "").trim();
+          const detail = String(d.variant ?? d.version ?? "").trim();
           setSt((prev) => ({
             ...prev,
-            fingerprint: `${d.cms ?? ""} ${d.variant ?? d.version ?? ""}`.trim(),
+            fingerprint: `${cms} ${detail}`.trim(),
           }));
-          push("info", `fingerprint: ${d.cms}${d.version ? " " + d.version : ""} detected (confidence ${d.confidence})`, e.timestamp);
+          // cms 为空时旧文案渲染成 "fingerprint: detected (confidence 0)"，
+          // 没有主体、语义反了；未识别就明确说未识别。
+          push(
+            "info",
+            cms
+              ? `fingerprint: ${cms}${detail ? " " + detail : ""} · confidence ${d.confidence ?? 0}`
+              : `fingerprint: 未识别（confidence ${d.confidence ?? 0}）`,
+            e.timestamp,
+          );
           break;
+        }
         case "waf":
           setSt((prev) => ({ ...prev, waf: String(d.waf || "") }));
           push("info", `waf: ${d.display || d.waf || "none"}${d.bypass_hint ? " · " + d.bypass_hint : ""}`, e.timestamp);
@@ -124,7 +151,11 @@ export function useScanConsole(task: ScanTask | null, key: string) {
           push("route", `auth: ${d.summary || d.detail || "credential probe"}`, e.timestamp);
           break;
         case "plugin_fallback":
-          push("info", `plugin_fallback: ${d.plugin || "?"} → ${d.reason || "fallback"}`, e.timestamp);
+          push(
+            "info",
+            `plugin_fallback: ${d.plugin || "auto"} → ${d.reason || "回退默认插件包"}`,
+            e.timestamp,
+          );
           break;
         case "nuclei_error":
           push("error", `nuclei_error: ${d.error || "engine unavailable"}`, e.timestamp);

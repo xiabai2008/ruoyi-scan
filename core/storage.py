@@ -75,6 +75,20 @@ class Storage:
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+                # D11：扫描结果明细落盘。
+                # 事件表只保留每任务 max_events_per_task 条（默认 500），长任务的
+                # result 事件会被截断；且只有计数没有明细时，重启后结果页只能显示 0。
+                # 结果按 seq 保序存整份 ScanResult.to_dict()，与报告/详情共用同一形状。
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS findings (
+                        task_id TEXT NOT NULL,
+                        seq INTEGER NOT NULL,
+                        payload TEXT NOT NULL,
+                        PRIMARY KEY (task_id, seq),
+                        FOREIGN KEY (task_id) REFERENCES tasks(task_id)
+                    )
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_task ON findings(task_id)")
                 # E9：定时扫描任务表
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS schedules (
@@ -164,24 +178,95 @@ class Storage:
             finally:
                 conn.close()
 
-    def get_events(self, task_id: str, limit: int = 500) -> List[Dict[str, Any]]:
-        """查询任务的事件历史"""
+    def get_events(self, task_id: str, limit: int = 500, canonical: bool = False) -> List[Dict[str, Any]]:
+        """查询任务的事件历史
+
+        Args:
+            task_id: 任务 ID
+            limit: 最多返回条数（取**最后** limit 条，再按时间正序返回）
+            canonical: True 时返回 WS/前端契约形状 {type,data,task_id,timestamp}；
+                False（默认）保留历史形状 {event_type,payload}，兼容既有调用与测试。
+
+        为什么取最后 N 条：旧实现 ORDER BY timestamp ASC LIMIT N 取的是最早 N 条，
+        长任务的最新事件（含终态/结果）会被截掉；而补播最需要的是最近现场。
+        """
         with self._lock:
             conn = self._connect()
             try:
                 conn.row_factory = sqlite3.Row
+                # 子查询按时间倒序取最近 N 条，外层再正序，保证回放顺序正确
                 rows = conn.execute(
-                    "SELECT * FROM events WHERE task_id = ? ORDER BY timestamp ASC LIMIT ?", (task_id, limit)
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM events WHERE task_id = ?
+                        ORDER BY timestamp DESC, id DESC LIMIT ?
+                    ) ORDER BY timestamp ASC, id ASC
+                """,
+                    (task_id, limit),
                 ).fetchall()
-                return [
-                    {
-                        "task_id": r["task_id"],
-                        "event_type": r["event_type"],
-                        "payload": json.loads(r["payload"]) if r["payload"] else {},
-                        "timestamp": r["timestamp"],
-                    }
-                    for r in rows
-                ]
+                out: List[Dict[str, Any]] = []
+                for r in rows:
+                    payload = json.loads(r["payload"]) if r["payload"] else {}
+                    if canonical:
+                        # payload 正常是 dict（notify 已把非 dict 包成 {"data": ...}）；
+                        # 极端脏数据仍保证 data 是 dict，前端不必再做类型判断
+                        out.append(
+                            {
+                                "type": r["event_type"],
+                                "data": payload if isinstance(payload, dict) else {"data": payload},
+                                "task_id": r["task_id"],
+                                "timestamp": r["timestamp"],
+                            }
+                        )
+                    else:
+                        out.append(
+                            {
+                                "task_id": r["task_id"],
+                                "event_type": r["event_type"],
+                                "payload": payload,
+                                "timestamp": r["timestamp"],
+                            }
+                        )
+                return out
+            finally:
+                conn.close()
+
+    # ── D11：扫描结果明细持久化 ──
+
+    def save_results(self, task_id: str, results: List[Dict[str, Any]]) -> None:
+        """全量保存任务结果明细（先删后插，单事务）"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute("DELETE FROM findings WHERE task_id = ?", (task_id,))
+                conn.executemany(
+                    "INSERT INTO findings (task_id, seq, payload) VALUES (?, ?, ?)",
+                    [
+                        (task_id, i, json.dumps(r, ensure_ascii=False, default=str))
+                        for i, r in enumerate(results)
+                    ],
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_results(self, task_id: str) -> List[Dict[str, Any]]:
+        """按 seq 读取任务结果明细（文件不存在/未落盘时返回空列表）"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT payload FROM findings WHERE task_id = ? ORDER BY seq ASC", (task_id,)
+                ).fetchall()
+                out: List[Dict[str, Any]] = []
+                for (payload,) in rows:
+                    try:
+                        item = json.loads(payload) if payload else {}
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(item, dict):
+                        out.append(item)
+                return out
             finally:
                 conn.close()
 
@@ -213,7 +298,7 @@ class Storage:
                     DELETE FROM events WHERE task_id IN (
                         SELECT task_id FROM tasks
                         WHERE COALESCE(NULLIF(finished_at, 0), created_at) < ?
-                          AND status IN ('done', 'failed')
+                          AND status IN ('done', 'failed', 'cancelled', 'interrupted')
                     )
                 """,
                     (cutoff,),
@@ -223,7 +308,7 @@ class Storage:
                     """
                     DELETE FROM tasks
                     WHERE COALESCE(NULLIF(finished_at, 0), created_at) < ?
-                      AND status IN ('done', 'failed')
+                      AND status IN ('done', 'failed', 'cancelled', 'interrupted')
                 """,
                     (cutoff,),
                 )

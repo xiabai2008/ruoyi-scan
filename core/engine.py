@@ -43,6 +43,7 @@ class ScanEngine:
         session: SessionManager,
         on_result: Optional[Callable[[ScanResult], None]] = None,
         waf_bypass_coordinator: Optional[Any] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> List[ScanResult]:
         """运行插件集合
 
@@ -52,12 +53,17 @@ class ScanEngine:
             session: SessionManager 实例
             on_result: 每个结果回调 on_result(ScanResult)
             waf_bypass_coordinator: WAF 绕过协调器（D7，None 则不绕过）
+            should_stop: 协作式取消检查（每插件入口调用；True 则不再启动新插件）
         Returns:
             结果列表
         """
         results = []
 
-        def _exec(cls: type) -> ScanResult:
+        def _exec(cls: type) -> Optional[ScanResult]:
+            # 协作式取消：立即停止启动新插件。已启动的插件无法强杀（requests
+            # 不支持中断），但会在自身 HTTP 超时内结束，不会无限占住线程。
+            if should_stop is not None and should_stop():
+                return None
             # 时间预算：慢站/被限速时宁可留 UNKNOWN，也不要让整次扫描无限拖长
             if self.deadline is not None and time.monotonic() > self.deadline:
                 return ScanResult(
@@ -115,6 +121,8 @@ class ScanEngine:
         if self.threads <= 1:
             for cls in plugin_classes:
                 res = _exec(cls)
+                if res is None:  # 已取消：停止启动后续插件
+                    break
                 results.append(res)
                 if on_result:
                     on_result(res)
@@ -123,6 +131,8 @@ class ScanEngine:
                 futures = {ex.submit(_exec, cls): cls for cls in plugin_classes}
                 for fut in as_completed(futures):
                     res = fut.result()
+                    if res is None:  # 已取消：跳过未执行项
+                        continue
                     results.append(res)
                     if on_result:
                         on_result(res)

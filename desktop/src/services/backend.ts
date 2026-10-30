@@ -10,12 +10,14 @@ export const WS_EVENT_TYPES = [
   "category_start", "result", "progress", "report", "plugins_loaded",
   "recon", "recon_start", "recon_error", "component", "template", "auth",
   "plugin_fallback", "nuclei_error", "error", "ping", "connection_closed",
+  "preflight", "blocked", "auth_wall", "basepath", "denied_downgrade",
+  "evidence_downgrade", "auth_wall_downgrade", "blocked_downgrade",
 ] as const;
 
 /* ---------- 类型（与后端 DTO 对齐） ---------- */
 
 export type Verdict = "CONFIRMED" | "SAFE" | "UNKNOWN";
-export type TaskStatus = "pending" | "running" | "done" | "failed" | "cancelled";
+export type TaskStatus = "pending" | "running" | "done" | "failed" | "cancelled" | "interrupted";
 /** 后端只有 high/medium/low，无 critical；UI 展示映射见 helpers */
 export type BackendSev = "high" | "medium" | "low";
 export type ScanMode = "u" | "m" | "p" | "l";
@@ -48,12 +50,21 @@ export interface ScanTask {
 }
 
 export interface ScanResultItem {
+  kind?: string;
   name: string;
   status: Verdict;
   severity: BackendSev;
+  severity_cn?: string;
   url: string;
   evidence: string;
   extra: Record<string, unknown>;
+  fix?: string;
+  fix_detail?: string;
+  reproduce?: string;
+  cve?: string;
+  cvss_score?: number;
+  cvss_vector?: string;
+  compliance?: Record<string, string>;
 }
 
 export interface PluginMeta {
@@ -104,6 +115,15 @@ export interface ScheduleJob {
   target: string;
   mode: string;
   payload: Record<string, unknown>;
+  degraded?: boolean;
+  effective_cron?: string;
+  warning?: string;
+  paused?: boolean;
+  paused_reason?: string;
+  last_task_id?: string;
+  last_run_at?: number;
+  last_status?: string;
+  consecutive_failures?: number;
 }
 
 export interface MetricsSnapshot {
@@ -146,13 +166,36 @@ export class ApiError extends Error {
   }
 }
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
+/** 默认请求超时：引擎离线时 fetch 会一直挂着，UI 永久“提交中…”（测评 P1-7） */
+const DEFAULT_TIMEOUT_MS = 12_000;
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
+async function http<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const url = getApiBase() + path;
-  const res = await fetch(url, {
-    ...init,
-    // headers 必须在 init 之后合并，否则调用方传入的 headers 会整体覆盖并丢掉 Content-Type
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      signal: ctrl.signal,
+      // headers 必须在 init 之后合并，否则调用方传入的 headers 会整体覆盖并丢掉 Content-Type
+      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    });
+  } catch (e) {
+    if (isAbortError(e)) {
+      throw new ApiError(0, `请求超时（${Math.round(timeoutMs / 1000)}s）—— 引擎可能未启动或目标无响应`);
+    }
+    if (e instanceof TypeError) {
+      throw new ApiError(0, `无法连接引擎 ${getApiBase()}，请确认后端已启动`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {
@@ -167,9 +210,9 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => http<{ status: string; version: string; uptime: number }>("/api/system/health"),
-  version: () => http<EngineInfo>("/api/system/version"),
-  fingerprint: (target: string) =>
+  health: () => http<{ status: string; version: string; uptime: number }>("/api/system/health", undefined, 6_000),
+  version: () => http<EngineInfo>("/api/system/version", undefined, 6_000),
+  fingerprint: (target: string, timeout = 8) =>
     http<{
       target: string;
       cms: string;
@@ -178,42 +221,81 @@ export const api = {
       matched: string[];
       waf: string;
       waf_display: string;
-    }>(`/api/system/fingerprint?target=${encodeURIComponent(target)}`),
+    }>(
+      `/api/system/fingerprint?target=${encodeURIComponent(target)}&timeout=${timeout}`,
+      undefined,
+      25_000,
+    ),
+  probe: (target: string) =>
+    http<{ target: string; ok: boolean; stage: string; reason: string; elapsed_ms: number }>(
+      `/api/system/probe?target=${encodeURIComponent(target)}&timeout=5`,
+      undefined,
+      20_000,
+    ),
 
-  listTasks: () => http<ScanTask[]>("/api/scan"),
-  getTask: (id: string) => http<ScanTask>(`/api/scan/${encodeURIComponent(id)}`),
-  taskResults: (id: string) => http<ScanResultItem[]>(`/api/scan/${encodeURIComponent(id)}/results`),
+  listTasks: () => http<ScanTask[]>("/api/scan", undefined, 8_000),
+  getTask: (id: string) => http<ScanTask>(`/api/scan/${encodeURIComponent(id)}`, undefined, 8_000),
+  taskResults: (id: string) => http<ScanResultItem[]>(`/api/scan/${encodeURIComponent(id)}/results`, undefined, 10_000),
   submitScan: (p: ScanSubmitPayload) => http<{ task_id: string; status: string }>("/api/scan", {
     method: "POST",
     body: JSON.stringify(p),
-  }),
+  }, 20_000),
   cancelScan: (id: string) => http<{ task_id: string; status: string }>(`/api/scan/${encodeURIComponent(id)}`, {
     method: "DELETE",
-  }),
-  listPlugins: () => http<PluginMeta[]>("/api/plugins"),
-  getPlugin: (name: string) => http<PluginMeta>(`/api/plugins/${encodeURIComponent(name)}`),
+  }, 8_000),
+  listPlugins: () => http<PluginMeta[]>("/api/plugins", undefined, 20_000),
+  getPlugin: (name: string) => http<PluginMeta>(`/api/plugins/${encodeURIComponent(name)}`, undefined, 10_000),
   reportMeta: (id: string) =>
-    http<{ task_id: string; formats: string[]; paths: string[] }>(`/api/report/${encodeURIComponent(id)}`),
-  /** 报告下载走 <a href> 直下（FileResponse 带 Content-Disposition），不需要 fetch */
+    http<{ task_id: string; formats: string[]; paths: string[] }>(`/api/report/${encodeURIComponent(id)}`, undefined, 10_000),
+  rebuildReport: (id: string) =>
+    http<{ task_id: string; paths: string[] }>(`/api/report/${encodeURIComponent(id)}/rebuild`, { method: "POST" }, 30_000),
+  /** 报告下载走 fetch/原生对话框；URL 仍由 FileResponse 提供 Content-Disposition */
   reportDownloadUrl: (id: string, fmt: string) =>
     `${getApiBase()}/api/report/${encodeURIComponent(id)}/${encodeURIComponent(fmt)}`,
+  reportPreviewUrl: (id: string) =>
+    `${getApiBase()}/api/report/${encodeURIComponent(id)}/html?inline=1`,
 
   /* E9 定时扫描 */
-  listSchedules: () => http<ScheduleJob[]>("/api/schedule"),
+  listSchedules: () => http<ScheduleJob[]>("/api/schedule", undefined, 8_000),
   createSchedule: (body: { cron: string; target: string; mode?: string; payload?: Record<string, unknown> }) =>
-    http<{ job_id: string; cron: string; target: string; status: string }>("/api/schedule", {
+    http<{
+      job_id: string;
+      cron: string;
+      target: string;
+      status: string;
+      degraded?: boolean;
+      effective_cron?: string;
+      warning?: string;
+    }>("/api/schedule", {
       method: "POST",
       body: JSON.stringify(body),
-    }),
+    }, 10_000),
+  /** 查询参数删除：历史 job_id 含 `/`，路径参数在部分网关/路由实现下无法匹配 */
   deleteSchedule: (jobId: string) =>
-    http<{ job_id: string; status: string }>(`/api/schedule/${encodeURIComponent(jobId)}`, { method: "DELETE" }),
+    http<{ job_id: string; status: string }>(`/api/schedule?job_id=${encodeURIComponent(jobId)}`, { method: "DELETE" }, 8_000),
+  resumeSchedule: (jobId: string) =>
+    http<{ job_id: string; status: string }>("/api/schedule/resume", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId }),
+    }, 8_000),
 };
 
 /* ---------- Prometheus 指标解析 ---------- */
 
 /** 拉取 /api/system/metrics 并解析为结构化快照（任务/结果统计、活跃数、uptime） */
 export async function fetchMetrics(): Promise<MetricsSnapshot> {
-  const res = await fetch(`${getApiBase()}/api/system/metrics`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBase()}/api/system/metrics`, { signal: ctrl.signal });
+  } catch (e) {
+    if (isAbortError(e)) throw new ApiError(0, "指标请求超时（8s）");
+    if (e instanceof TypeError) throw new ApiError(0, "无法连接引擎，无法获取指标");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
   const text = await res.text();
   const uptime = numOf(text, "ruoyi_scan_uptime_seconds");
@@ -245,7 +327,7 @@ function seriesOf(text: string, metric: string): Record<string, number> {
 
 export type WsState = "connecting" | "open" | "closed";
 
-const TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
+const TERMINAL_STATUSES = new Set(["done", "failed", "cancelled", "interrupted"]);
 
 /**
  * 订阅某个任务的实时事件。服务端连接后会先补播历史事件、随后推送新事件，
@@ -347,6 +429,32 @@ export const MODE_LABEL: Record<ScanMode, string> = {
   p: "漏洞检测 p",
   l: "登录爆破 l",
 };
+
+/** 任务状态统一文案：任务页/资产页/报告页共用，避免 CANCELLED / STOPPED 两套说法 */
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  pending: "QUEUED",
+  running: "RUNNING",
+  done: "DONE",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+  interrupted: "INTERRUPTED",
+};
+
+/** 状态色使用 CSS token（图表/表格/徽标共用） */
+export const TASK_STATUS_COLOR: Record<string, string> = {
+  pending: "var(--c-sem-amber)",
+  running: "var(--c-accent-primary)",
+  done: "var(--c-sem-green)",
+  failed: "var(--c-sem-red)",
+  cancelled: "var(--c-text-muted)",
+  interrupted: "var(--c-text-muted)",
+};
+
+/** CVE 占位符判断：后端已把 "N/A" 归一化为空串，前端再兜一层旧数据 */
+export function hasCve(cve?: string | null): boolean {
+  const s = String(cve ?? "").trim().toLowerCase();
+  return !!s && !["n/a", "na", "none", "null", "-", "—"].includes(s);
+}
 
 export const fmtClock = (ts: number) => {
   const d = new Date(ts * 1000);
