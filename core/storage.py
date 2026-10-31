@@ -241,10 +241,7 @@ class Storage:
                 conn.execute("DELETE FROM findings WHERE task_id = ?", (task_id,))
                 conn.executemany(
                     "INSERT INTO findings (task_id, seq, payload) VALUES (?, ?, ?)",
-                    [
-                        (task_id, i, json.dumps(r, ensure_ascii=False, default=str))
-                        for i, r in enumerate(results)
-                    ],
+                    [(task_id, i, json.dumps(r, ensure_ascii=False, default=str)) for i, r in enumerate(results)],
                 )
                 conn.commit()
             finally:

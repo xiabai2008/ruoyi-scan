@@ -209,7 +209,7 @@ def _collect_task_results(record, storage: Storage) -> list:
     （实测 6a9fb7ee：/results 有 32 条，重建却提示没有结果）。
     """
     rows = []
-    for event in (record.events or []):
+    for event in record.events or []:
         if event.get("type") == "result" and isinstance(event.get("data"), dict):
             rows.append(event["data"])
     if not rows:
