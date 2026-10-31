@@ -11,10 +11,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN  # noqa: E402
+from plugins.common.swagger_leak import SwaggerLeakPlugin  # noqa: E402
 from plugins.ruoyi.cve_2025_70986_select_dept_tree import (  # noqa: E402
     Cve202570986SelectDeptTreePlugin,
 )
 from plugins.ruoyi.file_upload import FileUploadPlugin  # noqa: E402
+from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin  # noqa: E402
 from plugins.ruoyi.unauth_batch import UnauthBatchPlugin  # noqa: E402
 
 AUTH_FAIL_UPLOAD = '{"msg":"请求访问：/common/upload，认证失败，无法访问系统资源","code":401}'
@@ -23,6 +25,7 @@ UPLOAD_OK = '{"code":200,"msg":"操作成功","fileName":"/profile/upload/2026/1
 USER_LIST_OK = '{"total":1,"code":200,"msg":"查询成功","rows":[{"userId":1,"admin":true,"userName":"admin"}]}'
 MISSING_RESOURCE = '{"msg":"No static resource system/dept/treeData/0 for request","code":500}'
 JSON_DENIED = '{"msg":"没有权限，请联系管理员授权","code":403}'
+SWAGGER_OK = '{"swagger":"2.0","info":{"title":"doc"},"paths":{"/x":{}}}'
 
 
 class FakeResp:
@@ -43,6 +46,8 @@ class FakeSession:
         self.authed_body = authed_body
         self.anon_body = anon_body
         self.closed = False
+        # 低权账号现在只能显式提供；测试用假凭据，真实扫描由 --surface-account 注入
+        self.surface_account = ("test_user", "test_pass")
 
     def _resp(self):
         return FakeResp(self.authed_body if self.authed else self.anon_body, 200)
@@ -77,6 +82,81 @@ def test_unauth_batch_uses_anonymous_session():
     assert res.status != STATUS_CONFIRMED, "认证态下的正常业务响应不应算未授权暴露"
     assert res.status == STATUS_SAFE, res.status
     print("PASS test_unauth_batch_uses_anonymous_session: %s" % res.status)
+
+
+def test_ruoyi_swagger_uses_anonymous_session():
+    """admin 会话能打开 Swagger，但匿名 401 ⇒ 不得判「未授权访问」"""
+    sess = FakeSession(authed_body=SWAGGER_OK, anon_body=AUTH_FAIL_LIST)
+    res = RuoyiSwaggerUnauthPlugin().verify("http://target/", sess)
+    assert res.status != STATUS_CONFIRMED, "高权会话下的 Swagger 可读不能算未授权"
+    assert res.status in (STATUS_SAFE, STATUS_UNKNOWN), res.status
+    print("PASS test_ruoyi_swagger_uses_anonymous_session: %s" % res.status)
+
+
+def test_swagger_leak_uses_anonymous_session():
+    """admin 会话能读文档，但匿名 401 ⇒ 不得判「Swagger API 文档泄露」"""
+    sess = FakeSession(authed_body=SWAGGER_OK, anon_body=AUTH_FAIL_LIST)
+    res = SwaggerLeakPlugin().verify("http://target/", sess)
+    assert res.status != STATUS_CONFIRMED, "高权会话下的文档可读不能算未授权泄露"
+    assert res.status in (STATUS_SAFE, STATUS_UNKNOWN), res.status
+    print("PASS test_swagger_leak_uses_anonymous_session: %s" % res.status)
+
+
+def test_swagger_leak_anon_public_confirmed():
+    """匿名真的能读文档 → CONFIRMED（修复不能把真暴露一起漏掉）"""
+    sess = FakeSession(authed_body="", anon_body=SWAGGER_OK)
+    res = SwaggerLeakPlugin().verify("http://target/", sess)
+    assert res.status == STATUS_CONFIRMED, res.status
+    print("PASS test_swagger_leak_anon_public_confirmed: %s" % res.status)
+
+
+class _AnonUploadSession:
+    def post(self, url, **kw):
+        return FakeResp(AUTH_FAIL_UPLOAD, 200)
+
+    def close(self):
+        pass
+
+
+class _AuthUploadSession:
+    """已认证会话：匿名上传被 401，登录后上传返回给定响应。"""
+
+    authenticated = True
+
+    def __init__(self, upload_body, file_body="<html>ruoyi_scan_probe</html>"):
+        self.upload_body = upload_body
+        self.file_body = file_body
+
+    def post(self, url, **kw):
+        return FakeResp(self.upload_body, 200)
+
+    def get(self, url, **kw):
+        return FakeResp(self.file_body, 200)
+
+    def anonymous(self):
+        return _AnonUploadSession()
+
+    def close(self):
+        pass
+
+
+def test_file_upload_authenticated_dimension_confirmed():
+    """P1-0e：登录后上传 .html 且可回读 → CONFIRMED（匿名 401 不影响该维度）"""
+    body = (
+        '{"code":0,"fileName":"/profile/upload/x.html",'
+        '"url":"http://target/profile/upload/x.html"}'
+    )
+    res = FileUploadPlugin().verify("http://target/", _AuthUploadSession(body))
+    assert res.status == STATUS_CONFIRMED, res.status
+    assert "登录后上传" in res.evidence
+    assert ".html" in res.evidence or "x.html" in res.evidence
+
+
+def test_file_upload_authenticated_dimension_500_unknown():
+    """P1-0e：登录后上传目录不存在/500 → UNKNOWN，不能判 SAFE"""
+    body = '{"code":500,"msg":"java.io.FileNotFoundException: profile 目录不存在"}'
+    res = FileUploadPlugin().verify("http://target/", _AuthUploadSession(body))
+    assert res.status == STATUS_UNKNOWN, res.status
 
 
 class _FakeAnonSession:

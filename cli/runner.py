@@ -150,6 +150,18 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         if not auth_config["cookies"] and not auth_config["headers"]:
             auth_config = None
 
+    # 认证状态：报告元信息、终端提示与「需会话插件」统一降级都依赖它。
+    # not_attempted = 用户没要求认证；failed = 要求了但没拿到任何凭据；ok = 拿到凭据。
+    auth_requested = bool(
+        getattr(args, "auth", None) or getattr(args, "auth_file", None) or getattr(args, "auth_login", None)
+    )
+    if not auth_requested:
+        auth_status = "not_attempted"
+    elif auth_config:
+        auth_status = "ok"
+    else:
+        auth_status = "failed"
+
     return ScanRequest(
         target=target,
         mode=mode,
@@ -170,6 +182,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         # 方案 A：对抗型传输层（--adversarial-transport 启用；默认关闭，向后兼容）
         adversarial_transport=getattr(args, "adversarial_transport", False),
         auth=auth_config,
+        surface_account=getattr(args, "surface_account", None),
+        auth_status=auth_status,
         template=getattr(args, "template", "") or "",
         crawl=getattr(args, "crawl", False),
         crawl_depth=getattr(args, "crawl_depth", 2),
@@ -427,7 +441,63 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         set_findings_muted(muted_before)
     duration = time.time() - t0
 
+    # 认证失败必须在终端显式说清：否则报告看起来"完整"，读者会把未认证扫描
+    # 产出的 UNKNOWN/SAFE 当成已登录结论。密码只显示用户名，不回显口令。
+    if req.auth_status == "failed":
+        auth_desc = ""
+        if getattr(args, "auth_login", None):
+            _user = str(args.auth_login).split(":", 1)[0]
+            auth_desc = f"--auth-login {_user}:***"
+        elif getattr(args, "auth_file", None):
+            auth_desc = f"--auth-file {args.auth_file}"
+        elif getattr(args, "auth", None):
+            auth_desc = "--auth"
+        print(
+            f"{RED}[!] 主扫描未认证：{auth_desc} 登录失败，"
+            f"主扫描中需要会话的插件结论不可信（--auth-surface 使用独立会话，另计）{RESET}"
+        )
+
+    # --auth-surface 尚未执行时也要有确定状态，供报告摘要使用；后续 G1 段会覆盖。
+    surface_status = "not_attempted"
     target_normalized = normalize_target(target)
+
+    # G1：认证后深度扫描（登录态接口资产盘点 + 越权矩阵）。
+    # 必须在报告生成之前执行：否则 surface 的 CONFIRMED/状态写不进本次报告，
+    # 出现「正文有 surface 结论、meta 却说 surface 未尝试」的自相矛盾。
+    if getattr(args, "auth_surface", False):
+        from lib.auth_surface import run_auth_surface_mode
+
+        print(f"{YELLOW}[*]认证后深度扫描：登录态资产盘点 + 越权矩阵...{RESET}")
+        surface_assets, surface_vulns, surface_status = run_auth_surface_mode(args, target_normalized)
+        if surface_status == "login_failed":
+            # 登录失败与“扫完无结果”语义已由 status 区分，避免误报“0 资产 0 漏洞”为扫描完成
+            print(f"{RED}[!]认证后深度扫描未执行：高权登录失败（检查 --auth-login）{RESET}")
+        else:
+            print(
+                f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
+                f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
+            )
+        if getattr(args, "surface_output", None) and surface_assets:
+            print(f"{GREEN}[*]资产清单已输出：{args.surface_output}{RESET}")
+        # 漏洞并入统一结果集（CONFIRMED 语义已在扫描器内保证，UNKNOWN 仅记录资产不产漏洞）
+        for lv in surface_vulns:
+            all_results.append(
+                ScanResult(
+                    kind="vuln",
+                    name=lv.name,
+                    severity=lv.severity,
+                    status=STATUS_CONFIRMED,
+                    url=lv.url,
+                    evidence=lv.evidence,
+                    fix=lv.fix,
+                    fix_detail=lv.fix_detail,
+                    reproduce=lv.reproduce,
+                )
+            )
+
+    # 认证状态按链路分开记录：admin 是主扫描（--auth-login），surface 是
+    # --auth-surface 的独立会话。两者成败可以不同，报告不能混成一句"未认证"。
+    req.surface_auth_status = surface_status
 
     # ── 报告生成 + 后处理（CLI 专属，orchestrator 不涉及）──
     if args.report:
@@ -471,6 +541,10 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
             "request_count": getattr(orch, "last_request_count", 0),
             "blocked": getattr(orch, "last_block_info", {}),
             "mode": report_label,
+            "auth_status": {
+                "admin": req.auth_status,
+                "surface": surface_status,
+            },
             "version_matrix": version_matrix,
             "fingerprint": {
                 "cms": req.cms or detected_fingerprint.get("cms", ""),
@@ -604,38 +678,6 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         finally:
             # 异常路径同样释放会话连接（scan 抛错时不能泄漏 socket/连接池）
             logic_session.close()
-
-    # G1：认证后深度扫描（登录态接口资产盘点 + 越权矩阵）
-    if getattr(args, "auth_surface", False):
-        from lib.auth_surface import run_auth_surface_mode
-
-        print(f"{YELLOW}[*]认证后深度扫描：登录态资产盘点 + 越权矩阵...{RESET}")
-        surface_assets, surface_vulns, surface_status = run_auth_surface_mode(args, target_normalized)
-        if surface_status == "login_failed":
-            # 登录失败与“扫完无结果”语义已由 status 区分，避免误报“0 资产 0 漏洞”为扫描完成
-            print(f"{RED}[!]认证后深度扫描未执行：高权登录失败（检查 --auth-login）{RESET}")
-        else:
-            print(
-                f"{YELLOW}[*]认证后深度扫描完成：盘点资产 {len(surface_assets)} 个，"
-                f"越权/未授权发现 {len(surface_vulns)} 个{RESET}"
-            )
-        if getattr(args, "surface_output", None) and surface_assets:
-            print(f"{GREEN}[*]资产清单已输出：{args.surface_output}{RESET}")
-        # 漏洞并入统一结果集（CONFIRMED 语义已在扫描器内保证，UNKNOWN 仅记录资产不产漏洞）
-        for lv in surface_vulns:
-            all_results.append(
-                ScanResult(
-                    kind="vuln",
-                    name=lv.name,
-                    severity=lv.severity,
-                    status=STATUS_CONFIRMED,
-                    url=lv.url,
-                    evidence=lv.evidence,
-                    fix=lv.fix,
-                    fix_detail=lv.fix_detail,
-                    reproduce=lv.reproduce,
-                )
-            )
 
     # D33：SIEM 导出
     if getattr(args, "siem_export", None):

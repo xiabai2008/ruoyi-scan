@@ -74,6 +74,36 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
 
 logger = get_logger(__name__)
 
+
+def downgrade_auth_required_results(results: List[ScanResult], auth_status: str, auth_required_names: set[str]) -> int:
+    """把「需高权会话」插件的 CONFIRMED/SAFE 统一降级为 UNKNOWN（单一入口）。
+
+    为什么需要：auth_status != ok 时，这些插件看到的只是登录墙/401，既不能证明
+    漏洞存在，也不能证明不存在。把 SAFE 留在报告里等于宣称「已确认安全」，是
+    比漏报更危险的假安全感。低权对照插件不在此列（它们自己解析显式
+    --surface-account，缺凭证时已返回 UNKNOWN）。
+
+    Args:
+        results: 待处理的结果列表（原地修改）
+        auth_status: ok / failed / not_attempted
+        auth_required_names: 标记了 requires_auth=True 的插件名集合
+
+    Returns:
+        被降级的条数
+    """
+    if auth_status == "ok" or not auth_required_names:
+        return 0
+    count = 0
+    for r in results:
+        if r.name in auth_required_names and r.status in (STATUS_CONFIRMED, STATUS_SAFE):
+            r.evidence = (
+                f"未取得高权会话（auth_status={auth_status}），需登录的结论降级为 UNKNOWN。原证据：{r.evidence}"
+            )
+            r.status = STATUS_UNKNOWN
+            count += 1
+    return count
+
+
 # === 数据模型 ===
 
 
@@ -112,6 +142,12 @@ class ScanRequest:
     # dataclass 重复字段以最后一次声明为准，此处仅为 D26 语义补充说明
     # D26：认证扫描增强（CLI args.auth / args.auth_file / args.auth_login 解析后传入）
     auth: Optional[Dict[str, Any]] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
+    # 显式低权账号（--surface-account user:pass，可多次；越权对照的唯一来源）
+    surface_account: Optional[List[str]] = None
+    # 主扫描（admin）认证状态：ok / failed / not_attempted（报告元信息与「需会话插件」统一降级用）
+    auth_status: str = "not_attempted"
+    # --auth-surface 的独立会话状态：ok / failed / not_attempted（与主扫描分开记录）
+    surface_auth_status: str = "not_attempted"
     # D19：扫描模板名称（quick / deep / compliance / dengbao）
     template: str = ""
     # P0：外部插件路径列表（--plugin-path 可多次指定）
@@ -130,6 +166,12 @@ class ScanRequest:
     # 兜底追加到尝试序列，用于突破 Cloudflare Turnstile/Interstitial 等 JS 挑战。
     # 需安装额外依赖：pip install 'ruoyi-scan[adversarial]'
     adversarial_transport: bool = False
+
+    def __post_init__(self) -> None:
+        """API/嵌入式调用可能直接传 auth 但不设 auth_status：有凭据即视为 ok。"""
+        if self.auth_status == "not_attempted" and self.auth:
+            if self.auth.get("cookies") or self.auth.get("headers"):
+                self.auth_status = "ok"
 
 
 @dataclass
@@ -375,10 +417,12 @@ class ScanOrchestrator:
                     payload = {**payload, "task_id": task.task_id}
                 elif not isinstance(payload, dict):
                     payload = {"task_id": task.task_id, "data": payload}
-                self.registry.notify(task.task_id, event_type, payload)
-                # 状态变更时同步 task_dict 到 registry（供 GET /api/scan 查询）
-                if event_type in ("status", "fingerprint", "waf", "complete"):
+                # 先同步 task_dict 再广播：状态事件会立即把 record.status 改为新状态，
+                # 若 task_dict 后写，GET /api/scan 可能短暂看到「status=failed 但 error 为空」。
+                # error 事件同样要落 task_dict（否则异常原因只在事件流里）。
+                if event_type in ("status", "error", "fingerprint", "waf", "complete"):
                     self.registry.update_task_dict(task.task_id, task.to_dict())
+                self.registry.notify(task.task_id, event_type, payload)
 
         # 资源泄漏防护（#3）：session 在 try 块内创建，旧实现只在正常路径 (:651)
         # 调用 session.close()；一旦其后的任意步骤抛异常走 except 直接 return，session
@@ -504,6 +548,9 @@ class ScanOrchestrator:
                     },
                 )
 
+            # 本次扫描是否真正拿到了高权会话：供 file_upload 的「登录后上传」维度判断。
+            session.authenticated = req.auth_status == "ok"
+
             # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
             # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
             # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
@@ -511,6 +558,17 @@ class ScanOrchestrator:
             if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
                 selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
             session.password_dict = selected_password_dict
+
+            # 3.1 显式低权账号：只挂在本次扫描的会话上（不写进程级 settings），
+            # 供越权对照插件读取；未提供时插件必须返回 UNKNOWN。
+            if req.surface_account:
+                from core.lowpriv import parse_account
+
+                for item in req.surface_account:
+                    parsed = parse_account(item)
+                    if parsed:
+                        session.surface_account = parsed
+                        break
 
             # 3.5 全站拦截探测（WAF / 网关 / 认证墙）
             # 站点被统一拒绝时，每个插件拿到的都是同一个 403，按插件自身逻辑会落到
@@ -783,6 +841,10 @@ class ScanOrchestrator:
             categories = mode_categories.get(req.mode, ["vuln"])
             total_plugins = sum(len(plugins_by_cat.get(c, [])) for c in categories)
             done_count = [0]  # 闭包可变
+            # 需要高权会话才能给出 CONFIRMED/SAFE 的插件名集合：auth_status != ok 时统一降级
+            auth_required_names = {
+                getattr(cls, "name", "") for cls in all_plugins if getattr(cls, "requires_auth", False)
+            }
 
             def _on_result(res: ScanResult) -> None:
                 """引擎结果回调：推送事件 + 计数"""
@@ -875,6 +937,21 @@ class ScanOrchestrator:
                         "task_id": task.task_id,
                     },
                 )
+
+            # 认证纪律：auth_status != ok 时，需会话插件的 CONFIRMED/SAFE 一律降级为 UNKNOWN。
+            # 这不是「降低误报」，而是把「没拿到会话」如实表达出来；低权对照插件不在此列
+            # （它们自己解析显式 --surface-account，缺凭证时已返回 UNKNOWN）。
+            auth_downgraded = downgrade_auth_required_results(all_results, req.auth_status, auth_required_names)
+            if auth_downgraded:
+                _emit(
+                    "auth_downgrade",
+                    {
+                        "count": auth_downgraded,
+                        "auth_status": req.auth_status,
+                        "task_id": task.task_id,
+                    },
+                )
+
             task.results = all_results
             # 三态降级全部完成后再落一次完整快照（增量落盘只覆盖到第 25n 条）
             self._persist_results(task.task_id, all_results)
@@ -903,6 +980,10 @@ class ScanOrchestrator:
                     },
                     "version_matrix": version_matrix,
                     "blocked": block_info,
+                    "auth_status": {
+                        "admin": req.auth_status,
+                        "surface": req.surface_auth_status,
+                    },
                 }
                 builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
                 formats = self._parse_formats(req.report_format)
@@ -1207,7 +1288,7 @@ class ScanOrchestrator:
         if storage is None:
             return
         try:
-            rows = [r.to_dict() if hasattr(r, "to_dict") else dict(r) for r in results]
+            rows = [r.to_dict() if hasattr(r, "to_dict") else dict(vars(r)) for r in results]
             storage.save_results(task_id, rows)
         except Exception:
             logger.debug("结果明细落盘失败 task=%s", task_id, exc_info=True)

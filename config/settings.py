@@ -94,22 +94,21 @@ class RuoYiAuth:
 
 
 class RuoYiLowPriv:
-    """低权限账号配置：用于验证「需普通用户权限才可触发」的越权类漏洞
+    """低权限账号配置（越权对照用）。
 
-    为什么需要单独一个账号：RuoYi 的 `checkUserDataScope` 对超级管理员**直接跳过**：
+    账号必须由调用方显式提供：命令行 `--surface-account user:pass`（可多次），
+    或 API 请求里的 surface_account。工具不再内置任何默认账号——内置账号只在
+    特定靶场成立，会把「未登录扫描」变成「偷偷用测试账号登录」，也会让产品在
+    真实客户环境里带着一个无效凭据。
 
-        if (!SysUser.isAdmin(ShiroUtils.getUserId())) { ...校验数据范围... }
+    未提供账号时，相关插件必须返回 UNKNOWN（测不了），不得返回 SAFE。
 
-    因此拿 admin 去探测，无论目标版本有没有该校验，行为完全一致——**区分不出来**。
-    必须用「持有所需功能权限、但数据范围不含目标用户」的普通账号才能复现。
-
-    该账号由 `lab/version_matrix/run_matrix.py seed` 在各版本库里自动创建
-    （角色：普通角色 role_id=2，data_scope=2 自定义且不含目标部门；
-    额外授予 `system:user:resetPwd` 菜单权限）。
+    TARGET_USER_ID 只是探测对象（默认超管），不是凭据，可用
+    RUOYI_SCAN_LOWPRIV_TARGET 覆盖。
     """
 
-    USERNAME = os.environ.get("RUOYI_SCAN_LOWPRIV_USER", "scanner_low")
-    PASSWORD = os.environ.get("RUOYI_SCAN_LOWPRIV_PASS", "LowPriv_2026")
+    USERNAME = None
+    PASSWORD = None
     # 越权探测的目标用户（默认超管自身：普通账号的数据范围必然不含它）
     try:
         # 空/非数字的环境变量回退默认值：解析发生在 import 期，抛 ValueError 会让整个工具无法启动

@@ -1,10 +1,13 @@
-# 任意文件上传：POST /common/upload 上传无害 .txt 探针，按 JSON 响应判定接口可写
+# 任意文件上传：POST /common/upload 上传无害探针，按 JSON 响应判定接口可写
+from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
 from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class FileUploadPlugin(PluginBase):
@@ -52,30 +55,68 @@ class FileUploadPlugin(PluginBase):
     # 探针文件名与内容（agents.md §7：仅做存在性验证，不上传可执行文件）
     PROBE_NAME = "ruoyi_scan_probe.txt"
     PROBE_CONTENT = "ruoyi-scan-probe-benign-content"
+    # P1-0e：登录后上传维度使用 .html 探针（证明扩展名不受限），内容仍是良性标记
+    AUTH_PROBE_NAME = "ruoyi_scan_probe.html"
+    AUTH_PROBE_CONTENT = "<html><body>ruoyi_scan_probe</body></html>"
+    AUTH_PROBE_MARKER = "ruoyi_scan_probe"
 
     def verify(self, target, session):
-        """上传无害 .txt 探针验证 /common/upload 未授权可写
+        """匿名上传 + 登录后上传两个维度
+
+        未授权维度必须用匿名会话（旧语义）；登录后维度使用扫描器已认证会话
+        （--auth / --auth-login 成功时）上传 .html 探针并回读 URL，证明
+        「登录后任意扩展名上传」——R4 实测 .html 可上传且可直接访问。
 
         @param target: 目标主机，用于拼接上传接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——JSON 含 url/fileName 且未触发鉴权拦截为 CONFIRMED，否则 SAFE
+        @return: ScanResult——任一维度确认可写为 CONFIRMED；否则按没测到/不存在返回 UNKNOWN/SAFE
         """
         url = join_url(target, "common/upload")
-        # multipart/form-data：RuoYi 默认字段名为 file
-        files = {"file": (self.PROBE_NAME, self.PROBE_CONTENT, "text/plain")}
-        # 本插件判定的是「**未授权**可写」，必须在完全未认证的会话上探测。
-        # 复用共享会话时若调用方注入了 cookie/token（--auth / --auth-login），
-        # 上传会以管理员身份成功并返回 code=200 + fileName，被误判成任意文件上传。
-        # 实测 2026-10-29 R6（RuoYi-Vue 3.9.2）：admin token 下探针上传成功 → CONFIRMED，
-        # 同一请求匿名提交则是 code=401「认证失败，无法访问系统资源」→ 接口鉴权正常。
+
+        # 维度一：匿名（未授权）上传
         anon = getattr(session, "anonymous", None)
         probe = anon() if callable(anon) else session
         try:
-            try:
-                resp = probe.post(url, files=files)
-            finally:
-                if probe is not session:
-                    probe.close()
+            anon_result = self._probe_upload(
+                target,
+                url,
+                probe,
+                self.PROBE_NAME,
+                self.PROBE_CONTENT,
+                "text/plain",
+                dimension="anonymous",
+            )
+        finally:
+            if probe is not session:
+                probe.close()
+
+        # 匿名就能写：更严重，直接返回，不再做登录后维度
+        if anon_result.status == STATUS_CONFIRMED:
+            anon_result.evidence = "未授权上传：" + anon_result.evidence
+            return anon_result
+
+        # 维度二：登录后上传（仅在扫描会话确实认证成功时）
+        if not getattr(session, "authenticated", False):
+            return anon_result
+
+        auth_result = self._probe_upload(
+            target,
+            url,
+            session,
+            self.AUTH_PROBE_NAME,
+            self.AUTH_PROBE_CONTENT,
+            "text/html",
+            dimension="authenticated",
+        )
+        if auth_result.status == STATUS_CONFIRMED:
+            auth_result.evidence = "登录后上传：" + auth_result.evidence
+        return auth_result
+
+    def _probe_upload(self, target, url, probe, filename, content, content_type, dimension):
+        """执行一次上传探针并判定；dimension=authenticated 时额外回读上传 URL。"""
+        files = {"file": (filename, content, content_type)}
+        try:
+            resp = probe.post(url, files=files)
         except Exception as e:
             emit(no("任意文件上传（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
@@ -138,10 +179,49 @@ class FileUploadPlugin(PluginBase):
                 kind="vuln", name=self.name, status=STATUS_SAFE, url=url, evidence=f"响应 msg={msg}（疑似拦截）"
             )
 
-        # 上传成功判定：要求 code 为成功码（部分版本无 code 字段，允许缺失）且含 url/fileName。
-        # 非成功 code（401/403/500 等，含字符串形式）一律不判 CONFIRMED（P1 修复扩展）。
-        code_ok = code is None or code in (200, "200")
+        # 登录后维度：上传目录不存在/服务端 500 是基础设施异常，不能判「不存在上传」。
+        # R1 实测：/common/upload 返回 FileNotFoundException（profile 目录未创建）。
+        if dimension == "authenticated" and (
+            code in (500, "500") or "FileNotFoundException" in text or "系统找不到指定的路径" in text
+        ):
+            emit(no("任意文件上传（登录后上传接口异常）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"登录后上传接口返回 code={code}，疑似上传目录不存在/服务端异常：{msg[:200]}",
+                extra={"dimension": "authenticated"},
+            )
+
+        # 上传成功判定：若依 AjaxResult 成功码是 0（部分版本 200）；无 code 字段也允许。
+        # 非成功 code（401/403/500 等，含字符串形式）一律不判 CONFIRMED。
+        code_ok = code is None or code in (0, 200, "0", "200")
         if (url_valid or name_valid) and code_ok:
+            if dimension == "authenticated":
+                # 登录后上传必须回读：只有文件真的可访问，才能证明扩展名限制失效/可落地
+                served = False
+                served_url = ""
+                try:
+                    served_url = up_url if up_url.startswith(("http://", "https://")) else join_url(target, up_url)
+                    get_resp = probe.get(served_url)
+                    body = getattr(get_resp, "text", "") or ""
+                    served = getattr(get_resp, "status_code", 0) == 200 and self.AUTH_PROBE_MARKER in body
+                except Exception:
+                    logger.debug("登录后上传回读失败: %s", up_url, exc_info=True)
+                if not served:
+                    emit(no("任意文件上传（登录后上传成功但文件不可访问）"))
+                    return ScanResult(
+                        kind="vuln",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        evidence=(
+                            f"登录后上传响应成功（code={code} url={up_url}），但回读文件失败/未命中标记，无法证明可访问"
+                        ),
+                        extra={"uploaded_url": up_url, "file_name": file_name, "dimension": "authenticated"},
+                    )
+                up_url = served_url or up_url
             emit(ok("存在任意文件上传漏洞"))
             return ScanResult(
                 kind="vuln",
@@ -149,8 +229,16 @@ class FileUploadPlugin(PluginBase):
                 severity=self.severity,
                 status=STATUS_CONFIRMED,
                 url=url,
-                evidence=f"上传响应 JSON：code={code} url={up_url} fileName={file_name}",
-                extra={"uploaded_url": up_url, "file_name": file_name, "code": code},
+                evidence=(
+                    f"上传响应 JSON：code={code} url={up_url} fileName={file_name}"
+                    + ("（.html 已上传且可回读）" if dimension == "authenticated" else "")
+                ),
+                extra={
+                    "uploaded_url": up_url,
+                    "file_name": file_name,
+                    "code": code,
+                    "dimension": dimension,
+                },
                 fix=self.fix,
             )
 

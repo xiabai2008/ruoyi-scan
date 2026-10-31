@@ -58,6 +58,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from config import settings
 from core.auth_chain import isolated_auth_session
 from core.http import join_url
+from core.lowpriv import resolve_surface_account
 from core.session import SessionManager
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page
@@ -118,6 +119,22 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
         "# 预期（修复版）：HTTP 200 + RuoYi - 403 权限页"
     )
 
+    def _missing_credentials(self) -> ScanResult:
+        """缺少显式低权账号：测不了，返回 UNKNOWN（绝不返回 SAFE）。"""
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            evidence=(
+                "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权"
+                "（该验证需要一个没有 system:dept:list 权限的普通账号）"
+            ),
+            fix=(
+                "创建一个普通角色账号（不要用 admin），不授予 system:dept:list；"
+                "然后以 --surface-account 用户名:口令 重新扫描"
+            ),
+        )
+
     def verify(self, target, session):
         """在**独立会话**中做差分验证
 
@@ -128,10 +145,14 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
         @param session: 共享 HTTP 会话（本插件不使用——需鉴权，必须隔离）
         @return: ScanResult —— 业务层无权限执行为 CONFIRMED；被权限门拦截为 SAFE；形态不定为 UNKNOWN
         """
+        creds = resolve_surface_account(session)
+        if not creds:
+            return self._missing_credentials()
+        low_user, low_pass = creds
         with isolated_auth_session(
             target,
-            settings.RuoYiLowPriv.USERNAME,
-            settings.RuoYiLowPriv.PASSWORD,
+            low_user,
+            low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
         ) as (sess, ok_login, reason):
             if not ok_login:
@@ -141,7 +162,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     kind="info",
                     name=self.name,
                     status=STATUS_UNKNOWN,
-                    evidence=f"低权账号 {settings.RuoYiLowPriv.USERNAME} 登录失败：{reason}{hint}",
+                    evidence=f"低权账号 {low_user} 登录失败：{reason}{hint}",
                 )
 
             url_data = join_url(target, "/system/dept/treeData/0")
@@ -223,7 +244,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     status=STATUS_SAFE,
                     url=url_data,
                     evidence=(
-                        f"无 system:dept:list 权限的账号 {settings.RuoYiLowPriv.USERNAME} 访问 "
+                        f"无 system:dept:list 权限的账号 {low_user} 访问 "
                         f"treeData 与 selectDeptTree 均被拒（403：单机版为 RuoYi - 403 权限页，"
                         f"分离版为 JSON code=403）⇒ 权限注解已生效"
                     ),
@@ -270,6 +291,23 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     f"selectDeptTree 返回 {len(bodies['selectDeptTree'])} 字节），但未能取到具体部门条目"
                 )
             extra_note = "；未认证请求同样可读取（匿名暴露，更严重）" if anon_open else ""
+            # P1-0b：必须拿到真实部门数据行才叫「越权」。
+            # treeData 返回 [] / 页面没有 treeName 时，只能证明业务层执行了，
+            # 不能证明低权拿到了本不该拿到的数据——空列表一律 UNKNOWN。
+            if not leaked and not tree_name and not anon_open:
+                emit(no("部门树越权访问（无数据返回，不能证明越权）"))
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url_data,
+                    evidence=(
+                        f"低权账号 {low_user} 登录成功；业务层在无权限下执行"
+                        f"（treeData 返回 {len(bodies['treeData'])} 字节、"
+                        f"selectDeptTree 返回 {len(bodies['selectDeptTree'])} 字节），"
+                        "但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定"
+                    ),
+                )
             emit(ok("存在部门树越权访问（无权限账号可读取组织架构）"))
             return ScanResult(
                 kind="vuln",
@@ -278,7 +316,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                 status=STATUS_CONFIRMED,
                 url=url_data,
                 evidence=(
-                    f"无 system:dept:list 权限的账号 {settings.RuoYiLowPriv.USERNAME} 访问部门树接口"
+                    f"无 system:dept:list 权限的账号 {low_user} 访问部门树接口"
                     f"未被权限门拦截：{detail}；未认证基线则被重定向到登录页{extra_note}"
                     f"⇒ selectDeptTree/treeData 缺少权限注解"
                 ),

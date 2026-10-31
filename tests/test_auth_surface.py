@@ -16,6 +16,7 @@ if PROJECT_ROOT not in sys.path:
 from lib.auth_surface import (
     AuthSurfaceScanner,
     _candidate_paths,
+    _extract_data_rows,
     _extract_paths_from_page,
     _looks_denied,
 )
@@ -118,19 +119,36 @@ class TestAuthzMatrix:
         assert assets[0].admin_size > 0
 
     def test_anon_200_confirmed(self):
-        """匿名 200 业务数据 → CONFIRMED 未授权访问"""
+        """匿名 200 且解析出真实数据行 → CONFIRMED 未授权访问"""
+        row = '{"total":1,"rows":[{"userId":1,"userName":"admin"}],"code":200}'
         scanner = self._scanner(
-            {"http://t/system/user/list": FakeResp('{"code":200,"rows":[]}', 200)},
+            {"http://t/system/user/list": FakeResp(row, 200)},
             low_map={"http://t/system/user/list": FakeResp("", 403)},
         )
         assets = scanner.inventory([("/system/user/list", "dict")])
-        # 匿名会话 mock 替换：匿名也 200
+        # 匿名会话 mock 替换：匿名也返回真实数据行
         scanner._anon_session = lambda: FakeSession(
-            {"http://t/system/user/list": FakeResp('{"code":200,"rows":[]}', 200)}
+            {"http://t/system/user/list": FakeResp(row, 200)}
         )
         assets, vulns = scanner.authz_matrix(assets)
         assert assets[0].verdict == "confirmed"
         assert any(v.vuln_type == "unauthorized_access" for v in vulns)
+
+    def test_anon_200_empty_rows_unknown(self):
+        """P1-0b：200 + 空列表（32B）不是越权证据 → UNKNOWN，不产漏洞"""
+        admin_row = '{"total":1,"rows":[{"userId":1,"userName":"admin"}],"code":200}'
+        empty = '{"total":0,"rows":[],"code":200}'
+        scanner = self._scanner(
+            {"http://t/system/user/list": FakeResp(admin_row, 200)},
+            low_map={"http://t/system/user/list": FakeResp(empty, 200)},
+        )
+        scanner._anon_session = lambda: FakeSession(
+            {"http://t/system/user/list": FakeResp(empty, 200)}
+        )
+        assets = scanner.inventory([("/system/user/list", "dict")])
+        assets, vulns = scanner.authz_matrix(assets)
+        assert assets[0].verdict == "unknown"
+        assert vulns == []
 
     def test_anon_401_safe(self):
         """匿名 401 → SAFE，不产漏洞（未授权访问不误报）"""
@@ -154,10 +172,11 @@ class TestAuthzMatrix:
         assert vulns == []
 
     def test_low_privilege_escalation_confirmed(self):
-        """低权 200 → CONFIRMED 垂直越权"""
+        """低权 200 且解析出真实数据行 → CONFIRMED 垂直越权"""
+        row = '{"total":1,"rows":[{"roleId":1,"roleName":"超级管理员"}],"code":200}'
         scanner = self._scanner(
-            {"http://t/system/role/list": FakeResp('{"code":200,"rows":[]}', 200)},
-            low_map={"http://t/system/role/list": FakeResp('{"code":200,"rows":[]}', 200)},
+            {"http://t/system/role/list": FakeResp(row, 200)},
+            low_map={"http://t/system/role/list": FakeResp(row, 200)},
         )
         scanner._anon_session = lambda: FakeSession({"http://t/system/role/list": FakeResp("", 401)})
         assets = scanner.inventory([("/system/role/list", "dict")])
@@ -202,13 +221,19 @@ class TestAuthzMatrix:
                 "http://t/prod-api/": FakeResp("", 404),
                 "http://t/system/user": FakeResp("", 404),
                 # 字典之外的页面提取端点 → 验证 page 来源真实进入盘点
-                "http://t/system/operlog/detail": FakeResp('{"code":200,"rows":[]}', 200),
+                "http://t/system/operlog/detail": FakeResp(
+                    '{"total":1,"rows":[{"operId":1,"title":"登录"}],"code":200}', 200
+                ),
                 # 字典其余条目 404 → 不入资产
             }
         )
         scanner = AuthSurfaceScanner("http://t", admin)
         scanner._anon_session = lambda: FakeSession(
-            {"http://t/system/operlog/detail": FakeResp('{"code":200,"rows":[]}', 200)}
+            {
+                "http://t/system/operlog/detail": FakeResp(
+                    '{"total":1,"rows":[{"operId":1,"title":"登录"}],"code":200}', 200
+                )
+            }
         )
         assets, vulns = scanner.run()
         assert [a.url for a in assets] == ["http://t/system/operlog/detail"]
@@ -376,3 +401,10 @@ def test_discover_js_endpoint_extraction():
     # JS 提取的两个 API 路径来源为 js（SPA 场景的核心增量）
     assert by_path.get("/system/operlog/detail") == "js"
     assert by_path.get("/monitor/server/info") == "js"
+
+
+def test_extract_data_rows_rejects_empty_nested_data():
+    """P1-0b：嵌套 data 里的空 rows 不能被当成「一个业务对象」。"""
+    assert _extract_data_rows('{"code":200,"data":{"total":0,"rows":[]}}') == []
+    assert _extract_data_rows('{"code":200,"rows":[],"total":0}') == []
+    assert _extract_data_rows('{"code":200,"data":[{"id":1}]}') == [{"id": 1}]

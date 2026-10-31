@@ -202,6 +202,7 @@ def auto_login(
         return {"cookies": {}, "headers": {}, "type": None}
 
     # 推断登录 URL
+    explicit_login_url = bool(login_url)
     if not login_url:
         # RuoYi 默认登录接口（其他应用请通过 login_url 参数显式指定）
         parsed = urlparse(target)
@@ -210,6 +211,29 @@ def auto_login(
 
     if verbose:
         emit(f"  [*]自动登录: {login_url}（用户: {username}）")
+
+    # RuoYi 默认形态：先用公共登录器（验证码 OCR + 算术运算符轮换 + v4/v5）。
+    # 旧实现只发 username/password，单机版必带验证码 → R1–R5 永远登不进去，
+    # 依赖会话的插件全部 UNKNOWN。仅在调用方没有显式覆盖登录形态时启用，
+    # 非若依应用继续走下方的通用表单/JSON 路径。
+    if (
+        not explicit_login_url
+        and login_type == "form"
+        and username_field == "username"
+        and password_field == "password"
+    ):
+        try:
+            from core.auth_chain import login_with_password
+
+            ok_chain, reason_chain, chain_config = login_with_password(target, username, password, attempts=8)
+        except Exception as exc:  # noqa: BLE001 - 登录能力失败不应中断扫描
+            ok_chain, reason_chain, chain_config = False, f"chain_error: {exc}", {}
+        if ok_chain:
+            if verbose:
+                emit("  [+]登录成功（验证码/表单链路）")
+            return chain_config
+        if verbose and reason_chain:
+            emit(f"  [-]统一登录器未成功：{reason_chain}")
 
     try:
         session = requests.Session()

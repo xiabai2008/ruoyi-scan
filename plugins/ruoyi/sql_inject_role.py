@@ -16,6 +16,8 @@ class SqlInjectRolePlugin(PluginBase):
     cve = "CNVD-2021-01931"
     severity = "high"
     category = "vuln"
+    # 使用共享会话访问 /system/role/list；没有高权会话时只能得到登录墙响应，不能下 SAFE 结论
+    requires_auth = True
     description = "/system/role/list 的 params[dataScope] 参数拼接 extractvalue 报错注入，泄露 database()"
     fix = "对 dataScope 参数做白名单校验，禁止拼接 SQL，使用参数化查询"
     fix_detail = (

@@ -14,6 +14,8 @@ class SqlInjectDeptPlugin(PluginBase):
     cve = "CNVD-2021-01931"
     severity = "high"
     category = "vuln"
+    # 使用共享会话访问 /system/dept/list；没有高权会话时只能得到登录墙响应，不能下 SAFE 结论
+    requires_auth = True
     description = "/system/dept/list 的 params[dataScope] 参数拼接 extractvalue 报错注入，泄露 database()"
     fix = "对 dataScope 参数做白名单校验，禁止拼接 SQL，使用参数化查询"
     # D18：修复详情（具体代码 diff + 升级版本）
@@ -75,7 +77,9 @@ class SqlInjectDeptPlugin(PluginBase):
             "Connection": "close",
             "Sec-Fetch-Dest": "document",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36",
-            "Cookie": "",
+            # 不再显式设置 Cookie: ""——那会覆盖 SessionManager 刚登录拿到的会话 Cookie，
+            # 把已认证请求退回登录墙（P1-0 修复高权登录后实测：role 命中、dept 被空 Cookie
+            # 覆盖成登录页）。需要匿名时由调用方使用 anonymous 会话，而不是在这里清空。
             "sec-ch-ua-mobile": "?0",
             "Sec-Fetch-User": "?1",
             "sec-ch-ua-platform": "Windows",

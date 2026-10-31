@@ -11,6 +11,8 @@ class RuoyiGenRcePlugin(PluginBase):
     cve = "N/A"
     severity = SEVERITY_HIGH
     category = "vuln"
+    # 代码生成模块入口需要登录后才会渲染；未取得会话时不能把「登录墙/不存在」判成 SAFE
+    requires_auth = True
     description = "RuoYi 代码生成模块中的模板引擎可能存在 SSTI 漏洞，攻击者可通过模板注入实现 RCE"
     fix = "升级 RuoYi 至最新版本，对模板变量进行严格过滤"
     fix_detail = (

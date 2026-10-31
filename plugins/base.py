@@ -157,6 +157,11 @@ class PluginBase(ABC):
     cve = ""  # CVE 编号（无 CVE 时填 CNVD 编号或 N/A）
     severity = "low"  # high/medium/low
     category = ""  # 分类
+    # 该插件是否必须依赖「高权会话」才能给出 CONFIRMED/SAFE。
+    # 为 True 时，引擎在 auth_status != ok 的扫描里会把它的 CONFIRMED/SAFE 统一降级为
+    # UNKNOWN（测不了 ≠ 不存在）。只应在「使用共享高权会话、没有会话就无法验证」的插件上置 True；
+    # 自己负责登录/使用匿名会话/使用显式 --surface-account 的插件保持 False。
+    requires_auth = False
     description = ""  # 漏洞描述
     fix = ""  # 修复建议（一句话概要）
     # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤）

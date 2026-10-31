@@ -65,6 +65,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from config import settings
 from core.auth_chain import LOGIN_CAPTCHA, isolated_auth_session
 from core.http import join_url
+from core.lowpriv import resolve_surface_account
 from lib.colors import no, ok
 from lib.reporter import emit
 from plugins.base import PluginBase
@@ -119,6 +120,22 @@ class JobInvokeTargetPlugin(PluginBase):
         '# 预期（修复版 >=4.7.0）：{"msg":"修改任务...失败，目标字符串不在白名单内","code":500}'
     )
 
+    def _missing_credentials(self) -> ScanResult:
+        """缺少显式低权账号：测不了，返回 UNKNOWN（绝不返回 SAFE）。"""
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            evidence=(
+                "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权"
+                "（该验证需要一个具备 monitor:job:edit 权限的普通账号）"
+            ),
+            fix=(
+                "创建一个普通角色账号（不要用 admin），授予 monitor:job:edit（但不要给超管权限）；"
+                "然后以 --surface-account 用户名:口令 重新扫描"
+            ),
+        )
+
     def verify(self, target, session):
         """在**独立会话**中判定 invokeTarget 白名单是否生效（只写不执行）
 
@@ -126,10 +143,14 @@ class JobInvokeTargetPlugin(PluginBase):
         @param session: 共享 HTTP 会话（本插件不使用——需鉴权，必须隔离）
         @return: ScanResult —— 载荷被接受为 CONFIRMED；被白名单拒绝为 SAFE；其余为 UNKNOWN
         """
+        creds = resolve_surface_account(session)
+        if not creds:
+            return self._missing_credentials()
+        low_user, low_pass = creds
         with isolated_auth_session(
             target,
-            settings.RuoYiLowPriv.USERNAME,
-            settings.RuoYiLowPriv.PASSWORD,
+            low_user,
+            low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
         ) as (sess, ok_login, reason):
             if not ok_login:
@@ -140,7 +161,7 @@ class JobInvokeTargetPlugin(PluginBase):
                     kind="info",
                     name=self.name,
                     status=STATUS_UNKNOWN,
-                    evidence=f"低权账号 {settings.RuoYiLowPriv.USERNAME} 登录失败：{reason}{hint}",
+                    evidence=f"低权账号 {low_user} 登录失败：{reason}{hint}",
                 )
 
             # Step 1：发现真实任务（动态，不硬编码 jobId）
@@ -190,7 +211,7 @@ class JobInvokeTargetPlugin(PluginBase):
                         status=STATUS_UNKNOWN,
                         url=edit_url,
                         evidence=(
-                            f"账号 {settings.RuoYiLowPriv.USERNAME} 调用 /monitor/job/edit 被权限门拦截"
+                            f"账号 {low_user} 调用 /monitor/job/edit 被权限门拦截"
                             f"（非 JSON 响应），说明其缺少 monitor:job:edit 权限——无法判定白名单是否存在"
                         ),
                     )

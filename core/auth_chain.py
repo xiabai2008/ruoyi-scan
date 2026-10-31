@@ -18,7 +18,7 @@
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 from common.logger import get_logger
 from core.http import join_url
@@ -84,13 +84,76 @@ def isolated_auth_session(
     own = SessionManager(timeout=int(timeout) if timeout is not None else None)
     try:
         chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
-        ok, reason = chain.login()
+        ok, reason = chain.login(max_attempts=8)
         yield own, ok, reason
     finally:
         try:
             own.close()
         except Exception:  # pragma: no cover - 关闭失败不应影响扫描结论
             logger.debug("关闭隔离会话失败", exc_info=True)
+
+
+def login_with_password(
+    target: str,
+    username: str,
+    password: str,
+    timeout: Optional[float] = None,
+    attempts: int = 8,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """公共登录器：显式凭据 + 验证码求解（含算术验证码运算符轮换）。
+
+    这是 `lib.auth_scan.auto_login` 与 `--auth-surface` 共用的登录能力，抽出来的
+    目的不是「合并认证链」，而是让高权登录也能用上验证码 OCR：
+    - 不内置任何默认账号，username/password 必须由调用方显式传入；
+    - v4 表单 / v5 JWT 由 RuoYiAuthChain 自动探测；
+    - 验证码错误时由 CaptchaSolver 换图重试，OCR 丢掉运算符时在 +、-、*、/
+      四个候选答案间轮换（Phase 2 盲测验证过的策略）。
+
+    Args:
+        target: 目标站点根 URL
+        username / password: 显式凭据
+        timeout: 请求超时（None 用 SessionManager 默认）
+        attempts: 验证码错误时的最大尝试次数
+
+    Returns:
+        (ok, reason, config)
+        config = {"cookies": {...}, "headers": {...}, "type": "cookie"|"bearer"|None}
+        失败时 config 为空字典；不会抛异常。
+    """
+    from core.session import SessionManager
+
+    own = SessionManager(timeout=int(timeout) if timeout is not None else None)
+    try:
+        chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
+        ok, reason = chain.login(max_attempts=attempts)
+        if not ok:
+            return False, reason, {}
+
+        headers: Dict[str, str] = {}
+        auth_header = own.session.headers.get("Authorization")
+        if auth_header:
+            headers["Authorization"] = auth_header
+        cookies = dict(own.session.cookies)
+        if not cookies and not headers:
+            # 目标无鉴权：login() 会返回成功，但没有任何凭据可注入
+            return False, "no_credentials", {}
+        return (
+            True,
+            reason,
+            {
+                "cookies": cookies,
+                "headers": headers,
+                "type": "bearer" if headers else "cookie",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - 登录失败不应中断扫描
+        logger.debug("公共登录器异常", exc_info=True)
+        return False, f"{LOGIN_ERROR}: {exc}", {}
+    finally:
+        try:
+            own.close()
+        except Exception:  # pragma: no cover - 关闭失败不影响登录结论
+            logger.debug("关闭公共登录器会话失败", exc_info=True)
 
 
 class RuoYiAuthChain:
@@ -180,7 +243,7 @@ class RuoYiAuthChain:
         self.auth_mode = AUTH_V4_SESSION
         return AUTH_V4_SESSION
 
-    def login(self, captcha_code: Optional[str] = None, max_attempts: int = 5) -> Tuple[bool, str]:
+    def login(self, captcha_code: Optional[str] = None, max_attempts: int = 8) -> Tuple[bool, str]:
         """按探测到的鉴权模式登录（验证码错误时自动重试）
 
         为什么需要重试：RuoYi 4.x 登录必带验证码，而 OCR 不可能 100% 准确。
@@ -214,7 +277,7 @@ class RuoYiAuthChain:
         attempts = 1 if captcha_code is not None else max(1, max_attempts)
         last_reason = LOGIN_ERROR
         for i in range(attempts):
-            ok, reason = self._login_once(captcha_code)
+            ok, reason = self._login_once(captcha_code, attempt_index=i)
             if ok:
                 return True, LOGIN_OK
             last_reason = reason
@@ -225,17 +288,17 @@ class RuoYiAuthChain:
             logger.debug("第 %d/%d 次登录因验证码失败，换图重试", i + 1, attempts)
         return False, last_reason
 
-    def _login_once(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
+    def _login_once(self, captcha_code: Optional[str] = None, attempt_index: int = 0) -> Tuple[bool, str]:
         """执行一次登录尝试（按 auth_mode 分发，不含重试）"""
         if self.auth_mode == AUTH_V4_SESSION:
-            return self._login_v4_session(captcha_code)
+            return self._login_v4_session(captcha_code, attempt_index=attempt_index)
 
         if self.auth_mode == AUTH_V5_JWT:
-            return self._login_v5_jwt(captcha_code)
+            return self._login_v5_jwt(captcha_code, attempt_index=attempt_index)
 
         return False, LOGIN_ERROR
 
-    def _login_v4_session(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
+    def _login_v4_session(self, captcha_code: Optional[str] = None, attempt_index: int = 0) -> Tuple[bool, str]:
         """RuoYi v4 Session 登录：POST /login 表单 → Cookie 自动复用
 
         表单字段：username / password / rememberMe / validateCode
@@ -251,7 +314,7 @@ class RuoYiAuthChain:
                 from core.captcha_solver import CaptchaSolver
 
                 solver = CaptchaSolver(self.target, self.session)
-                has_captcha, code = solver.solve()
+                has_captcha, code = solver.solve(math_op_index=attempt_index)
                 if has_captcha:
                     if code:
                         validate_code = code
@@ -332,7 +395,7 @@ class RuoYiAuthChain:
 
         return False, f"{LOGIN_FAIL}: 未知响应 code={r_code} msg={msg}"
 
-    def _login_v5_jwt(self, captcha_code: Optional[str] = None) -> Tuple[bool, str]:
+    def _login_v5_jwt(self, captcha_code: Optional[str] = None, attempt_index: int = 0) -> Tuple[bool, str]:
         """RuoYi v5 JWT 登录：POST /login JSON → 提取 token → 加 Authorization 头
 
         请求体：{"username":"admin","password":"admin123","code":"验证码","uuid":"uuid"}
@@ -347,7 +410,7 @@ class RuoYiAuthChain:
                 from core.captcha_solver import CaptchaSolver
 
                 solver = CaptchaSolver(self.target, self.session)
-                has_captcha, code = solver.solve()
+                has_captcha, code = solver.solve(math_op_index=attempt_index)
                 if has_captcha:
                     # uuid 必须与本次识别的图片同批下发，否则服务端校验必然失败
                     captcha_uuid = solver.captcha_uuid

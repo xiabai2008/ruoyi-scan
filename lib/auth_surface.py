@@ -22,8 +22,9 @@
 #
 # 注意：RuoYi 未授权访问常返回 HTTP 200 + JSON code:401，判定必须同时看
 # HTTP 状态码与业务语义，不能只看状态码。
+import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from common.logger import get_logger
@@ -46,6 +47,7 @@ class SurfaceAsset:
     source: str = "dict"  # dict=端点字典 / page=页面提取 / crawl=爬虫
     admin_code: int = 0  # 高权会话响应码
     admin_size: int = 0
+    admin_body: str = field(default="", repr=False, compare=False)  # 高权响应体（仅用于行数对照，不序列化）
     anon_code: Optional[int] = None  # 匿名重放响应码（None=未探测/异常）
     low_code: Optional[int] = None  # 低权重放响应码（None=未配置低权账号）
     verdict: str = ""  # confirmed/safe/unknown（越权矩阵综合判定，空=未判定）
@@ -140,6 +142,68 @@ def _looks_like_html_document(body: str) -> bool:
     """
     head = (body or "").lstrip()[:100].lower()
     return head.startswith("<!doctype html") or head.startswith("<html")
+
+
+def _json_rows(obj: Any) -> List[Any]:
+    """从 JSON 结构中提取「数据行」列表；空列表/仅错误信封返回 []。
+
+    兼容 RuoYi（total/rows）、Jeecg（success/result.records）、通用 data/list。
+    单个业务对象视为 1 行；只有 code/msg/success/total 等信封键的对象不算数据。
+    """
+    if isinstance(obj, list):
+        return obj
+    if not isinstance(obj, dict):
+        return []
+    for key in ("rows", "records", "list", "items", "data", "result"):
+        value = obj.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            # 嵌套容器（data/result）里再找 rows/records；若它本身是容器但内容为空，
+            # 必须返回 []，不能把 {"total":0,"rows":[]} 当成「一个业务对象」。
+            if any(k in value for k in ("rows", "records", "list", "items", "data", "result", "total")):
+                return _json_rows(value)
+            if value:
+                return [value]
+    total = obj.get("total")
+    if isinstance(total, (int, float)) and not isinstance(total, bool) and total == 0:
+        return []
+    envelope = {
+        "code",
+        "msg",
+        "success",
+        "timestamp",
+        "total",
+        "rows",
+        "records",
+        "list",
+        "items",
+        "data",
+        "result",
+    }
+    if any(k not in envelope for k in obj):
+        return [obj]
+    return []
+
+
+def _extract_data_rows(body: str) -> List[Any]:
+    """从响应体中提取真实数据行；空列表/空对象/错误文案一律返回 []。
+
+    P1-0b：`len(body) > 0` 不是「拿到业务数据」的证据——RuoYi 对无数据权限的
+    查询会返回 32B 的 `{"total":0,"rows":[],"code":200}`，旧判据会把它当成
+    越权证据。这里必须解析出至少一行数据，才允许进入 CONFIRMED 分支。
+    """
+    text = (body or "").strip()
+    if not text or _looks_like_html_document(text):
+        return []
+    try:
+        obj = json.loads(text)
+    except Exception:
+        # 非 JSON：只接受有明显体量的多行业务文本，短错误文案不算数据
+        if len(text) < 32:
+            return []
+        return [line for line in text.splitlines() if line.strip()]
+    return _json_rows(obj)
 
 
 def _candidate_paths(variant: str = "") -> List[str]:
@@ -300,6 +364,7 @@ class AuthSurfaceScanner:
                     source=source,
                     admin_code=code,
                     admin_size=len(body),
+                    admin_body=body,
                 )
             )
         return assets
@@ -332,6 +397,7 @@ class AuthSurfaceScanner:
 
         for asset in assets:
             verdicts = []
+            admin_rows = _extract_data_rows(asset.admin_body)
             # 1. 匿名重放 → 未授权访问
             try:
                 resp = anon.get(asset.url)
@@ -340,27 +406,36 @@ class AuthSurfaceScanner:
                 asset.anon_code = code
                 if _looks_denied(code, body):
                     verdicts.append("safe")
-                elif code == 200 and len(body) > 0 and not _looks_like_html_document(body):
-                    # 200 且为业务数据（排除 SPA 兜底页/登录页 HTML）才判 CONFIRMED
-                    verdicts.append("confirmed")
-                    vulns.append(
-                        LogicVuln(
-                            vuln_type="unauthorized_access",
-                            name=f"未授权访问 - {asset.url}",
-                            severity="high",
-                            url=asset.url,
-                            method="GET",
-                            evidence=f"匿名请求返回 200，响应大小 {len(body)}B（高权盘点该接口登录态可达）",
-                            fix="接口增加鉴权过滤器，未认证请求返回 401",
-                            fix_detail=(
-                                "【代码修复】Spring Security 配置该路径 authenticated()，"
-                                "或自定义 Filter 校验 Token\n"
-                                "【合规】OWASP A01:2021 / 等保 2.0 8.1.4"
-                            ),
-                            reproduce=f'curl -i "{asset.url}"\n# 预期：401（实际返回 200 + 业务数据）',
-                            description="接口未做任何认证校验，匿名用户可直接读取业务数据",
+                elif code == 200 and not _looks_like_html_document(body):
+                    rows = _extract_data_rows(body)
+                    # P1-0b：必须同时证明「匿名拿到了数据行」且「高权盘点确实有数据行」。
+                    # 32B 的 {"total":0,"rows":[],"code":200} 不算数据，不能判 CONFIRMED。
+                    if rows and admin_rows:
+                        verdicts.append("confirmed")
+                        vulns.append(
+                            LogicVuln(
+                                vuln_type="unauthorized_access",
+                                name=f"未授权访问 - {asset.url}",
+                                severity="high",
+                                url=asset.url,
+                                method="GET",
+                                evidence=(
+                                    f"匿名请求返回 200，解析到 {len(rows)} 行业务数据"
+                                    f"（高权盘点 {len(admin_rows)} 行；响应 {len(body)}B）"
+                                ),
+                                fix="接口增加鉴权过滤器，未认证请求返回 401",
+                                fix_detail=(
+                                    "【代码修复】Spring Security 配置该路径 authenticated()，"
+                                    "或自定义 Filter 校验 Token\n"
+                                    "【合规】OWASP A01:2021 / 等保 2.0 8.1.4"
+                                ),
+                                reproduce=f'curl -i "{asset.url}"\n# 预期：401（实际返回 200 + 业务数据）',
+                                description="接口未做任何认证校验，匿名用户可直接读取业务数据",
+                            )
                         )
-                    )
+                    else:
+                        # 200 但无可解析数据行（空列表/空对象/仅信封）：不可判定，绝不冒充 CONFIRMED
+                        verdicts.append("unknown")
                 else:
                     verdicts.append("unknown")
             except Exception:
@@ -377,33 +452,43 @@ class AuthSurfaceScanner:
                     asset.low_code = code
                     if _looks_denied(code, body):
                         verdicts.append("safe")
-                    elif code == 200 and len(body) > 0 and not _looks_like_html_document(body):
-                        # 200 且为业务数据（排除 SPA 兜底页/登录页 HTML）才判 CONFIRMED
-                        verdicts.append("confirmed")
-                        vulns.append(
-                            LogicVuln(
-                                vuln_type="privilege_escalation",
-                                name=f"垂直越权 - 低权用户可访问管理接口 {asset.url}",
-                                severity="high",
-                                url=asset.url,
-                                method="GET",
-                                evidence=f"低权用户请求管理接口返回 200，响应大小 {len(body)}B（无拒绝语义）",
-                                fix="实施基于角色的访问控制（RBAC），接口层校验用户角色",
-                                fix_detail=(
-                                    "【代码修复】Spring Security @PreAuthorize(\"@ss.hasRole('admin')\")\n"
-                                    "【权限框架】Sa-Token 注解 @SaCheckRole / Shiro @RequiresRoles\n"
-                                    "【合规】OWASP A01:2021 / 等保 2.0 8.1.4"
-                                ),
-                                reproduce=(
-                                    f"# 1. 低权账号登录\n"
-                                    f'curl -d "username=user&password=pass" "{join_url(self.target, "/login")}"\n\n'
-                                    f"# 2. 携带低权凭证访问管理接口\n"
-                                    f'curl -H "Authorization: Bearer <user-token>" "{asset.url}"\n\n'
-                                    f"# 预期：403（实际返回 200 + 管理数据）"
-                                ),
-                                description="低权用户通过认证后可访问应仅限管理员访问的接口（RBAC 缺失）",
+                    elif code == 200 and not _looks_like_html_document(body):
+                        rows = _extract_data_rows(body)
+                        # P1-0b：低权必须拿到真实数据行，且高权盘点也有数据行；
+                        # 32B 的空列表不是越权证据（接口带 @RequiresPermissions 时，
+                        # 低权可能只是被数据范围过滤成空列表）。
+                        if rows and admin_rows:
+                            verdicts.append("confirmed")
+                            vulns.append(
+                                LogicVuln(
+                                    vuln_type="privilege_escalation",
+                                    name=f"垂直越权 - 低权用户可访问管理接口 {asset.url}",
+                                    severity="high",
+                                    url=asset.url,
+                                    method="GET",
+                                    evidence=(
+                                        f"低权用户请求管理接口返回 200，解析到 {len(rows)} 行业务数据"
+                                        f"（高权盘点 {len(admin_rows)} 行；响应 {len(body)}B）"
+                                    ),
+                                    fix="实施基于角色的访问控制（RBAC），接口层校验用户角色",
+                                    fix_detail=(
+                                        "【代码修复】Spring Security @PreAuthorize(\"@ss.hasRole('admin')\")\n"
+                                        "【权限框架】Sa-Token 注解 @SaCheckRole / Shiro @RequiresRoles\n"
+                                        "【合规】OWASP A01:2021 / 等保 2.0 8.1.4"
+                                    ),
+                                    reproduce=(
+                                        f"# 1. 低权账号登录\n"
+                                        f'curl -d "username=user&password=pass" "{join_url(self.target, "/login")}"\n\n'
+                                        f"# 2. 携带低权凭证访问管理接口\n"
+                                        f'curl -H "Authorization: Bearer <user-token>" "{asset.url}"\n\n'
+                                        f"# 预期：403（实际返回 200 + 管理数据）"
+                                    ),
+                                    description="低权用户通过认证后可访问应仅限管理员访问的接口（RBAC 缺失）",
+                                )
                             )
-                        )
+                        else:
+                            # 200 但无数据行（空列表/空对象/仅信封）：不可判定，绝不冒充 CONFIRMED
+                            verdicts.append("unknown")
                     else:
                         verdicts.append("unknown")
                 except Exception:
@@ -504,12 +589,12 @@ def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[Su
         user_pass = getattr(args, "auth_login", None)
         if not user_pass:
             logger.warning("--auth-surface 需要 --auth-login user:pass 提供高权凭证")
-            return [], []
+            return [], [], "login_failed"
         username, _, password = user_pass.partition(":")
         ok, reason = _login(target, admin_session, username, password)
         if not ok:
             logger.warning("高权登录失败（%s），认证后深度扫描终止", reason)
-            return [], []
+            return [], [], "login_failed"
 
         # 2. 低权会话登录（可选，多个取第一个成功的）
         for account in getattr(args, "surface_account", None) or []:
@@ -546,7 +631,7 @@ def run_auth_surface_mode(args, target: str, variant: str = "") -> Tuple[List[Su
                     indent=2,
                 )
 
-        return assets, vulns
+        return assets, vulns, "ok"
     finally:
         # 提前返回（凭证缺失/登录失败）与 scanner.run() 异常路径也必须释放会话
         admin_session.close()

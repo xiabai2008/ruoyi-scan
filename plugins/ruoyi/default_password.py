@@ -5,6 +5,7 @@ import requests
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from core.auth_chain import isolated_auth_session
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page, match_positive
@@ -119,162 +120,187 @@ class DefaultPasswordPlugin(PluginBase):
         return is_missing_resource_page(getattr(resp, "text", "") or "")
 
     def verify(self, target, session):
-        """用默认口令（admin/admin123）无验证码登录后台并判定是否命中
+        """用默认口令（admin/admin123）登录后台并判定是否命中
 
         命中判定三通道：返回 token / code==200（排除 msg 含失败关键字）/ Set-Cookie 含 Admin-Token
         @param target: 目标主机，用于拼接 /login 地址
-        @param session: 复用的 HTTP 会话对象
         @return: ScanResult——命中为 CONFIRMED，明确失败为 SAFE，验证码拦截或特征不明为 UNKNOWN
         """
         url = join_url(target, "login")
-        # RuoYi 两种登录形态，提交方式不能混用：
-        #   单机版（4.x Thymeleaf + Shiro）：表单参数绑定 username/password/rememberMe/validateCode
-        #   前后端分离版（Vue）：@RequestBody JSON {"username","password","code","uuid"}
-        # 旧实现一律用 JSON 提交，单机版收到后 `Boolean rememberMe` 为 null 触发拆箱 NPE，
-        # 返回 {"msg":"运行时异常:null","code":500}，被判定链的「code==500」分支当成
-        # 「口令已修改」→ admin/admin123 假阴性（2026-10-29 真实靶场实测）。
-        # 现改为表单优先，服务端明确不认表单（400/415/运行时异常）才退回 JSON。
-        form_data = {
-            "username": self.USERNAME,
-            "password": self.PASSWORD,
-            "rememberMe": "false",
-            "validateCode": "",  # 不带验证码：启用验证码的服务端会返回「验证码错误」→ UNKNOWN
-        }
-        try:
-            resp = session.post(url, data=form_data)
-            if self._is_submit_mismatch(resp):
-                resp = session.post(
-                    url,
-                    json={"username": self.USERNAME, "password": self.PASSWORD},
-                    headers={"Content-Type": "application/json"},
+        # P1-0d：先走带验证码的公共登录器（v4/v5 + OCR + 算术轮换）。
+        # 旧逻辑只发 username/password，R1–R5 必带验证码 → 永远 UNKNOWN；
+        # 公共登录器成功即确认默认口令，失败再退回原有表单/JSON/Cloud 判定。
+        # F3：整个登录流程（含回退分支）都在 isolated_auth_session 的独立会话里，
+        # 不触碰调用方传入的共享会话，避免认证状态污染后续插件。
+        with isolated_auth_session(target, self.USERNAME, self.PASSWORD) as (iso, ok_chain, chain_reason):
+            if ok_chain:
+                emit(ok("存在后台默认口令漏洞（admin/admin123，验证码登录成功）"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence="默认口令登录成功（含验证码场景；独立会话验证，凭证已脱敏）",
+                    extra={"username": self.USERNAME, "password": self.PASSWORD, "chain": "captcha_login"},
+                    fix=self.fix,
                 )
-        except requests.RequestException as e:
-            # 仅捕获传输异常：编程错误不再被静默分类为网络异常 UNKNOWN
-            emit(no("后台默认口令（网络异常）"))
-            return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+            if chain_reason:
+                logger.debug("默认口令：公共登录器未成功（%s），回退原判定链", chain_reason)
 
-        # Cloud 形态（RuoYi-Cloud v3.6.8）：网关没有 /login，登录接口是 /auth/login。
-        # 先按单机版/分离版探测；拿到「端点不存在」再切换，不影响原有站点行为。
-        if self._is_missing_login_endpoint(resp):
-            alt_url = join_url(target, "auth/login")
+            # RuoYi 两种登录形态，提交方式不能混用：
+            #   单机版（4.x Thymeleaf + Shiro）：表单参数绑定 username/password/rememberMe/validateCode
+            #   前后端分离版（Vue）：@RequestBody JSON {"username","password","code","uuid"}
+            # 旧实现一律用 JSON 提交，单机版收到后 `Boolean rememberMe` 为 null 触发拆箱 NPE，
+            # 返回 {"msg":"运行时异常:null","code":500}，被判定链的「code==500」分支当成
+            # 「口令已修改」→ admin/admin123 假阴性（2026-10-29 真实靶场实测）。
+            # 现改为表单优先，服务端明确不认表单（400/415/运行时异常）才退回 JSON。
+            form_data = {
+                "username": self.USERNAME,
+                "password": self.PASSWORD,
+                "rememberMe": "false",
+                "validateCode": "",  # 不带验证码：启用验证码的服务端会返回「验证码错误」→ UNKNOWN
+            }
             try:
-                alt = session.post(
-                    alt_url,
-                    json={"username": self.USERNAME, "password": self.PASSWORD},
-                    headers={"Content-Type": "application/json"},
+                resp = iso.post(url, data=form_data)
+                if self._is_submit_mismatch(resp):
+                    resp = iso.post(
+                        url,
+                        json={"username": self.USERNAME, "password": self.PASSWORD},
+                        headers={"Content-Type": "application/json"},
+                    )
+            except requests.RequestException as e:
+                # 仅捕获传输异常：编程错误不再被静默分类为网络异常 UNKNOWN
+                emit(no("后台默认口令（网络异常）"))
+                return ScanResult(kind="brute", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+
+            # Cloud 形态（RuoYi-Cloud v3.6.8）：网关没有 /login，登录接口是 /auth/login。
+            # 先按单机版/分离版探测；拿到「端点不存在」再切换，不影响原有站点行为。
+            if self._is_missing_login_endpoint(resp):
+                alt_url = join_url(target, "auth/login")
+                try:
+                    alt = iso.post(
+                        alt_url,
+                        json={"username": self.USERNAME, "password": self.PASSWORD},
+                        headers={"Content-Type": "application/json"},
+                    )
+                except requests.RequestException:
+                    alt = None
+                if alt is not None and not self._is_missing_login_endpoint(alt):
+                    resp = alt
+                    url = alt_url
+
+            text = resp.text or ""
+            code = getattr(resp, "status_code", 0)
+            set_cookie = ""
+            if hasattr(resp, "headers") and resp.headers.get("Set-Cookie"):
+                set_cookie = resp.headers.get("Set-Cookie", "")
+
+            # 解析 JSON 响应
+            body = {}
+            try:
+                body = resp.json()
+            except Exception:
+                logger.debug("登录响应 JSON 解析失败", exc_info=True)
+
+            # 1) 命中判定：JSON 含 token / code == 200 / Set-Cookie 含 session/Admin-Token
+            # body 可能是 JSON 数组/标量（非对象），isinstance 兜底避免对其调用 .get
+            token = body.get("token") if isinstance(body, dict) else ""
+            r_code = body.get("code") if isinstance(body, dict) else None
+            msg = str(body.get("msg", "")) if isinstance(body, dict) else ""
+            # RuoYi-Cloud 把 token 包在 data 里：{"code":200,"data":{"access_token":"..."}}
+            if not token and isinstance(body, dict):
+                data = body.get("data")
+                if isinstance(data, dict):
+                    token = data.get("access_token") or data.get("token") or ""
+
+            # 排除「code:200 但 msg 含错误」的误报（部分版本错误也返 200）
+            msg_lower = msg.lower()
+            has_login_failure_kw = any(kw in msg_lower for kw in self.FAILURE_KEYWORDS)
+
+            if token:
+                # 含 token → 强命中；token 是可用会话凭证，不写入 evidence/extra（仅记录存在标志）
+                emit(ok("存在后台默认口令漏洞（admin/admin123，返回 token）"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"登录返回 token（已脱敏，长度 {len(str(token))}）",
+                    extra={
+                        "username": self.USERNAME,
+                        "password": self.PASSWORD,
+                        "token_present": True,
+                        "code": r_code,
+                    },
+                    fix=self.fix,
                 )
-            except requests.RequestException:
-                alt = None
-            if alt is not None and not self._is_missing_login_endpoint(alt):
-                resp = alt
-                url = alt_url
 
-        text = resp.text or ""
-        code = getattr(resp, "status_code", 0)
-        set_cookie = ""
-        if hasattr(resp, "headers") and resp.headers.get("Set-Cookie"):
-            set_cookie = resp.headers.get("Set-Cookie", "")
+            if r_code == 200 and not has_login_failure_kw:
+                # code == 200 且 msg 不含错误关键字
+                emit(ok("存在后台默认口令漏洞（admin/admin123，code=200）"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"登录返回 code=200 msg={msg}",
+                    extra={"username": self.USERNAME, "password": self.PASSWORD, "code": r_code, "msg": msg},
+                    fix=self.fix,
+                )
 
-        # 解析 JSON 响应
-        body = {}
-        try:
-            body = resp.json()
-        except Exception:
-            logger.debug("登录响应 JSON 解析失败", exc_info=True)
+            if "Admin-Token" in set_cookie:
+                # Admin-Token 是 RuoYi 前后端分离版登录成功下发的专属 token Cookie
+                # 注意：JSESSIONID 不在此判定中——Java 应用登录失败时通常也会下发 JSESSIONID，
+                # 仅凭 JSESSIONID 会产生大量误报（P0 修复）
+                # Cookie 值同属可用会话凭证，不写入 evidence/extra（仅记录存在标志）
+                emit(ok("存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence="登录响应 Set-Cookie 含 Admin-Token（值已脱敏）",
+                    extra={"username": self.USERNAME, "password": self.PASSWORD, "admin_token_present": True},
+                    fix=self.fix,
+                )
 
-        # 1) 命中判定：JSON 含 token / code == 200 / Set-Cookie 含 session/Admin-Token
-        # body 可能是 JSON 数组/标量（非对象），isinstance 兜底避免对其调用 .get
-        token = body.get("token") if isinstance(body, dict) else ""
-        r_code = body.get("code") if isinstance(body, dict) else None
-        msg = str(body.get("msg", "")) if isinstance(body, dict) else ""
-        # RuoYi-Cloud 把 token 包在 data 里：{"code":200,"data":{"access_token":"..."}}
-        if not token and isinstance(body, dict):
-            data = body.get("data")
-            if isinstance(data, dict):
-                token = data.get("access_token") or data.get("token") or ""
+            # 3) 验证码拦截：强成功信号均不成立时，才轮到「服务端要求验证码」的 UNKNOWN 分支；
+            # 顺序不能倒置——成功响应（token/code:200/Admin-Token）或 SPA 兜底页里出现
+            # "captcha" 等泛化子串时，不应掩盖真实命中
+            if match_positive(text, self.CAPTCHA_KEYWORDS):
+                emit(no("后台默认口令：服务端要求验证码，无法判定"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=f"响应含验证码关键字，无法在无验证码场景判定。前 200 字节：{text[:200]}",
+                    extra={"captcha_required": True},
+                )
 
-        # 排除「code:200 但 msg 含错误」的误报（部分版本错误也返 200）
-        msg_lower = msg.lower()
-        has_login_failure_kw = any(kw in msg_lower for kw in self.FAILURE_KEYWORDS)
+            # 4) 明确的失败信号：code == 500 / msg 含「密码错误」等
+            if r_code == 500 or has_login_failure_kw:
+                emit(no("不存在后台默认口令漏洞（口令已修改）"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    status=STATUS_SAFE,
+                    url=url,
+                    evidence=f"登录失败：code={r_code} msg={msg}",
+                    extra={"username": self.USERNAME, "code": r_code, "msg": msg},
+                )
 
-        if token:
-            # 含 token → 强命中；token 是可用会话凭证，不写入 evidence/extra（仅记录存在标志）
-            emit(ok("存在后台默认口令漏洞（admin/admin123，返回 token）"))
-            return ScanResult(
-                kind="brute",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence=f"登录返回 token（已脱敏，长度 {len(str(token))}）",
-                extra={"username": self.USERNAME, "password": self.PASSWORD, "token_present": True, "code": r_code},
-                fix=self.fix,
-            )
-
-        if r_code == 200 and not has_login_failure_kw:
-            # code == 200 且 msg 不含错误关键字
-            emit(ok("存在后台默认口令漏洞（admin/admin123，code=200）"))
-            return ScanResult(
-                kind="brute",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence=f"登录返回 code=200 msg={msg}",
-                extra={"username": self.USERNAME, "password": self.PASSWORD, "code": r_code, "msg": msg},
-                fix=self.fix,
-            )
-
-        if "Admin-Token" in set_cookie:
-            # Admin-Token 是 RuoYi 前后端分离版登录成功下发的专属 token Cookie
-            # 注意：JSESSIONID 不在此判定中——Java 应用登录失败时通常也会下发 JSESSIONID，
-            # 仅凭 JSESSIONID 会产生大量误报（P0 修复）
-            # Cookie 值同属可用会话凭证，不写入 evidence/extra（仅记录存在标志）
-            emit(ok("存在后台默认口令漏洞（admin/admin123，Set-Cookie 含会话）"))
-            return ScanResult(
-                kind="brute",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence="登录响应 Set-Cookie 含 Admin-Token（值已脱敏）",
-                extra={"username": self.USERNAME, "password": self.PASSWORD, "admin_token_present": True},
-                fix=self.fix,
-            )
-
-        # 3) 验证码拦截：强成功信号均不成立时，才轮到「服务端要求验证码」的 UNKNOWN 分支；
-        # 顺序不能倒置——成功响应（token/code:200/Admin-Token）或 SPA 兜底页里出现
-        # "captcha" 等泛化子串时，不应掩盖真实命中
-        if match_positive(text, self.CAPTCHA_KEYWORDS):
-            emit(no("后台默认口令：服务端要求验证码，无法判定"))
+            # 5) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
+            emit(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
             return ScanResult(
                 kind="brute",
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"响应含验证码关键字，无法在无验证码场景判定。前 200 字节：{text[:200]}",
-                extra={"captcha_required": True},
+                evidence=f"HTTP {code} 响应前 200 字节：{text[:200]}",
+                extra={"username": self.USERNAME},
             )
-
-        # 4) 明确的失败信号：code == 500 / msg 含「密码错误」等
-        if r_code == 500 or has_login_failure_kw:
-            emit(no("不存在后台默认口令漏洞（口令已修改）"))
-            return ScanResult(
-                kind="brute",
-                name=self.name,
-                status=STATUS_SAFE,
-                url=url,
-                evidence=f"登录失败：code={r_code} msg={msg}",
-                extra={"username": self.USERNAME, "code": r_code, "msg": msg},
-            )
-
-        # 5) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
-        emit(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
-        return ScanResult(
-            kind="brute",
-            name=self.name,
-            status=STATUS_UNKNOWN,
-            url=url,
-            evidence=f"HTTP {code} 响应前 200 字节：{text[:200]}",
-            extra={"username": self.USERNAME},
-        )

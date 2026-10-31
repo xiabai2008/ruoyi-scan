@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 # 将项目根目录加入 sys.path，便于直接运行
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,6 +66,13 @@ from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 # mock 注册 URL 一律经 mock_url() → join_url() 拼接，保证与插件实际请求路径完全一致；
 # 若基准无尾斜杠，join_url 会退化为朴素拼接，让 host 吞掉路径（如 ...testdruid/submitLogin）。
 MOCK_TARGET = "http://ruoyi-mock.test/"
+
+
+def mock_session():
+    """测试用会话：低权账号必须显式提供，测试注入假凭据（非真实账号）。"""
+    s = SessionManager()
+    s.surface_account = ("test_user", "test_pass")
+    return s
 
 
 def mock_url(path: str) -> str:
@@ -256,7 +264,7 @@ class TestJobInvokeTarget(unittest.TestCase):
         """漏洞版：任意调用目标被接受并写库 → CONFIRMED；且任务必须还原、载荷绝不执行"""
         server = self._FakeJobServer(reject=False)
         self._mock_login_and_jobs(m, server)
-        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"载荷被接受应判 CONFIRMED，实际 {result.status}")
         self.assertIn("白名单", result.evidence)
         # 安全属性：不得触发执行（判据只看写入是否被接受）
@@ -272,7 +280,7 @@ class TestJobInvokeTarget(unittest.TestCase):
         """修复版：写入判别载荷被白名单拒绝 → SAFE"""
         server = self._FakeJobServer(reject=True)
         self._mock_login_and_jobs(m, server)
-        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_SAFE, f"被白名单拒绝应判 SAFE，实际 {result.status}")
         self.assertIn("白名单", result.evidence)
         self.assertEqual(server.invoke_target, self.ORIG_TARGET)
@@ -288,7 +296,7 @@ class TestJobInvokeTarget(unittest.TestCase):
             headers={"Content-Type": "application/json"},
         )
         m.post(mock_url("/monitor/job/edit"), text=self.PAGE_403, headers={"Content-Type": "text/html"})
-        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"权限不足应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -297,7 +305,7 @@ class TestJobInvokeTarget(unittest.TestCase):
         m.get(mock_url("/login"), text="<html>登录</html>", headers={"Content-Type": "text/html"})
         m.post(mock_url("/login"), text='{"code":0,"msg":"操作成功"}', headers={"Content-Type": "application/json"})
         m.post(mock_url("/monitor/job/list"), text=self.PAGE_403, headers={"Content-Type": "text/html"})
-        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"列表不可读应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -305,7 +313,7 @@ class TestJobInvokeTarget(unittest.TestCase):
         """服务端返回成功但回读发现没写进去 → UNKNOWN（不凭单次响应下结论）"""
         server = self._FakeJobServer(reject=False, write_through=False)
         self._mock_login_and_jobs(m, server)
-        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, SessionManager())
+        result = JobInvokeTargetPlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"写入未生效应判 UNKNOWN，实际 {result.status}")
 
 
@@ -610,6 +618,16 @@ class TestUnauthBatch(unittest.TestCase):
 
 class TestDefaultPassword(unittest.TestCase):
     """Step 5：后台默认口令 admin/admin123 判定"""
+
+    @mock.patch(
+        "core.auth_chain.RuoYiAuthChain.login",
+        return_value=(True, "ok"),
+    )
+    def test_confirmed_via_captcha_login_helper(self, _mocked):
+        """P1-0d：公共登录器带验证码成功 → CONFIRMED，且不依赖旧的无验证码表单"""
+        result = DefaultPasswordPlugin().verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"验证码登录成功应判 CONFIRMED，实际 {result.status}")
+        self.assertIn("验证码", result.evidence)
 
     @requests_mock.Mocker()
     def test_hit_token(self, m):
@@ -922,7 +940,7 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
         m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
         m.get(mock_url("/system/user/resetPwd/1"), text=self.LEAKED_PAGE)
-        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"越权渲染应判 CONFIRMED，实际 {result.status}")
         self.assertIn("admin", result.evidence, "证据应点名泄露的登录名")
 
@@ -935,14 +953,14 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}, {"userId": 100, "loginName": "scanner_low"}])
         m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
         m.get(mock_url("/system/user/resetPwd/1"), text=self.DENIED_PAGE)
-        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_SAFE, f"被拒应判 SAFE，实际 {result.status}")
 
     @requests_mock.Mocker()
     def test_unknown_when_target_visible_to_account(self, m):
         """目标用户对当前账号可见 → UNKNOWN（构不成越权场景，不能冒充 SAFE）"""
         self._mock_login_and_list(m, [{"userId": 1, "loginName": "admin"}, {"userId": 2, "loginName": "ry"}])
-        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"目标可见应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -954,14 +972,14 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
         m.get(mock_url("/system/user/resetPwd/2"), text="<html>whatever</html>")
         m.get(mock_url("/system/user/resetPwd/1"), text="<html>whatever</html>")
-        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"对照组未渲染应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
     def test_unknown_when_no_visible_users(self, m):
         """用户列表不可读 → 无法建立基线 → UNKNOWN"""
         self._mock_login_and_list(m, [])
-        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"无可见用户应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -974,7 +992,7 @@ class TestCve202546174ResetPwdScope(unittest.TestCase):
         self._mock_login_and_list(m, [{"userId": 2, "loginName": "ry"}])
         m.get(mock_url("/system/user/resetPwd/2"), text=self.CONTROL_PAGE)
         m.get(mock_url("/system/user/resetPwd/1"), text=self.DENIED_PAGE)
-        shared = SessionManager()
+        shared = mock_session()
         Cve202546174ResetPwdScopePlugin().verify(MOCK_TARGET, shared)
         self.assertEqual(len(list(shared.session.cookies)), 0, "共享会话不应被插件登录所污染")
 
@@ -1012,28 +1030,30 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
             '[{"id":105,"pId":101,"name":"测试部门","title":"测试部门"}]',
             self.JSON_500,
         )
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"泄露部门数据应判 CONFIRMED，实际 {result.status}")
         self.assertIn("测试部门", result.evidence, "证据应点名泄露的部门名称")
 
     @requests_mock.Mocker()
-    def test_confirmed_when_business_layer_executes_without_data(self, m):
-        """漏洞版：接口返回空数组（未取到具体条目）但业务层在无权限下执行 → 仍判 CONFIRMED
+    def test_unknown_when_business_layer_executes_without_data(self, m):
+        """P1-0b：接口返回空数组、没有部门数据行 → UNKNOWN（空列表不是越权证据）
 
-        回归重点：4.8.0 实测 treeData 返回空数组——若只认「有数据」会漏判。
-        差分的本质是「未被权限门拦截」，而非「必须拿到数据」。
+        旧行为把「未命中权限门」本身当 CONFIRMED；但空列表可能只是数据范围过滤，
+        不能证明低权拿到了本不该拿到的数据。只有真正泄露部门数据才判 CONFIRMED。
         """
         self._mock_login(m)
         self._mock_probes(m, "[]", self.JSON_500)
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(result.status, STATUS_CONFIRMED, f"业务层无权限执行应判 CONFIRMED，实际 {result.status}")
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"空数据应判 UNKNOWN，实际 {result.status}")
+        self.assertIn("登录成功", result.evidence, "必须证明低权登录成功，不能把 captcha 失败当判据")
+        self.assertNotIn("登录失败", result.evidence)
 
     @requests_mock.Mocker()
     def test_safe_when_permission_denied(self, m):
         """修复版：两个探针均被 RuoYi-403 权限页拦截（注意也是 HTTP 200）→ SAFE"""
         self._mock_login(m)
         self._mock_probes(m, self.PAGE_403, self.PAGE_403)
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_SAFE, f"被权限门拦截应判 SAFE，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -1041,7 +1061,7 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         """一个探针被拦、另一个没拦：形态矛盾 → UNKNOWN（不能贸然下结论）"""
         self._mock_login(m)
         self._mock_probes(m, self.PAGE_403, "[]")
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"形态矛盾应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -1049,7 +1069,7 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         """会话失效（响应为登录页）→ UNKNOWN，不得据此判 SAFE/CONFIRMED"""
         self._mock_login(m)
         self._mock_probes(m, self.PAGE_LOGIN, self.PAGE_LOGIN)
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"会话失效应判 UNKNOWN，实际 {result.status}")
 
     @requests_mock.Mocker()
@@ -1064,7 +1084,7 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         self._mock_login(m)
         m.get(mock_url("/system/dept/treeData/0"), text="Whitelabel Error Page", status_code=404)
         m.get(mock_url("/system/dept/selectDeptTree/0"), text="Whitelabel Error Page", status_code=404)
-        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, SessionManager())
+        result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
         self.assertEqual(result.status, STATUS_UNKNOWN, f"端点缺失应判 UNKNOWN，实际 {result.status}")
         self.assertIn("404", result.evidence, "证据说明端点缺失原因")
 

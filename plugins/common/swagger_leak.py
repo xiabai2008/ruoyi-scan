@@ -1,4 +1,6 @@
 # Swagger/OpenAPI 文档泄露 — 常见 API 文档路径探测
+import json
+
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -75,19 +77,51 @@ class SwaggerLeakPlugin(PluginBase):
         "/api.html",
     ]
 
-    # 统一小写后匹配（大小写不敏感）；Swagger/OpenAPI/swagger-ui/'"swagger"' 等重复或被包含项已去重
-    _POSITIVE = [
-        "swagger",
-        "openapi",
-        "api-docs",
-        "knife4j",
-    ]
+    # HTML 界面必须有明确的 Swagger UI / Knife4j 标记。
+    # 不用 "swagger"/"api-docs" 这类纯路径词：Config Server 等通配路由会把
+    # {"name":"swagger-ui","profiles":["index.html"]} 回显出来，造成误报。
+    _HTML_MARKERS = ("swagger-ui", "knife4j")
+    # JSON 文档只认结构化键，不做子串匹配。
+    _JSON_KEYS = ("swagger", "openapi", "paths")
+
+    @classmethod
+    def _is_swagger_payload(cls, payload) -> bool:
+        """结构化识别 Swagger 文档，不做子串匹配。
+
+        支持：
+          - 文档对象：含 swagger/openapi/paths
+          - springfox /swagger-resources 数组：元素含 swaggerVersion + url
+          - springdoc swagger-config：含 configUrl，或 url + urls
+        """
+        if isinstance(payload, dict):
+            if any(key in payload for key in cls._JSON_KEYS):
+                return True
+            if "configUrl" in payload:
+                return True
+            return "url" in payload and "urls" in payload
+        if isinstance(payload, list):
+            return any(isinstance(item, dict) and "swaggerVersion" in item and "url" in item for item in payload)
+        return False
 
     def verify(self, target, session) -> ScanResult:
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 file_upload / unauth_batch 同一口径，避免 P1-0 登录修复后把登录后可见的
+        Swagger/OpenAPI 文档误报成「未授权公开」。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_with_session(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_with_session(self, target, session) -> ScanResult:
         """探测常见 Swagger/OpenAPI/Knife4j/Druid 文档端点是否可匿名访问
 
         @param target: 目标站点 URL
-        @param session: 已配置的 HTTP 会话
+        @param session: 匿名（或测试用）HTTP 会话
         @return: STATUS_CONFIRMED（发现公开文档端点）、STATUS_SAFE（确认未暴露）或 STATUS_UNKNOWN（全部探测失败）
         """
         found = []
@@ -98,17 +132,21 @@ class SwaggerLeakPlugin(PluginBase):
                 resp = session.get(url)
                 if resp.status_code != 200:
                     continue
-                # HTML 界面特征在页面头部即可命中，切片仅用于关键字扫描；
-                # JSON 文档的 "paths" 键通常出现在 500 字符之后，故 JSON 键判定用全文
                 full_text = resp.text or ""
-                # 小写化：_POSITIVE 为小写关键字，实现大小写不敏感匹配（SWAGGER/Swagger-ui 等变体均可命中）
-                text = full_text[:500].lower()
                 ct = (resp.headers.get("Content-Type") or "").lower()
-                # JSON API 文档 或 HTML Swagger 界面
-                # 细分为两路判定：JSON 定义（Content-Type=json 且含 swagger/openapi/paths 键）或 HTML 界面（关键字命中）
-                if (
-                    "json" in ct and ('"swagger"' in full_text or '"openapi"' in full_text or '"paths"' in full_text)
-                ) or any(kw in text for kw in self._POSITIVE):
+                # JSON API 文档：必须能解析为对象，且含 swagger/openapi/paths 键。
+                # 纯子串会把 Config Server 的路径回显当成文档。
+                if "json" in ct:
+                    try:
+                        payload = json.loads(full_text)
+                    except (TypeError, ValueError):
+                        payload = None
+                    if self._is_swagger_payload(payload):
+                        found.append(path)
+                    # JSON 响应不参与 HTML 标记判断，避免 name 字段里的 "swagger-ui" 误命中
+                    continue
+                # HTML 界面：必须有 Swagger UI / Knife4j 标记。
+                if any(marker in full_text.lower() for marker in self._HTML_MARKERS):
                     found.append(path)
             except Exception:
                 # 单个路径失败不中断整体探测，但必须计数：全部失败时不能当"确认未暴露"（SAFE）

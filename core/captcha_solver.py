@@ -256,31 +256,62 @@ class CaptchaSolver:
                 return ""
         return ""
 
-    def _eval_math_captcha(self, text: str) -> str:
-        """算术验证码求值（如 '3+5=?' → '8'）"""
+    def _eval_math_captcha(self, text: str, math_op_index: int = 0) -> str:
+        """算术验证码求值（如 '3+5=?' → '8'）
+
+        OCR 对 "7-2=?" 这类图片常丢掉运算符与等号，只返回 "7247"。此时无法从
+        文本判断运算符，按 Phase 2 盲测验证过的策略：取前两个数字，依次尝试
+        +、-、*、/ 四个候选；调用方每次重试传入递增序号，轮换候选答案，
+        避免 5 次重试都提交同一个错误答案。
+
+        Args:
+            text: OCR 文本
+            math_op_index: 运算符轮换序号（0=+，1=-，2=*，3=/）
+        """
         if not text:
             return ""
-        # 提取算式部分（去掉 =? 或 = 等）
+        # 1) OCR 保留了算式：直接求值
         m = re.search(r"(\d+)\s*([+\-*/])\s*(\d+)", text)
-        if not m:
-            return text  # 非算术，直接返回原文
-        a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
-        try:
-            if op == "+":
-                return str(a + b)
-            if op == "-":
-                return str(a - b)
-            if op == "*":
-                return str(a * b)
-            if op == "/":
-                # 验证码算式为整数除法；b==0 是 OCR 误识别，直接给 "0" 防御
-                return str(a // b) if b != 0 else "0"
-        except Exception:
-            logger.debug("算术验证码求值失败", exc_info=True)
-        return text
+        if m:
+            a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
+            try:
+                if op == "+":
+                    return str(a + b)
+                if op == "-":
+                    return str(a - b)
+                if op == "*":
+                    return str(a * b)
+                if op == "/":
+                    # 验证码算式为整数除法；b==0 是 OCR 误识别，直接给 "0" 防御
+                    return str(a // b) if b != 0 else "0"
+            except Exception:
+                logger.debug("算术验证码求值失败", exc_info=True)
+            return text
 
-    def solve(self) -> Tuple[bool, str]:
+        # 2) OCR 丢了运算符：从数字中恢复候选（不猜负数/超两位的结果）
+        digits = [int(c) for c in text if c.isdigit()]
+        if len(digits) >= 2:
+            a, b = digits[0], digits[1]
+            candidates = []
+            for value in (a + b, a - b, a * b, (a // b if b else None)):
+                if value is None or value < 0 or value > 99:
+                    continue
+                candidate = str(value)
+                if candidate not in candidates:
+                    candidates.append(candidate)
+            if candidates:
+                return candidates[math_op_index % len(candidates)]
+
+        return text  # 非算术，直接返回原文
+
+    def solve(self, math_op_index: int = 0) -> Tuple[bool, str]:
         """探测并识别验证码
+
+        Args:
+            math_op_index: 算术验证码的运算符轮换序号。OCR 常把 "7-2=?" 读成
+                "7247"（运算符/等号被丢弃），此时无法判断运算符；调用方每次重试
+                传入递增序号，在 +、-、*、/ 四个候选答案间轮换，避免 5 次重试
+                都提交同一个错误答案。
 
         Returns:
             (has_captcha: bool, code: str)
@@ -302,7 +333,7 @@ class CaptchaSolver:
             return True, ""
         # 算术验证码求值
         if self.captcha_type in ("auto", "math"):
-            result = self._eval_math_captcha(text)
+            result = self._eval_math_captcha(text, math_op_index=math_op_index)
             return True, result
         return True, text
 

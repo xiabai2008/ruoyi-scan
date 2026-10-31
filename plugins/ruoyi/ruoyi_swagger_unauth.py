@@ -52,10 +52,25 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 file_upload / unauth_batch 同一口径：插件判定的是「未授权可达」，不能复用
+        调用方注入的 admin cookie/token；否则 P1-0 登录修复后会把登录后可见的 Swagger
+        误报成「未授权访问」。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_with_session(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_with_session(self, target, session) -> ScanResult:
         """批量探测 Swagger/Knife4j 常见文档路径是否未授权公开。
 
         @param target: 目标站点根 URL
-        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）
+        @param session: 匿名（或测试用）HTTP 会话
         @return: ScanResult — 任一路径命中文档特征则 CONFIRMED，全部无特征则 SAFE，全部请求失败则 UNKNOWN（不误判 SAFE）
         """
         # P3 三态补全：所有请求异常 → UNKNOWN，不误判为 SAFE

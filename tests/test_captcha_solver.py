@@ -194,6 +194,14 @@ class TestMathCaptcha(unittest.TestCase):
         solver = CaptchaSolver(MOCK_TARGET, SessionManager())
         self.assertEqual(solver._eval_math_captcha(""), "")
 
+    def test_eval_operator_rotation_when_ocr_drops_operator(self):
+        """OCR 把 '7-2=?' 读成 '7247'：按重试序号在 +、-、*、/ 间轮换候选答案"""
+        solver = CaptchaSolver(MOCK_TARGET, SessionManager())
+        self.assertEqual(solver._eval_math_captcha("7247", math_op_index=0), "9")  # 7+2
+        self.assertEqual(solver._eval_math_captcha("7247", math_op_index=1), "5")  # 7-2
+        self.assertEqual(solver._eval_math_captcha("7247", math_op_index=2), "14")  # 7*2
+        self.assertEqual(solver._eval_math_captcha("7247", math_op_index=3), "3")  # 7//2
+
 
 class TestAuthChainCaptchaIntegration(unittest.TestCase):
     """RuoYiAuthChain 验证码集成"""

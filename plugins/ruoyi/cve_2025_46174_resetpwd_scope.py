@@ -59,6 +59,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from config import settings
 from core.auth_chain import LOGIN_CAPTCHA, isolated_auth_session
 from core.http import join_url
+from core.lowpriv import resolve_surface_account
 from lib.colors import no, ok
 from lib.reporter import emit
 from plugins.base import PluginBase
@@ -121,22 +122,47 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
         而其余插件的判定普遍以「未认证基线」为前提，会被污染成误报
         （2026-09-17 实测：v4.8.3 因此多出 6 个假 CONFIRMED）。
         详见 core/auth_chain.isolated_auth_session 的说明。
+
+        低权账号只能来自显式来源（--surface-account / API surface_account）；
+        未提供时返回 UNKNOWN，不能拿内置默认账号偷偷登录。
         """
+        creds = resolve_surface_account(session)
+        if not creds:
+            return self._missing_credentials()
+        low_user, low_pass = creds
         with isolated_auth_session(
             target,
-            settings.RuoYiLowPriv.USERNAME,
-            settings.RuoYiLowPriv.PASSWORD,
+            low_user,
+            low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
         ) as (isolated, ok_login, reason):
-            return self._verify_authed(target, isolated, ok_login, reason)
+            return self._verify_authed(target, isolated, ok_login, reason, low_user)
 
-    def _verify_authed(self, target, session, ok_login, reason):
+    def _missing_credentials(self) -> ScanResult:
+        """缺少显式低权账号：测不了，返回 UNKNOWN（绝不返回 SAFE）。"""
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_UNKNOWN,
+            evidence=(
+                "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权"
+                "（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）"
+            ),
+            fix=(
+                "创建一个普通角色账号（不要用 admin）：只授予 system:user:resetPwd，"
+                "数据范围设为「仅本部门」且不包含目标用户；然后以 "
+                "--surface-account 用户名:口令 重新扫描"
+            ),
+        )
+
+    def _verify_authed(self, target, session, ok_login, reason, low_user):
         """差分验证主体（session 为已登录的**隔离会话**）
 
         @param target: 目标站点根 URL
         @param session: 已登录的隔离会话（非共享会话）
         @param ok_login: 登录是否成功
         @param reason: 登录失败原因
+        @param low_user: 显式传入的低权用户名（仅用于证据文案）
         @return: ScanResult —— 实验组越权渲染为 CONFIRMED；被拒为 SAFE；无法建立基线为 UNKNOWN
         """
         if not ok_login:
@@ -146,7 +172,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
                 kind="info",
                 name=self.name,
                 status=STATUS_UNKNOWN,
-                evidence=f"低权账号 {settings.RuoYiLowPriv.USERNAME} 登录失败：{reason}{hint}",
+                evidence=f"低权账号 {low_user} 登录失败：{reason}{hint}",
             )
 
         # Step 2：取当前账号可见的用户集合（受数据范围过滤）
@@ -204,7 +230,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
                 status=STATUS_SAFE,
                 url=test_url,
                 evidence=(
-                    f"以 {settings.RuoYiLowPriv.USERNAME}（可见用户 {sorted(visible)}）访问不可见用户 "
+                    f"以 {low_user}（可见用户 {sorted(visible)}）访问不可见用户 "
                     f"userId={target_id} 时被拒：「{PERM_DENIED_MARKER}」；"
                     f"对照组 userId={control_id} 正常渲染 ⇒ 数据权限校验生效"
                 ),
@@ -220,7 +246,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
                 status=STATUS_CONFIRMED,
                 url=test_url,
                 evidence=(
-                    f"低权账号 {settings.RuoYiLowPriv.USERNAME}（可见用户 {sorted(visible)}）"
+                    f"低权账号 {low_user}（可见用户 {sorted(visible)}）"
                     f"越权渲染出不可见用户 userId={target_id} 的重置密码页，"
                     f"泄露登录名「{leaked_login}」⇒ 缺少 checkUserDataScope 校验"
                 ),

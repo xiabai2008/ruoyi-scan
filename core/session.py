@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import requests
 import urllib3
@@ -196,6 +196,13 @@ class SessionManager:
         )
         self._last_host = ""
         self.short_circuited = 0  # 因熔断被立即失败的请求数（本实例计数，报告可用）
+
+        # 显式低权账号（--surface-account）：由 orchestrator 在扫描前写入。
+        # 只允许由 CLI 显式提供，不设环境变量/配置兜底——默认值会在真实客户环境里
+        # 变成一个静默生效的假账号（Phase 5 P0-1 已删除硬编码靶场账号）。
+        self.surface_account: Optional[Tuple[str, str]] = None
+        # 本次扫描是否拿到了高权会话（file_upload 的「登录后上传」维度使用）
+        self.authenticated: bool = False
 
     @property
     def breaker_tripped(self) -> bool:
