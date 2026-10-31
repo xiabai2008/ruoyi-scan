@@ -42,6 +42,8 @@ CMS_FEATURES = {
         ],
         "login_keywords": [],  # Spring Boot 无统一登录页
         "weak_keywords": ["Whitelabel Error Page", "Spring Boot", "spring-boot"],
+        # Spring Boot 默认错误 JSON：{"timestamp","status","error","path"}
+        "root_json_keys": ["timestamp", "status", "error", "path"],
         "weight_strong": 0.5,
         "weight_weak": 0.2,
     },
@@ -64,7 +66,7 @@ CMS_FEATURES = {
         "favicon_hashes": set(),
         "strong_paths": [
             {"path": "/jeecg-boot/", "expect": "any"},
-            {"path": "/sys/login", "expect": "json"},
+            {"path": "/sys/login", "expect": "json", "json_keys": ["success"]},
         ],
         "login_keywords": ["JeecgBoot", "Jeecg-Boot"],
         "weak_keywords": ["jeecg", "JEECG"],

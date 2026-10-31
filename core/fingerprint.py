@@ -1,5 +1,6 @@
 # 指纹识别接口 + 通用特征判定（数据驱动，支持多 CMS 自动识别与路由）
 import hashlib
+import json
 import re
 from typing import Any, Dict
 
@@ -129,6 +130,17 @@ class FeatureBasedFingerprint(Fingerprint):
                     weak_hits += 1
                     matched.append("keyword:%s" % kw)
                     break
+            # Spring Boot 默认错误 JSON 也是强特征；解析失败按无特征处理。
+            root_json_keys = f.get("root_json_keys", [])
+            if root_json_keys:
+                try:
+                    payload = json.loads(text)
+                except (TypeError, ValueError):
+                    logger.debug("根路径 JSON 解析失败，跳过 root_json_keys 特征", exc_info=True)
+                else:
+                    if isinstance(payload, dict) and all(key in payload for key in root_json_keys):
+                        strong_hits += 1
+                        matched.append("root_json:%s" % ",".join(root_json_keys))
         except Exception:
             logger.debug("主页特征检测失败", exc_info=True)
 
@@ -145,7 +157,8 @@ class FeatureBasedFingerprint(Fingerprint):
                 ct = (r.headers.get("Content-Type") or "").lower()
                 body = _response_text(r)
                 if expect == "json":
-                    ok = _looks_like_api_json(ct, body)
+                    json_keys = item.get("json_keys", [])
+                    ok = _json_has_keys(ct, body, json_keys) if json_keys else _looks_like_api_json(ct, body)
                 elif expect == "image":
                     ok = "image" in ct
                 else:
@@ -197,6 +210,19 @@ class RuoyiFingerprint(FeatureBasedFingerprint):
         super().__init__("ruoyi")
 
 
+def _json_has_keys(ct: str, body: str, keys: Any) -> bool:
+    """JSON 强特征：Content-Type 为 json、正文可解析为对象，且指定键全部存在。"""
+    if "json" not in ct:
+        return False
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return all(key in payload for key in keys)
+
+
 def _looks_like_api_json(ct: str, body: str) -> bool:
     """判断响应是否像一个「接口的 JSON 响应」，而不是错误包装页
 
@@ -238,13 +264,15 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
             return cache.get(url)
         return session.get(url)
 
-    def _expect_ok(r: Any, expect: str) -> bool:
+    def _expect_ok(r: Any, expect: str, json_keys: Any = ()) -> bool:
         """复用主指纹的 expect 语义：json/image/any"""
         if r.status_code != 200:
             return False
         ct = (r.headers.get("Content-Type") or "").lower()
         body = _response_text(r)
         if expect == "json":
+            if json_keys:
+                return _json_has_keys(ct, body, json_keys)
             # 登录墙下的「认证失败」JSON 对变体没有区分度（见 _is_auth_failure_json）
             return _looks_like_api_json(ct, body) and not _is_auth_failure_json(body)
         if expect == "image":
@@ -278,7 +306,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
         for item in f.get("negative_paths", []):
             try:
                 r = _get(target + item["path"].lstrip("/"))
-                if not _expect_ok(r, item.get("expect", "any")):
+                if not _expect_ok(r, item.get("expect", "any"), item.get("json_keys", [])):
                     continue
                 if root_ok and _response_text(r) == root_body:
                     continue  # 与根路径同内容 → 通配 200，不作为排除依据
@@ -292,7 +320,7 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
         for item in f.get("strong_paths", []):
             try:
                 r = _get(target + item["path"].lstrip("/"))
-                if not _expect_ok(r, item.get("expect", "any")):
+                if not _expect_ok(r, item.get("expect", "any"), item.get("json_keys", [])):
                     continue
                 # 通配 200 防护（与 negative_paths、detect_cms 保持一致）：
                 # expect="any" 的强特征路径在有登录墙时**必然**命中——若依对任意受保护
