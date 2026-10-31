@@ -161,7 +161,12 @@ jobs:
           Write-Host "version: $ver"
 
           $plugins = & "$iso/ruoyi-scan.exe" --plugin-list | Out-String
-          if ($plugins -notmatch '(?m)^\s*54\s') { throw "plugin list incomplete (expect 54 POC)" }
+          # 统计编号行而不是只匹配第 54 行：后者受表格换行/编码影响会假失败
+          $pluginRows = [regex]::Matches($plugins, '(?m)^\s*\d+\s+\S').Count
+          if ($pluginRows -ne 54) {
+            Write-Host $plugins
+            throw "plugin list incomplete: expected 54 rows, got $pluginRows"
+          }
           $chains = & "$iso/ruoyi-scan.exe" --chain-list | Out-String
           if ($chains -notmatch 'ruoyi_sql_to_rce') { throw "--chain-list missing builtin chain" }
           Write-Host "PLUGINS_OK (54) / CHAINS_OK"
