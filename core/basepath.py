@@ -22,7 +22,7 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 # 候选前缀：RuoYi-Vue 官方脚手架为 /prod-api/，其余为常见改法
-CANDIDATES = ("/prod-api", "/dev-api", "/api")
+CANDIDATES = ("/prod-api", "/dev-api", "/api", "/jeecg-boot", "/jeecg")
 
 # 验证码接口（用来确认「这个前缀确实通到若依后端」）
 #   RuoYi-Vue（3.8.x/3.9.x）: /captchaImage  -> {"code":200,"captchaEnabled":...}
@@ -36,6 +36,11 @@ CANDIDATES = ("/prod-api", "/dev-api", "/api")
 # /auth/code，缺这一条时 base-path 探测失败 → R9 首扫只出 1 条 CONFIRMED，
 # 而 /prod-api/v3/api-docs 实际返回 312KB 的 OpenAPI 文档。
 CAPTCHA_PATHS = ("/captchaImage", "/code", "/auth/code")
+
+# JeecgBoot 的真实验证码接口：GET {base}/sys/randomImage/{key}
+# 返回 {"success":true,"result":{"img":"data:image/png;base64,..."}}
+# 固定 key 便于复现；真实 Jeecg 接受任意 key。
+JEECG_CAPTCHA_PATH = "/sys/randomImage/ruoyi_scan_probe"
 
 
 def _looks_like_ruoyi_api(resp: Any) -> bool:
@@ -68,15 +73,52 @@ def _looks_like_ruoyi_api(resp: Any) -> bool:
         return False
 
 
+def _looks_like_jeecg_api(resp: Any) -> bool:
+    """判断响应是否是 JeecgBoot 的真实验证码接口。
+
+    真实响应：
+        {"success":true,"code":200,"result":{"img":"data:image/png;base64,..."}}
+    只认 success=True 不够，必须同时校验 result.img 非空且是 data:image 开头。
+    """
+    try:
+        if getattr(resp, "status_code", 0) != 200:
+            return False
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        text = resp.text or ""
+        if "json" not in ctype and not text.lstrip().startswith("{"):
+            return False
+        data = json.loads(text)
+        if not isinstance(data, dict) or data.get("success") is not True:
+            return False
+        result = data.get("result")
+        if not isinstance(result, dict):
+            return False
+        img = result.get("img")
+        return isinstance(img, str) and bool(img) and img.startswith("data:image")
+    except Exception:
+        return False
+
+
 def _probe_api_base(base: str, session: Any) -> bool:
-    """在给定前缀下依次尝试各验证码接口，任一命中即说明该前缀通到若依后端"""
-    for path in CAPTCHA_PATHS:
-        try:
-            if _looks_like_ruoyi_api(session.get(base + path)):
-                return True
-        except Exception:
-            logger.debug("验证码接口探测失败: %s%s", base, path, exc_info=True)
-    return False
+    """在给定前缀下尝试对应验证码接口，任一命中即说明该前缀通到后端。
+
+    Jeecg 前缀只用 Jeecg 专用探针：/captchaImage 是 RuoYi 的路径，
+    在 Jeecg 里并不存在，不能拿它当判据。
+    """
+    is_jeecg = base.endswith("/jeecg-boot") or base.endswith("/jeecg")
+    if not is_jeecg:
+        for path in CAPTCHA_PATHS:
+            try:
+                if _looks_like_ruoyi_api(session.get(base + path)):
+                    return True
+            except Exception:
+                logger.debug("验证码接口探测失败: %s%s", base, path, exc_info=True)
+        return False
+    try:
+        return _looks_like_jeecg_api(session.get(base + JEECG_CAPTCHA_PATH))
+    except Exception:
+        logger.debug("Jeecg 验证码接口探测失败: %s%s", base, JEECG_CAPTCHA_PATH, exc_info=True)
+        return False
 
 
 def detect_api_base(target: str, session: Any) -> str:

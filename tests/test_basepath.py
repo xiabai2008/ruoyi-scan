@@ -43,6 +43,39 @@ def test_basepath_detects_dev_api_variant():
     assert detect_api_base("http://target/", sess) == "/dev-api"
 
 
+JEECG_JSON = '{"success":true,"code":200,"result":{"img":"data:image/png;base64,iVBORw0KGgo="}}'
+
+
+def test_basepath_detected_for_jeecg_boot():
+    """真实 Jeecg 验证码 /sys/randomImage/{key} 返回 success+result.img → 识别 /jeecg-boot"""
+    sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON)})
+    assert detect_api_base("http://target/", sess) == "/jeecg-boot"
+
+
+def test_basepath_jeecg_requires_real_image_payload():
+    """只有 success 没有 result.img → 不认"""
+    sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp('{"success":true}')})
+    assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_jeecg_captcha_path_does_not_exist():
+    """/jeecg-boot/captchaImage 是错误假设，不能作为判据"""
+    sess = FakeSession({"http://target/jeecg-boot/captchaImage": FakeResp(CAPTCHA_JSON)})
+    assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_jeecg_spa_root_not_used_as_evidence():
+    """/jeecg-boot/ 根路径 SPA 兜底 200 HTML 不能作为前缀判据"""
+    sess = FakeSession(
+        {
+            "http://target/jeecg-boot/": FakeResp(
+                "<html><title>JeecgBoot</title></html>", 200, {"Content-Type": "text/html"}
+            )
+        }
+    )
+    assert detect_api_base("http://target/", sess) == ""
+
+
 def test_basepath_none_for_non_ruoyi():
     """全站只有静态页 → 不臆造前缀"""
     sess = FakeSession({})
