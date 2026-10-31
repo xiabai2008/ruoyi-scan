@@ -1,6 +1,7 @@
 # 插件动态发现与加载
 import hashlib
 import importlib
+import importlib.util
 import os
 import sys
 from typing import Any, List, Optional
@@ -166,16 +167,29 @@ def discover_plugin_packages() -> List[str]:
     """
     # chain 包是链专用步骤插件，不注册到主扫描引擎
     _EXCLUDED = {"chain"}
-    plugins_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plugins")
+    # onefile 解压后的根目录是 sys._MEIPASS；不能用源码树的 __file__ 路径
+    if getattr(sys, "frozen", False):
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    else:
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+    plugins_dir = os.path.join(base_dir, "plugins")
     packages: List[str] = []
-    if not os.path.isdir(plugins_dir):
-        return packages
-    for name in sorted(os.listdir(plugins_dir)):
-        if name in _EXCLUDED:
-            continue
-        pkg_path = os.path.join(plugins_dir, name)
-        if os.path.isdir(pkg_path) and os.path.isfile(os.path.join(pkg_path, "__init__.py")):
-            packages.append(f"plugins.{name}")
+    if os.path.isdir(plugins_dir):
+        for name in sorted(os.listdir(plugins_dir)):
+            if name in _EXCLUDED:
+                continue
+            pkg_path = os.path.join(plugins_dir, name)
+            if os.path.isdir(pkg_path) and os.path.isfile(os.path.join(pkg_path, "__init__.py")):
+                packages.append(f"plugins.{name}")
+    # 兜底：PyInstaller onefile 若因数据目录缺失导致磁盘扫描为空，
+    # 但插件包已作为 hiddenimports 打进 PYZ，仍可按已知包名加载。
+    if not packages and getattr(sys, "frozen", False):
+        for pkg_name in ("plugins.ruoyi", "plugins.spring", "plugins.common", "plugins.jeecgboot"):
+            try:
+                if importlib.util.find_spec(pkg_name) is not None:
+                    packages.append(pkg_name)
+            except (ImportError, AttributeError, ValueError):
+                continue
     return packages
 
 

@@ -94,7 +94,9 @@ def test_orchestrator_injects_dict_without_global_mutation(tmp_path, monkeypatch
         "core.orchestrator.detect_cms"
     ) as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
         "core.orchestrator.load_plugins"
-    ) as mock_load:
+    ) as mock_load, patch("core.basepath.detect_api_base", return_value=""), patch(
+        "lib.reachability.detect_blocked", return_value={"blocked": False}
+    ), patch("lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}):
         mock_router.return_value.resolve.return_value = []
         mock_router.return_value.resolve_by_name.return_value = []
         mock_cms.return_value = MagicMock(cms="ruoyi", version="", confidence=0.9, matched=["test"])
