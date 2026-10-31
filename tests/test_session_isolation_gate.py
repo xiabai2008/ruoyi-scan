@@ -29,6 +29,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parent.parent / "plugins"
 FORBIDDEN_NAME = "RuoYiAuthChain"
 REQUIRED_HELPER = "isolated_auth_session"
+# 任何登录入口包装层都算触发：引用后必须用 isolated_auth_session，不能绕回共享会话
+AUTH_ENTRY_MODULES = ("core.auth_chain", "core.login")
 
 
 def _plugin_files():
@@ -85,8 +87,7 @@ def test_auth_plugins_use_isolated_session():
     for path in _plugin_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         touches_auth_chain = any(
-            isinstance(node, ast.ImportFrom) and node.module == "core.auth_chain"
-            for node in ast.walk(tree)
+            isinstance(node, ast.ImportFrom) and node.module in AUTH_ENTRY_MODULES for node in ast.walk(tree)
         )
         if not touches_auth_chain:
             continue
@@ -99,8 +100,7 @@ def test_auth_plugins_use_isolated_session():
         if not uses_helper:
             missing.append(path.name)
     assert not missing, (
-        f"以下插件引用了 core.auth_chain 却未使用 {REQUIRED_HELPER}（必须用独立会话，"
-        f"禁止在共享会话上登录）: {missing}"
+        f"以下插件引用了 core.auth_chain 却未使用 {REQUIRED_HELPER}（必须用独立会话，禁止在共享会话上登录）: {missing}"
     )
     print("PASS test_auth_plugins_use_isolated_session")
 
