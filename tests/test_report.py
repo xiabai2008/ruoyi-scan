@@ -224,6 +224,18 @@ def test_render_all_writes_three_files():
     print("PASS test_render_all_writes_three_files: json/html/csv 均生成且非空")
 
 
+def test_render_all_contains_traversal_stem():
+    """外部可控 stem 不得把报告写出 out_dir"""
+    rb = ReportBuilder(results=_sample_results(), target="http://target/", summary=_sample_summary())
+    with tempfile.TemporaryDirectory() as root:
+        out_dir = os.path.join(root, "reports")
+        paths = rb.render_all(out_dir, formats=["json", "html", "csv"], stem="../../escape")
+        for p in paths:
+            assert os.path.dirname(os.path.abspath(p)) == os.path.abspath(out_dir), p
+        assert not os.path.exists(os.path.join(root, "escape.json"))
+    print("PASS test_render_all_contains_traversal_stem")
+
+
 if __name__ == "__main__":
     test_risk_distribution()
     test_json_fields()
@@ -233,4 +245,5 @@ if __name__ == "__main__":
     test_donut_svg_zero_total()
     test_batch_bar_svg()
     test_render_all_writes_three_files()
+    test_render_all_contains_traversal_stem()
     print("ALL_REPORT_TESTS_PASS")

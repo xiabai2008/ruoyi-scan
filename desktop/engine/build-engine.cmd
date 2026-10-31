@@ -20,7 +20,9 @@ REM Install dependencies even when the build venv already exists: a stale venv
 REM would miss newly added packages (e.g. APScheduler) and cron would silently
 REM degrade to a 5-minute interval.
 desktop\engine\.venv-build\Scripts\python.exe -m pip install --quiet --upgrade pip || goto :err
-desktop\engine\.venv-build\Scripts\python.exe -m pip install --quiet pyinstaller fastapi "uvicorn[standard]" requests requests-mock reportlab python-docx openpyxl pyyaml apscheduler || goto :err
+REM --upgrade + explicit security floors: pip install alone keeps stale venv packages.
+REM urllib3/pillow/setuptools/certifi fixed releases require the Python 3.10+ build interpreter.
+desktop\engine\.venv-build\Scripts\python.exe -m pip install --quiet --upgrade pyinstaller fastapi "uvicorn[standard]" requests requests-mock reportlab python-docx openpyxl pyyaml apscheduler "urllib3>=2.8.0" "pillow>=13.0.0" "setuptools>=84.2.1" "certifi>=2026.10.19" || goto :err
 desktop\engine\.venv-build\Scripts\python.exe -m PyInstaller desktop/engine/ruoyi-scan-engine.spec --noconfirm --distpath desktop/engine/dist --workpath desktop/engine/build || goto :err
 
 echo [2/3] Building frontend + Tauri bundle (engine embedded)...

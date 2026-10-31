@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lib.ai_generator import _clean_code, _rule_fallback, _write_source, generate_ai_plugin
+from lib.ai_generator import _clean_code, _llm_complete, _rule_fallback, _write_source, generate_ai_plugin
 
 
 def test_rule_fallback_sql():
@@ -155,6 +155,35 @@ def test_write_source_exists():
     print("PASS test_write_source_exists")
 
 
+def test_write_source_rejects_category_traversal():
+    """category 参与默认插件目录拼接：非白名单值必须拒绝"""
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_ai_cat_")
+    try:
+        try:
+            _write_source("插件", "../../escape", "# x\n", tmp)
+            assert False, "应抛 ValueError"
+        except ValueError:
+            pass
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("PASS test_write_source_rejects_category_traversal")
+
+
+def test_llm_complete_rejects_non_http_base_url(monkeypatch):
+    """LLM base_url 只允许 http/https（localhost 仍允许，供 Ollama 使用）"""
+    import requests
+
+    called = []
+    monkeypatch.setattr(requests, "post", lambda *a, **kw: called.append((a, kw)))
+    try:
+        _llm_complete([], "m", "k", "file:///etc/passwd")
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+    assert called == []
+    print("PASS test_llm_complete_rejects_non_http_base_url")
+
+
 if __name__ == "__main__":
     test_rule_fallback_sql()
     test_rule_fallback_file_read()
@@ -163,4 +192,6 @@ if __name__ == "__main__":
     test_generate_ai_plugin_retry_loop()
     test_generate_ai_plugin_no_key_fallback()
     test_write_source_exists()
+    test_write_source_rejects_category_traversal()
+    test_llm_complete_rejects_non_http_base_url()
     print("ALL_E7_TESTS_PASS")

@@ -375,10 +375,12 @@ class ScanOrchestrator:
                     payload = {**payload, "task_id": task.task_id}
                 elif not isinstance(payload, dict):
                     payload = {"task_id": task.task_id, "data": payload}
-                self.registry.notify(task.task_id, event_type, payload)
-                # 状态变更时同步 task_dict 到 registry（供 GET /api/scan 查询）
-                if event_type in ("status", "fingerprint", "waf", "complete"):
+                # 先同步 task_dict 再广播：状态事件会立即把 record.status 改为新状态，
+                # 若 task_dict 后写，GET /api/scan 可能短暂看到「status=failed 但 error 为空」。
+                # error 事件同样要落 task_dict（否则异常原因只在事件流里）。
+                if event_type in ("status", "error", "fingerprint", "waf", "complete"):
                     self.registry.update_task_dict(task.task_id, task.to_dict())
+                self.registry.notify(task.task_id, event_type, payload)
 
         # 资源泄漏防护（#3）：session 在 try 块内创建，旧实现只在正常路径 (:651)
         # 调用 session.close()；一旦其后的任意步骤抛异常走 except 直接 return，session
@@ -1207,7 +1209,7 @@ class ScanOrchestrator:
         if storage is None:
             return
         try:
-            rows = [r.to_dict() if hasattr(r, "to_dict") else dict(r) for r in results]
+            rows = [r.to_dict() for r in results]
             storage.save_results(task_id, rows)
         except Exception:
             logger.debug("结果明细落盘失败 task=%s", task_id, exc_info=True)

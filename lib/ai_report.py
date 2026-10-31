@@ -12,6 +12,7 @@
 # 安全：测试全部 mock，不真实调用外部 API；AI 分析标注「由 AI 生成，供参考」。
 import json
 import os
+from pathlib import Path
 from typing import Dict, List
 
 from common.logger import get_logger
@@ -25,6 +26,12 @@ logger = get_logger(__name__)
 # 严重度排序权重（高→中→低）：中文排序无严重度语义，必须用显式 rank；
 # 未知/缺失严重度取 rank 3，排到最后而非最前
 _SEVERITY_RANK = {SEVERITY_HIGH: 0, SEVERITY_MEDIUM: 1, SEVERITY_LOW: 2}
+
+
+def _normalize_lang(lang: str) -> str:
+    """把 --ai-report 的语言参数收敛为 zh/en，避免进入输出文件名。"""
+    return "en" if str(lang or "").strip().lower() in ("en", "english") else "zh"
+
 
 _ANALYSIS_PROMPT = """你是资深安全分析师。根据 Ruoyi-Scan 的扫描 JSON 报告，输出一份简洁的中文/英文
 漏洞分析摘要，包含：
@@ -161,6 +168,7 @@ def generate_analysis(
     Returns:
         分析 Markdown 文本
     """
+    lang = _normalize_lang(lang)
     api_key = api_key or AI_API_KEY
     if api_key:
         try:
@@ -185,11 +193,11 @@ def run_ai_report_mode(report_dir: str, report_dict: dict, lang: str = "zh") -> 
     Returns:
         分析文件路径
     """
+    lang = _normalize_lang(lang)
     analysis = generate_analysis(report_dict, lang=lang)
     # 防御性创建：本函数作为公开入口被独立调用时目录可能尚不存在
     if report_dir:
         os.makedirs(report_dir, exist_ok=True)
     out_path = os.path.join(report_dir, "report.analysis.%s.md" % lang)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(analysis)
+    Path(out_path).write_text(analysis, encoding="utf-8")
     return out_path

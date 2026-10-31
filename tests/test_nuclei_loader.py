@@ -225,6 +225,25 @@ def test_dsl_matcher_whitelist():
     print("PASS test_dsl_matcher_whitelist")
 
 
+def test_dsl_ast_semantics():
+    """AST 求值保留比较/逻辑语义，同时拒绝属性、下标、算术等节点"""
+    from lib.nuclei_loader import _dsl_expr_supported, _eval_dsl
+
+    assert _eval_dsl("status_code >= 200 and status_code < 300", 204, "", "") is True
+    assert _eval_dsl("status_code == 500 or status_code == 200", 200, "", "") is True
+    assert _eval_dsl("not (status_code == 404)", 200, "", "") is True
+    assert _eval_dsl("status_code == 200 and False", 200, "", "") is False
+    assert _eval_dsl("status_code in [200]", 200, "", "") is False
+    assert _eval_dsl("1 + 1", 200, "", "") is False
+    assert _eval_dsl("status_code.__class__", 200, "", "") is False
+    assert _eval_dsl("foo", 200, "", "") is False
+    assert _dsl_expr_supported("status_code == 200") is True
+    assert _dsl_expr_supported("status_code == 200 and contains(body, 'x')") is True
+    assert _dsl_expr_supported("__import__('os')") is False
+    assert _dsl_expr_supported("status_code in [200]") is False
+    print("PASS test_dsl_ast_semantics")
+
+
 if __name__ == "__main__":
     test_parse_example_template()
     test_parse_matchers_condition()
@@ -238,4 +257,5 @@ if __name__ == "__main__":
     test_load_with_filters()
     test_meta_contract()
     test_dsl_matcher_whitelist()
+    test_dsl_ast_semantics()
     print("ALL_E4_TESTS_PASS")

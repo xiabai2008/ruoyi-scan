@@ -5,6 +5,7 @@ import html as html_module
 import io
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from common.logger import get_logger
@@ -18,6 +19,7 @@ from common.models import (
     STATUS_UNKNOWN,
     ScanResult,
 )
+from common.paths import safe_filename, safe_join
 from config import settings
 from lib.star_cta import REPO_URL
 
@@ -527,6 +529,10 @@ function toggleFilter() {{
         """
         if not out_dir:
             out_dir = settings.REPORT_DIR
+        # stem 可能来自目标 URL / 批量命名 / 外部调用方：先收敛为单段文件名，
+        # 再用 safe_join 二次确认，避免 ../ 或绝对路径把报告写出 out_dir。
+        stem = safe_filename(stem, default="report")
+        out_dir = os.path.abspath(out_dir)
         os.makedirs(out_dir, exist_ok=True)
 
         if formats is None:
@@ -536,19 +542,17 @@ function toggleFilter() {{
 
         paths = []
         if "json" in formats:
-            json_path = os.path.join(out_dir, f"{stem}.json")
-            with open(json_path, "w", encoding="utf-8") as f:
-                f.write(self.to_json())
+            json_path = safe_join(out_dir, f"{stem}.json")
+            Path(json_path).write_text(self.to_json(), encoding="utf-8")
             paths.append(json_path)
         if "html" in formats:
-            html_path = os.path.join(out_dir, f"{stem}.html")
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(self.to_html())
+            html_path = safe_join(out_dir, f"{stem}.html")
+            Path(html_path).write_text(self.to_html(), encoding="utf-8")
             paths.append(html_path)
         if "csv" in formats:
-            csv_path = os.path.join(out_dir, f"{stem}.csv")
-            # CSV 用 utf-8-sig 便于 Excel 正确显示中文
-            with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+            csv_path = safe_join(out_dir, f"{stem}.csv")
+            # CSV 用 utf-8-sig 便于 Excel 正确显示中文；newline="" 避免 Windows 二次换行
+            with Path(csv_path).open("w", encoding="utf-8-sig", newline="") as f:
                 f.write(self.to_csv())
             paths.append(csv_path)
         # D8.2-D8.4: PDF/Word/Excel 惰性 import + 降级友好
@@ -556,7 +560,7 @@ function toggleFilter() {{
             try:
                 from core.report_pdf import render_pdf
 
-                pdf_path = os.path.join(out_dir, f"{stem}.pdf")
+                pdf_path = safe_join(out_dir, f"{stem}.pdf")
                 render_pdf(self, pdf_path)
                 paths.append(pdf_path)
             except ImportError:
@@ -568,7 +572,7 @@ function toggleFilter() {{
             try:
                 from core.report_docx import render_docx
 
-                docx_path = os.path.join(out_dir, f"{stem}.docx")
+                docx_path = safe_join(out_dir, f"{stem}.docx")
                 render_docx(self, docx_path)
                 paths.append(docx_path)
             except ImportError:
@@ -579,7 +583,7 @@ function toggleFilter() {{
             try:
                 from core.report_xlsx import render_xlsx
 
-                xlsx_path = os.path.join(out_dir, f"{stem}.xlsx")
+                xlsx_path = safe_join(out_dir, f"{stem}.xlsx")
                 render_xlsx(self, xlsx_path)
                 paths.append(xlsx_path)
             except ImportError:
@@ -591,7 +595,7 @@ function toggleFilter() {{
             try:
                 from core.report_sarif import render_sarif
 
-                sarif_path = os.path.join(out_dir, f"{stem}.sarif")
+                sarif_path = safe_join(out_dir, f"{stem}.sarif")
                 render_sarif(self, sarif_path)
                 paths.append(sarif_path)
             except Exception as e:
@@ -782,13 +786,13 @@ class BatchReport:
         """输出 batch_report.html + batch_report.csv"""
         if not out_dir:
             out_dir = settings.REPORT_DIR
+        out_dir = os.path.abspath(out_dir)
         os.makedirs(out_dir, exist_ok=True)
         paths = []
-        html_path = os.path.join(out_dir, "batch_report.html")
-        csv_path = os.path.join(out_dir, "batch_report.csv")
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(self.to_html())
-        with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+        html_path = safe_join(out_dir, "batch_report.html")
+        csv_path = safe_join(out_dir, "batch_report.csv")
+        Path(html_path).write_text(self.to_html(), encoding="utf-8")
+        with Path(csv_path).open("w", encoding="utf-8-sig", newline="") as f:
             f.write(self.to_csv())
         paths.extend([html_path, csv_path])
         return paths

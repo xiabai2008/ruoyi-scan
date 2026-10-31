@@ -18,6 +18,7 @@
 # SARIF 2.1.0 规范：https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Dict, List
 
 # SARIF 规范版本
@@ -229,5 +230,4 @@ def render_sarif(report_builder: Any, filepath: str) -> None:
         filepath: 输出文件路径
     """
     sarif_content = to_sarif(report_builder)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(sarif_content)
+    Path(filepath).write_text(sarif_content, encoding="utf-8")

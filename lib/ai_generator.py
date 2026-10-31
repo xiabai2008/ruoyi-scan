@@ -10,7 +10,9 @@
 #
 # 安全提示：AI 生成代码必须人工复核后再用于生产；生成物不自动加入 plugin_list。
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from common.logger import get_logger
 from lib.reporter import emit
@@ -73,6 +75,9 @@ def _llm_complete(messages: List[Dict[str, str]], model: str, api_key: str, base
 
     # rstrip("/") 容错：兼容用户配置 base_url 末尾带斜杠的情况
     url = base_url.rstrip("/") + "/chat/completions"
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError("LLM base_url 仅支持 http/https")
     headers = {"Authorization": "Bearer %s" % api_key, "Content-Type": "application/json"}
     payload = {
         "model": model,
@@ -288,6 +293,9 @@ def _write_source(
         output_dir: 输出目录
         overwrite: 已存在时是否覆盖（同一生成会话内重试循环用 True）
     """
+    # category 参与默认输出目录拼接，必须先白名单校验（CLI/调用方传入 ../../ 时拒绝）
+    if category not in ("ruoyi", "spring", "common"):
+        raise ValueError("unsupported category: %s" % category)
     if output_dir is None:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, "plugins", category)
@@ -297,8 +305,7 @@ def _write_source(
     filepath = os.path.join(output_dir, _to_filename(name) + ".py")
     if os.path.exists(filepath) and not overwrite:
         raise FileExistsError("插件文件已存在: %s" % filepath)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(source)
+    Path(filepath).write_text(source, encoding="utf-8")
     return filepath
 
 

@@ -36,6 +36,8 @@ def test_submit_scan_returns_task_id(client, mock_network):
     assert "task_id" in data
     assert len(data["task_id"]) == 12
     assert data["status"] == "pending"
+    # 必须等任务结束再退出 fixture：否则 mock teardown 后后台线程会加载真实插件
+    assert wait_for_task_done(client, data["task_id"], timeout=5)
 
 
 def test_submit_scan_with_full_params(client, mock_network):
@@ -43,24 +45,27 @@ def test_submit_scan_with_full_params(client, mock_network):
     resp = client.post(
         "/api/scan",
         json={
-            "target": "http://target:8080/",
+            # 用本地拒绝端口，避免 portscan 对不可解析的 target 主机做 DNS 等待
+            "target": "http://127.0.0.1:1/",
             "mode": "u",
             "cms": "ruoyi",
             "threads": 5,
             "rate": 10,
-            "timeout": 15,
+            "timeout": 2,
             "bypass_waf": "on",
             "portscan": True,
-            "ports": "80,443",
+            "ports": "1",
         },
     )
     assert resp.status_code == 200
-    assert "task_id" in resp.json()
+    task_id = resp.json()["task_id"]
+    assert wait_for_task_done(client, task_id, timeout=5)
 
 
 def test_list_scans(client, mock_network):
     """GET /api/scan 列出任务"""
-    client.post("/api/scan", json={"target": "http://x.com/", "mode": "p"})
+    task_id = client.post("/api/scan", json={"target": "http://x.com/", "mode": "p"}).json()["task_id"]
+    assert wait_for_task_done(client, task_id, timeout=5)
     wait_for(lambda: len(client.get("/api/scan").json()) > 0, timeout=3)
     resp = client.get("/api/scan")
     assert resp.status_code == 200
@@ -72,9 +77,7 @@ def test_get_scan_status(client, mock_network):
     """GET /api/scan/{task_id} 查询状态"""
     r = client.post("/api/scan", json={"target": "http://x.com/", "mode": "p"})
     task_id = r.json()["task_id"]
-    wait_for(
-        lambda: client.get(f"/api/scan/{task_id}").json().get("status") in ("done", "failed", "running"), timeout=3
-    )
+    assert wait_for_task_done(client, task_id, timeout=5)
     resp = client.get(f"/api/scan/{task_id}")
     assert resp.status_code == 200
     data = resp.json()
@@ -94,6 +97,11 @@ def test_cancel_scan(client, mock_network):
     resp = client.delete(f"/api/scan/{task_id}")
     assert resp.status_code == 200
     assert resp.json()["status"] == "cancelled"
+    # 取消是协作式的：等执行线程真正退出，避免 teardown 后残留扫描
+    assert wait_for(
+        lambda: client.get(f"/api/scan/{task_id}").json().get("status") in ("cancelled", "done", "failed"),
+        timeout=5,
+    )
 
 
 def test_get_scan_results(client, mock_network):

@@ -538,6 +538,33 @@ class TestSendNotifications:
         result = send_webhook("https://x", msg, verbose=False)
         assert result is False
 
+    def test_send_webhook_rejects_private_or_non_http_url(self, monkeypatch):
+        """Webhook 默认拒绝 localhost/内网字面量与非 http(s) 协议"""
+        import requests
+
+        from lib.notifier import send_webhook
+
+        called = []
+        monkeypatch.setattr(requests, "post", lambda *a, **kw: called.append((a, kw)))
+        msg = {
+            "target": "",
+            "vuln_count": 0,
+            "high_count": 0,
+            "medium_count": 0,
+            "low_count": 0,
+            "vulns": [],
+            "scan_time": "",
+            "duration": 0,
+            "request_count": 0,
+            "mode": "",
+            "truncated": False,
+            "total_vulns": 0,
+        }
+        assert send_webhook("http://127.0.0.1:8080/hook", msg, verbose=False) is False
+        assert send_webhook("http://169.254.169.254/latest/meta-data", msg, verbose=False) is False
+        assert send_webhook("file:///etc/passwd", msg, verbose=False) is False
+        assert called == []
+
     def test_send_email_no_smtp_config(self):
         """邮件无 SMTP 配置跳过"""
         from lib.notifier import send_email
