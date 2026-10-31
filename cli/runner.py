@@ -443,7 +443,9 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
 
     # 认证失败必须在终端显式说清：否则报告看起来"完整"，读者会把未认证扫描
     # 产出的 UNKNOWN/SAFE 当成已登录结论。密码只显示用户名，不回显口令。
-    if req.auth_status == "failed":
+    # 用 getattr 兜底：部分调用方（单测、插件直调）用轻量对象代替 ScanRequest，
+    # 没有 auth_status 字段时应视为"未尝试认证"，而不是抛 AttributeError。
+    if getattr(req, "auth_status", "not_attempted") == "failed":
         auth_desc = ""
         if getattr(args, "auth_login", None):
             _user = str(args.auth_login).split(":", 1)[0]

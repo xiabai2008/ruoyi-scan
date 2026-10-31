@@ -76,9 +76,17 @@ def _looks_like_ruoyi_api(resp: Any) -> bool:
 def _looks_like_jeecg_api(resp: Any) -> bool:
     """判断响应是否是 JeecgBoot 的真实验证码接口。
 
-    真实响应：
-        {"success":true,"code":200,"result":{"img":"data:image/png;base64,..."}}
-    只认 success=True 不够，必须同时校验 result.img 非空且是 data:image 开头。
+    真实响应（JeecgBoot 3.6.3 实测 2026-10-31）：
+        GET /jeecg-boot/sys/randomImage/1234
+        {"success":true,"message":"","code":0,
+         "result":"data:image/jpg;base64,/9j/4AAQ..."}
+
+    注意两点，都跟"想当然"的实现不同：
+      1. `result` 是**字符串**（data URI），不是 {"img": "..."} 字典；
+      2. `code` 是 0（Jeecg 的成功码），不是 200。
+
+    因此两种形态都要认：result 为 dict 时取 img，为 str 时直接判前缀。
+    只认 success=True 不够，必须拿到真实的图片数据，否则任意 success 响应都会命中。
     """
     try:
         if getattr(resp, "status_code", 0) != 200:
@@ -91,10 +99,12 @@ def _looks_like_jeecg_api(resp: Any) -> bool:
         if not isinstance(data, dict) or data.get("success") is not True:
             return False
         result = data.get("result")
-        if not isinstance(result, dict):
-            return False
-        img = result.get("img")
-        return isinstance(img, str) and bool(img) and img.startswith("data:image")
+        if isinstance(result, str):
+            return result.startswith("data:image")
+        if isinstance(result, dict):
+            img = result.get("img")
+            return isinstance(img, str) and bool(img) and img.startswith("data:image")
+        return False
     except Exception:
         return False
 

@@ -198,8 +198,20 @@ class FeatureBasedFingerprint(Fingerprint):
         # 需至少 2 个弱特征（0.4）或 1 个强特征（0.5）才判为该 CMS。
         # 边界用例：含"若依"二字的非若依页面（单弱特征）不应误判。
         weak_confidence = weak_hits * w_weak
+        # 可选：按特征库给的 version_regex 从根页面提取框架版本
+        # （JeecgBoot 把版本写在 <script src="/_app.config.js?v=3.6.3-..."> 里）
+        version = ""
+        pattern = f.get("version_regex")
+        if pattern and root_body:
+            try:
+                vm = re.search(pattern, root_body)
+                if vm:
+                    version = vm.group(1)
+                    matched.append("version:%s" % version)
+            except Exception:
+                logger.debug("version_regex 提取失败: %s", pattern, exc_info=True)
         if strong_hits > 0 or weak_confidence >= 0.4:
-            return FingerprintResult(cms=self.cms, version="", confidence=confidence, matched=matched)
+            return FingerprintResult(cms=self.cms, version=version, confidence=confidence, matched=matched)
         return FingerprintResult(cms="", version="", confidence=0.0, matched=matched)
 
 
@@ -240,6 +252,77 @@ def _looks_like_api_json(ct: str, body: str) -> bool:
     if '"code":500' in body or "'code':500" in body:
         return False
     return ("code" in body) or ("msg" in body)
+
+
+# ── P1-1：API 文档取证 ──
+# 前后端分离版把后端挂在 context-path（/prod-api、/jeecg-boot）后面，前端 SPA 对根路径
+# 任意 path 都返回 index.html；品牌化之后根页面连框架名都没有，靠「页面文字 + favicon」
+# 必然探不到（实测 R9 完全未识别）。但 SpringDoc / knife4j 文档默认公开，里面直接写着
+# 框架名和版本：R6 3.9.2 / R7 3.8.9 / R9 5.6.2（RuoYi-Vue-Plus）/ R10 /jeecg-boot/v2/api-docs。
+# 一次请求同时拿到 cms + version + variant，比逐条猜路径可靠。
+_API_DOC_PATHS = ("/v3/api-docs", "/v2/api-docs")
+_API_DOC_BASES = ("", "/prod-api", "/jeecg-boot", "/api")
+_DOC_VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
+
+
+def _cms_from_doc_title(title: str) -> str:
+    """从文档 info.title 反推 CMS。
+
+    只认明确写进标题的框架名，避免「任意开了 swagger 的业务系统」被误判成若依
+    ——负样本 R11 必须保持未识别。
+    """
+    t = (title or "").lower()
+    if "jeecg" in t:
+        return "jeecgboot"
+    if "ruoyi" in t or "若依" in t:
+        return "ruoyi"
+    return ""
+
+
+def _variant_from_doc_title(title: str) -> str:
+    """文档标题里带 Plus 才能细分变体，避免拿泛化 token 猜"""
+    if "plus" in (title or "").lower():
+        return "ruoyi-plus"
+    return ""
+
+
+def _probe_api_docs(target: str, session: SessionManager, cache: Any = None) -> Dict[str, str]:
+    """探测公开的 OpenAPI 文档并抽取 info.title / info.version
+
+    Returns:
+        {"title", "version", "url"}；全部未命中返回 {}。
+        只接受能 json.loads 且 info 为 dict 的响应——SPA 兜底页与错误包装页直接跳过。
+    """
+
+    def _get(url: str) -> Any:
+        try:
+            return cache.get(url) if cache is not None else session.get(url)
+        except Exception:
+            return None
+
+    for base in _API_DOC_BASES:
+        for path in _API_DOC_PATHS:
+            url = target.rstrip("/") + base + path
+            resp = _get(url)
+            if resp is None or getattr(resp, "status_code", 0) != 200:
+                continue
+            text = _response_text(resp)
+            if not text.lstrip().startswith("{"):
+                continue
+            try:
+                doc = json.loads(text)
+            except Exception:
+                continue
+            info = doc.get("info") if isinstance(doc, dict) else None
+            if not isinstance(info, dict):
+                continue
+            title = str(info.get("title") or "")
+            m = _DOC_VERSION_RE.search(str(info.get("version") or ""))
+            version = m.group(1) if m else ""
+            if not title and not version:
+                continue
+            return {"title": title, "version": version, "url": url}
+    return {}
 
 
 def detect_variant(target: str, session: SessionManager, cache: Any = None) -> str:
@@ -403,6 +486,36 @@ def detect_cms(target: str, session: SessionManager, cache: Any = None) -> Finge
             # 版本号未在登录页/根路径出现时，Router 会按"版本未识别"处理（跑全部 POC）。
         except Exception:
             logger.debug("若依版本探测失败", exc_info=True)
+
+    # P1-1：API 文档取证（base-path 感知）
+    # 只在「没识别出 CMS」或「识别出但没拿到版本」时探测——单机版页面上就有版本号，
+    # 不加这一段不会多花请求；SPA 站这是唯一可行的取证路径。
+    need_doc = (not best.cms) or (best.cms in ("ruoyi", "jeecgboot") and not best.version)
+    if need_doc:
+        try:
+            doc = _probe_api_docs(target, session, cache=cache)
+        except Exception:
+            logger.debug("API 文档探测失败", exc_info=True)
+            doc = {}
+        if doc:
+            doc_cms = _cms_from_doc_title(doc["title"])
+            # 1) 页面取证失败时，用文档标题确立 CMS（文档是服务端生成的，比页面可靠）
+            if doc_cms and not best.cms:
+                best.cms = doc_cms
+                best.confidence = max(best.confidence, 0.7)
+                best.matched.append("apidoc:%s" % doc["url"])
+            # 2) 版本只对若依采纳：JeecgBoot 的 info.version 是业务应用版本（实测 R10 为 "1.0"），
+            #    不是框架版本，采信会把 3.6.3 写成 1.0。
+            if doc["version"] and doc_cms == "ruoyi" and (not best.cms or best.cms == "ruoyi"):
+                if best.version != doc["version"]:
+                    best.version = doc["version"]
+                    best.matched.append("version:apidoc:%s" % doc["version"])
+            # 3) 变体：仅当标题明确写 Plus
+            if not best.variant:
+                v = _variant_from_doc_title(doc["title"])
+                if v:
+                    best.variant = v
+                    best.matched.append("variant:%s" % v)
     return best
 
 

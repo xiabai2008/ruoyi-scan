@@ -70,6 +70,9 @@ CMS_FEATURES = {
         ],
         "login_keywords": ["JeecgBoot", "Jeecg-Boot"],
         "weak_keywords": ["jeecg", "JEECG"],
+        # 框架版本写在静态资源查询串里：<script src="/_app.config.js?v=3.6.3-179...">
+        # 这是页面上唯一可靠的框架版本来源（api-docs 的 info.version 是业务应用版本，实测 "1.0"）
+        "version_regex": r"_app\.config\.js\?v=(\d+\.\d+\.\d+)",
         "weight_strong": 0.5,
         "weight_weak": 0.2,
     },

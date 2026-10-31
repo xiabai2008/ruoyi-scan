@@ -43,18 +43,48 @@ def test_basepath_detects_dev_api_variant():
     assert detect_api_base("http://target/", sess) == "/dev-api"
 
 
-JEECG_JSON = '{"success":true,"code":200,"result":{"img":"data:image/png;base64,iVBORw0KGgo="}}'
+# JeecgBoot 3.6.3 的真实响应（2026-10-31 从 R10 实测）：result 是 data URI 字符串，code 是 0。
+# 旧用例用的是 {"code":200,"result":{"img":"..."}}，与线上实现不符，导致探测函数按错误
+# 结构写、单测还全绿——R10 因此始终探不到 /jeecg-boot。
+JEECG_JSON_REAL = (
+    '{"success":true,"message":"","code":0,'
+    '"result":"data:image/jpg;base64,/9j/4AAQSkZJRgABAgAA"}'
+)
+# 兼容老版本 / 其它 Jeecg 分支返回的嵌套形态
+JEECG_JSON_NESTED = '{"success":true,"code":200,"result":{"img":"data:image/png;base64,iVBORw0KGgo="}}'
 
 
 def test_basepath_detected_for_jeecg_boot():
-    """真实 Jeecg 验证码 /sys/randomImage/{key} 返回 success+result.img → 识别 /jeecg-boot"""
-    sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON)})
+    """真实 Jeecg 验证码 /sys/randomImage/{key}：result 为 data URI 字符串 → 识别 /jeecg-boot"""
+    sess = FakeSession(
+        {"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_REAL)}
+    )
+    assert detect_api_base("http://target/", sess) == "/jeecg-boot"
+
+
+def test_basepath_detected_for_jeecg_boot_nested_result():
+    """兼容 result 为 {'img': ...} 的嵌套形态"""
+    sess = FakeSession(
+        {"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_NESTED)}
+    )
     assert detect_api_base("http://target/", sess) == "/jeecg-boot"
 
 
 def test_basepath_jeecg_requires_real_image_payload():
-    """只有 success 没有 result.img → 不认"""
+    """只有 success 没有图片数据 → 不认"""
     sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp('{"success":true}')})
+    assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_jeecg_rejects_non_image_result_string():
+    """result 是非图片字符串（如错误文案）→ 不认"""
+    sess = FakeSession(
+        {
+            "http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(
+                '{"success":true,"code":0,"result":"Token失效"}'
+            )
+        }
+    )
     assert detect_api_base("http://target/", sess) == ""
 
 
