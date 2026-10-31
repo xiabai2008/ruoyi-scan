@@ -195,14 +195,14 @@ def dispatch(args: Namespace) -> None:
             # 脚本里 -f 不带模式会被误判为「批量扫描完成」
             sys.exit(2)
         run_mode_batch(args.file, mode, args)
-    # 单目标模式按 u→m→p→l 顺序取第一个有效目标执行（优先级隐含在元组顺序中）
+    # 单目标模式：-m -u URL 这类组合里，u 携带目标、m 是裸开关。
+    # 此时应进入裸开关指定的模式，而不是按 u→m→p→l 顺序被 u 吞掉。
     elif target_for:
-        for k in _MODE_ARGS:
-            if k in target_for:
-                if not preflight_target(target_for[k], args):
-                    sys.exit(EXIT_UNREACHABLE)
-                run_mode(k, target_for[k], args)
-                break
+        mode = next(iter(flag_for)) if flag_for else next(iter(target_for))
+        target = next(iter(target_for.values()))
+        if not preflight_target(target, args):
+            sys.exit(EXIT_UNREACHABLE)
+        run_mode(mode, target, args)
     # 只给了模式开关（如裸 -p）却没有目标：明确报错并返回非 0 退出码。
     # 此前这种调用会走完全部分支、只留一个 banner 后 exit 0，使用者以为扫过了。
     elif flag_for:

@@ -1,7 +1,7 @@
 ﻿===============================================================================
  Ruoyi-Scan 插件清单（POC 覆盖范围）
- 版本：v1.5.2　共 54 个插件
- 高危 31　中危 18　低危 5　含 CVE 编号 16 个
+ 版本：v1.5.3　共 54 个插件
+ 高危 31　中危 18　低危 5　含 CVE 编号 15 个
  说明：本清单由 scripts/export_plugin_list.py 从插件源码导出，与运行时一致；
        装好后可用 ruoyi-scan --plugin-list 实时查看同一份数据。
 ===============================================================================
@@ -166,10 +166,10 @@
       说明：JDK9+ 下 DataBinder 可访问 ClassLoader，写 Tomcat 日志 getshell（影响 5.3.x）
       修复：升级 Spring Framework 至 5.3.18+ / 5.2.20+；或升级 JDK 至不受影响版本
 
- 028  高危  漏洞  CVE-2020-5410
-      名称：Spring Cloud Config 路径穿越
-      说明：Spring Cloud Config 的/{name}/{profile}/{label}端点存在目录遍历，可读取任意文件
-      修复：升级 Spring Cloud Config 至 ≥2.2.3.RELEASE / ≥2.1.9.RELEASE
+ 028  高危  漏洞
+      名称：Spring Cloud Config 配置未授权读取
+      说明：Spring Cloud Config 的 /{application}/{profile} 端点可匿名读取配置，可能泄露数据库、Redis 等连接信息
+      修复：为 Spring Cloud Config 端点增加访问认证，或仅允许内网受信服务访问
 
  029  中危  漏洞
       名称：Spring Boot Actuator 未授权访问
@@ -318,7 +318,6 @@
    CNVD-2022-30348   JeecgBoot jmreport SQL注入
    CNVD-2022-39817   JeecgBoot 任意文件读取
    CVE-2016-4437     Shiro RememberMe 反序列化（指纹）
-   CVE-2020-5410     Spring Cloud Config 路径穿越
    CVE-2021-29441    RuoYi-Cloud Nacos 配置泄露 / Nacos 未授权访问
    CVE-2022-22947    CVE-2022-22947 Spring Cloud Gateway 远程代码执行
    CVE-2022-22963    CVE-2022-22963 Spring Cloud Function 远程代码执行

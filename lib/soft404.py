@@ -31,9 +31,11 @@
 """
 
 import hashlib
+import json
 import re
 import uuid
-from typing import Any, Optional
+from typing import Any, Iterable, Optional, Tuple
+from urllib.parse import urlparse
 
 from common.logger import get_logger
 from core.http import join_url
@@ -59,8 +61,47 @@ def _digest(body: bytes) -> str:
 _PATH_TOKEN_RE = re.compile(rb"[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+")
 
 
-def _digest_canonical(body: bytes) -> str:
-    """把响应体里的路径片段归一化后再算摘要
+def _is_config_server_wildcard(body: bytes) -> bool:
+    """识别 Spring Cloud Config Server 的通配 JSON 响应。
+
+    两种形态都会出现：
+      - `/{name}/{profile}`：{"name":...,"profiles":[...],"propertySources":[...]}
+      - `/{name}-{profile}.json`：直接返回合并后的配置源，含 spring/server 等键
+    这类响应由任意路径触发，不能作为「文件存在」的证据。
+    """
+    try:
+        payload = json.loads(body.decode("utf-8", errors="replace"))
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if {"name", "profiles", "propertySources"} <= set(payload):
+        return True
+    spring = payload.get("spring")
+    return isinstance(spring, dict) and any(key in spring for key in ("datasource", "application", "redis"))
+
+
+def _derive_echo_tokens(path: str) -> Tuple[str, ...]:
+    """从请求路径派生可能在响应正文里回显的 token。
+
+    除了完整路径，还包含去前导斜杠、basename 和每个长度 >=3 的路径段。
+    Config Server 会把 `/swagger-ui/index.html` 拆成
+    `"name":"swagger-ui"` + `"profiles":["index.html"]`，只归一化连续路径
+    片段匹配不上，需要按 token 单独替换。
+    """
+    if not path:
+        return ()
+    parsed_path = urlparse(path).path or path
+    tokens = {parsed_path, parsed_path.lstrip("/")}
+    segments = [segment for segment in parsed_path.split("/") if segment]
+    if segments:
+        tokens.add(segments[-1])
+    tokens.update(segment for segment in segments if len(segment) >= 3)
+    return tuple(sorted(token for token in tokens if token))
+
+
+def _digest_canonical(body: bytes, tokens: Iterable[str] = ()) -> str:
+    """把响应体里的路径片段和回显 token 归一化后再算摘要
 
     为什么需要：兜底错误页常把请求路径回显在正文里。Spring Boot 4（若依 v4.8.3
     使用）对不存在的资源返回 **HTTP 200** + JSON：
@@ -68,9 +109,13 @@ def _digest_canonical(body: bytes) -> str:
     正文随请求路径变化，逐字节摘要必然不同 → 软 404 保护失效 → 目录扫描把
     几百条「资源不存在」全判成命中（实测 v4.8.3 靶场 696 条里报出 672 条命中）。
 
-    归一化后同一类错误页的摘要一致，可重新比对。
+    Config Server 还会把路径拆成 `"name":"swagger-ui"` + `"profiles":["index.html"]`，
+    因此再按调用方给的 token 做一次替换。归一化后同一类错误页的摘要一致。
     """
     canon = _PATH_TOKEN_RE.sub(b"*", body[:_DIGEST_BYTES])
+    for token in tokens:
+        if token:
+            canon = canon.replace(token.encode("utf-8"), b"*")
     return hashlib.sha256(canon).hexdigest()
 
 
@@ -95,7 +140,16 @@ _AUTH_FAILURE_RE = re.compile(rb'"(?:code|status)"\s*:\s*(?:401|403)\b')
 class Soft404Baseline:
     """软 404 基线：记录随机不存在路径的响应特征，用于判别兜底路由"""
 
-    __slots__ = ("reachable", "status_code", "length", "digest", "probe_path", "canonical_digest")
+    __slots__ = (
+        "reachable",
+        "status_code",
+        "length",
+        "digest",
+        "probe_path",
+        "canonical_digest",
+        "echo_tokens",
+        "config_server_wildcard",
+    )
 
     def __init__(
         self,
@@ -105,6 +159,8 @@ class Soft404Baseline:
         digest: str = "",
         probe_path: str = "",
         canonical_digest: str = "",
+        echo_tokens: Iterable[str] = (),
+        config_server_wildcard: bool = False,
     ) -> None:
         self.reachable = reachable  # 基线请求是否成功拿到响应
         self.status_code = status_code
@@ -113,17 +169,23 @@ class Soft404Baseline:
         self.probe_path = probe_path
         # 路径归一化后的摘要：用于识别「正文随请求路径变化」的兜底错误页
         self.canonical_digest = canonical_digest
+        # 基线探测路径派生出的回显 token（完整路径/去斜杠/basename/路径段）
+        self.echo_tokens = tuple(echo_tokens)
+        # 基线响应是否来自 Config Server 通配路由（两种响应形态都算）
+        self.config_server_wildcard = config_server_wildcard
 
     @property
     def is_catch_all(self) -> bool:
         """站点是否存在兜底路由（随机不存在路径也返回 2xx 且有内容）"""
         return self.reachable and 200 <= self.status_code < 300 and self.length > 0
 
-    def looks_like_real_file(self, resp: Optional[Any]) -> bool:
+    def looks_like_real_file(self, resp: Optional[Any], path: str = "") -> bool:
         """判断响应是否指向一个独立文件（而非兜底页）
 
         Args:
-            resp: 待判定的响应对象（requests.Response 兼容，需有 status_code/content）
+            resp: 待判定的响应对象（requests.Response 兼容，需有 status_code/content，
+                  真实响应还应带 url 供派生回显 token）
+            path: 可选请求路径；缺省时从 resp.url 派生
 
         Returns:
             True 表示可判定为独立文件；False 表示不存在或与兜底页无法区分
@@ -148,8 +210,17 @@ class Soft404Baseline:
         # 站点有兜底路由：与基线页完全一致 → 判定为同一个兜底页，不是独立文件
         if len(body) == self.length and _digest(body) == self.digest:
             return False
-        # 正文随请求路径变化的兜底错误页：归一化后摘要一致 → 仍是同一个兜底页
-        if self.canonical_digest and _digest_canonical(body) == self.canonical_digest:
+        # Config Server 对 /{name}/{profile} 与 /{name}-{profile}.json 返回两种不同形态；
+        # 两者都是通配响应，不能靠逐字节摘要区分。
+        if self.config_server_wildcard and _is_config_server_wildcard(body):
+            return False
+        # 正文随请求路径变化的兜底错误页：归一化后摘要一致 → 仍是同一个兜底页。
+        # 真实响应带 url 时用候选路径的 token；测试替身没有 url 时退化为旧行为。
+        candidate_path = path
+        if not candidate_path:
+            candidate_path = urlparse(getattr(resp, "url", "") or "").path
+        candidate_tokens = _derive_echo_tokens(candidate_path)
+        if self.canonical_digest and _digest_canonical(body, candidate_tokens) == self.canonical_digest:
             return False
         # 框架自带的「资源不存在」错误页：正文随请求路径变化时两种比对都可能失效，
         # 靠标记判定更稳（Spring Boot 4 / 若依 v4.8.3 实测）
@@ -192,11 +263,14 @@ class Soft404Baseline:
             logger.debug("软 404 基线探测异常详情", exc_info=True)
             return cls(reachable=False, probe_path=probe_path)
         body = getattr(resp, "content", None) or b""
+        echo_tokens = _derive_echo_tokens(probe_path)
         return cls(
             reachable=True,
             status_code=getattr(resp, "status_code", 0),
             length=len(body),
             digest=_digest(body) if body else "",
-            canonical_digest=_digest_canonical(body) if body else "",
+            canonical_digest=_digest_canonical(body, echo_tokens) if body else "",
             probe_path=probe_path,
+            echo_tokens=echo_tokens,
+            config_server_wildcard=_is_config_server_wildcard(body) if body else False,
         )
