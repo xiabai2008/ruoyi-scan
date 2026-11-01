@@ -4,6 +4,43 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.5.5] - 2026-11-02
+
+检出能力版：用真实组件靶场补盲测 v2 暴露的「该报的报不出来」，54 个插件中有 CONFIRMED 产出的从 29 个提升到 46 个。
+
+### 检出能力（盲测 v3 验证）
+
+- **JeecgBoot 整包 8 项恢复检出**：新增真实 JeecgBoot 3.6.3 漏洞演示环境（默认 safe / vuln 双模式），
+  8 个 Jeecg 插件全部首次 CONFIRMED（默认口令、字典越权、任意文件读取、jmreport 上传/SQLi/未授权/报表 SSTI、queryUserByDepId SQLi）。
+- **Spring 组件类判定按真实响应形态重写**（内置签名靶场已换为真实组件：Spring Cloud Gateway 3.1.0/SBA、Spring Cloud Function 3.2.2、Tomcat Spring4Shell）：
+  - Actuator env 配置覆盖 RCE：真实 WritableEnvironmentEndpoint 的 POST 成功响应是写入结果映射（如 `{"ruoyi.scan.env_probe":"true"}`）或 204，不再要求 `propertySources`。
+  - CVE-2022-22947 Gateway RCE：真实 `save()` 返回 201 + 空 body + `Location: /routes/{id}`；同时改为唯一探针路由 id 并在判定后 DELETE 清理，不再给目标留副作用。
+  - CVE-2022-22963 SCF RCE：真实受影响版与修复版对畸形路由都返回 500，改为时序差分（`T(Thread).sleep(4000)` 延迟 ≥2.5s 且显著高于基线）。
+  - CVE-2022-22965 Spring4Shell：`--exploit` 在真实 Tomcat 上写入并执行无害数字 JSP 后 CONFIRMED。
+- **RuoYi 二开场景**：未授权定时任务编辑接口、代码生成模板注入在真实二开站点首次 CONFIRMED。
+- **RuoYi-Cloud Nacos**：新增直连 Nacos API（8848）的验收流程，Nacos 未授权访问 / Cloud 配置泄露两插件首次 CONFIRMED。
+
+### Fixed
+
+- **前后端分离版登录入口识别（F10）**：nginx 只反代 `/prod-api` 时根路径 `/login` 是 SPA 页面，旧逻辑按 v4 登录导致 405 门禁失败。
+  现按 API 前缀 + 验证码接口形态识别 RuoYi-Vue/Cloud（`{base}/login`）、Plus（`{base}/auth/login`，Sa-Token clientId/grantType）
+  与 JeecgBoot（`{base}/sys/login`）三类登录入口；R6/R7/R9 鉴权后扫描从退出码 4 恢复为正常。
+- **JeecgBoot context-path 双前缀（F11）**：API 前缀提升后插件 URL 变成 `/jeecg-boot/jeecg-boot/...`，真实 Jeecg 目标整包漏报；
+  新增 `plugin_target_for()` 对 Jeecg 上下文保持站点根。同时 jmreport 列表插件支持积木报表常见的 `result.records` 包装。
+- **需会话插件降级口径（F13）**：认证纪律降级前移到 CLI 打印之前，修掉「终端显示存在、report.json 显示 UNKNOWN」的自相矛盾。
+
+### Added
+
+- 盲测 v3 报告 `docs/blind_test_report_v3.md`：46/54 插件有 CONFIRMED（v2 为 29），v2 产出 0 丢失，B 类误报 0；
+  R10/C2/D1 安全模式均 0 CONFIRMED（D1 仅默认口令真阳性）。
+- 新增单测：分离版登录（F10）、Spring 真实响应形态（F12）、引擎降级口径（F13）、Jeecg 双前缀与 result 包装。
+
+### Notes
+
+- 剩余 8 个零产出插件均为已识别边界：recon 类 2、Shiro 指纹 1（设计上不产 CONFIRMED）、
+  Windows 靶场无法验证 /etc/passwd 型文件读取 2、需 Plus 误配站 1、需 6379 无认证 Redis 1、备份靶场未建 1。
+- 扫描器仍不识别自定义 context-path（如二开站点的 `/portal`），列为下一版候选。
+
 ## [1.5.4] - 2026-11-01
 
 ### 盲测 v2：两个 P0 级判定缺陷（2026-11-01）
