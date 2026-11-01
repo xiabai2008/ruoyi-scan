@@ -116,6 +116,9 @@ class SessionManager:
 
     password_dict: Optional[str] = None
 
+    # F8：真实利用开关（默认 False；只有显式 --exploit 才允许写目标文件）
+    exploit: bool = False
+
     def __init__(
         self,
         proxy: Optional[str] = None,

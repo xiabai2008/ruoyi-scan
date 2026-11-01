@@ -189,6 +189,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         bypass_waf=getattr(args, "bypass_waf", "auto"),
         # 方案 A：对抗型传输层（--adversarial-transport 启用；默认关闭，向后兼容）
         adversarial_transport=getattr(args, "adversarial_transport", False),
+        # F8：Spring4Shell 真实利用（默认关闭，非回环/内网目标由插件二次拒绝）
+        exploit=getattr(args, "exploit", False),
         auth=auth_config,
         surface_account=getattr(args, "surface_account", None),
         auth_status=auth_status,

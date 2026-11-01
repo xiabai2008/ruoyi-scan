@@ -201,6 +201,8 @@ class ScanRequest:
     # 兜底追加到尝试序列，用于突破 Cloudflare Turnstile/Interstitial 等 JS 挑战。
     # 需安装额外依赖：pip install 'ruoyi-scan[adversarial]'
     adversarial_transport: bool = False
+    # F8：Spring4Shell 真实利用（--exploit；默认关闭，仅回环/内网目标允许）
+    exploit: bool = False
 
     def __post_init__(self) -> None:
         """API/嵌入式调用可能直接传 auth 但不设 auth_status：有凭据即视为 ok。"""
@@ -556,6 +558,8 @@ class ScanOrchestrator:
                 timeout=req.timeout,
                 pool_size=req.threads,
             )
+            # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
+            session.exploit = req.exploit
             self._raise_if_cancelled(task.task_id)
             engine = ScanEngine(
                 threads=req.threads,

@@ -157,6 +157,15 @@ def build_parser():
     group = parser.add_argument_group("D6 利用链")
     group.add_argument("--chain", default=None, metavar="NAME", help="执行漏洞利用链")
     group.add_argument("--chain-list", action="store_true", default=False, help="列出可用链")
+    group.add_argument(
+        "--exploit",
+        action="store_true",
+        default=False,
+        help=(
+            "仅用于已授权目标：对 Spring4Shell 做真实利用验证（会写入一个无害 JSP）。\n"
+            "默认关闭；非回环/内网目标自动拒绝。"
+        ),
+    )
 
     group = parser.add_argument_group("D7 WAF 绕过")
     group.add_argument("--bypass-waf", choices=["auto", "on", "off"], default="auto", help="WAF 绕过策略")
@@ -399,6 +408,11 @@ def print_help():
         ("--no-dedup", "关闭结果去重聚合"),
         ("--chain <name>", "执行漏洞利用链"),
         ("--chain-list", "列出所有可用的漏洞利用链"),
+        (
+            "--exploit",
+            "仅用于已授权目标：对 Spring4Shell 做真实利用验证（会写入一个无害 JSP）。\n"
+            "                             默认关闭；非回环/内网目标自动拒绝。",
+        ),
         ("--bypass-waf <m>", "WAF 绕过策略：auto/on/off（默认 auto）"),
         ("--adversarial-transport", "启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战"),
         ("--serve", "启动 Web API 服务（FastAPI + WebSocket + Web 控制台）"),
