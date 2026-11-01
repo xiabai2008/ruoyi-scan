@@ -73,10 +73,16 @@ class RocketmqUnauthPlugin(PluginBase):
             # 控制台特征 + 排除登录页：命中 RocketMQ 专有标识但含 login/sign in 说明有鉴权，不算未授权
             # 历史缺陷：positives 曾含 "dashboard"/"topic" 等泛化词，任意含 "topics" 的普通页面即误报；
             # 现在只认 RocketMQ 专有标识（rocketmq / mqnamesrv）
+            #
+            # request_path 必传：catch-all 路由（如 Spring 的 `/**`）会把请求路径写进页面，
+            # 于是 /rocketmq/ 的响应体里天然含 "rocketmq" —— 不传路径就会 100% 误报。
+            # 实测 2026-11-01 盲测 v2 C4-6：
+            #   GET /rocketmq/ → <html><body><h2>页面: rocketmq/</h2></body></html>
             if resp.status_code == 200 and match_positive(
                 text.lower(),
                 ["rocketmq", "mqnamesrv"],
                 negatives=["login", "sign in"],
+                request_path=p,
             ):
                 evidence_url = url
                 break

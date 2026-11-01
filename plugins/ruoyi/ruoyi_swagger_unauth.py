@@ -6,6 +6,7 @@ import requests
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import is_path_echo_page
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -91,6 +92,15 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 # 匹配整个响应体（resp.text 已物化，[:500] 截断会在大型文档上漏掉标题标记）；
                 # 统一转小写比较，覆盖 "Swagger UI" 等大写形态；原 '"swagger"' 为 "swagger" 的子串冗余
                 body = (resp.text or "").lower()
+
+                # 先排除 catch-all 路径回显：靶场/web 框架用 `/**` 兜底时，
+                # 任意路径都返回 200 HTML，且页面里带请求路径本身：
+                #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
+                # 正文天然含 "swagger-ui" 字样 → 旧实现 100% 误报。
+                # 实测 2026-11-01 盲测 v2 C4-6 靶场。
+                if is_path_echo_page(resp.text or "", path):
+                    continue
+
                 if any(
                     kw in body
                     for kw in [

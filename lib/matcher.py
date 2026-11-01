@@ -50,22 +50,76 @@ def is_missing_resource_page(text) -> bool:
     return any(m in low for m in _MISSING_RESOURCE_MARKERS)
 
 
-def match_positive(text, positives, negatives=None):
+# HTML catch-all 路由的特征：把**请求路径本身**写进页面。
+#
+# 第三类「路径回显」陷阱（2026-11-01 盲测 v2 实测）：
+# 靶场用 `/**` 路由兜底时，任意路径都返回 200 HTML，页面标题/正文里带着请求路径：
+#   GET /rocketmq/       → <html><body><h2>页面: rocketmq/</h2></body></html>
+#   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
+#
+# 组件探测类插件拿路径名当关键字（"rocketmq"、"swagger"），于是 100% 误判。
+# 前两道排除（missing resource / auth failure）只覆盖 JSON 回显，管不了 HTML。
+_CATCH_ALL_MAX_LEN = 600
+
+
+def is_path_echo_page(text, request_path: str = "") -> bool:
+    """判断响应是否是「把请求路径回显在页面里」的 catch-all 兜底页。
+
+    与 is_missing_resource_page / is_auth_failure_page 同类，是第三道排除。
+    区别：靠**「页面里出现了请求路径」**判定，不依赖固定文案。
+
+    Args:
+        text: 响应正文
+        request_path: 实际请求的路径（如 "/rocketmq/"）。为空时无法可靠判定，返回 False。
+
+    Returns:
+        True 表示这是 catch-all 回显页，正文里的路径名不能当组件存在证据。
+    """
+    if not text or not request_path:
+        return False
+    # 只处理短页面：真实组件页面（Swagger UI / Druid / RocketMQ 控制台）
+    # 都在几十 KB 量级，不会短到这个程度。设上限避免误杀正常页面。
+    if len(text) > _CATCH_ALL_MAX_LEN:
+        return False
+
+    low = text.lower()
+    if "<html" not in low and "<body" not in low and "<h2" not in low:
+        return False
+
+    full = request_path.split("?")[0].strip("/")
+    if not full:
+        return False
+    if full.lower() in low:
+        return True
+    # 退化：用最后一段（有些页面只回显文件名）
+    seg = full.rsplit("/", 1)[-1]
+    return bool(seg and len(seg) >= 4 and seg.lower() in low)
+
+
+def match_positive(text, positives, negatives=None, request_path=""):
     """正向命中：text 含任一 positives 且不含任何 negatives
 
-    「资源不存在」错误页一律判负：它只是把请求路径回显在正文里，
-    对组件探测类插件是纯噪声。
+    三类「路径回显」噪声一律判负 —— 它们只是把请求路径写在正文里，
+    对组件探测类插件是纯噪声：
+
+    1. 资源不存在错误页（JSON）
+    2. 登录墙认证失败页（JSON）
+    3. catch-all 路由把路径当页面内容回显（HTML），**需要传 request_path 才能识别**
 
     Args:
         text: 响应文本
         positives: 正向关键字列表（命中任一即为正向特征存在）
         negatives: 负向排除关键字列表（命中任一即判为噪声/WAF/错误页）
+        request_path: 实际请求的路径（如 "/rocketmq/"）。传了才能排除 HTML catch-all；
+            不传时保持旧行为（不少老插件没有现成的 path 变量）。
     """
     if text is None:
         return False
     if is_missing_resource_page(text):
         return False
     if is_auth_failure_page(text) and not any(p in _AUTH_BLOCK_KEYWORDS for p in positives):
+        return False
+    if request_path and is_path_echo_page(text, request_path):
         return False
     if not any(p in text for p in positives):
         return False

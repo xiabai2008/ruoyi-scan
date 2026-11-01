@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_positive
+from lib.matcher import is_path_echo_page, match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -144,6 +144,15 @@ class UnauthBatchPlugin(PluginBase):
                 continue
 
             # 3) 特征关键字命中（且 JSON 端点要求响应确实是 JSON）
+            #
+            # 先排除 catch-all 路径回显：`/**` 路由会把请求路径写进页面，
+            # 于是 /swagger-ui.html 的响应体天然含 "swagger-ui" —— 不排除就 100% 误报。
+            # 实测 2026-11-01 盲测 v2 C4-6：
+            #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
+            if is_path_echo_page(text, ep["path"]):
+                all_status.append((ep["name"], "SAFE", "catch-all 路径回显，非真实端点"))
+                continue
+
             matched_kw = [kw for kw in ep["keywords"] if kw.lower() in text.lower()]
             # 无 JSON Content-Type 时用响应体首字符（{ 或 [）推断 JSON，兼容未声明类型的自研接口
             is_json = "json" in ctype.lower() or text.lstrip().startswith("{") or text.lstrip().startswith("[")

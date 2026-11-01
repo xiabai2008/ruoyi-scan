@@ -81,6 +81,44 @@ def _is_config_server_wildcard(body: bytes) -> bool:
     return isinstance(spring, dict) and any(key in spring for key in ("datasource", "application", "redis"))
 
 
+def _html_echoes_path(body: bytes, path: str) -> bool:
+    """判断响应是否是「短 HTML 页面回显请求路径」的 catch-all。
+
+    这类兜底的麻烦之处：**每个路径的响应长度都不同**（路径越长相，长度越长），
+    所以长度比对、逐字节摘要、归一化摘要全部失效。只能靠「页面里出现了路径」识别。
+
+    实测（2026-11-01 盲测 v2 C4-6）：
+        GET /index.bak → <html><body><h2>页面: index.bak</h2></body></html>
+        → backup_scan 把 60 个候选路径全当成「真实备份文件」
+
+    Args:
+        body: 响应体字节
+        path: 请求路径（可含查询串）
+
+    Returns:
+        True 表示这是路径回显页，不能当作「文件存在」的证据。
+    """
+    if not body or not path:
+        return False
+    # 只处理短页面：真实文件（Swagger UI / Druid / 备份 SQL）不会短到这个程度
+    if len(body) > 600:
+        return False
+    try:
+        text = body.decode("utf-8", errors="replace")
+    except Exception:
+        return False
+    low = text.lower()
+    if "<html" not in low and "<body" not in low and "<h2" not in low:
+        return False
+    cleaned = (urlparse(path).path or path).strip("/")
+    if not cleaned:
+        return False
+    if cleaned.lower() in low:
+        return True
+    seg = cleaned.rsplit("/", 1)[-1]
+    return bool(seg and len(seg) >= 3 and seg.lower() in low)
+
+
 def _derive_echo_tokens(path: str) -> Tuple[str, ...]:
     """从请求路径派生可能在响应正文里回显的 token。
 
@@ -225,6 +263,14 @@ class Soft404Baseline:
         # 框架自带的「资源不存在」错误页：正文随请求路径变化时两种比对都可能失效，
         # 靠标记判定更稳（Spring Boot 4 / 若依 v4.8.3 实测）
         if _MISSING_RESOURCE_RE.search(body):
+            return False
+        # HTML catch-all 把**请求路径**回显进页面：每个路径的响应长度都不同
+        # （路径越长相，长度越长），所以长度/摘要/归一化比对全部失效。
+        # 实测 2026-11-01 盲测 v2 C4-6：
+        #   GET /index.bak → <html><body><h2>页面: index.bak</h2></body></html>
+        #   → 60 个「备份文件」全是同一个 catch-all 页，被判成真文件。
+        # 判据：短 HTML 页面里出现了候选路径本身。
+        if _html_echoes_path(body, candidate_path):
             return False
         # 内容与兜底页不同 → 确有差异，保守放行（由插件继续做关键字校验）
         return True
