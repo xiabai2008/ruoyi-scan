@@ -25,9 +25,10 @@
 > WP2 ✅ 完成（R6/R7/R9 登录 exit 0，ruoyi-scan 3c27e31）；
 > WP3 ✅ 完成（scanner fee7580；C2-1b 真实 Gateway 3.1.0 + SBA client 上 env RCE / Gateway RCE / trace 全部 CONFIRMED，
 > C2-3 降到 3.2.2 后 SCF 时序差分 CONFIRMED，C2-2 --exploit Spring4Shell CONFIRMED；三站 safe 模式 0 CONFIRMED）；
-> WP4 🔶 部分（R2 任意文件上传已通：runtime profile 改绝对路径，待收口进 launch.py；
-> dataScope 注入在 R2(4.6.2) 已修复、判 SAFE 正确；文件读取受 Windows 靶场限制）；
-> WP5/WP6 未开始。
+> WP4 ✅ 完成（lab 4b15a05 绝对 profile → R2/R4 上传 CONFIRMED；lab 9106053 D1 二开漏洞版 → 未授权 job RCE 匿名 CONFIRMED、
+> gen SSTI 认证后 CONFIRMED；R8 独占轮次直连 8848 → Nacos 两插件 CONFIRMED）；
+> WP5 ✅ 完成（盲测 v3：46/54 插件有 CONFIRMED，较 v2 +17、0 丢失、0 B 类误报，报告 docs/blind_test_report_v3.md）；
+> WP6 待执行（发布 v1.5.5）。
 
 **本轮新增扫描器能力（均已 push，CI 绿）**
 - `3c27e31` 分离版登录入口识别（base path → /prod-api/login | /auth/login | /sys/login）
