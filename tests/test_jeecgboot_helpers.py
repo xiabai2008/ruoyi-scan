@@ -26,6 +26,11 @@ def test_is_dict_list_json_cases():
     # 正向：records/rows 为 list + total/success 之一
     assert _is_dict_list_json(_Resp({"records": [{"id": 1}], "total": 1})) is True
     assert _is_dict_list_json(_Resp({"rows": [], "success": True})) is True
+    # 积木报表常见 result 包装（2026-11-02 修复：jmreport_list 曾因只看顶层漏报）
+    assert (
+        _is_dict_list_json(_Resp({"code": 200, "success": True, "result": {"records": [{"id": 1}], "total": 3}}))
+        is True
+    )
     # 负向：code 非 200 → 拒绝
     assert _is_dict_list_json(_Resp({"code": 500, "records": [1], "total": 1})) is False
     # 负向：records 不是 list → 拒绝

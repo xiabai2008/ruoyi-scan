@@ -131,6 +131,25 @@ def _probe_api_base(base: str, session: Any) -> bool:
         return False
 
 
+# JeecgBoot 的 context-path（插件内部路径已自带）
+_JEECG_BASES = ("/jeecg-boot", "/jeecg")
+
+
+def plugin_target_for(target: str, api_base: str) -> str:
+    """把探测到的 API 前缀提升为插件探测基准（引擎用）。
+
+    JeecgBoot 例外：其插件路径内部已经写死 context-path（/jeecg-boot/...），
+    若再把 api_base 追加到 target 会拼成 /jeecg-boot/jeecg-boot/... 的双前缀，
+    真实 Jeecg 目标会整包漏报（2026-11-02 R10 实测，5 个插件 URL 翻倍）。
+    因此 Jeecg 上下文保持站点根，由插件自己拼 context-path。
+    """
+    if not api_base:
+        return target
+    if api_base in _JEECG_BASES:
+        return target
+    return target.rstrip("/") + api_base + "/"
+
+
 def detect_api_base(target: str, session: Any) -> str:
     """探测需要在 target 后追加的 API 前缀
 

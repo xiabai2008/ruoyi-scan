@@ -766,15 +766,18 @@ class ScanOrchestrator:
             # 实测 2026-10-29 R7（严格只反代 /prod-api/）：除宿主级 Redis 外无任何命中。
             # 根路径已直连后端（单机版）时 detect_api_base 返回空串，行为不变。
             plugin_target = target
+            api_base = ""
             try:
                 from core.basepath import detect_api_base
 
                 api_base = detect_api_base(target, session)
             except Exception:
                 logger.debug("API 前缀探测失败", exc_info=True)
-                api_base = ""
             if api_base:
-                plugin_target = target.rstrip("/") + api_base + "/"
+                # JeecgBoot 的插件路径自带 /jeecg-boot context-path，helper 会避免双前缀
+                from core.basepath import plugin_target_for
+
+                plugin_target = plugin_target_for(target, api_base)
                 _emit(
                     "basepath",
                     {"base": api_base, "plugin_target": plugin_target, "task_id": task.task_id},

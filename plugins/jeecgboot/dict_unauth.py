@@ -23,11 +23,16 @@ def _is_dict_list_json(resp):
     code = body.get("code")
     if isinstance(code, int) and code != 200:
         return False
-    records = body.get("records")
-    rows = body.get("rows")
+    # JeecgBoot/积木报表常见 result 包装：{"code":200,"success":true,
+    # "result":{"records":[...],"total":N}}。dict_unauth._is_dict_page 已经支持，
+    # 本函数原先只看顶层，导致 jmreport_list 对 result 包装形态漏报
+    # （2026-11-02 R10 实测：按顶层字段造数据才命中，真实积木接口多为 result 包装）。
+    page = body.get("result") if isinstance(body.get("result"), dict) else body
+    records = page.get("records")
+    rows = page.get("rows")
     if not (isinstance(records, list) or isinstance(rows, list)):
         return False
-    return ("total" in body) or ("success" in body)
+    return any(k in page for k in ("total", "success")) or any(k in body for k in ("total", "success"))
 
 
 class JeecgDictUnauthPlugin(PluginBase):

@@ -46,27 +46,20 @@ def test_basepath_detects_dev_api_variant():
 # JeecgBoot 3.6.3 的真实响应（2026-10-31 从 R10 实测）：result 是 data URI 字符串，code 是 0。
 # 旧用例用的是 {"code":200,"result":{"img":"..."}}，与线上实现不符，导致探测函数按错误
 # 结构写、单测还全绿——R10 因此始终探不到 /jeecg-boot。
-JEECG_JSON_REAL = (
-    '{"success":true,"message":"","code":0,'
-    '"result":"data:image/jpg;base64,/9j/4AAQSkZJRgABAgAA"}'
-)
+JEECG_JSON_REAL = '{"success":true,"message":"","code":0,"result":"data:image/jpg;base64,/9j/4AAQSkZJRgABAgAA"}'
 # 兼容老版本 / 其它 Jeecg 分支返回的嵌套形态
 JEECG_JSON_NESTED = '{"success":true,"code":200,"result":{"img":"data:image/png;base64,iVBORw0KGgo="}}'
 
 
 def test_basepath_detected_for_jeecg_boot():
     """真实 Jeecg 验证码 /sys/randomImage/{key}：result 为 data URI 字符串 → 识别 /jeecg-boot"""
-    sess = FakeSession(
-        {"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_REAL)}
-    )
+    sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_REAL)})
     assert detect_api_base("http://target/", sess) == "/jeecg-boot"
 
 
 def test_basepath_detected_for_jeecg_boot_nested_result():
     """兼容 result 为 {'img': ...} 的嵌套形态"""
-    sess = FakeSession(
-        {"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_NESTED)}
-    )
+    sess = FakeSession({"http://target/jeecg-boot/sys/randomImage/ruoyi_scan_probe": FakeResp(JEECG_JSON_NESTED)})
     assert detect_api_base("http://target/", sess) == "/jeecg-boot"
 
 
@@ -143,3 +136,30 @@ def test_basepath_cloud_code_not_confused_with_generic_json():
         }
     )
     assert detect_api_base("http://target/", sess) == ""
+
+
+# ── F11: plugin_target 提升（Jeecg 双前缀回归） ─────────────────────────
+
+
+def test_plugin_target_for_empty_base_returns_target():
+    from core.basepath import plugin_target_for
+
+    assert plugin_target_for("http://target/", "") == "http://target/"
+
+
+def test_plugin_target_for_appends_api_base():
+    from core.basepath import plugin_target_for
+
+    assert plugin_target_for("http://target/", "/prod-api") == "http://target/prod-api/"
+
+
+def test_plugin_target_for_jeecg_does_not_double_prefix():
+    """JeecgBoot 插件路径自带 /jeecg-boot，不能再把 base 追加到 target。
+
+    2026-11-02 R10 实测：追加后 5 个插件 URL 变成 /jeecg-boot/jeecg-boot/...，
+    真实 Jeecg 目标会整包漏报。
+    """
+    from core.basepath import plugin_target_for
+
+    assert plugin_target_for("http://target/", "/jeecg-boot") == "http://target/"
+    assert plugin_target_for("http://target/", "/jeecg") == "http://target/"
