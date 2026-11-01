@@ -85,16 +85,14 @@ class TestGatewayRce(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_hit(self, m):
-        m.post(MOCK_TARGET + "/actuator/gateway/routes/test", text='{"status":201,"_marker":"' + MARKER_GW + '"}')
+        m.post(requests_mock.ANY, text='{"status":201,"_marker":"' + MARKER_GW + '"}')
         r = SpringGatewayRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_CONFIRMED, f"响应含 Gateway 签名应判 CONFIRMED，实际 {r.status}")
         self.assertIn(MARKER_GW, r.evidence)
 
     @requests_mock.Mocker()
     def test_safe(self, m):
-        m.post(
-            MOCK_TARGET + "/actuator/gateway/routes/test", text='{"status":404,"error":"Not Found"}', status_code=404
-        )
+        m.post(requests_mock.ANY, text='{"status":404,"error":"Not Found"}', status_code=404)
         r = SpringGatewayRcePlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE, f"端点不可达应判 SAFE，实际 {r.status}")
 
@@ -107,7 +105,7 @@ class TestGatewayRce(unittest.TestCase):
             '"uri":"http://localhost:1","order":0}'
         )
         m.post(
-            MOCK_TARGET + "/actuator/gateway/routes/test",
+            requests_mock.ANY,
             text=real_resp,
             status_code=201,
             headers={"Content-Type": "application/json"},

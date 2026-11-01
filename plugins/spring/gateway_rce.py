@@ -2,6 +2,8 @@
 # 漏洞原因：Actuator 暴露 /gateway/routes/ 端点，可 POST 创建含恶意 Filter 的路由触发
 #   SPEL 表达式求值执行任意命令（影响 Spring Cloud Gateway 3.1.x）。
 # 本插件仅做存在性验证：POST 创建测试路由探针，检测响应特征判定接口是否可达。
+import secrets
+
 import requests
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
@@ -65,12 +67,14 @@ class SpringGatewayRcePlugin(PluginBase):
         @param session: 共享 HTTP 会话
         @return: ScanResult——路由可匿名创建返回 CONFIRMED，否则 SAFE，网络异常 UNKNOWN
         """
-        url = join_url(target, "/actuator/gateway/routes/test")
+        # 唯一路由 id：避免与目标上既有路由（如 id=test）重名，也便于删除清理
+        route_id = "ruoyi-scan-probe-" + secrets.token_hex(4)
+        url = join_url(target, "/actuator/gateway/routes/" + route_id)
         # 路由创建探针（仅触发接口签名，不执行真实 SPEL）
         payload = {
             # 路由 id 必须与 URL 路径段一致：Gateway 以路径段为主键（控制器会用路径 id 覆盖 body id），
             # 不一致在严格/旧版实现上可能导致创建被拒，削弱检测可靠性
-            "id": "test",
+            "id": route_id,
             "filters": [{"name": "AddResponseHeader", "args": {"name": "X-Probe", "value": "c22947"}}],
             # uri 指向本地不可达端口：探针路由不会被真实转发流量，避免副作用
             "uri": "http://localhost:1",
@@ -86,6 +90,7 @@ class SpringGatewayRcePlugin(PluginBase):
         text = resp.text or ""
         if GW_MARKER in text:
             emit(ok("存在 CVE-2022-22947 Spring Cloud Gateway 远程代码执行漏洞"))
+            self._cleanup_route(session, target, route_id)
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -99,6 +104,7 @@ class SpringGatewayRcePlugin(PluginBase):
         # 真实漏洞响应：路由创建成功（201 Created + 路由信息）
         if resp.status_code in (200, 201) and match_gateway_route_created(text):
             emit(ok("存在 CVE-2022-22947 Spring Cloud Gateway 远程代码执行漏洞（真实漏洞响应）"))
+            self._cleanup_route(session, target, route_id)
             return ScanResult(
                 kind="vuln",
                 name=self.name,
@@ -108,6 +114,25 @@ class SpringGatewayRcePlugin(PluginBase):
                 evidence="响应含 Gateway 路由创建成功特征（filters/predicate），证实 Gateway 路由可创建",
                 fix=self.fix,
             )
+        # F12：真实 Spring Cloud Gateway 3.1.0 的 AbstractGatewayControllerEndpoint.save
+        # 用 ResponseEntity.created(uri).build() 返回 **201 + 空 body + Location: /routes/{id}**，
+        # 旧实现要求 body 含 filters/predicate → 真实可创建端点被漏判 SAFE
+        # （2026-11-02 C2-1b 真实 Gateway 实测）。Location 指向本插件刚创建的唯一路由
+        # 才认，避免把普通 201 误判为漏洞。
+        location = (resp.headers.get("Location") or "").strip()
+        if resp.status_code in (200, 201) and ("/routes/" + route_id) in location:
+            emit(ok("存在 CVE-2022-22947 Spring Cloud Gateway 远程代码执行漏洞（201 + Location）"))
+            self._cleanup_route(session, target, route_id)
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=url,
+                evidence=f"POST 创建路由返回 HTTP {resp.status_code} 且 Location={location}（路由已创建，可被 refresh 触发）",
+                fix=self.fix,
+            )
+        self._cleanup_route(session, target, route_id)
         emit(no("不存在 CVE-2022-22947 Spring Cloud Gateway 远程代码执行漏洞"))
         return ScanResult(
             kind="vuln",
@@ -116,3 +141,15 @@ class SpringGatewayRcePlugin(PluginBase):
             url=url,
             evidence="响应未含 Gateway RCE 特征（端点不可达或已修复）",
         )
+
+    @staticmethod
+    def _cleanup_route(session, target: str, route_id: str) -> None:
+        """删除本次创建的路由（best effort）。
+
+        2026-11-02 真实 Gateway 实测：不清理会在目标上留下探针路由，安全工具不应
+        产生持久副作用。清理失败不影响检测结论（网关可能不允许 DELETE）。
+        """
+        try:
+            session.delete(join_url(target, "/actuator/gateway/routes/" + route_id))
+        except Exception:
+            pass
