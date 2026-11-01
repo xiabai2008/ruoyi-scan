@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 
 if TYPE_CHECKING:
     from core.session import SessionManager
@@ -127,6 +127,18 @@ class ScanEngine:
                 enrich = getattr(inst, "enrich", None)
                 if callable(enrich):
                     original = cast(ScanResult, enrich(original))
+                # F13：需会话插件必须在结果回调（CLI 逐条打印）之前按认证纪律降级。
+                # 旧行为：orchestrator 在 engine 返回后才统一降级，CLI 已按原状态打印
+                # 「存在 XXX」，与 report.json 的 UNKNOWN 自相矛盾（2026-11-02 D1 实测）。
+                # session.authenticated 由 orchestrator 调用本引擎前显式设置；未设置的
+                # 调用方（单测/嵌入式 API）保持旧行为，不做提前降级。
+                if getattr(cls, "requires_auth", False) and getattr(session, "authenticated", None) is False:
+                    if original.status in (STATUS_CONFIRMED, STATUS_SAFE):
+                        original.status = STATUS_UNKNOWN
+                        original.evidence = (
+                            "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。"
+                            f"原证据：{original.evidence}"
+                        )
                 return original
             except Exception as e:
                 # 网络异常等不阻断整体流程，判为 UNKNOWN（绝不判 SAFE）
