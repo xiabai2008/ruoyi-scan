@@ -36,7 +36,23 @@ class RocketmqUnauthPlugin(PluginBase):
         @param session: 已配置的 HTTP 会话
         @return: ScanResult（CONFIRMED 表示可无凭证访问控制台）
         """
-        paths = ["/rocketmq/", "/dashboard/", "/rocketmq-console-ng/"]
+        # 探测路径。顺序即优先级：
+        #   1. "/"            —— **真实 rocketmq-dashboard 的默认位置**
+        #   2. "/rocketmq/"    —— 少数反向代理按前缀挂载时
+        #   3. "/dashboard/"   —— 二开项目常见自定义前缀
+        #   4. "/rocketmq-console-ng/" —— 旧版 war 包部署名
+        #
+        # 为什么把 "/" 放第一位：rocketmq-console-ng（现 rocketmq-dashboard）是**独立的
+        # Spring Boot Web 应用**，官方发布包默认 context-path 为空，控制台直接挂在根路径。
+        # 旧实现只探后三条（都是"猜前缀"），真实部署一条都命中不了。
+        #
+        # 实测（2026-11-01 C4-3 靶场，复刻真实 dashboard 路由）：
+        #   GET /                    → 200，正文含 mqnamesrv / RocketMQ Dashboard
+        #   GET /rocketmq/           → 404
+        #   GET /dashboard/          → 404
+        #   GET /rocketmq-console-ng/ → 404
+        #   → 旧实现判 SAFE（漏报），这就是该插件历史上从未 CONFIRMED 过的原因。
+        paths = ["/", "/rocketmq/", "/dashboard/", "/rocketmq-console-ng/"]
         evidence_url = ""
         # SAFE 证据用最后探测的 URL：只报裸 target 无法说明实际探测到哪个路径（与 CONFIRMED 的 evidence_url 对齐）
         last_url = ""
