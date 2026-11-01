@@ -21,6 +21,19 @@
 
 ## 二、工作包（按 ROI 排序，可并行）
 
+> **执行状态（2026-11-02 第 1 轮）**：WP1 ✅ 完成（真实 R10，8/8 CONFIRMED，lab commit de58a37）；
+> WP2 ✅ 完成（R6/R7/R9 登录 exit 0，ruoyi-scan 3c27e31）；
+> WP3 ✅ 完成（scanner fee7580；C2-1b 真实 Gateway 3.1.0 + SBA client 上 env RCE / Gateway RCE / trace 全部 CONFIRMED，
+> C2-3 降到 3.2.2 后 SCF 时序差分 CONFIRMED，C2-2 --exploit Spring4Shell CONFIRMED；三站 safe 模式 0 CONFIRMED）；
+> WP4 🔶 部分（R2 任意文件上传已通：runtime profile 改绝对路径，待收口进 launch.py；
+> dataScope 注入在 R2(4.6.2) 已修复、判 SAFE 正确；文件读取受 Windows 靶场限制）；
+> WP5/WP6 未开始。
+
+**本轮新增扫描器能力（均已 push，CI 绿）**
+- `3c27e31` 分离版登录入口识别（base path → /prod-api/login | /auth/login | /sys/login）
+- `95f27be` Jeecg context-path 不重复追加 + jmreport result 包装识别
+- `fee7580` Spring 三插件按真实响应形态判定（env 属性回显/204、gateway 201+Location+清理、SCF 时序差分）
+
 ### WP1 · JeecgBoot 8 个插件（ROI 最高，一座靶场解锁 8 个）
 - **做法**：改造真实 R10（JeecgBoot 3.6.3）为**漏洞版**：jmreport 未授权/注入/上传、dict 越权、
   queryUserByDepId 注入、任意文件读取、代码生成 SSTI、默认口令；保留一个「修复版」负样本。
