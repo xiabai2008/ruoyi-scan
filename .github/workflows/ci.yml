@@ -150,14 +150,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: RuoYi signature lab
-        # allow-safe 名单均为「结构性非 CONFIRMED」插件：Redis/MinIO/RocketMQ 为中间件
-        # 探测（靶机无该服务即 SAFE）；Shiro RememberMe 指纹探测设计上只有
-        # SAFE（无特征）/UNKNOWN（有特征需验密钥）两种判定，永远不可能 CONFIRMED。
+        # allow-safe 名单均为「结构性非 CONFIRMED」插件：
+        # - Redis/MinIO/RocketMQ：中间件探测，靶机未部署即 SAFE；
+        # - Shiro RememberMe：指纹探测设计上只有 SAFE/UNKNOWN 两种判定；
+        # - 6 个越权/鉴权类：F6/F7 起没有 --auth-login / --surface-account 时
+        #   诚实降级 UNKNOWN（签名靶场没有真实登录链与低权账号），不再像旧版
+        #   那样在未认证请求上判 CONFIRMED。
         run: |
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
             --target http://127.0.0.1:8080/ --mode p \
             --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro RememberMe 反序列化（指纹）"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro RememberMe 反序列化（指纹）,POST型报错注入（role）,POST型报错注入（dept）,RuoYi 代码生成模块 SSTI,定时任务调用目标未校验,重置密码页数据权限绕过,部门树越权访问"
       - name: Spring signature lab
         run: |
           python scripts/run_e2e.py --lab lab/spring_server.py --lab-port 8091 \
@@ -312,11 +315,14 @@ jobs:
           cache-dependency-path: "requirements*.txt"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-      - name: Scan real-spring lab (expect >= 11 CONFIRMED)
+      - name: Scan real-spring lab (expect >= 10 CONFIRMED)
+        # 期望下限 10（原 11）：F8 起 Spring4Shell 默认只做存在性验证，
+        # 「POST 200 且无错误」不再判 CONFIRMED；real-spring 靶场根路径 GET 404、
+        # 无可提交表单，无 --exploit 时该项诚实 UNKNOWN。其余 10 项不变。
         run: |
           python scripts/run_e2e.py --lab lab/real-spring/server.py --lab-port 8086 \
             --target http://127.0.0.1:8086/ --mode p \
-            --report-dir /tmp/e2e/real-spring --name real-spring --min-confirmed 11
+            --report-dir /tmp/e2e/real-spring --name real-spring --min-confirmed 10
 
   # ── 真实 RuoYi 靶场：Java + MySQL + Maven，D4 自动化验收 ────────
   # lab/real-ruoyi/ 完整 Java 源码未纳入 git（体积过大），常规 CI 无法执行该验收。

@@ -461,6 +461,21 @@ def dispatch(path, method):
         if vuln:
             return html_body("<html><body><h1>swagger 接口文档</h1><p>swagger-ui</p></body></html>")
         return json_body({"code": 401, "msg": "请先登录"}, 401)
+    if path == "/v2/api-docs":
+        # 真实若依 4.x 的 springfox 文档 JSON。F7-4 起 common/swagger_leak 只认
+        # 结构化文档（Content-Type=json 且 paths 非空）；纯 UI 页由 ruoyi_swagger 报。
+        if vuln:
+            return json_body(
+                {
+                    "swagger": "2.0",
+                    "info": {"title": "RuoYi 管理系统_接口文档", "version": "4.6.2"},
+                    "paths": {
+                        "/system/user/list": {"post": {"summary": "用户列表"}},
+                        "/system/role/list": {"post": {"summary": "角色列表"}},
+                    },
+                }
+            )
+        return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/system/user/list":
         if vuln:
             # 已登录低权账号：数据范围受限，仅可见自身——CVE-2025-46174 用它建立

@@ -225,11 +225,43 @@ def dispatch(path, method):
             return json_body({"pageItems": [{"dataId": "application-dev.yml"}], "totalCount": 1})
         return json_body({"timestamp": "...", "status": 404, "error": "Not Found"}, 404)
 
+    # Spring Cloud Config 未授权配置读取（F7 起插件读取 /application/default 的 propertySources）
+    if path in ("/application/default", "/application"):
+        if vuln:
+            return json_body(
+                {
+                    "name": "application",
+                    "profiles": ["default"],
+                    "propertySources": [
+                        {
+                            "name": "applicationConfig: [classpath:/application.properties]",
+                            "source": {
+                                "spring.datasource.password": "root",
+                                "spring.redis.password": "redis-pass",
+                            },
+                        }
+                    ],
+                }
+            )
+        return json_body({"timestamp": "...", "status": 404, "error": "Not Found", "path": path}, 404)
+
     # Swagger 未授权访问
     if path == "/swagger-ui.html":
         if vuln:
             return html_body("<html><body><h1>swagger 接口文档</h1></body></html>")
         return json_body({"timestamp": "...", "status": 404, "error": "Not Found"}, 404)
+
+    # OpenAPI 文档 JSON（F7-4 起 common/swagger_leak 只认结构化文档，不认纯 UI 页）
+    if path == "/v2/api-docs":
+        if vuln:
+            return json_body(
+                {
+                    "swagger": "2.0",
+                    "info": {"title": "Spring 接口文档", "version": "1.0"},
+                    "paths": {"/actuator/env": {"get": {"summary": "env"}}},
+                }
+            )
+        return json_body({"timestamp": "...", "status": 404, "error": "Not Found", "path": path}, 404)
 
     # 代码生成模块 SSTI
     if path == "/tool/gen/edit":
