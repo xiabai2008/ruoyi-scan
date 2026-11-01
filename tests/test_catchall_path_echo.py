@@ -114,17 +114,28 @@ def test_real_short_druid_monitor_is_not_echo():
     "残留 < 整页一半" 算法误判成路径回显 → CONFIRMED 退化为 SAFE。
     修正为按「残留 / 正文有效内容」比例判断。
     """
-    body = (
-        "<html><head><title>Druid Stat Index</title></head>"
-        "<body>Druid Monitor View</body></html>"
-    )
+    body = "<html><head><title>Druid Stat Index</title></head><body>Druid Monitor View</body></html>"
     assert is_path_echo_page(body, "druid/index.html") is False
 
 
 def test_soft404_short_real_page_is_not_echo():
     """soft404 同款判据：88 字节的真实 Druid 页不是路径回显。"""
-    body = (
-        "<html><head><title>Druid Stat Index</title></head>"
-        "<body>Druid Monitor View</body></html>"
-    ).encode()
+    body = ("<html><head><title>Druid Stat Index</title></head><body>Druid Monitor View</body></html>").encode()
     assert _html_echoes_path(body, "/druid/index.html") is False
+
+
+def test_short_real_component_page_without_path_is_not_echo():
+    """真实短页面只含品牌词、不含请求路径时，不能被判成回显。
+
+    2026-11-02 CI 实测：签名靶场的 75 字节 Swagger 页
+    "<h1>swagger 接口文档</h1>" 被旧判据误杀，导致两个 Swagger 插件
+    从 CONFIRMED 退化为 SAFE。回显页的前提是「正文里出现了请求路径」。
+    """
+    body = "<html><body><h1>swagger 接口文档</h1><p>swagger-ui</p></body></html>"
+    assert is_path_echo_page(body, "/swagger-ui.html") is False
+
+
+def test_soft404_short_real_page_without_path_is_not_echo():
+    """soft404 同款判据：不含请求路径的短真实页不是回显。"""
+    body = "<html><body><h1>swagger 接口文档</h1></body></html>".encode()
+    assert _html_echoes_path(body, "/swagger-ui.html") is False

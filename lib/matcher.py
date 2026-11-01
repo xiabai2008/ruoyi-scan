@@ -103,6 +103,12 @@ def is_path_echo_page(text, request_path: str = "") -> bool:
     # 真实组件页面剥掉品牌词后仍有大量结构/脚本/文案，不会被误判。
     needle = full.lower()
     seg = full.rsplit("/", 1)[-1].lower()
+    # 路径本身必须先出现在正文里，才谈得上「路径回显」。
+    # 真实但很短的组件页可能只含品牌词（如签名靶场的 75 字节 Swagger 页
+    # "<h1>swagger 接口文档</h1>"，并不包含 "/swagger-ui.html"），
+    # 若把这类页面也判成回显，会把真实端点误杀成 SAFE（2026-11-02 CI 实测）。
+    if needle not in low and seg not in low:
+        return False
     stripped = low.replace(needle, "").replace(seg, "")
 
     # 剥掉路径后剩下的「有效字符」（去掉 HTML 标签和空白）

@@ -118,7 +118,11 @@ def _html_echoes_path(body: bytes, path: str) -> bool:
     # 不能用裸子串匹配 —— 真实控制台的品牌词（如 `<title>RocketMQ Dashboard</title>`）
     # 会让路径名以合法词边界出现，裸匹配会误杀真实页面。
     seg = cleaned.rsplit("/", 1)[-1].lower()
-    stripped = low.replace(cleaned.lower(), "").replace(seg, "")
+    # 同 lib.matcher：正文里没出现请求路径就谈不上回显，避免误杀短的真实页面。
+    cleaned_l = cleaned.lower()
+    if cleaned_l not in low and seg not in low:
+        return False
+    stripped = low.replace(cleaned_l, "").replace(seg, "")
     residual = re.sub(r"<[^>]*>", "", stripped)
     residual = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", residual)
     if len(residual) <= 20:
