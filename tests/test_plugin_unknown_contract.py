@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import STATUS_SAFE, STATUS_UNKNOWN
 
 # 契约要求：网络不可达（请求抛异常）→ 必须返回 UNKNOWN，绝不冒充 SAFE/CONFIRMED
 CANDIDATES = [
@@ -112,12 +112,13 @@ def test_swagger_non_200_is_skipped_then_safe():
     assert result.status == STATUS_SAFE
 
 
-def test_swagger_ui_detected():
+def test_swagger_ui_only_is_not_document_leak():
+    """F7-4：纯 UI 页面不算文档泄露；由 ruoyi_swagger_unauth 单独报「UI 可访问」。"""
     from plugins.common.swagger_leak import SwaggerLeakPlugin
 
     resp = _StaticResp(200, "<html><head><title>swagger-ui</title></head></html>", {"Content-Type": "text/html"})
     result = SwaggerLeakPlugin().verify("http://x/", _StaticSession(resp))
-    assert result.status == STATUS_CONFIRMED
+    assert result.status == STATUS_SAFE
 
 
 def test_backup_scan_survives_request_errors():

@@ -18,7 +18,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures.thread import _worker
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
@@ -73,6 +73,41 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
 
 
 logger = get_logger(__name__)
+
+
+def _load_fallback_plugins() -> Tuple[List[type], List[Dict[str, Any]]]:
+    """cms 未识别时的回退插件包：ruoyi + spring，按类对象去重。
+
+    F7-1：旧实现只加载 plugins.ruoyi。C2-2（Spring4Shell）cms 为空，
+    报告里没有任何 Spring 插件结果——真实 Spring MVC 站点没有 /actuator
+    强特征时永远轮不到 plugins.spring。这里补回退覆盖面，但不猜 CMS：
+    两个包都加载，让插件自己给出 SAFE/UNKNOWN/CONFIRMED。
+
+    plugins.spring 加载失败只 warning，不影响 ruoyi；去重避免同一个类
+    被两个包同时导出时重复执行。
+
+    Returns:
+        (插件类列表, 每个包的加载明细)；明细含 package/count，失败时含 error。
+    """
+    plugins: List[type] = []
+    loaded: List[Dict[str, Any]] = []
+    seen: set[type] = set()
+    for package in ("plugins.ruoyi", "plugins.spring"):
+        try:
+            bundle = load_plugins(package)
+        except Exception as e:
+            logger.warning("回退插件包 %s 加载失败：%s", package, e, exc_info=True)
+            loaded.append({"package": package, "count": 0, "error": str(e)})
+            continue
+        added = 0
+        for cls in bundle:
+            if cls in seen:
+                continue
+            seen.add(cls)
+            plugins.append(cls)
+            added += 1
+        loaded.append({"package": package, "count": added})
+    return plugins, loaded
 
 
 def downgrade_auth_required_results(results: List[ScanResult], auth_status: str, auth_required_names: set[str]) -> int:
@@ -694,12 +729,14 @@ class ScanOrchestrator:
 
             # 6. 插件加载 + 路由
             if not all_plugins:
-                all_plugins = load_plugins("plugins.ruoyi")
+                all_plugins, fallback_packages = _load_fallback_plugins()
                 _emit(
                     "plugin_fallback",
                     {
                         "plugin": fp_result.cms or req.cms or "auto",
-                        "reason": "未匹配专用插件包，回退加载默认 ruoyi 包",
+                        "reason": "未匹配专用插件包，回退加载默认 ruoyi + spring 包",
+                        "packages": fallback_packages,
+                        "total_count": len(all_plugins),
                         "task_id": task.task_id,
                     },
                 )

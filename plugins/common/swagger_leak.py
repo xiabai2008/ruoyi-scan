@@ -77,30 +77,28 @@ class SwaggerLeakPlugin(PluginBase):
         "/api.html",
     ]
 
-    # HTML 界面必须有明确的 Swagger UI / Knife4j 标记。
-    # 不用 "swagger"/"api-docs" 这类纯路径词：Config Server 等通配路由会把
-    # {"name":"swagger-ui","profiles":["index.html"]} 回显出来，造成误报。
-    _HTML_MARKERS = ("swagger-ui", "knife4j")
-    # JSON 文档只认结构化键，不做子串匹配。
-    _JSON_KEYS = ("swagger", "openapi", "paths")
-
     @classmethod
     def _is_swagger_payload(cls, payload) -> bool:
         """结构化识别 Swagger 文档，不做子串匹配。
 
+        F7-4：只有 **有内容** 的文档才算泄露。C3 蜜罐的 /v2/api-docs 返回
+        {"swagger":"2.0","paths":{}}，旧实现只看 swagger 键就 CONFIRMED（B 类硬误报）。
+
         支持：
-          - 文档对象：含 swagger/openapi/paths
-          - springfox /swagger-resources 数组：元素含 swaggerVersion + url
-          - springdoc swagger-config：含 configUrl，或 url + urls
+          - 文档对象：paths 是 dict 且非空
+          - springfox /swagger-resources 数组：非空且元素含 swaggerVersion
+          - springdoc swagger-config：urls 非空
         """
         if isinstance(payload, dict):
-            if any(key in payload for key in cls._JSON_KEYS):
+            paths = payload.get("paths")
+            if isinstance(paths, dict) and paths:
                 return True
-            if "configUrl" in payload:
+            urls = payload.get("urls")
+            if isinstance(urls, list) and urls:
                 return True
-            return "url" in payload and "urls" in payload
+            return False
         if isinstance(payload, list):
-            return any(isinstance(item, dict) and "swaggerVersion" in item and "url" in item for item in payload)
+            return bool(payload) and all(isinstance(item, dict) and "swaggerVersion" in item for item in payload)
         return False
 
     def verify(self, target, session) -> ScanResult:
@@ -134,19 +132,16 @@ class SwaggerLeakPlugin(PluginBase):
                     continue
                 full_text = resp.text or ""
                 ct = (resp.headers.get("Content-Type") or "").lower()
-                # JSON API 文档：必须能解析为对象，且含 swagger/openapi/paths 键。
-                # 纯子串会把 Config Server 的路径回显当成文档。
-                if "json" in ct:
-                    try:
-                        payload = json.loads(full_text)
-                    except (TypeError, ValueError):
-                        payload = None
-                    if self._is_swagger_payload(payload):
-                        found.append(path)
-                    # JSON 响应不参与 HTML 标记判断，避免 name 字段里的 "swagger-ui" 误命中
+                # F7-4：只有可解析且有实际接口的文档 JSON 才算 swagger_leak。
+                # 纯 UI 页面（/swagger-ui.html 可访问但文档为空）交给
+                # ruoyi_swagger_unauth 报「UI 可访问」，不在本插件计为文档泄露。
+                if "json" not in ct:
                     continue
-                # HTML 界面：必须有 Swagger UI / Knife4j 标记。
-                if any(marker in full_text.lower() for marker in self._HTML_MARKERS):
+                try:
+                    payload = json.loads(full_text)
+                except (TypeError, ValueError):
+                    payload = None
+                if self._is_swagger_payload(payload):
                     found.append(path)
             except Exception:
                 # 单个路径失败不中断整体探测，但必须计数：全部失败时不能当"确认未暴露"（SAFE）

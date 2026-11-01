@@ -51,9 +51,13 @@ CMS_FEATURES = {
     "ruoyi-cloud": {
         "display": "RuoYi-Cloud",
         "favicon_hashes": set(),  # Cloud 版 favicon 与单机版可能不同
+        # F7-3：空 200 不是强特征。实测 C2-3（Spring Cloud Function）的 /nacos/、
+        # /gateway/ 都是 200+0 字节，仅凭状态码会把普通 Spring 应用判成 RuoYi-Cloud。
+        # min_length=20 仍保持 expect="any"：真实 Nacos 3.x 的 /nacos/ 可能是 404/410，
+        # 不能改成 JSON 判定（会误杀 R8）。
         "strong_paths": [
-            {"path": "/nacos/", "expect": "any"},  # Nacos 控制台
-            {"path": "/gateway/", "expect": "any"},  # Spring Gateway
+            {"path": "/nacos/", "expect": "any", "min_length": 20},  # Nacos 控制台
+            {"path": "/gateway/", "expect": "any", "min_length": 20},  # Spring Gateway
         ],
         "login_keywords": ["RuoYi-Cloud", "若依微服务"],
         "weak_keywords": ["ruoyi-cloud", "RuoYiCloud", "nacos"],

@@ -1,7 +1,12 @@
 # Spring Boot Admin 未授权访问
+import json
+
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from plugins.base import PluginBase
+
+# SBA 的 JSON API 返回实例/应用列表；SPA 壳页不含该标识。
+_SBA_HTML_MARKER = "spring-boot-admin"
 
 
 class SpringBootAdminPlugin(PluginBase):
@@ -46,14 +51,38 @@ class SpringBootAdminPlugin(PluginBase):
         "# 预期响应：200 + HTML 含 applications / spring-boot-admin 关键字即漏洞存在"
     )
 
-    def verify(self, target, session) -> ScanResult:
-        """验证 SBA 未授权访问：依次探测 3 个管理端点，任一端点命中关键字即确认。
+    @staticmethod
+    def _json_item_count(body: str) -> int:
+        """解析 SBA JSON 响应，返回实例/应用数量；不是有效列表时返回 0。
 
-        三态：
-        - 任一端点命中 SBA 专有特征 → CONFIRMED
-        - 至少拿到一个响应（含 404/403）且均未命中 → SAFE
-        - 三个端点全部请求异常（不可达 / 超时 / WAF 断连）→ UNKNOWN
-          旧实现此处直接落 SAFE，把「一个都没扫到」呈现为「确认安全」，违反三态铁律。
+        SBA 的 /applications、/instances、/wallboard 在 `Accept: application/json`
+        下返回 JSON 数组；部分版本包一层 {"applications": [...]} / {"instances": [...]}。
+        空数组、SPA 壳页、错误 JSON 一律不算命中。
+        """
+        try:
+            payload = json.loads(body or "")
+        except (TypeError, ValueError):
+            return 0
+        if isinstance(payload, list):
+            return len(payload)
+        if isinstance(payload, dict):
+            for key in ("instances", "applications"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return len(value)
+        return 0
+
+    def verify(self, target, session) -> ScanResult:
+        """验证 SBA 未授权访问：带 Accept: application/json 探测 3 个管理端点。
+
+        判定顺序：
+        1. JSON 可解析且列表非空（或 dict 中的 instances/applications 非空）→ CONFIRMED
+        2. JSON 不成立时回退 HTML 关键字（仅 spring-boot-admin 专有标识）→ CONFIRMED
+        3. 至少拿到一个响应（含 404/403）且均未命中 → SAFE
+        4. 三个端点全部请求异常（不可达 / 超时 / WAF 断连）→ UNKNOWN
+
+        实测 2026-10-31 C2-1a：默认 Accept 返回 1279 字节 SPA 壳（判 SAFE），
+        带 `Accept: application/json` 才返回 1876 字节实例列表——只请求 HTML 会漏报。
 
         @param target: 目标站点根 URL
         @param session: 共享 HTTP 会话
@@ -61,38 +90,38 @@ class SpringBootAdminPlugin(PluginBase):
         """
         errors = []
         responded = 0
-        for path in ["/applications", "/wallboard", "/instances"]:
+        for path in ["/applications", "/instances", "/wallboard"]:
             url = join_url(target, path)
             try:
-                resp = session.get(url)
-                # 匹配整个响应体：SBA 页面（SPA 壳）体积大，标识可能出现在前 500 字符之后，
-                # 截断匹配会漏报（resp.text 此时已全部物化，截断并不节省开销）
-                body = (resp.text or "").lower()
-                if resp.status_code == 200 and any(kw in body for kw in ["spring-boot-admin", "applications"]):
-                    return ScanResult(
-                        kind=self.category,
-                        name=self.name,
-                        severity=self.severity,
-                        status=STATUS_CONFIRMED,
-                        url=url,
-                        evidence=f"{path} 可未授权访问",
-                        fix=self.fix,
-                    )
+                resp = session.get(url, headers={"Accept": "application/json"})
             # 单一路径异常视为不可达，继续探测其余路径（容错而非整体失败）
-            except Exception:
+            except Exception as e:
+                errors.append(f"{path}: {e}")
                 continue
             responded += 1
-            # 只匹配响应前 500 字符：SBA 页面体积大，关键字头部即可命中，避免全量匹配开销。
-            # 关键字收紧为 SBA 专有标识——旧实现含裸词 "applications"，任意在首 500 字符
-            # 出现该英文词的 200 页面（普通站点首页、JS、文档）都会被误报为未授权。
-            if resp.status_code == 200 and "spring-boot-admin" in (resp.text or "")[:500]:
+            if resp.status_code != 200:
+                continue
+            body = resp.text or ""
+            count = self._json_item_count(body)
+            if count > 0:
                 return ScanResult(
                     kind=self.category,
                     name=self.name,
                     severity=self.severity,
                     status=STATUS_CONFIRMED,
                     url=url,
-                    evidence=f"{path} 可未授权访问",
+                    evidence=f"{path} JSON 接口可未授权访问（{count} 个实例/应用）",
+                    fix=self.fix,
+                )
+            # JSON 不成立才回退 HTML 判定：只认 SBA 专有标识，避免裸词 applications 误报。
+            if _SBA_HTML_MARKER in body.lower():
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"{path} 页面含 SBA 专有标识，可未授权访问",
                     fix=self.fix,
                 )
         if responded == 0:

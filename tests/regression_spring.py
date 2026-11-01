@@ -57,6 +57,7 @@ class TestSpring4shell(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_hit(self, m):
+        m.get(MOCK_TARGET + "/", text="<html><body>root</body></html>")
         m.post(MOCK_TARGET + "/", text='{"status":200,"_marker":"' + MARKER_S4S + '"}')
         r = Spring4shellPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_CONFIRMED, f"响应含 Spring4Shell 签名应判 CONFIRMED，实际 {r.status}")
@@ -64,20 +65,19 @@ class TestSpring4shell(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_safe(self, m):
+        m.get(MOCK_TARGET + "/", text="<html><body>root</body></html>")
         m.post(MOCK_TARGET + "/", text='{"status":400,"error":"Bad Request"}')
         r = Spring4shellPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(r.status, STATUS_SAFE, f"响应不含签名应判 SAFE，实际 {r.status}")
 
     @requests_mock.Mocker()
-    def test_real_vuln(self, m):
-        """真实漏洞响应（Spring Boot 成功 JSON，无 marker）应判 CONFIRMED"""
-        # 真实成功响应：200 + 无 error 字段的标准 JSON
+    def test_success_without_marker_not_confirmed(self, m):
+        """200 + 无错误标识只能说明端点可达，不能证明代码执行（F7-5 禁止假阳性）。"""
         real_success = '{"timestamp":"2024-01-01T00:00:00.000Z","status":200,"message":"ok"}'
+        m.get(MOCK_TARGET + "/", text="<html><body>root</body></html>")
         m.post(MOCK_TARGET + "/", text=real_success)
         r = Spring4shellPlugin().verify(MOCK_TARGET, SessionManager())
-        self.assertEqual(
-            r.status, STATUS_CONFIRMED, f"真实漏洞响应（Spring Boot 成功 JSON）应判 CONFIRMED，实际 {r.status}"
-        )
+        self.assertNotEqual(r.status, STATUS_CONFIRMED, f"无 marker 的 200 响应不得判 CONFIRMED，实际 {r.status}")
 
 
 class TestGatewayRce(unittest.TestCase):

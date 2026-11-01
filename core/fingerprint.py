@@ -156,6 +156,10 @@ class FeatureBasedFingerprint(Fingerprint):
                     continue
                 ct = (r.headers.get("Content-Type") or "").lower()
                 body = _response_text(r)
+                # F7-3：可选最小响应体长度。空 200（或仅 "OK"）不是强特征——
+                # 通配路由/网关兜底会把任意路径都回 200+0 字节，路径存在性没有意义。
+                if len(body) < item.get("min_length", 0):
+                    continue
                 if expect == "json":
                     json_keys = item.get("json_keys", [])
                     ok = _json_has_keys(ct, body, json_keys) if json_keys else _looks_like_api_json(ct, body)

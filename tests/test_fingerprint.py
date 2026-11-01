@@ -130,9 +130,7 @@ def test_router_resolves_ruoyi():
 
     fp_result = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 18, (
-        f"通用 ruoyi 应 18 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
-    )
+    assert len(plugins) == 18, f"通用 ruoyi 应 18 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
     print("PASS test_router_resolves_ruoyi: %d 个插件" % len(plugins))
 
 
@@ -252,7 +250,9 @@ def test_e1_detect_variant_plus():
 
     sess = FakeSession(
         {
-            "http://target/auth/login": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/auth/login": FakeResp(
+                '{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}
+            ),
             "http://target/auth/logout": FakeResp("", 200, {"Content-Type": "text/html"}),
             "http://target/captcha/image": FakeResp("", 404),
         }
@@ -268,7 +268,9 @@ def test_e1_detect_variant_app():
 
     sess = FakeSession(
         {
-            "http://target/prod-api/app/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/prod-api/app/": FakeResp(
+                '{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}
+            ),
         }
     )
     variant = detect_variant("http://target/", sess)
@@ -282,8 +284,12 @@ def test_e1_detect_variant_cloud_plus_excluded_by_prod_api():
 
     sess = FakeSession(
         {
-            "http://target/auth/login": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
-            "http://target/prod-api/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/auth/login": FakeResp(
+                '{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}
+            ),
+            "http://target/prod-api/": FakeResp(
+                '{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}
+            ),
         }
     )
     variant = detect_variant("http://target/", sess)
@@ -307,7 +313,9 @@ def test_e1_detect_cms_variant_integration():
     sess = FakeSession(
         {
             "http://target/": FakeResp(html, 200, {"Content-Type": "text/html"}),
-            "http://target/prod-api/app/": FakeResp('{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}),
+            "http://target/prod-api/app/": FakeResp(
+                '{"code":200,"msg":"操作成功"}', 200, {"Content-Type": "application/json"}
+            ),
         }
     )
     res = detect_cms("http://target/", sess)
@@ -363,7 +371,9 @@ def test_e1_router_variant_filter():
         names3 = [getattr(p, "name", "") for p in plugins3]
         assert "app_only_test" not in names3, "通用 ruoyi 不应包含 app_only_test（变体专属）"
     finally:
-        pkg.plugin_list = orig_list
+        # 必须原地恢复：重新绑定会留下旧 list 对象，其他模块在导入期持有的引用
+        # 会永久看到本次测试 append 的 AppOnlyPlugin（pytest-randomly 下概率性红）。
+        pkg.plugin_list[:] = orig_list
     print("PASS test_e1_router_variant_filter")
 
 
@@ -447,9 +457,7 @@ def test_fp_utf8_body_without_charset_matches_chinese_keyword():
     html = "<html><head><title>若依管理系统</title></head><body>RuoYi</body></html>"
     raw = html.encode("utf-8")
     garbled = raw.decode("iso-8859-1")  # 模拟 requests 的默认误解码
-    sess = FakeSession(
-        {"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)}
-    )
+    sess = FakeSession({"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)})
     res = RuoyiFingerprint().detect("http://target/", sess)
     assert res.cms == "ruoyi", res.cms
     assert any("login" in m for m in res.matched), res.matched
@@ -461,9 +469,7 @@ def test_fp_gbk_body_without_charset_matches_chinese_keyword():
     html = "<html><head><title>若依管理系统</title></head><body>若依</body></html>"
     raw = html.encode("gb18030")
     garbled = raw.decode("iso-8859-1")
-    sess = FakeSession(
-        {"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)}
-    )
+    sess = FakeSession({"http://target/": FakeResp(garbled, 200, {"Content-Type": "text/html"}, content=raw)})
     res = RuoyiFingerprint().detect("http://target/", sess)
     assert res.cms == "ruoyi", res.cms
     print("PASS test_fp_gbk_body_without_charset_matches_chinese_keyword")
@@ -479,9 +485,7 @@ def test_fp_auth_failure_json_not_variant_evidence():
     from core.fingerprint import detect_variant
 
     body = '{"msg":"请求访问：/app/，认证失败，无法访问系统资源","code":401}'
-    sess = FakeSession(
-        {"http://target/prod-api/app/": FakeResp(body, 200, {"Content-Type": "application/json"})}
-    )
+    sess = FakeSession({"http://target/prod-api/app/": FakeResp(body, 200, {"Content-Type": "application/json"})})
     variant = detect_variant("http://target/", sess)
     assert variant == "", f"认证失败 JSON 不应命中变体，实际 {variant}"
     print("PASS test_fp_auth_failure_json_not_variant_evidence")
@@ -490,9 +494,7 @@ def test_fp_auth_failure_json_not_variant_evidence():
 def test_fp_auth_failure_json_still_identifies_cms():
     """但「认证失败」JSON 仍有效：msg 文案（请求访问：X，认证失败）是若依框架专有"""
     body = '{"msg":"请求访问：/getInfo，认证失败，无法访问系统资源","code":401}'
-    sess = FakeSession(
-        {"http://target/getInfo": FakeResp(body, 200, {"Content-Type": "application/json"})}
-    )
+    sess = FakeSession({"http://target/getInfo": FakeResp(body, 200, {"Content-Type": "application/json"})})
     res = RuoyiFingerprint().detect("http://target/", sess)
     assert res.cms == "ruoyi", res.cms
     assert res.variant == "", res.variant

@@ -50,33 +50,32 @@ class TestExtractVersion(unittest.TestCase):
         self.assertEqual(extract_version("<html>无版本</html>"), "")
         self.assertEqual(extract_version(""), "")
 
-
     def test_extract_version_by_copyright_year(self):
-            """Thymeleaf 单机版登录页无明文版本号，靠版权年份识别版本
+        """Thymeleaf 单机版登录页无明文版本号，靠版权年份识别版本
 
-            数据来源：官方各 tag 的 templates/login.html（2026-09-19 逐一核对，
-            v4.6.2~v4.8.3 五个版本年份互不相同）。未收录年份返回空串（保守：不做版本过滤）。
-            """
-            from core.ruoyi_versions import extract_version, extract_version_by_copyright
+        数据来源：官方各 tag 的 templates/login.html（2026-09-19 逐一核对，
+        v4.6.2~v4.8.3 五个版本年份互不相同）。未收录年份返回空串（保守：不做版本过滤）。
+        """
+        from core.ruoyi_versions import extract_version, extract_version_by_copyright
 
-            cases = {
-                "Copyright © 2018-2021 ruoyi.vip All Rights Reserved.": "4.6.2",
-                "Copyright © 2018-2023 ruoyi.vip All Rights Reserved.": "4.7.8",
-                "Copyright © 2018-2024 ruoyi.vip All Rights Reserved.": "4.8.0",
-                "Copyright © 2018-2025 ruoyi.vip All Rights Reserved.": "4.8.2",
-                "Copyright © 2018-2026 ruoyi.vip All Rights Reserved.": "4.8.3",
-            }
-            for html, want in cases.items():
-                got = extract_version(html)
-                assert got == want, f"版权年份应映射到 {want}，实际 {got!r}（HTML: {html[:40]}）"
-            # 起始年份不同也应命中（只锚定结束年份）；大小写不敏感；(c) 写法
-            assert extract_version_by_copyright("Copyright © 2019-2025") == "4.8.2"
-            assert extract_version_by_copyright("copyright (c) 2018-2023") == "4.7.8"
-            # 未收录年份 / 无版权行 → 空串（不过滤，等价旧行为）
-            assert extract_version_by_copyright("Copyright © 2018-2019") == ""
-            assert extract_version("no copyright here") == ""
-            # 明文版本号优先（旧管线优先级更高）
-            assert extract_version("RuoYi 4.7.8 <br> Copyright © 2018-2021") == "4.7.8"
+        cases = {
+            "Copyright © 2018-2021 ruoyi.vip All Rights Reserved.": "4.6.2",
+            "Copyright © 2018-2023 ruoyi.vip All Rights Reserved.": "4.7.8",
+            "Copyright © 2018-2024 ruoyi.vip All Rights Reserved.": "4.8.0",
+            "Copyright © 2018-2025 ruoyi.vip All Rights Reserved.": "4.8.2",
+            "Copyright © 2018-2026 ruoyi.vip All Rights Reserved.": "4.8.3",
+        }
+        for html, want in cases.items():
+            got = extract_version(html)
+            assert got == want, f"版权年份应映射到 {want}，实际 {got!r}（HTML: {html[:40]}）"
+        # 起始年份不同也应命中（只锚定结束年份）；大小写不敏感；(c) 写法
+        assert extract_version_by_copyright("Copyright © 2019-2025") == "4.8.2"
+        assert extract_version_by_copyright("copyright (c) 2018-2023") == "4.7.8"
+        # 未收录年份 / 无版权行 → 空串（不过滤，等价旧行为）
+        assert extract_version_by_copyright("Copyright © 2018-2019") == ""
+        assert extract_version("no copyright here") == ""
+        # 明文版本号优先（旧管线优先级更高）
+        assert extract_version("RuoYi 4.7.8 <br> Copyright © 2018-2021") == "4.7.8"
 
 
 class TestParseVersion(unittest.TestCase):
@@ -219,7 +218,6 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertNotIn("定时任务调用目标未校验", plugin_names)
         # 4.7.8 应跑的 POC
         self.assertIn("Thymeleaf/SpEL 模板注入", plugin_names)
-
 
     def test_router_candidates_not_version_filtered(self):
         """回归：candidates() 返回**未按版本过滤**的候选集，resolve() 才是过滤后的
