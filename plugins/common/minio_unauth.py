@@ -66,35 +66,68 @@ class MinioUnauthPlugin(PluginBase):
                 evidence=f"健康检查返回 HTTP {code} 且无 MinIO 专有特征（Server/X-Amz/正文），未发现 MinIO 服务",
             )
         # 2. 无凭证列举 bucket（匿名桶列表）
-        root_url = join_url(target, "/minio/")
-        try:
-            resp2 = session.get(root_url)
+        #
+        # ⚠ 探测路径的选择（2026-11-01 C4-2 实测纠正）
+        #
+        # 旧实现只探 /minio/ —— 那是 **MinIO 控制台入口**，永远返回登录页 HTML，
+        # 不含 bucket 列表。真实 MinIO 的匿名列举走 **S3 协议根路径 GET /**，
+        # 返回 <ListAllMyBucketsResult> XML。两个路径语义完全不同。
+        #
+        # 实测（用真实 S3 协议响应复刻的靶场）：
+        #   GET /            → 200 + <ListAllMyBucketsResult><Bucket>hospital-reports...（漏洞点）
+        #   GET /minio/      → 200 + 控制台 SPA HTML（登录页，无 bucket）
+        #   → 旧实现探 /minio/ 判 SAFE，**漏报**
+        #
+        # 与 rocketmq_unauth 是同一类缺陷：照着自己想象的路径写，没按真实产品形态验证。
+        #
+        # 现按顺序探两个路径，任一命中即 CONFIRMED：
+        #   1. "/"       S3 ListBuckets（真实漏洞点）
+        #   2. "/minio/" 兼容少数把控制台挂在该前缀下、且配置了匿名桶列表的部署
+        candidates = [join_url(target, "/"), join_url(target, "/minio/")]
+        last_err = None
+        last_url = candidates[0]
+        last_status = 0
+        for cand in candidates:
+            last_url = cand
+            try:
+                resp2 = session.get(cand)
+            except Exception as e:
+                last_err = e
+                continue
+            last_status = resp2.status_code
             text2 = resp2.text or ""
-        except Exception as e:
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=root_url, evidence=str(e))
-        # 匿名列举成功时 /minio/ 必须返回 2xx 且正文含 bucket 列表结构；
-        # 403/404 错误页（AccessDenied/<Error>、控制台登录页）即使含 "minio"/"bucket" 字样也不算未授权
-        if resp2.status_code == 200 and match_positive(
-            text2,
-            ["bucket", "storage-class", "<ListAllMyBucketsResult"],
-            negatives=["AccessDenied", "<Error>"],
-        ):
-            emit(ok("存在 MinIO 未授权访问"))
-            return ScanResult(
-                kind="vuln",
-                name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=root_url,
-                evidence="无凭证返回 bucket 列表",
-                fix=self.fix,
-                extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
-            )
+            # 匿名列举成功：2xx + 正文含 bucket 列表结构。
+            # 403/404 错误页（AccessDenied/<Error>）与控制台登录页即使含
+            # "minio"/"bucket" 字样也不算未授权 —— 靠 negatives 排除。
+            # 正向特征只认 **S3 XML 结构**，不认裸关键字 "bucket"。
+            # 实测踩过：控制台登录页里出现 "bucket manager" 这类字样就会被早先的
+            # 泛用 positive "bucket" 命中 → 把安全站点误判成未授权。
+            # 真实的匿名列举响应一定带 <ListAllMyBucketsResult> 或 <ListBucketResult>
+            # 这类 S3 专有元素名，控制台 HTML 不会有。
+            if resp2.status_code == 200 and match_positive(
+                text2,
+                ["<ListAllMyBucketsResult", "<ListBucketResult", "<Bucket><Name>"],
+                negatives=["AccessDenied", "<Error>"],
+            ):
+                emit(ok("存在 MinIO 未授权访问"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=cand,
+                    evidence=f"无凭证从 {cand} 返回 bucket 列表（S3 ListBuckets 匿名可读）",
+                    fix=self.fix,
+                    extra={"vuln_type": "unauth", "plugin_name": "minio_unauth"},
+                )
+        if last_err is not None and last_status == 0:
+            # 两个路径都请求失败：测不到 ≠ 安全
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_err))
         emit(no("不存在 MinIO 未授权访问"))
         return ScanResult(
             kind="vuln",
             name=self.name,
             status=STATUS_SAFE,
-            url=root_url,
-            evidence=f"/minio/ 返回 HTTP {resp2.status_code}，未出现匿名 bucket 列表特征",
+            url=last_url,
+            evidence=f"探测了 S3 根路径与 /minio/（最后 {last_url} 返回 HTTP {last_status}），未出现匿名 bucket 列表特征",
         )
