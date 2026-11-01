@@ -52,6 +52,47 @@ class RuoyiGenRcePlugin(PluginBase):
     vuln_type = "rce"
     supports_waf_bypass = True
 
+    # 差分探针：基线用无害表名，注入用 ${7*7}。
+    # tableId 用 1（真实若依的演示库总有 id=1 的表配置）。
+    _BASELINE_TABLE = "sys_user"
+    _INJECT_TABLE = "sys_user_%24%7B7*7%7D"  # URL 编码的 sys_user_${7*7}
+    EVAL_RESULT = "49"
+    RAW_REFLECTION = "7*7"
+
+    def _probe_preview_ssti(self, target, session):
+        """对 /tool/gen/preview 做基线与注入的差分，返回证据或空串。
+
+        为什么必须差分：仅仅「响应里出现 49」会误报（页码、时间戳、行号里都有）。
+        只有「基线没有、注入才有」才能证明求值真的发生了。
+        """
+        import re
+
+        preview = join_url(target, "/tool/gen/preview/1")
+        try:
+            base = session.get(f"{preview}?tableName={self._BASELINE_TABLE}")
+            base_text = base.text or ""
+            inj = session.get(f"{preview}?tableName={self._INJECT_TABLE}")
+            inj_text = inj.text or ""
+        except Exception:
+            return ""
+
+        if inj.status_code != 200:
+            return ""
+        # 条件 1：基线**不能**含求值结果（否则 49 来自页面本身，不是求值）
+        if re.search(rf"(?<!\d){self.EVAL_RESULT}(?!\d)", base_text):
+            return ""
+        # 条件 2：注入响应必须含求值结果，且是独立数字
+        if not re.search(rf"(?<!\d){self.EVAL_RESULT}(?!\d)", inj_text):
+            return ""
+        # 条件 3：响应里不能出现原始表达式（排除载荷被原样回显）
+        if self.RAW_REFLECTION in inj_text:
+            return ""
+        return (
+            f"差分验证成立：基线 tableName={self._BASELINE_TABLE} 无求值结果，"
+            f"注入 tableName=${{7*7}} 后响应出现独立数字 {self.EVAL_RESULT}（模板已求值）；"
+            f"注入响应前 120 字节：{inj_text[:120]}"
+        )
+
     def verify(self, target, session) -> ScanResult:
         """访问代码生成编辑页，检测该模块是否可达并尝试 SSTI 特征判定。
 
@@ -92,6 +133,31 @@ class RuoyiGenRcePlugin(PluginBase):
                 status=STATUS_CONFIRMED,
                 url=url,
                 evidence="代码生成 SSTI 签名命中（lab 判定桩）",
+                fix=self.fix,
+            )
+
+        # 【真实差分验证】编辑器可达时，用「无 payload 基线 vs 注入 payload」做差分：
+        # 这一条替代了旧实现「只探可达性 → 一律 UNKNOWN」的做法。
+        #
+        # 旧逻辑的问题：有 SSTI 的真站和没 SSTI 的真站，都只 GET /tool/gen/edit，
+        # 拿到的都是 200 HTML，无法区分 → 一律 UNKNOWN。等于「有洞也报不出来」。
+        #
+        # 真实若依的注入点在 /tool/gen/preview/{tableId} 的 tableName 参数
+        # （GenController#preview → genTableService.downloadCode 走 Velocity 渲染）。
+        # 判断必须满足：
+        #   1. 基线请求（无害表名）不出现求值结果
+        #   2. 注入请求（tableName 带 ${7*7}）出现 49，且基线里没有
+        #   3. 响应里不出现原始表达式 7*7（排除载荷原样回显）
+        # 三条同时成立才算 CONFIRMED —— 仅「响应含 49」会误报（页码/时间戳/行号）。
+        ssti_evidence = self._probe_preview_ssti(target, session)
+        if ssti_evidence:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_CONFIRMED,
+                url=join_url(target, "/tool/gen/preview/1"),
+                evidence=ssti_evidence,
                 fix=self.fix,
             )
 
