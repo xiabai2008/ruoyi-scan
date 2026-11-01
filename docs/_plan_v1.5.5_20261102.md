@@ -28,7 +28,7 @@
 > WP4 ✅ 完成（lab 4b15a05 绝对 profile → R2/R4 上传 CONFIRMED；lab 9106053 D1 二开漏洞版 → 未授权 job RCE 匿名 CONFIRMED、
 > gen SSTI 认证后 CONFIRMED；R8 独占轮次直连 8848 → Nacos 两插件 CONFIRMED）；
 > WP5 ✅ 完成（盲测 v3：46/54 插件有 CONFIRMED，较 v2 +17、0 丢失、0 B 类误报，报告 docs/blind_test_report_v3.md）；
-> WP6 待执行（发布 v1.5.5）。
+> WP6 ✅ 完成（v1.5.5 已发布：GitHub Release 11 个资产 + PyPI + 桌面端 3 exe；CI / Release / Desktop Release 三工作流全绿）。
 
 **本轮新增扫描器能力（均已 push，CI 绿）**
 - `3c27e31` 分离版登录入口识别（base path → /prod-api/login | /auth/login | /sys/login）
@@ -78,3 +78,11 @@
 - 盲测 v3 的 **FP = 0**（B 类硬误报），FN 有清单且逐条给出「修/不修」结论；
 - 全量 pytest、ruff、format、mypy --strict、签名靶场 E2E、CI 全绿；
 - 干净 venv 安装 wheel + 冒烟通过；GitHub Release / PyPI / 桌面端产物齐全。
+
+
+## 五、最终交付（2026-11-02 收尾）
+
+- 版本：**v1.5.5**，tag `v1.5.5`（commit 95bb69c），GitHub Release 11 资产（whl/sdist/checksums/nuclei 模板包/桌面 exe/NSIS/CLI exe/两本文档），PyPI 1.5.5 已上架。
+- 盲测 v3：46/54 插件有 CONFIRMED（v1.5.4 为 29，+17），v2 产出 0 丢失，B 类误报 0。
+- 剩余 8 个零产出：recon 2、Shiro 指纹 1（设计边界）、Windows 靶场文件读取 2、Plus 误配站 1、无认证 Redis 1、备份靶场 1 —— 均为已识别边界，无「未知漏报」。
+- 工作流：Ruoyi-Scan CI ✔ / Release ✔ / Desktop Release ✔ / Docs Site（0e99e14 修复失效链接后）✔。
