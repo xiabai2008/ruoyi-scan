@@ -27,11 +27,16 @@
 #   SMTP_USER=sender@example.com
 #   SMTP_PASS=password
 #   SMTP_FROM=sender@example.com
+#
+# 内网 Webhook（127.0.0.1 / 10.x / 192.168.x 等）默认被拒绝；确需使用时显式设置：
+#   RUOYI_SCAN_ALLOW_PRIVATE_WEBHOOKS=1
+import ipaddress
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List
+from urllib.parse import urlsplit, urlunsplit
 
 from lib.reporter import emit
 
@@ -186,8 +191,6 @@ def _build_markdown_message(msg: Dict[str, Any]) -> str:
 
 def _redact_url_for_log(url: str) -> str:
     """日志脱敏：Webhook 端点常把访问凭证放在查询串（access_token/key）或路径末段（hook token），输出前抹除"""
-    from urllib.parse import urlsplit, urlunsplit
-
     try:
         parts = urlsplit(url)
     except ValueError:
@@ -198,6 +201,47 @@ def _redact_url_for_log(url: str) -> str:
         # 长路径段（如飞书 hook 路径 token）按凭证处理
         parts = parts._replace(path="/".join("***" if len(seg) > 12 else seg for seg in parts.path.split("/")))
     return urlunsplit(parts)
+
+
+def _allow_private_webhooks() -> bool:
+    return os.environ.get("RUOYI_SCAN_ALLOW_PRIVATE_WEBHOOKS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _validate_webhook_url(url: str) -> str:
+    """限制 Webhook 为 http/https，并默认拒绝本机/内网字面量地址。
+
+    说明：这里只校验字面量 IP 与 localhost，不做 DNS 解析，避免在离线环境
+    为每次通知引入解析超时；如需访问内网 Webhook，设置
+    RUOYI_SCAN_ALLOW_PRIVATE_WEBHOOKS=1 显式放开。
+    """
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("Webhook URL 为空")
+    parts = urlsplit(url.strip())
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("Webhook 仅支持 http/https")
+    host = (parts.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise ValueError("Webhook URL 缺少主机名")
+    if parts.username or parts.password:
+        raise ValueError("Webhook URL 不允许内嵌用户名/密码")
+    if _allow_private_webhooks():
+        return url.strip()
+    if host == "localhost" or host.endswith(".localhost"):
+        raise ValueError("Webhook 默认拒绝 localhost")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return url.strip()
+    if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        raise ValueError("Webhook 默认拒绝内网/保留地址")
+    return url.strip()
+
+
+def _post_json(url: str, payload: Dict[str, Any], timeout: int = 10):
+    """统一发送 JSON 通知：所有 Webhook 类型共用同一套 URL 校验。"""
+    import requests
+
+    return requests.post(_validate_webhook_url(url), json=payload, timeout=timeout)
 
 
 def send_webhook(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
@@ -211,14 +255,12 @@ def send_webhook(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         是否成功
     """
     try:
-        import requests
-
         payload = {
             "text": _build_text_message(msg),
             "markdown": _build_markdown_message(msg),
             "data": msg,
         }
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = _post_json(url, payload)
         if resp.status_code < 400:
             if verbose:
                 emit(f"  [+]Webhook 通知已发送: {_redact_url_for_log(url)[:50]}...")
@@ -243,8 +285,6 @@ def send_dingtalk(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
         是否成功
     """
     try:
-        import requests
-
         payload = {
             "msgtype": "markdown",
             "markdown": {
@@ -252,7 +292,7 @@ def send_dingtalk(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
                 "text": _build_markdown_message(msg),
             },
         }
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = _post_json(url, payload)
         result = resp.json()
         if result.get("errcode") == 0:
             if verbose:
@@ -271,15 +311,13 @@ def send_dingtalk(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
 def send_wechat(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
     """发送企业微信机器人通知"""
     try:
-        import requests
-
         payload = {
             "msgtype": "markdown",
             "markdown": {
                 "content": _build_markdown_message(msg),
             },
         }
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = _post_json(url, payload)
         result = resp.json()
         if result.get("errcode") == 0:
             if verbose:
@@ -298,15 +336,13 @@ def send_wechat(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
 def send_feishu(url: str, msg: Dict[str, Any], verbose: bool = True) -> bool:
     """发送飞书机器人通知"""
     try:
-        import requests
-
         payload = {
             "msg_type": "text",
             "content": {
                 "text": _build_text_message(msg),
             },
         }
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = _post_json(url, payload)
         result = resp.json()
         if result.get("StatusCode") == 0 or result.get("code") == 0:
             if verbose:

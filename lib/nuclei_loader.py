@@ -11,6 +11,7 @@
 #   3. 模板为外部输入，加载前须经过 validate_template 校验
 #
 # 判定三态：matcher 命中 → CONFIRMED；明确未命中 → SAFE；网络异常 → UNKNOWN
+import ast
 import os
 import re
 from dataclasses import dataclass, field
@@ -339,9 +340,19 @@ def _resolve_vars(tpl: NucleiTemplate, target: str, session=None) -> NucleiTempl
 # === matcher 判定 ===
 
 # dsl 白名单：数字/比较/逻辑运算符/空白/括号/字母（and/or/not/True/False）
-# 安全防线：不含下划线（拒绝 __import__ 等 dunder）、不含点号（拒绝属性访问）、
-# eval 使用空 builtins（任何名字解析失败 → False）
+# 安全防线：不含下划线（拒绝 __import__ 等 dunder）、不含点号（拒绝属性访问），
+# 且不调用 eval——表达式只经过 AST 结构校验和纯比较求值。
 _DSL_SAFE_RE = re.compile(r"^[0-9<>=!&\s|()a-zA-Z]+$")
+
+# 允许的比较运算：仅数值/布尔比较，拒绝 in/is/位运算等
+_DSL_COMPARE_OPS = {
+    ast.Eq: lambda a, b: a == b,
+    ast.NotEq: lambda a, b: a != b,
+    ast.Lt: lambda a, b: a < b,
+    ast.LtE: lambda a, b: a <= b,
+    ast.Gt: lambda a, b: a > b,
+    ast.GtE: lambda a, b: a >= b,
+}
 
 # dsl 中的 contains(part, 'needle') 调用（part 仅允许 body/header 两个参数名）
 _DSL_CONTAINS_RE = re.compile(r"contains\(\s*(\w+)\s*,\s*['\"]([^'\"]*)['\"]\s*\)")
@@ -370,6 +381,80 @@ def _dsl_normalize_ops(expr: str) -> str:
     return re.sub(r"(?<![=!])!(?!=)", " not ", expr)
 
 
+def _dsl_validate_node(node: ast.AST) -> None:
+    """递归校验 AST 结构；遇到任何非白名单节点抛 ValueError。"""
+    if isinstance(node, ast.Expression):
+        _dsl_validate_node(node.body)
+        return
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (bool, int, float)):
+            return
+        raise ValueError("dsl constant not allowed")
+    if isinstance(node, ast.BoolOp):
+        if not isinstance(node.op, (ast.And, ast.Or)):
+            raise ValueError("dsl bool op not allowed")
+        for value in node.values:
+            _dsl_validate_node(value)
+        return
+    if isinstance(node, ast.UnaryOp):
+        if not isinstance(node.op, ast.Not):
+            raise ValueError("dsl unary op not allowed")
+        _dsl_validate_node(node.operand)
+        return
+    if isinstance(node, ast.Compare):
+        if not isinstance(node.left, (ast.Constant,)):
+            raise ValueError("dsl compare operand not allowed")
+        _dsl_validate_node(node.left)
+        for op, comparator in zip(node.ops, node.comparators):
+            if type(op) not in _DSL_COMPARE_OPS:
+                raise ValueError("dsl compare op not allowed")
+            if not isinstance(comparator, ast.Constant):
+                raise ValueError("dsl compare operand not allowed")
+            _dsl_validate_node(comparator)
+        return
+    raise ValueError("dsl node not allowed: %s" % type(node).__name__)
+
+
+def _dsl_eval_node(node: ast.AST):
+    """对已通过 _dsl_validate_node 的 AST 求值（不再接触 Python eval）。"""
+    if isinstance(node, ast.Expression):
+        return _dsl_eval_node(node.body)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.And):
+            for value in node.values:
+                if not _dsl_eval_node(value):
+                    return False
+            return True
+        for value in node.values:
+            if _dsl_eval_node(value):
+                return True
+        return False
+    if isinstance(node, ast.UnaryOp):
+        return not _dsl_eval_node(node.operand)
+    left = _dsl_eval_node(node.left)
+    for op, comparator in zip(node.ops, node.comparators):
+        right = _dsl_eval_node(comparator)
+        if not _DSL_COMPARE_OPS[type(op)](left, right):
+            return False
+        left = right
+    return True
+
+
+def _dsl_parse(expr: str) -> Optional[ast.AST]:
+    """白名单校验 + 解析；任何不支持的表达式返回 None。"""
+    # nuclei dsl 表达式通常很短；限制长度避免外部模板用超长嵌套表达式拖垮解析
+    if len(expr) > 1024:
+        return None
+    try:
+        tree = ast.parse(expr, mode="eval")
+        _dsl_validate_node(tree)
+        return tree
+    except (SyntaxError, ValueError, TypeError, OverflowError, RecursionError):
+        return None
+
+
 def _dsl_expr_supported(expr: str) -> bool:
     """dsl 表达式结构白名单校验（与 _eval_dsl 共用同一归一化路径）
 
@@ -382,7 +467,10 @@ def _dsl_expr_supported(expr: str) -> bool:
     replaced = _dsl_replace_contains(expr.replace("status_code", "200"), lambda _p, _n: True)
     if replaced is None:
         return False
-    return bool(_DSL_SAFE_RE.fullmatch(_dsl_normalize_ops(replaced)))
+    normalized = _dsl_normalize_ops(replaced)
+    if not _DSL_SAFE_RE.fullmatch(normalized):
+        return False
+    return _dsl_parse(normalized) is not None
 
 
 def _eval_dsl(expr: str, status_code: int, body: str, headers_str: str) -> bool:
@@ -394,9 +482,12 @@ def _eval_dsl(expr: str, status_code: int, body: str, headers_str: str) -> bool:
     expr2 = _dsl_normalize_ops(expr2)
     if not _DSL_SAFE_RE.fullmatch(expr2):
         return False
+    tree = _dsl_parse(expr2)
+    if tree is None:
+        return False
     try:
-        return bool(eval(expr2, {"__builtins__": {}}, {}))
-    except Exception:
+        return bool(_dsl_eval_node(tree))
+    except (TypeError, ValueError):
         return False
 
 

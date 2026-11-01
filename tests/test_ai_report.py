@@ -122,7 +122,11 @@ def test_run_ai_report_mode(monkeypatch):
     monkeypatch.setattr(ar, "AI_API_KEY", "test-key")
     tmp = tempfile.mkdtemp(prefix="ruoyi_scan_airpt_")
     try:
-        path = run_ai_report_mode(tmp, _sample_report(), lang="zh", )
+        path = run_ai_report_mode(
+            tmp,
+            _sample_report(),
+            lang="zh",
+        )
         assert os.path.isfile(path)
         assert path.endswith("report.analysis.zh.md")
         with open(path, encoding="utf-8") as f:
@@ -132,6 +136,18 @@ def test_run_ai_report_mode(monkeypatch):
     print("PASS test_run_ai_report_mode")
 
 
+def test_run_ai_report_mode_normalizes_lang():
+    """lang 参数不得进入路径；非法值回退 zh"""
+    tmp = tempfile.mkdtemp(prefix="ruoyi_scan_airpt_lang_")
+    try:
+        path = run_ai_report_mode(tmp, _sample_report(), lang="../../escape")
+        assert os.path.dirname(os.path.abspath(path)) == os.path.abspath(tmp)
+        assert path.endswith("report.analysis.zh.md")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("PASS test_run_ai_report_mode_normalizes_lang")
+
+
 if __name__ == "__main__":
     test_build_prompt()
     test_template_summary_zh()
@@ -139,4 +155,5 @@ if __name__ == "__main__":
     test_generate_analysis_no_key()
     test_generate_analysis_mock_llm()
     test_run_ai_report_mode()
+    test_run_ai_report_mode_normalizes_lang()
     print("ALL_E8_TESTS_PASS")

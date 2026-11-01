@@ -22,6 +22,7 @@ import importlib.util
 import os
 import sys
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from common.logger import get_logger
@@ -221,6 +222,9 @@ def decide_install_path(filepath: str, category: str, verdict: str) -> Optional[
     """
     from lib.plugin_sdk import _to_filename
 
+    # category 参与安装目录拼接：非白名单值（如 ../../）一律不落盘
+    if category not in ("ruoyi", "spring", "common"):
+        return None
     filename = _to_filename(os.path.splitext(os.path.basename(filepath))[0]) + ".py"
     if verdict == VERDICT_PASS:
         return os.path.join(PROJECT_ROOT, "plugins", category, filename)
@@ -265,8 +269,7 @@ def validate_generated_source(name: str, category: str, source: str) -> Dict[str
     # TemporaryDirectory 上下文管理器保证任何 return/异常路径都清理临时目录
     with tempfile.TemporaryDirectory(prefix="ai_plugin_validate_") as tmpdir:
         tmp_path = os.path.join(tmpdir, _to_filename(name) + ".py")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            f.write(source)
+        Path(tmp_path).write_text(source, encoding="utf-8")
 
         report = validate_ai_plugin(tmp_path)
         report["generated"] = True
@@ -275,6 +278,5 @@ def validate_generated_source(name: str, category: str, source: str) -> Dict[str
 
         if target_path:
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write(source)
+            Path(target_path).write_text(source, encoding="utf-8")
         return report

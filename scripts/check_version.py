@@ -20,6 +20,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+
+def _force_utf8_stdio() -> None:
+    """Windows CI 默认 cp1252 控制台，中文输出会 UnicodeEncodeError。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 BASE_FILE = "config/settings.py"
 PYPROJECT = "pyproject.toml"
 DESKTOP_PKG = "desktop/package.json"
@@ -75,6 +84,7 @@ def changelog_has_version(version: str) -> bool:
 
 
 def main(argv=None) -> int:
+    _force_utf8_stdio()
     parser = argparse.ArgumentParser(description="校验各文件版本号一致")
     parser.add_argument("--tag", default="", help="git tag，如 v1.5.2（会与版本号比对）")
     args = parser.parse_args(argv)

@@ -42,6 +42,9 @@ jobs:
     permissions:
       contents: write  # 创建 Release 需要
     timeout-minutes: 90
+    env:
+      # Windows runner 默认 cp1252；发布脚本含中文输出，统一 UTF-8 避免编码崩溃
+      PYTHONIOENCODING: utf-8
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +84,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # 依赖固定精确版本（供应链 + 可复现构建）；升级时同步 desktop/engine/build-engine.cmd
-          pip install pyinstaller==6.22.3 fastapi==0.143.0 "uvicorn[standard]==0.54.0" requests==2.34.2 requests-mock==1.12.1 reportlab==5.0.1 python-docx==1.2.0 openpyxl==3.1.5 pyyaml==6.0.3
+          # 安全下限与本地构建脚本保持一致：避免 CI 复用旧传递依赖打出带已知漏洞的引擎
+          pip install pyinstaller==6.22.3 fastapi==0.143.0 "uvicorn[standard]==0.54.0" requests==2.34.2 requests-mock==1.12.1 reportlab==5.0.1 python-docx==1.2.0 openpyxl==3.1.5 pyyaml==6.0.3 "apscheduler>=3.10,<4" "urllib3>=2.8.0" "pillow>=13.0.0" "setuptools>=84.2.1" "certifi>=2026.10.19"
           pyinstaller desktop/engine/ruoyi-scan-engine.spec --noconfirm --distpath desktop/engine/dist --workpath desktop/engine/build
 
       # 引擎冒烟：onefile 解压 + 启动 API + 文档 200，任何一步失败即终止
@@ -157,7 +161,12 @@ jobs:
           Write-Host "version: $ver"
 
           $plugins = & "$iso/ruoyi-scan.exe" --plugin-list | Out-String
-          if ($plugins -notmatch '(?m)^\s*54\s') { throw "plugin list incomplete (expect 54 POC)" }
+          # 统计编号行而不是只匹配第 54 行：后者受表格换行/编码影响会假失败
+          $pluginRows = [regex]::Matches($plugins, '(?m)^\s*\d+\s+\S').Count
+          if ($pluginRows -ne 54) {
+            Write-Host $plugins
+            throw "plugin list incomplete: expected 54 rows, got $pluginRows"
+          }
           $chains = & "$iso/ruoyi-scan.exe" --chain-list | Out-String
           if ($chains -notmatch 'ruoyi_sql_to_rce') { throw "--chain-list missing builtin chain" }
           Write-Host "PLUGINS_OK (54) / CHAINS_OK"

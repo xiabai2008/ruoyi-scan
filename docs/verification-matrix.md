@@ -41,7 +41,7 @@
 | L1 | RuoYi 代码生成模块 SSTI | N/A | high | 是 | — | `plugins/ruoyi/ruoyi_gen_rce.py` |
 | L1 | RuoYi Swagger 未授权访问 | N/A | medium | 是 | — | `plugins/ruoyi/ruoyi_swagger_unauth.py` |
 | L1 | Spring Boot Admin 未授权访问 | N/A | medium | 是 | — | `plugins/spring/spring_boot_admin.py` |
-| L1 | Spring Cloud Config 路径穿越 | CVE-2020-5410 | high | 是 | — | `plugins/spring/spring_cloud_config.py` |
+| L1 | Spring Cloud Config 配置未授权读取 | N/A | high | 是 | — | `plugins/spring/spring_cloud_config.py` |
 | L1 | Spring Data REST 信息泄露 | N/A | low | 是 | — | `plugins/spring/spring_data_rest.py` |
 | L2 | Spring Boot Actuator env 配置覆盖 RCE | N/A | high | 是 | — | `plugins/spring/actuator_env_rce.py` |
 | L2 | Spring Boot Actuator 未授权访问 | N/A | medium | 是 | — | `plugins/spring/actuator_unauth.py` |
@@ -64,4 +64,3 @@
 | L3 | POST型报错注入（role） | CNVD-2021-01931 | high | 是 | — | `plugins/ruoyi/sql_inject_role.py` |
 | L3 | Thymeleaf/SpEL 模板注入 | CVE-2023-38286 | high | 是 | — | `plugins/ruoyi/thymeleaf_ssti.py` |
 | L3 | 未授权访问（批量） | N/A | medium | 是 | — | `plugins/ruoyi/unauth_batch.py` |
-

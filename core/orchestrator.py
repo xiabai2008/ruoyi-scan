@@ -1334,7 +1334,10 @@ class ScanOrchestrator:
         if storage is None:
             return
         try:
-            rows = [r.to_dict() if hasattr(r, "to_dict") else dict(vars(r)) for r in results]
+            # 采纳 main 的写法：只接受 to_dict()，不再用 vars() 兜底。
+            # vars() 是安全加固时去掉的 —— 它会把任意对象的 __dict__ 整体落盘，
+            # 结果对象换成别的类型时可能写入非预期字段。results 的契约就是 ScanResult。
+            rows = [r.to_dict() for r in results]
             storage.save_results(task_id, rows)
         except Exception:
             logger.debug("结果明细落盘失败 task=%s", task_id, exc_info=True)

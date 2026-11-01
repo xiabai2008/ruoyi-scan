@@ -99,6 +99,8 @@ class TestGenerateValidate:
         q = decide_install_path("a/foo.py", "ruoyi", VERDICT_UNVERIFIED)
         assert "_quarantine" in q
         assert decide_install_path("a/foo.py", "ruoyi", VERDICT_FAIL) is None
+        # category 非白名单时不得拼出插件目录之外的路径
+        assert decide_install_path("a/foo.py", "../../escape", VERDICT_PASS) is None
 
 
 class TestTriageUnknowns:

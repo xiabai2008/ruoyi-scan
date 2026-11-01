@@ -108,6 +108,14 @@ hiddenimports = [
     "lib.ai_validate",
     "core.orchestrator",
     "core.loader",
+    # 插件包显式声明：collect_submodules 在部分冻结环境会漏掉 datas，
+    # 显式 hiddenimports 保证 PYZ 里始终有可回退的插件模块
+    "plugins",
+    "plugins.base",
+    "plugins.ruoyi",
+    "plugins.spring",
+    "plugins.common",
+    "plugins.jeecgboot",
     # 可选依赖：装了就带上，没装 PyInstaller 只会告警
     "cryptography",
     "cryptography.hazmat.primitives.asymmetric.ed25519",

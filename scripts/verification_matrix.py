@@ -37,6 +37,15 @@ import re
 import sys
 from typing import Dict, List, Set
 
+# Windows 控制台默认 cp936：`print()` 中文会被编成 GBK，重定向到文件后与仓库里的
+# UTF-8 文档逐字节不同，CI 的「文档与脚本一致」门禁就会红，而且生成物是乱码。
+# Linux 默认 UTF-8 所以这个问题只在本地暴露 —— 显式固定 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -245,7 +254,11 @@ def main() -> int:
     rows = build_rows()
     text = render(rows)
     if not args.check:
-        print(text)
+        # 用 bytes 直写而不是 print()：Windows 下 print 会把 \n 转成 \r\n，
+        # 生成物与仓库里的 LF 文件逐字节不同，CI 的「文档与脚本一致」门禁会红。
+        # 固定 UTF-8 + LF，让三个平台产出完全相同的字节序列。
+        sys.stdout.buffer.write(text.encode("utf-8"))
+        sys.stdout.buffer.flush()
 
     none_rows = [r for r in rows if r["level"] == "none"]
     if args.check and none_rows:

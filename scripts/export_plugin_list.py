@@ -15,6 +15,16 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+def _force_utf8_stdio() -> None:
+    """Windows CI 默认 cp1252 控制台，中文输出会 UnicodeEncodeError。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 sys.path.insert(0, str(REPO))
 
 from config import settings  # noqa: E402
@@ -171,6 +181,7 @@ def _normalize(text: str) -> str:
 
 def main(argv) -> int:
     """默认写入清单；--check 只校验与源码是否一致（CI 门禁，不改文件）"""
+    _force_utf8_stdio()
     lines, total, cve_total = build_lines()
     text = "\r\n".join(lines) + "\r\n"
 

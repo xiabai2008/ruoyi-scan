@@ -22,9 +22,17 @@
 - **README**：目录树 `models.py` 位置修正（实为 `common/models.py`）并补齐 `common/` 段；末尾个人宣言移至 `AUTHOR.md`；与 nuclei/xray 对比表补 3 行诚实短板（模板存量 / 跨框架广度 / 社区规模），与「互补而非竞争」定位对齐
 - **退出码文档**：统一 0/1/2/3/4 五种语义，修正 `docs/usage.md` 中「3 = 配置错误」的错误表述（配置错误是 2，3 是目标不可达）
 
-## [1.5.3] - 2026-10-30
+## [1.5.3] - 2026-10-31
 
-桌面端体验测评（v1.5.2）问题修复版：P0 数据可信性 3 项、P1 核心功能 8 项、P2 一致性与体验 12 项。
+桌面端体验测评（v1.5.2）问题修复版：P0 数据可信性 3 项、P1 核心功能 8 项、P2 一致性与体验 12 项；发布前完成一轮安全审计加固与依赖升级。
+
+### Security
+- **报告输出路径穿越**：`ReportBuilder.render_all` 的 `stem` 与批量报告路径统一经 `safe_filename` 收敛为单段文件名，并用 `safe_join` 二次确认不越出输出目录；`lib/ai_report` 的语言参数收敛为 `zh/en`，防止进入文件名
+- **AI 插件落盘目录与 LLM 端点**：`ai_generator` / `ai_validate` 对 `category` 做 `ruoyi/spring/common` 白名单校验，拒绝 `../../` 等值参与插件目录拼接；LLM `base_url` 仅允许 http/https（localhost 仍可用于 Ollama）
+- **nuclei DSL 移除 `eval`**：改为 AST 结构白名单 + 纯比较求值，保留 `status_code` 比较、`and/or/not`、`contains(body/header)` 语义，拒绝属性、下标、算术和任意名字
+- **Webhook SSRF 收敛**：`lib/notifier` 统一校验 http/https、主机名与内嵌凭证，默认拒绝 localhost 和本机/内网/保留字面量 IP；内网 Webhook 需显式设置 `RUOYI_SCAN_ALLOW_PRIVATE_WEBHOOKS=1`
+- **桌面依赖升级**：`echarts` 5.6 → 6.1（GHSA-fgmj-fm8m-jvvx）、`vite` 6.0 → 6.4.5（含 launch-editor Windows 高危）、`source-map-js` 覆盖到 1.2.2（GHSA-68fv-2mgg-jv7q）；`npm audit` 与 `pip-audit` 均无已知漏洞
+- **引擎构建依赖**：`build-engine.cmd` 与 `desktop-release.yml` 显式抬高 `urllib3>=2.8.0`、`pillow>=13.0.0`、`setuptools>=84.2.1`、`certifi>=2026.10.19`，并补上 APScheduler，避免复用旧构建环境时把已知漏洞打进单文件引擎
 
 ### Fixed
 - **重启后历史任务终端全是 `undefined:` / 结果明细丢失（P0）**：SQLite 事件以 `event_type/payload` 落盘，恢复时原样塞进回放列表，而 WS/前端只认 `type/data`。恢复口统一归一化为 `{type,data,task_id,timestamp}`，并按最近 N 条回放；结果接口在事件缺失时从新增的 `findings` 表兜底，三态统计不再归零，也不再给出“暂无确认项，安全”的错误结论
