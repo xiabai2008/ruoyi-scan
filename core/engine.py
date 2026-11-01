@@ -44,20 +44,36 @@ class ScanEngine:
         on_result: Optional[Callable[[ScanResult], None]] = None,
         waf_bypass_coordinator: Optional[Any] = None,
         should_stop: Optional[Callable[[], bool]] = None,
+        root_target: str = "",
     ) -> List[ScanResult]:
         """运行插件集合
 
         Args:
             plugin_classes: 插件类列表
-            target: 目标 URL（已归一化）
+            target: 目标 URL（已归一化）。若探到 API 前缀，这里已是带前缀的基准
             session: SessionManager 实例
             on_result: 每个结果回调 on_result(ScanResult)
             waf_bypass_coordinator: WAF 绕过协调器（D7，None 则不绕过）
             should_stop: 协作式取消检查（每插件入口调用；True 则不再启动新插件）
+            root_target: **不带 API 前缀的站点根 URL**（F9）。为空时等价于 target。
+                用于 path_scope="root"/"both" 的插件——它们探的是部署在 web 根的
+                静态资源（.git/.env/备份/IDE 残留），加了前缀反而探不到。
         Returns:
             结果列表
         """
         results = []
+        _root = root_target or target
+
+        def _target_for(cls: type) -> str:
+            """按插件的 path_scope 选择探测基准（F9 单一入口）。"""
+            scope = getattr(cls, "path_scope", "api")
+            if scope == "root":
+                return _root
+            # "both" 的完整双探由插件内部处理（它需要比较两个响应），
+            # 这里给它根路径作为基准，插件自己拼前缀版本。
+            if scope == "both" and _root != target:
+                return _root
+            return target
 
         def _exec(cls: type) -> Optional[ScanResult]:
             # 协作式取消：立即停止启动新插件。已启动的插件无法强杀（requests
@@ -84,7 +100,11 @@ class ScanEngine:
                 # Shiro 把认证状态存在服务端 session（按 JSESSIONID 索引），
                 # 把 cookie 还原成同一个 JSESSIONID，服务端仍视其为已认证。
                 # 需鉴权的插件必须自建独立会话（见 plugins/ruoyi/job_invoke_target.py 的写法）。
-                original = cast(ScanResult, inst.verify(target, session))
+                #
+                # F9：按插件声明的 path_scope 选探测基准。分离版站点探到 /prod-api 后，
+                # API 类插件要跟着前缀走，而根静态资源插件（.git/.env/备份）必须留在根路径。
+                exec_target = _target_for(cls)
+                original = cast(ScanResult, inst.verify(exec_target, session))
                 # D7: WAF 绕过（仅当协调器存在且插件支持绕过且原结果非 CONFIRMED）
                 if (
                     waf_bypass_coordinator is not None
@@ -93,7 +113,7 @@ class ScanEngine:
                 ):
                     try:
                         original = cast(
-                            ScanResult, waf_bypass_coordinator.maybe_bypass(inst, target, session, original)
+                            ScanResult, waf_bypass_coordinator.maybe_bypass(inst, exec_target, session, original)
                         )
                     except Exception as e:
                         # 绕过异常不降级为 SAFE，保持原状态；同时记录日志：

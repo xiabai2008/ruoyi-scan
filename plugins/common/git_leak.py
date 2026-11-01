@@ -12,6 +12,8 @@ class GitLeakPlugin(PluginBase):
     name = ".git 源码泄露"
     cve = "N/A"
     severity = SEVERITY_HIGH
+    # F9：根目录的 .git/ 是运维遗留的源码目录，不在 API 前缀下，探测基准必须留在站点根，不能跟随 API 前缀
+    path_scope = "root"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

@@ -162,6 +162,22 @@ class PluginBase(ABC):
     # UNKNOWN（测不了 ≠ 不存在）。只应在「使用共享高权会话、没有会话就无法验证」的插件上置 True；
     # 自己负责登录/使用匿名会话/使用显式 --surface-account 的插件保持 False。
     requires_auth = False
+    # 路径作用域（F9）：决定引擎在探到 API 前缀（/prod-api、/jeecg-boot）时，
+    # 是否要把本插件的探测基准一起推过去。
+    #
+    # 背景：前后端分离部署下，Nginx 只把 /prod-api/ 反代到后端，根路径交给 SPA。
+    # 于是「API 端点」必须加前缀才探得到，而「部署在 web 根的静态文件」恰恰相反——
+    # .git/.env/备份/IDE 残留是运维丢在站点根目录的，加了前缀反而探不到。
+    # 曾经一刀切全部加前缀，导致分离版站点的静态泄露整类漏报：
+    # 实测 R7 根路径 /​.git/HEAD 返回 200（真实存在），扫描器探 /prod-api/.git/HEAD
+    # 得 502，最终判「不存在」——错误 SAFE。
+    #
+    # 取值：
+    #   "api"   —— 后端接口（actuator/swagger/业务 API），**跟随** API 前缀
+    #   "root"  —— 部署在 web 根的静态资源（.git/.env/备份/IDE 残留），**不跟随**
+    #   "both"  —— 两种可能都要探（命中任一即算），代价是多一倍请求
+    # 默认 "api"：与历史行为一致，不会让已有插件静默改变探测位置。
+    path_scope = "api"
     description = ""  # 漏洞描述
     fix = ""  # 修复建议（一句话概要）
     # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤）

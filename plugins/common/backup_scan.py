@@ -14,6 +14,8 @@ class BackupScanPlugin(PluginBase):
     name = "备份文件泄露"
     cve = "N/A"
     severity = SEVERITY_MEDIUM
+    # F9：备份/交换文件丢在 web 根，不在 API 前缀下，探测基准必须留在站点根，不能跟随 API 前缀
+    path_scope = "root"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A05:2021"

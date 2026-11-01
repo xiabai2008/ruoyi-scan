@@ -930,6 +930,11 @@ class ScanOrchestrator:
                     on_result=_on_result,
                     waf_bypass_coordinator=waf_bypass_coordinator,
                     should_stop=lambda: self._cancelled(task.task_id),
+                    # F9：把不带前缀的站点根一并传下去。path_scope="root" 的插件
+                    # （.git/.env/备份/IDE 残留）用它探测——这些文件部署在 web 根，
+                    # 加了 API 前缀必然探不到（实测 R7 根路径 .git/HEAD 200，
+                    # 探 /prod-api/.git/HEAD 得 502，最终错误判 SAFE）。
+                    root_target=target,
                 )
 
             task.results = all_results

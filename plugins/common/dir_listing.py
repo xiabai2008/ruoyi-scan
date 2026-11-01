@@ -10,6 +10,8 @@ class DirListingPlugin(PluginBase):
     name = "目录遍历探测"
     cve = "N/A"
     severity = SEVERITY_LOW
+    # F9：目录列表针对 web 根的静态目录（/logs/、/backup/ 等），探测基准必须留在站点根，不能跟随 API 前缀
+    path_scope = "root"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"

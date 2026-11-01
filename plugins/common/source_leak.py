@@ -40,6 +40,8 @@ class SourceLeakPlugin(PluginBase):
     name = "IDE/SCM 残留文件泄露"
     cve = "N/A"
     severity = SEVERITY_MEDIUM
+    # F9：.svn/.idea/.vscode 等 IDE/SCM 残留随源码部署在 web 根，探测基准必须留在站点根，不能跟随 API 前缀
+    path_scope = "root"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
