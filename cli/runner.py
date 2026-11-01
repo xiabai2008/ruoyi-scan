@@ -327,7 +327,17 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{YELLOW}[*]WAF 绕过已启用（{mode} 模式）{RESET}")
 
     elif event_type == "plugin_fallback":
-        print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi + spring 插件包（阶段一兼容）{RESET}")
+        # 这条事件有两个来源，文案必须如实区分，否则会误导排查：
+        #   1. cms 未识别 → 回退 ruoyi + spring
+        #   2. cms 弱证据命中 → 在原包基础上补加载（不丢原包）
+        # 早先两种情况都打同一句「未匹配插件包」，实测排查时被误导过 ——
+        # 明明 cms=spring 且加载了 14 个插件，日志却说「未匹配」。
+        reason = payload.get("reason", "")
+        plugin = payload.get("plugin", "auto")
+        if "弱证据" in reason:
+            print(f"{YELLOW}[*]指纹弱证据（{plugin}）：{reason}{RESET}")
+        else:
+            print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi + spring 插件包（阶段一兼容）{RESET}")
 
     elif event_type == "plugins_loaded":
         # 插件按来源分批加载，每个来源各发一次事件（common / 外部目录 / 用户安装 /

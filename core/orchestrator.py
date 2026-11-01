@@ -75,6 +75,57 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
 logger = get_logger(__name__)
 
 
+# 弱证据判定阈值：置信度不超过这个值时，认为「cms 只是猜的」，不该排他加载插件包。
+#
+# 背景（2026-11-01 盲测 v2 发现）：`spring` 的 root_json_keys 特征
+# （根路径返回 {"timestamp","status","error","path"}）被算作**强特征**，
+# 单独命中就给 0.5 置信度。但「返回 Spring Boot 默认错误 JSON」只说明这是个
+# Spring 应用 —— 它完全可能同时也是若依/Jeecg。
+#
+# 后果实测（C4-4 / C4-5）：
+#   GET / → {"timestamp","status","error","path"}  → cms=spring (0.5)
+#   → 只加载 plugins.spring（26 个插件）
+#   → plugins.jeecgboot / plugins.ruoyi **整包不加载**
+#   → freemarker_ssti / ruoyi_gen_rce 根本没被调用 → 0 CONFIRMED
+# 而靶场真的存在 SSTI（手工验证 ${7*7} → 49）。
+#
+# 一个错误的指纹判定屏蔽掉整个插件包的漏洞面，比单个插件判定不准严重得多。
+_WEAK_FINGERPRINT_CONFIDENCE = 0.5
+
+# 弱证据时额外补加载的包：凡是「Spring 生态上的应用」都该一起跑。
+# 顺序即优先级，去重按类对象。
+_EXPANDED_PACKAGES = ("plugins.ruoyi", "plugins.spring", "plugins.jeecgboot")
+
+
+def _load_plugins_from(packages: tuple[str, ...] | list[str]) -> Tuple[List[type], List[Dict[str, Any]]]:
+    """从给定包列表加载插件，按类对象去重。
+
+    Args:
+        packages: 包名列表（如 "plugins.ruoyi"）
+    Returns:
+        (插件类列表, 每个包的加载明细)；明细含 package/count，失败时含 error。
+    """
+    plugins: List[type] = []
+    loaded: List[Dict[str, Any]] = []
+    seen: set[type] = set()
+    for package in packages:
+        try:
+            bundle = load_plugins(package)
+        except Exception as e:
+            logger.warning("插件包 %s 加载失败：%s", package, e, exc_info=True)
+            loaded.append({"package": package, "count": 0, "error": str(e)})
+            continue
+        added = 0
+        for cls in bundle:
+            if cls in seen:
+                continue
+            seen.add(cls)
+            plugins.append(cls)
+            added += 1
+        loaded.append({"package": package, "count": added})
+    return plugins, loaded
+
+
 def _load_fallback_plugins() -> Tuple[List[type], List[Dict[str, Any]]]:
     """cms 未识别时的回退插件包：ruoyi + spring，按类对象去重。
 
@@ -89,25 +140,23 @@ def _load_fallback_plugins() -> Tuple[List[type], List[Dict[str, Any]]]:
     Returns:
         (插件类列表, 每个包的加载明细)；明细含 package/count，失败时含 error。
     """
-    plugins: List[type] = []
-    loaded: List[Dict[str, Any]] = []
-    seen: set[type] = set()
-    for package in ("plugins.ruoyi", "plugins.spring"):
-        try:
-            bundle = load_plugins(package)
-        except Exception as e:
-            logger.warning("回退插件包 %s 加载失败：%s", package, e, exc_info=True)
-            loaded.append({"package": package, "count": 0, "error": str(e)})
-            continue
-        added = 0
-        for cls in bundle:
-            if cls in seen:
-                continue
-            seen.add(cls)
-            plugins.append(cls)
-            added += 1
-        loaded.append({"package": package, "count": added})
-    return plugins, loaded
+    return _load_plugins_from(("plugins.ruoyi", "plugins.spring"))
+
+
+def _is_weak_fingerprint(fp_result: Any) -> bool:
+    """判断指纹结论是否只是「弱证据猜出来的」，此时不该排他。
+
+    条件：cms 非空，但置信度不超过阈值（只有弱特征命中，没有真正的标志性证据）。
+    cms 为空的情况已由 _load_fallback_plugins 覆盖，不在此列。
+    """
+    cms = getattr(fp_result, "cms", "") or ""
+    if not cms:
+        return False
+    try:
+        conf = float(getattr(fp_result, "confidence", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return False
+    return conf <= _WEAK_FINGERPRINT_CONFIDENCE
 
 
 def downgrade_auth_required_results(results: List[ScanResult], auth_status: str, auth_required_names: set[str]) -> int:
@@ -732,6 +781,15 @@ class ScanOrchestrator:
                 )
 
             # 6. 插件加载 + 路由
+            #
+            # 三层策略：
+            #   a) cms 未识别      → 回退 ruoyi + spring（F7-1）
+            #   b) cms 弱证据命中  → 在原包基础上补加载 ruoyi + spring + jeecgboot
+            #   c) cms 强证据命中  → 只加载该 CMS 的包（正常路径）
+            #
+            # b 是为了修「弱指纹排他导致整包漏扫」（2026-11-01 盲测 v2 发现）：
+            # 根路径返回 Spring Boot 默认错误 JSON 就把 cms 判成 spring，
+            # 于是一整类 CMS 的专项插件全不跑。C4-4/C4-5 实测 0 CONFIRMED 即此因。
             if not all_plugins:
                 all_plugins, fallback_packages = _load_fallback_plugins()
                 _emit(
@@ -744,6 +802,31 @@ class ScanOrchestrator:
                         "task_id": task.task_id,
                     },
                 )
+            elif _is_weak_fingerprint(fp_result):
+                # 弱证据：保留原判定的包，再补上其它可能同时成立的包。
+                # 不丢弃原包 —— 用户看到 cms=spring 时仍应看到 spring 插件结果。
+                base_cms = getattr(fp_result, "cms", "") or ""
+                merged_packages = [f"plugins.{base_cms}"]
+                for pkg in _EXPANDED_PACKAGES:
+                    if pkg not in merged_packages:
+                        merged_packages.append(pkg)
+                expanded, expand_detail = _load_plugins_from(tuple(merged_packages))
+                if expanded:
+                    all_plugins = expanded
+                    _emit(
+                        "plugin_fallback",
+                        {
+                            "plugin": base_cms,
+                            "reason": (
+                                f"指纹为弱证据（{base_cms} 置信度 "
+                                f"{getattr(fp_result, 'confidence', 0):.2f} ≤ {_WEAK_FINGERPRINT_CONFIDENCE}），"
+                                "补加载 ruoyi/spring/jeecgboot，避免整包漏扫"
+                            ),
+                            "packages": expand_detail,
+                            "total_count": len(all_plugins),
+                            "task_id": task.task_id,
+                        },
+                    )
 
             # 通用漏洞检测包
             # ⚠ 旧实现只记 debug（生产默认 WARNING 级不可见）：plugins.common 加载失败时
