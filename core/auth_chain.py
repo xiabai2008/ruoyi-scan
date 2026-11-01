@@ -342,7 +342,7 @@ class RuoYiAuthChain:
             return None
         return body if isinstance(body, dict) else None
 
-    def _detect_separated_login(self) -> bool:
+    def _detect_separated_login(self) -> Optional[str]:
         """前后端分离版：根路径 /login 只是 SPA 页面，真实登录入口在 API 前缀下。
 
         背景（2026-11-02 实测 R6/R7）：nginx 只反代 /prod-api/ 时：
@@ -362,7 +362,7 @@ class RuoYiAuthChain:
             logger.debug("API 前缀探测失败", exc_info=True)
             api_base = ""
         if not api_base:
-            return False
+            return None
         self.base_path = api_base
         base_url = self.target.rstrip("/") + api_base
         low = api_base.lower()
@@ -370,7 +370,7 @@ class RuoYiAuthChain:
             self.login_url = join_url(base_url, "/sys/login")
             self.login_style = "jeecg"
             self.auth_mode = AUTH_V5_JWT
-            return True
+            return AUTH_V5_JWT
         # 注意：不能用「返回 200 JSON」当判据 —— RuoYi 的全局异常处理器会对
         # 未知路由返回 HTTP 200 + {"code":404,"msg":...}，会把 Vue 站误判成 Plus。
         # 必须看验证码接口的业务结构（captchaEnabled）。
@@ -380,20 +380,20 @@ class RuoYiAuthChain:
                 self.login_url = join_url(base_url, "/auth/login")
                 self.login_style = "plus"
                 self.auth_mode = AUTH_V5_JWT
-                return True
+                return AUTH_V5_JWT
         for captcha_path in ("/captchaImage", "/code"):
             captcha_body = self._json_get(self.session, base_url + captcha_path)
             if isinstance(captcha_body, dict) and "captchaEnabled" in captcha_body:
                 self.login_url = join_url(base_url, "/login")
                 self.login_style = "ruoyi-vue"
                 self.auth_mode = AUTH_V5_JWT
-                return True
+                return AUTH_V5_JWT
         # 前缀已确认通到后端，但验证码接口形态不识别：按 RuoYi-Vue 约定兜底，
         # 至少不再把登录请求打到 SPA 的 /login。
         self.login_url = join_url(base_url, "/login")
         self.login_style = "ruoyi-vue"
         self.auth_mode = AUTH_V5_JWT
-        return True
+        return AUTH_V5_JWT
 
     def _detect_by_protected_endpoints(self) -> str:
         """用受保护接口判断「到底有没有鉴权」并顺便发现登录页。
@@ -469,8 +469,9 @@ class RuoYiAuthChain:
         """
         # 前后端分离版优先：根路径 /login 是 SPA 200，不能再用它判 v4/v5。
         # 先用 API 前缀找到真实登录入口（失败则保持旧的根路径逻辑）。
-        if self._detect_separated_login():
-            return self.auth_mode
+        sep_mode = self._detect_separated_login()
+        if sep_mode:
+            return sep_mode
         self.login_url = join_url(self.target, "/login")
         try:
             # 必须自己看 3xx：requests 默认自动跟随会让 /login -> 登录页 的站点
