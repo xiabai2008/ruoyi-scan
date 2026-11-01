@@ -4,7 +4,52 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [1.5.4] - 2026-11-01
+
+### 盲测 v2：两个 P0 级判定缺陷（2026-11-01）
+
+本轮用 27 座仿真靶场做黑盒盲测，暴露并修复了两个**影响整类场景**的缺陷。
+详细报告见 `docs/blind_test_report_v2.md`。
+
+#### Fixed（盲测发现）
+
+- **弱指纹排他加载导致整包漏扫**：`spring` 的 `root_json_keys` 特征（根路径返回
+  `{"timestamp","status","error","path"}`）被算作强特征，单独命中给 0.5 置信度。
+  但「返回 Spring Boot 默认错误 JSON」只说明这是个 Spring 应用 —— 它完全可能同时是
+  若依 / Jeecg。于是 `cms=spring` 时只加载 `plugins.spring`，`plugins.ruoyi` /
+  `plugins.jeecgboot` **整包不加载**，两类专项插件全部不跑。
+  实测：两个真实存在的 SSTI（jmreport / 代码生成）被判 0 CONFIRMED。
+  修法：cms 弱证据（置信度 ≤ 0.5）时保留原包并补加载三个包；强证据行为不变。
+- **catch-all 路径回显被当成组件存在**：带 `/**` 兜底路由的站点，任意路径返回
+  200 HTML 且正文里带着请求路径。组件探测插件拿路径名当关键字 → 100% 误判。
+  最麻烦的是这类响应**每个路径长度都不同**（路径越长相），长度比对、逐字节摘要、
+  归一化摘要全部失效。实测：3 条组件误报 + 60 个假备份。
+  修法：新增 `is_path_echo_page()` / `_html_echoes_path()`，判据是
+  「剥掉路径后剩余有效内容极少」，接入 `matcher` / `soft404` 及 3 个插件。
+
+#### Changed（盲测发现）
+
+- **minio_unauth**：匿名列举探 S3 根路径 `/`（返回 `<ListAllMyBucketsResult>` XML），
+  不再探 `/minio/` —— 那是控制台登录页，永远不含桶列表。
+  顺带把正向特征从泛用关键字 `"bucket"` 收紧成 S3 XML 结构，消除
+  「控制台里出现 bucket 字样即误报」的风险。
+- **rocketmq_unauth**：控制台探根路径。`rocketmq-console-ng` 是独立 Spring Boot 应用，
+  官方包 `context-path` 为空，控制台就在 `/`，不在 `/rocketmq/`。
+- **freemarker_ssti**：接口要求鉴权时判 UNKNOWN 而不是 SAFE。真实 JeecgBoot 返回
+  `HTTP 200 + {"code":500,"message":"Token校验失败"}` —— 状态码是 200、body code 是 500、
+  文案是「无权限访问」，三个特征叠在一起让通用兜底全部抓不到。
+- **ruoyi_gen_rce**：对 `/tool/gen/preview` 做**差分验证**（无 payload 基线 vs 注入
+  `${7*7}`），不再只探可达性。旧实现有洞没洞都返回同样的 200 HTML，一律 UNKNOWN。
+
+#### Added（盲测方法论）
+
+- 靶场侧：`scripts/lab.py` 统一启停 + 三级健康检查（入口码 / 后端端口 / 业务探针）、
+  `lab_assets/` 真实感资产层、C4 中间件靶场 6 座（Redis / MinIO-S3 / RocketMQ / 三类 SSTI，
+  全部用真实模板引擎求值），R13 WAF hold-out 验证站。
+- 扫描器侧：ground truth 独立探测、三方对照（扫描器 / nuclei / 手工）、
+  盲测报告与 P 类缺陷清单。
+
+---
 
 ### Added
 - **桌面端质量门禁**：ESLint `react-hooks/rules-of-hooks` 静态检查（拦截条件 Hook；v1.5.0 白屏同类问题）+ 构建产物 CDP 冒烟（真实点击「新建扫描」并遍历全部导航页，捕获运行时异常）；两项均纳入 CI
@@ -21,6 +66,10 @@
 ### Changed
 - **README**：目录树 `models.py` 位置修正（实为 `common/models.py`）并补齐 `common/` 段；末尾个人宣言移至 `AUTHOR.md`；与 nuclei/xray 对比表补 3 行诚实短板（模板存量 / 跨框架广度 / 社区规模），与「互补而非竞争」定位对齐
 - **退出码文档**：统一 0/1/2/3/4 五种语义，修正 `docs/usage.md` 中「3 = 配置错误」的错误表述（配置错误是 2，3 是目标不可达）
+
+## [Unreleased]
+
+（暂无）
 
 ## [1.5.3] - 2026-10-31
 
