@@ -123,7 +123,11 @@ def _html_echoes_path(body: bytes, path: str) -> bool:
     residual = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", residual)
     if len(residual) <= 20:
         return True
-    return len(text) <= 150 and len(residual) <= len(text) // 2
+    # 与 lib/matcher 同款修正：按「残留 / 正文有效内容」的比例判断，而不是按整页长度。
+    # 真实短页面（如 88 字节的 Druid 监控页）剥掉路径名后文案仍在，不该判成回显。
+    content = re.sub(r"<[^>]*>", "", low)
+    content = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", content)
+    return len(text) <= 150 and bool(content) and len(residual) * 2 <= len(content)
 
 
 def _derive_echo_tokens(path: str) -> Tuple[str, ...]:

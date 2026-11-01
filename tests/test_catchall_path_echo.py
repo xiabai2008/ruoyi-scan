@@ -105,3 +105,26 @@ def test_soft404_handles_empty_input():
     """空输入不崩。"""
     assert _html_echoes_path(b"", "/index.bak") is False
     assert _html_echoes_path(b"<html></html>", "") is False
+
+
+def test_real_short_druid_monitor_is_not_echo():
+    """真实短页面（不足 150 字节）不能被按整页长度误判成回显。
+
+    2026-11-02 实测：regression_ruoyi 的 Druid 监控用例（88 字节页面）被
+    "残留 < 整页一半" 算法误判成路径回显 → CONFIRMED 退化为 SAFE。
+    修正为按「残留 / 正文有效内容」比例判断。
+    """
+    body = (
+        "<html><head><title>Druid Stat Index</title></head>"
+        "<body>Druid Monitor View</body></html>"
+    )
+    assert is_path_echo_page(body, "druid/index.html") is False
+
+
+def test_soft404_short_real_page_is_not_echo():
+    """soft404 同款判据：88 字节的真实 Druid 页不是路径回显。"""
+    body = (
+        "<html><head><title>Druid Stat Index</title></head>"
+        "<body>Druid Monitor View</body></html>"
+    ).encode()
+    assert _html_echoes_path(body, "/druid/index.html") is False

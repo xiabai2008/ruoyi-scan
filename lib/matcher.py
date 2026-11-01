@@ -113,8 +113,16 @@ def is_path_echo_page(text, request_path: str = "") -> bool:
     if len(residual) <= 20:
         return True
 
-    # 稍宽一点：页面极短（<=150）且剥掉路径后剩不到一半，也算回显
-    return len(text) <= 150 and len(residual) <= len(text) // 2
+    # 页面很短（<=150）时再看「残留内容占正文有效内容的比例」：
+    # 真实组件页即使很短，剥掉路径后它本该有的文案仍在（如 Druid 监控页
+    # "<title>Druid Stat Index</title>...Druid Monitor View"），残留占比很高；
+    # 而回显页的正文几乎只有路径，残留占比很低。
+    # 不能用「残留 < 正文长度一半」这种按整页长度的算法 —— 短真实页会被误杀
+    # （2026-11-02 实测：Druid Stat Index 88 字节页被误判成路径回显，导致
+    #  regression_ruoyi 的 Druid 监控用例从 CONFIRMED 退化为 SAFE）。
+    content = re.sub(r"<[^>]*>", "", low)
+    content = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", content)
+    return len(text) <= 150 and bool(content) and len(residual) * 2 <= len(content)
 
 
 def match_positive(text, positives, negatives=None, request_path=""):
