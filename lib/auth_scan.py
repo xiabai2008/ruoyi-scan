@@ -210,7 +210,10 @@ def auto_login(
         login_url = urljoin(base, "/login")
 
     if verbose:
-        emit(f"  [*]自动登录: {login_url}（用户: {username}）")
+        # 未显式指定登录 URL 时不要展示硬编码的 /login —— 分离版真实入口可能是
+        # /prod-api/login 或 /auth/login，由登录链探测；这里只报目标，避免误导。
+        login_hint = login_url if explicit_login_url else target
+        emit(f"  [*]自动登录: {login_hint}（用户: {username}）")
 
     # RuoYi 默认形态：先用公共登录器（验证码 OCR + 算术运算符轮换 + v4/v5）。
     # 旧实现只发 username/password，单机版必带验证码 → R1–R5 永远登不进去，

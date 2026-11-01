@@ -18,6 +18,7 @@
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
 import re
+import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Tuple
 from urllib.parse import urljoin, urlparse
@@ -209,6 +210,9 @@ class RuoYiAuthChain:
         # 应用上下文前缀（例如 D1 部署在 /portal）：根路径下探测不到受保护接口时，
         # 从站点根的同源目录重定向通用推导，供受保护接口探测与登录后取证复用。
         self.base_path: str = ""
+        # 前后端分离版的登录形态（F10）："" = 旧逻辑；ruoyi-vue / plus / jeecg
+        # 由 _detect_separated_login() 根据 API 前缀下的验证码接口形态确定。
+        self.login_style: str = ""
 
     # 受保护接口：仅用于判断「目标到底有没有鉴权」，不依赖任何具体登录页路径。
     # 这些是若依各形态共有的业务列表接口；返回业务 JSON 即证明无需登录即可取数。
@@ -316,6 +320,81 @@ class RuoYiAuthChain:
             return ""
         return path.rstrip("/")
 
+    # ── 前后端分离版登录入口（F10） ───────────────────────────────
+    # RuoYi-Vue-Plus 的 Sa-Token 客户端标识：前端构建期公开常量（非密钥），
+    # plus-ui 官方默认 pc 端即此值；R9（Plus 5.6.2）sys_client 表实测相同。
+    _PLUS_CLIENT_IDS = ("e5cd7e4891bf95d1d19206ce24a7b32e",)
+    _PLUS_TENANT_ID = "000000"
+
+    @staticmethod
+    def _json_get(session: Any, url: str) -> Optional[Dict[str, Any]]:
+        """GET 并返回 JSON 对象（非 200 / 非 JSON / 异常一律 None），用于轻量探测。"""
+        try:
+            resp = session.get(url)
+        except Exception:
+            logger.debug("API 前缀探测请求失败: %s", url, exc_info=True)
+            return None
+        if int(getattr(resp, "status_code", 0) or 0) != 200:
+            return None
+        try:
+            body = resp.json()
+        except (ValueError, TypeError):
+            return None
+        return body if isinstance(body, dict) else None
+
+    def _detect_separated_login(self) -> bool:
+        """前后端分离版：根路径 /login 只是 SPA 页面，真实登录入口在 API 前缀下。
+
+        背景（2026-11-02 实测 R6/R7）：nginx 只反代 /prod-api/ 时：
+          - GET /login             → 200 SPA index.html（旧逻辑据此判 v4，POST /login 405）
+          - POST /prod-api/login   → 200 {"code":200,"token":...}
+        因此先用 core.basepath.detect_api_base 找前缀，再按前缀下验证码接口形态区分：
+          - /auth/code      → RuoYi-Vue-Plus（POST {base}/auth/login，Sa-Token）
+          - /captchaImage   → RuoYi-Vue（POST {base}/login）
+          - /code           → RuoYi-Cloud（POST {base}/login）
+          - /sys/randomImage→ JeecgBoot（POST {base}/sys/login）
+        """
+        try:
+            from core import basepath
+
+            api_base = basepath.detect_api_base(self.target, self.session)
+        except Exception:  # noqa: BLE001 - 前缀探测失败退回旧逻辑，不阻断登录
+            logger.debug("API 前缀探测失败", exc_info=True)
+            api_base = ""
+        if not api_base:
+            return False
+        self.base_path = api_base
+        base_url = self.target.rstrip("/") + api_base
+        low = api_base.lower()
+        if low.endswith("/jeecg-boot") or low.endswith("/jeecg"):
+            self.login_url = join_url(base_url, "/sys/login")
+            self.login_style = "jeecg"
+            self.auth_mode = AUTH_V5_JWT
+            return True
+        # 注意：不能用「返回 200 JSON」当判据 —— RuoYi 的全局异常处理器会对
+        # 未知路由返回 HTTP 200 + {"code":404,"msg":...}，会把 Vue 站误判成 Plus。
+        # 必须看验证码接口的业务结构（captchaEnabled）。
+        plus_code = self._json_get(self.session, base_url + "/auth/code")
+        if isinstance(plus_code, dict) and isinstance(plus_code.get("data"), dict):
+            if "captchaEnabled" in plus_code["data"]:
+                self.login_url = join_url(base_url, "/auth/login")
+                self.login_style = "plus"
+                self.auth_mode = AUTH_V5_JWT
+                return True
+        for captcha_path in ("/captchaImage", "/code"):
+            captcha_body = self._json_get(self.session, base_url + captcha_path)
+            if isinstance(captcha_body, dict) and "captchaEnabled" in captcha_body:
+                self.login_url = join_url(base_url, "/login")
+                self.login_style = "ruoyi-vue"
+                self.auth_mode = AUTH_V5_JWT
+                return True
+        # 前缀已确认通到后端，但验证码接口形态不识别：按 RuoYi-Vue 约定兜底，
+        # 至少不再把登录请求打到 SPA 的 /login。
+        self.login_url = join_url(base_url, "/login")
+        self.login_style = "ruoyi-vue"
+        self.auth_mode = AUTH_V5_JWT
+        return True
+
     def _detect_by_protected_endpoints(self) -> str:
         """用受保护接口判断「到底有没有鉴权」并顺便发现登录页。
 
@@ -388,6 +467,10 @@ class RuoYiAuthChain:
 
         关键：404 只说明「没有这个登录入口」，不能说明「没有鉴权」。
         """
+        # 前后端分离版优先：根路径 /login 是 SPA 200，不能再用它判 v4/v5。
+        # 先用 API 前缀找到真实登录入口（失败则保持旧的根路径逻辑）。
+        if self._detect_separated_login():
+            return self.auth_mode
         self.login_url = join_url(self.target, "/login")
         try:
             # 必须自己看 3xx：requests 默认自动跟随会让 /login -> 登录页 的站点
@@ -480,6 +563,10 @@ class RuoYiAuthChain:
             return self._login_v4_session(captcha_code, attempt_index=attempt_index)
 
         if self.auth_mode == AUTH_V5_JWT:
+            if self.login_style == "plus":
+                return self._login_v5_plus(captcha_code, attempt_index=attempt_index)
+            if self.login_style == "jeecg":
+                return self._login_v5_jeecg(captcha_code, attempt_index=attempt_index)
             return self._login_v5_jwt(captcha_code, attempt_index=attempt_index)
 
         return False, LOGIN_ERROR
@@ -660,3 +747,99 @@ class RuoYiAuthChain:
             return False, LOGIN_CAPTCHA
 
         return False, f"{LOGIN_FAIL}: code={r_code} msg={msg}"
+
+    def _login_v5_plus(self, captcha_code: Optional[str] = None, attempt_index: int = 0) -> Tuple[bool, str]:
+        """RuoYi-Vue-Plus（Sa-Token）登录：POST {base}/auth/login
+
+        请求体：clientId / grantType=password / tenantId / username / password / code / uuid
+        响应：{"code":200,"data":{"access_token":"...","expire_in":...}}
+        clientId 是前端构建期公开常量（非密钥），Plus 官方 plus-ui 默认 pc 端值
+        实测与 R9（Plus 5.6.2）sys_client 表一致。
+
+        验证码：Plus 由 /auth/code 下发（如启用）。本实现不自动 OCR Plus 验证码
+        ——未启用时 code/uuid 传空即可；启用时如实返回 LOGIN_CAPTCHA，让调用方
+        走人工登录 / --auth bearer，不假装成功。
+        """
+        validate_code = captcha_code or ""
+        failures = []
+        for client_id in self._PLUS_CLIENT_IDS:
+            payload = {
+                "clientId": client_id,
+                "grantType": "password",
+                "tenantId": self._PLUS_TENANT_ID,
+                "username": self.username,
+                "password": self.password,
+                "code": validate_code,
+                "uuid": "",
+            }
+            try:
+                resp = self.session.post(self.login_url, json=payload)
+            except Exception as exc:  # noqa: BLE001 - 登录失败不抛异常
+                return False, f"{LOGIN_ERROR}: {exc}"
+            body: Any = {}
+            try:
+                body = resp.json()
+            except (ValueError, TypeError):
+                return False, f"{LOGIN_ERROR}: 响应非 JSON"
+            if not isinstance(body, dict):
+                continue
+            r_code = body.get("code")
+            data = body.get("data")
+            token = ""
+            if isinstance(data, dict):
+                token = str(data.get("access_token") or "")
+            token = token or str(body.get("token") or "")
+            ok_code = isinstance(r_code, int) and not isinstance(r_code, bool) and r_code in (0, 200)
+            if ok_code and token:
+                self.session.session.headers["Authorization"] = f"Bearer {token}"
+                return True, LOGIN_OK
+            msg = str(body.get("msg") or "")
+            if self._mentions_mfa(msg):
+                return False, LOGIN_MFA
+            if "验证码" in msg or "captcha" in msg.lower():
+                return False, LOGIN_CAPTCHA
+            failures.append(f"client={client_id[:8]} code={r_code} msg={msg}")
+        return False, f"{LOGIN_FAIL}: " + "; ".join(failures)
+
+    def _login_v5_jeecg(self, captcha_code: Optional[str] = None, attempt_index: int = 0) -> Tuple[bool, str]:
+        """JeecgBoot 登录：POST {base}/sys/login（JSON）
+
+        请求体：username / password / captcha / checkKey（毫秒时间戳）
+        响应：{"success":true,"result":{"token":"..."}} 或 result 为 token 字符串。
+        鉴权头用 X-Access-Token（同时带 Authorization Bearer 兼容反代改写）。
+        Jeecg 图形验证码为图片，无法可靠 OCR —— 启用验证码时如实返回 LOGIN_CAPTCHA。
+        """
+        payload = {
+            "username": self.username,
+            "password": self.password,
+            "captcha": captcha_code or "",
+            "checkKey": str(int(time.time() * 1000)),
+        }
+        try:
+            resp = self.session.post(self.login_url, json=payload)
+        except Exception as exc:  # noqa: BLE001 - 登录失败不抛异常
+            return False, f"{LOGIN_ERROR}: {exc}"
+        try:
+            body: Any = resp.json()
+        except (ValueError, TypeError):
+            return False, f"{LOGIN_ERROR}: 响应非 JSON"
+        if not isinstance(body, dict):
+            return False, f"{LOGIN_ERROR}: 响应 JSON 非对象"
+        if body.get("success") is True:
+            result = body.get("result")
+            token = ""
+            if isinstance(result, dict):
+                token = str(result.get("token") or "")
+            elif isinstance(result, str):
+                token = result
+            if token:
+                self.session.session.headers["X-Access-Token"] = token
+                self.session.session.headers["Authorization"] = f"Bearer {token}"
+                return True, LOGIN_OK
+            return False, f"{LOGIN_FAIL}: 登录成功但无 token"
+        msg = str(body.get("message") or body.get("msg") or "")
+        if self._mentions_mfa(msg):
+            return False, LOGIN_MFA
+        if "验证码" in msg or "captcha" in msg.lower():
+            return False, LOGIN_CAPTCHA
+        return False, f"{LOGIN_FAIL}: {msg or 'success=false'}"
