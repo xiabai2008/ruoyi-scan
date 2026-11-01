@@ -89,11 +89,32 @@ def is_path_echo_page(text, request_path: str = "") -> bool:
     full = request_path.split("?")[0].strip("/")
     if not full:
         return False
-    if full.lower() in low:
+
+    # ⚠ 判据核心：「页面内容几乎只有路径」。
+    #
+    # 不能用「路径作为词出现」—— 踩过两次坑：
+    #   1. 裸子串：`rocketmqCluster` 里的 `rocketmq` 会命中
+    #   2. 词边界：真实 RocketMQ 控制台的 `<title>RocketMQ Dashboard</title>`
+    #      里 `rocketmq` 前后是 `>` 和空格，**是合法词边界**，但那是品牌词，
+    #      不是路径回显 → 真实控制台被误杀成 SAFE
+    #
+    # 回显页的真正形态是「整页除了这句路径几乎没有别的东西」。
+    # 所以判据改为：把路径从页面里**剥掉**，剩下的「有效内容」极少。
+    # 真实组件页面剥掉品牌词后仍有大量结构/脚本/文案，不会被误判。
+    needle = full.lower()
+    seg = full.rsplit("/", 1)[-1].lower()
+    stripped = low.replace(needle, "").replace(seg, "")
+
+    # 剥掉路径后剩下的「有效字符」（去掉 HTML 标签和空白）
+    residual = re.sub(r"<[^>]*>", "", stripped)
+    residual = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", residual)
+
+    # 剩下的非路径内容少于 20 个字符 → 整页基本就是路径回显
+    if len(residual) <= 20:
         return True
-    # 退化：用最后一段（有些页面只回显文件名）
-    seg = full.rsplit("/", 1)[-1]
-    return bool(seg and len(seg) >= 4 and seg.lower() in low)
+
+    # 稍宽一点：页面极短（<=150）且剥掉路径后剩不到一半，也算回显
+    return len(text) <= 150 and len(residual) <= len(text) // 2
 
 
 def match_positive(text, positives, negatives=None, request_path=""):

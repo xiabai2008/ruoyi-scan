@@ -113,10 +113,17 @@ def _html_echoes_path(body: bytes, path: str) -> bool:
     cleaned = (urlparse(path).path or path).strip("/")
     if not cleaned:
         return False
-    if cleaned.lower() in low:
+
+    # 与 lib.matcher.is_path_echo_page 同一判据：剥掉路径后看剩余内容。
+    # 不能用裸子串匹配 —— 真实控制台的品牌词（如 `<title>RocketMQ Dashboard</title>`）
+    # 会让路径名以合法词边界出现，裸匹配会误杀真实页面。
+    seg = cleaned.rsplit("/", 1)[-1].lower()
+    stripped = low.replace(cleaned.lower(), "").replace(seg, "")
+    residual = re.sub(r"<[^>]*>", "", stripped)
+    residual = re.sub(r"[\s:：\-—()（）\[\]{}'\"+/.,;]", "", residual)
+    if len(residual) <= 20:
         return True
-    seg = cleaned.rsplit("/", 1)[-1]
-    return bool(seg and len(seg) >= 3 and seg.lower() in low)
+    return len(text) <= 150 and len(residual) <= len(text) // 2
 
 
 def _derive_echo_tokens(path: str) -> Tuple[str, ...]:

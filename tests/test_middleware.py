@@ -88,13 +88,25 @@ def test_redis_unauth_unknown():
 
 
 def test_minio_unauth_confirm():
-    """MinIO：health/live 200 + bucket 列表 → CONFIRMED"""
+    """MinIO：health/live 200 + S3 根路径返回匿名桶列表 → CONFIRMED
+
+    注意探测路径：真实 MinIO 的匿名列举走 **S3 根路径 GET /**，
+    返回 `<ListAllMyBucketsResult>` XML；`/minio/` 是控制台登录页，
+    永远不含桶列表。旧测试假设 `/minio/` 返回 JSON 桶列表，那是错的
+    （2026-11-01 盲测 v2 用真实 S3 协议靶场实测修正）。
+    """
     from plugins.common.minio_unauth import MinioUnauthPlugin
 
+    buckets_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+        "<Buckets><Bucket><Name>data</Name></Bucket></Buckets>"
+        "</ListAllMyBucketsResult>"
+    )
     sess = FakeSession(
         {
             "http://target/minio/health/live": FakeResp("ok", 200),
-            "http://target/minio/": FakeResp('{"buckets":[{"name":"data"}]}', 200, {"Content-Type": "application/json"}),
+            "http://target/": FakeResp(buckets_xml, 200, {"Content-Type": "application/xml"}),
         }
     )
     res = MinioUnauthPlugin().verify("http://target/", sess)
@@ -115,12 +127,21 @@ def test_minio_unauth_safe():
 
 
 def test_rocketmq_unauth_confirm():
-    """RocketMQ：/rocketmq/ 返回 Dashboard → CONFIRMED"""
+    """RocketMQ：控制台在**根路径**（不是 /rocketmq/）→ CONFIRMED
+
+    真实 rocketmq-console-ng 是独立 Spring Boot 应用，官方包 context-path 为空，
+    控制台就挂在 `/`。旧测试假设 `/rocketmq/` 返回 Dashboard，那是猜的路径
+    （2026-11-01 盲测 v2 C4-3 靶场实测修正）。
+    """
     from plugins.common.rocketmq_unauth import RocketmqUnauthPlugin
 
     sess = FakeSession(
         {
-            "http://target/rocketmq/": FakeResp("<html><title>RocketMQ Dashboard</title></html>", 200),
+            "http://target/": FakeResp(
+                "<html><head><title>RocketMQ Dashboard</title>"
+                "<script>var mqnamesrv='10.0.0.1:9876';</script></head></html>",
+                200,
+            ),
         }
     )
     res = RocketmqUnauthPlugin().verify("http://target/", sess)
