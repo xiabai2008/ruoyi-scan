@@ -1,5 +1,6 @@
 # 后台默认口令：POST /login 尝试 admin/admin123，按 token/code:200/Set-Cookie 判定
-from typing import Any
+import re
+from typing import Any, Tuple
 
 import requests
 
@@ -64,6 +65,56 @@ class DefaultPasswordPlugin(PluginBase):
 
     # 验证码相关关键字（命中即视为需要验证码，无法判定，标 UNKNOWN）
     CAPTCHA_KEYWORDS = ["验证码", "captcha", "code expired", "验证码已失效", "code is null"]
+
+    # 二次验证关键字：出现即说明登录还需要第二因素，不能把「登录接口没拒绝」
+    # 当成「默认口令可用」。必须排在验证码判断之前：「验证码已发送」也含"验证码"。
+    MFA_KEYWORDS = ("动态口令", "otp", "mfa", "二次验证", "验证码已发送")
+
+    # 登录成功后用于取证的受保护接口（F6-2）。只有这里拿到业务数据才算 CONFIRMED，
+    # 避免「登录链误报成功」直接变成「默认口令漏洞」。
+    PROTECTED_ENDPOINTS = ("/system/user/list", "/monitor/job/list", "/system/dept/list")
+
+    def _protected_data_proof(self, iso: Any, target: str) -> Tuple[bool, str]:
+        """用登录后的独立会话访问受保护接口，确认确实取到了业务数据。
+
+        Returns:
+            (True, 证据描述) / (False, 失败描述)
+            evidence 里只写接口路径、rows/total 等计数，不写任何 token/cookie。
+        """
+        # isolated_auth_session 会把登录链发现的应用上下文前缀挂在会话上
+        # （D1 部署在 /portal，受保护接口不在根路径）。没有该属性时按根路径探测，
+        # 与旧行为一致；不在这里猜任何具体前缀。
+        bases = [""]
+        auth_base = str(getattr(iso, "auth_base", "") or "")
+        if auth_base:
+            bases.append(auth_base)
+        for base in bases:
+            for path in self.PROTECTED_ENDPOINTS:
+                api_url = join_url(target, base + path)
+                for method in ("get", "post"):
+                    try:
+                        resp = getattr(iso, method)(api_url, allow_redirects=False)
+                    except Exception:
+                        logger.debug("受保护接口取证失败: %s %s", method.upper(), api_url, exc_info=True)
+                        continue
+                    if getattr(resp, "status_code", 0) != 200:
+                        continue
+                    try:
+                        body = resp.json()
+                    except Exception:
+                        continue
+                    if not isinstance(body, dict):
+                        continue
+                    rows = body.get("rows")
+                    total = body.get("total")
+                    data = body.get("data")
+                    if isinstance(rows, list) and rows:
+                        return True, f"{base + path} 返回 rows={len(rows)} total={total}"
+                    if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+                        return True, f"{base + path} 返回 total={total}"
+                    if isinstance(data, list) and data:
+                        return True, f"{base + path} 返回 data={len(data)} 条"
+        return False, "受保护接口未返回业务数据"
 
     # 登录失败关键字：仅保留若依真实失败文案与具体认证英文短语（统一小写后匹配），
     # 不用裸 "password"/"incorrect"/"invalid" 这类泛化片段——它们既可能抑制真实的
@@ -134,15 +185,38 @@ class DefaultPasswordPlugin(PluginBase):
         # 不触碰调用方传入的共享会话，避免认证状态污染后续插件。
         with isolated_auth_session(target, self.USERNAME, self.PASSWORD) as (iso, ok_chain, chain_reason):
             if ok_chain:
-                emit(ok("存在后台默认口令漏洞（admin/admin123，验证码登录成功）"))
+                # F6-2 双保险：登录链说成功还不够，必须用同一会话取到受保护接口的
+                # 业务数据（rows/total/data）。C2-2 这类 /login 404 的站点旧逻辑会
+                # 在「无鉴权」前提下列 CONFIRMED，这条会用真实数据把误报挡住。
+                proven, proof = self._protected_data_proof(iso, target)
+                if not proven:
+                    emit(no("后台默认口令：登录链返回成功但受保护接口无数据，判 UNKNOWN"))
+                    return ScanResult(
+                        kind="brute",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        evidence=f"登录接口返回成功但受保护接口未取到数据，证据不足（{proof}）",
+                        extra={"username": self.USERNAME, "chain": "captcha_login", "login_ok": True},
+                    )
+                emit(ok("存在后台默认口令漏洞（admin/admin123，验证码登录成功且有业务数据）"))
+                login_endpoint = str(getattr(iso, "auth_login_url", "") or "")
                 return ScanResult(
                     kind="brute",
                     name=self.name,
                     severity=self.severity,
                     status=STATUS_CONFIRMED,
-                    url=url,
-                    evidence="默认口令登录成功（含验证码场景；独立会话验证，凭证已脱敏）",
-                    extra={"username": self.USERNAME, "password": self.PASSWORD, "chain": "captcha_login"},
+                    url=login_endpoint or url,
+                    evidence=(
+                        f"默认口令登录成功，登录入口 {login_endpoint or url}，"
+                        f"受保护接口取到业务数据：{proof}（独立会话验证，凭证已脱敏）"
+                    ),
+                    extra={
+                        "username": self.USERNAME,
+                        "password": self.PASSWORD,
+                        "chain": "captcha_login",
+                        "protected_data": proof,
+                    },
                     fix=self.fix,
                 )
             if chain_reason:
@@ -268,7 +342,23 @@ class DefaultPasswordPlugin(PluginBase):
                     fix=self.fix,
                 )
 
-            # 3) 验证码拦截：强成功信号均不成立时，才轮到「服务端要求验证码」的 UNKNOWN 分支；
+            # 3) 二次验证：登录接口没拒绝不等于口令可用。A2 这类站点会返回
+            # 「请输入动态口令/验证码已发送」，必须明确判 UNKNOWN 并写清原因。
+            text_lower = text.lower()
+            if any(k in text_lower for k in ("动态口令", "二次验证", "验证码已发送")) or re.search(
+                r"\b(otp|mfa)\b", text_lower
+            ):
+                emit(no("后台默认口令：目标启用了二次验证，无法自动登录"))
+                return ScanResult(
+                    kind="brute",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=f"目标启用了二次验证（动态口令/OTP/MFA），无法自动登录。响应前 200 字节：{text[:200]}",
+                    extra={"username": self.USERNAME, "mfa_required": True},
+                )
+
+            # 4) 验证码拦截：强成功信号均不成立时，才轮到「服务端要求验证码」的 UNKNOWN 分支；
             # 顺序不能倒置——成功响应（token/code:200/Admin-Token）或 SPA 兜底页里出现
             # "captcha" 等泛化子串时，不应掩盖真实命中
             if match_positive(text, self.CAPTCHA_KEYWORDS):
@@ -282,7 +372,7 @@ class DefaultPasswordPlugin(PluginBase):
                     extra={"captcha_required": True},
                 )
 
-            # 4) 明确的失败信号：code == 500 / msg 含「密码错误」等
+            # 5) 明确的失败信号：code == 500 / msg 含「密码错误」等
             if r_code == 500 or has_login_failure_kw:
                 emit(no("不存在后台默认口令漏洞（口令已修改）"))
                 return ScanResult(
@@ -294,7 +384,7 @@ class DefaultPasswordPlugin(PluginBase):
                     extra={"username": self.USERNAME, "code": r_code, "msg": msg},
                 )
 
-            # 5) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
+            # 6) 响应特征不明确（非 JSON、无 token/code/cookie 关键字）→ UNKNOWN
             emit(no("后台默认口令：响应特征不明确，判 UNKNOWN"))
             return ScanResult(
                 kind="brute",

@@ -415,9 +415,7 @@ class TestDirectoryScan(unittest.TestCase):
     @requests_mock.Mocker()
     def test_title_extraction(self, m):
         """标题提取：<title>RuoYi管理系统</title>"""
-        m.get(
-            mock_url("/login"), status_code=200, text="<html><head><title>RuoYi管理系统</title></head>login</html>"
-        )
+        m.get(mock_url("/login"), status_code=200, text="<html><head><title>RuoYi管理系统</title></head>login</html>")
         import tempfile
 
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf:
@@ -619,15 +617,17 @@ class TestUnauthBatch(unittest.TestCase):
 class TestDefaultPassword(unittest.TestCase):
     """Step 5：后台默认口令 admin/admin123 判定"""
 
-    @mock.patch(
-        "core.auth_chain.RuoYiAuthChain.login",
-        return_value=(True, "ok"),
-    )
-    def test_confirmed_via_captcha_login_helper(self, _mocked):
-        """P1-0d：公共登录器带验证码成功 → CONFIRMED，且不依赖旧的无验证码表单"""
-        result = DefaultPasswordPlugin().verify(MOCK_TARGET, SessionManager())
+    @requests_mock.Mocker()
+    def test_confirmed_via_captcha_login_helper(self, m):
+        """P1-0d + F6-2：公共登录器成功且受保护接口有数据 → CONFIRMED"""
+        m.get(mock_url("/system/user/list"), json={"rows": [{"userId": 1}], "total": 1})
+        with mock.patch(
+            "core.auth_chain.RuoYiAuthChain.login",
+            return_value=(True, "ok"),
+        ):
+            result = DefaultPasswordPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"验证码登录成功应判 CONFIRMED，实际 {result.status}")
-        self.assertIn("验证码", result.evidence)
+        self.assertIn("受保护接口取到业务数据", result.evidence)
 
     @requests_mock.Mocker()
     def test_hit_token(self, m):

@@ -232,6 +232,12 @@ def auto_login(
             if verbose:
                 emit("  [+]登录成功（验证码/表单链路）")
             return chain_config
+        if reason_chain == "mfa_required":
+            # 二次验证：不能落到通用回退分支——那里可能把登录失败下发的新 Cookie
+            # 误当成功凭据。把状态带回 CLI，写进 meta.auth_status 并用退出码提示。
+            if verbose:
+                emit("  [!]目标启用了二次验证（动态口令/OTP/MFA），无法自动登录")
+            return {"cookies": {}, "headers": {}, "type": None, "auth_status": "mfa_required"}
         if verbose and reason_chain:
             emit(f"  [-]统一登录器未成功：{reason_chain}")
 

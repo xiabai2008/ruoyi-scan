@@ -17,8 +17,10 @@
 #   - 登录失败不抛异常，返回 (ok, reason)，调用方决定是否继续
 #   - 兼容签名靶场（无验证码）与真实若依（有验证码，D1 阶段判 UNKNOWN）
 import json as _json
+import re
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 
 from common.logger import get_logger
 from core.http import join_url
@@ -26,9 +28,10 @@ from core.http import join_url
 logger = get_logger(__name__)
 
 # 鉴权模式
-AUTH_NONE = "none"  # 无鉴权（如 VulnPreviewController 直接暴露）
+AUTH_NONE = "none"  # 无鉴权（受保护接口直接返回业务数据）
 AUTH_V4_SESSION = "v4"  # RuoYi v4 Session（Cookie）
 AUTH_V5_JWT = "v5"  # RuoYi v5 JWT（Authorization 头）
+AUTH_UNKNOWN = "unknown"  # 有鉴权迹象但没找到登录入口（/login 404 且受保护接口非 200）
 AUTH_ERROR = "error"  # 探测失败（网络异常），区别于「确认无鉴权」
 
 # 登录结果
@@ -37,6 +40,11 @@ LOGIN_FAIL = "fail"  # 登录失败（用户名/密码错误）
 LOGIN_CAPTCHA = "captcha"  # 验证码错误（换图重试有意义）
 LOGIN_CAPTCHA_INFRA = "captcha_infra"  # 验证码接口/OCR 后端故障（换图重试无意义，不重试）
 LOGIN_ERROR = "error"  # 网络异常或响应异常
+LOGIN_MFA = "mfa_required"  # 目标启用了二次验证（动态口令/OTP/MFA），无法自动登录
+
+# 二次验证（MFA）特征：登录响应出现这些词说明账号/站点要求第二因素，
+# 不能笼统记为 failed——安全团队需要据此改走人工登录或排除该目标。
+MFA_KEYWORDS = ("动态口令", "otp", "mfa", "二次验证", "验证码已发送")
 
 # 验证码挡住登录时的下一步动作：只报「识别失败」用户无从下手，
 # 实测（行为级靶场）没有 OCR 后端时注入/上传类全部只能停在 UNKNOWN。
@@ -85,6 +93,10 @@ def isolated_auth_session(
     try:
         chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
         ok, reason = chain.login(max_attempts=8)
+        # 登录入口可能不在根路径（如 D1 的 /portal 上下文），后续受保护接口取证
+        # 需要同一前缀。挂在会话上而不是增加返回元组字段，保持既有调用方不变。
+        setattr(own, "auth_base", chain.base_path)
+        setattr(own, "auth_login_url", chain.login_url)
         yield own, ok, reason
     finally:
         try:
@@ -191,18 +203,196 @@ class RuoYiAuthChain:
         self.remember_me = remember_me
         self.timeout = timeout
         self.auth_mode: Optional[str] = None
+        # 登录入口：默认按 RuoYi 约定 /login；探测到 302 Location 后改为实际地址
+        # （例如 /portal/auth/signin）。后续 _login_once 必须使用它，不能硬编码。
+        self.login_url: str = join_url(target, "/login")
+        # 应用上下文前缀（例如 D1 部署在 /portal）：根路径下探测不到受保护接口时，
+        # 从站点根的同源目录重定向通用推导，供受保护接口探测与登录后取证复用。
+        self.base_path: str = ""
+
+    # 受保护接口：仅用于判断「目标到底有没有鉴权」，不依赖任何具体登录页路径。
+    # 这些是若依各形态共有的业务列表接口；返回业务 JSON 即证明无需登录即可取数。
+    PROTECTED_ENDPOINTS = ("/system/user/list", "/monitor/job/list", "/system/dept/list")
+
+    # Location 中含这些片段即视为「指向登录页」（大小写不敏感）。
+    # 不写死 /portal/auth/signin——D1 这类自定义入口靠 302 通用发现。
+    LOGIN_LOCATION_HINTS = ("login", "logon", "signin", "sign-in", "sign_in", "auth", "sso")
+
+    @staticmethod
+    def _mentions_mfa(text: str) -> bool:
+        """响应是否提到二次验证（动态口令/OTP/MFA/短信验证码已发送）。"""
+        low = (text or "").lower()
+        if any(k in low for k in ("动态口令", "二次验证", "验证码已发送")):
+            return True
+        # otp/mfa 用词边界匹配，避免 prototype 之类的普通英文单词误触发
+        return bool(re.search(r"\b(otp|mfa)\b", low))
+
+    @staticmethod
+    def _is_login_location(location: str) -> bool:
+        low = (location or "").lower()
+        return any(hint in low for hint in RuoYiAuthChain.LOGIN_LOCATION_HINTS)
+
+    @staticmethod
+    def _classify_login_response(resp: Any) -> str:
+        """按登录页内容判定 v5（JSON）或 v4（HTML/表单）。
+
+        与旧 detect_auth_mode 的后半段判定保持一致：先 JSON 再 HTML，
+        避免 JSON 的 msg 含「登录」二字被 HTML 规则抢判。
+        """
+        text = resp.text or ""
+        ct = (resp.headers.get("Content-Type", "") or "").lower()
+        if "json" in ct:
+            return AUTH_V5_JWT
+        try:
+            _json.loads(text)
+            return AUTH_V5_JWT
+        except (ValueError, TypeError):
+            logger.debug("鉴权模式 JSON 响应解析失败", exc_info=True)
+
+        text_lower = text.lower()
+        if "html" in ct or "<html" in text_lower or "<form" in text_lower:
+            return AUTH_V4_SESSION
+        return AUTH_V4_SESSION
+
+    def _follow_login_location(self, location: str, base_url: str) -> Optional[str]:
+        """跟随 Location 到登录页，更新 self.login_url 并返回鉴权模式。"""
+        abs_url = urljoin(base_url, location)
+        try:
+            resp = self.session.get(abs_url, allow_redirects=True)
+        except Exception:
+            logger.debug("跟随登录页 Location 失败: %s", abs_url, exc_info=True)
+            return None
+        code = int(resp.status_code) if hasattr(resp, "status_code") else 0
+        if code >= 400:
+            return None
+        self.login_url = abs_url
+        return self._classify_login_response(resp)
+
+    @staticmethod
+    def _protected_body_has_data(body: Any) -> bool:
+        """受保护接口响应是否含业务数据（rows 非空 / total>0 / data 非空）。"""
+        if not isinstance(body, dict):
+            return False
+        rows = body.get("rows")
+        if isinstance(rows, list) and rows:
+            return True
+        total = body.get("total")
+        if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+            return True
+        data = body.get("data")
+        if isinstance(data, list) and data:
+            return True
+        return bool(isinstance(data, dict) and data)
+
+    def _discover_context_base(self) -> str:
+        """从站点根的同源目录重定向推导应用上下文前缀。
+
+        背景（D1 实测）：应用部署在 `/portal`，根路径 `/login`、`/system/user/list`
+        都只命中 Nginx 的 404；受保护接口的真实地址是 `/portal/system/user/list`。
+        直接猜 `/portal` 属于对单座靶场特判，这里改为通用能力：
+            GET / -> 302 Location: /portal/
+        只接受同源、以 `/` 结尾、且不像登录页的目录重定向；其余一律返回空串，
+        行为与改动前一致（按根路径探测）。
+        """
+        root = join_url(self.target, "/")
+        try:
+            resp = self.session.get(root, allow_redirects=False)
+        except Exception:
+            logger.debug("根路径上下文探测失败", exc_info=True)
+            return ""
+        code = int(resp.status_code) if hasattr(resp, "status_code") else 0
+        if code not in (301, 302, 303, 307, 308):
+            return ""
+        location = (getattr(resp, "headers", {}) or {}).get("Location", "") or ""
+        if not location:
+            return ""
+        abs_url = urljoin(root, location)
+        if urlparse(abs_url).netloc != urlparse(self.target).netloc:
+            return ""
+        path: str = str(urlparse(abs_url).path)
+        if not path.endswith("/") or path == "/":
+            return ""
+        if self._is_login_location(path):
+            return ""
+        return path.rstrip("/")
+
+    def _detect_by_protected_endpoints(self) -> str:
+        """用受保护接口判断「到底有没有鉴权」并顺便发现登录页。
+
+        - 200 + 业务 JSON（rows/data/total）→ AUTH_NONE
+        - 302/401/403 → 有鉴权；若 302 Location 指向登录页则跟随并判定 v4/v5，
+          否则 AUTH_UNKNOWN
+        - 全部 404/异常 → AUTH_UNKNOWN（绝不当作「无鉴权」）
+
+        先按根路径探测；全部落空时再尝试从站点根重定向推导出的上下文前缀
+        （例如 /portal），避免把「部署在子路径」误判成「没有登录入口」。
+        """
+        bases = [""]
+        context_base = self._discover_context_base()
+        if context_base:
+            bases.append(context_base)
+        for base in bases:
+            for path in self.PROTECTED_ENDPOINTS:
+                url = join_url(self.target, base + path)
+                for method in ("get", "post"):
+                    try:
+                        resp = getattr(self.session, method)(url, allow_redirects=False)
+                    except Exception:
+                        logger.debug("受保护接口探测失败: %s %s", method.upper(), url, exc_info=True)
+                        continue
+
+                    code = int(resp.status_code) if hasattr(resp, "status_code") else 0
+                    if code == 200:
+                        try:
+                            body = resp.json()
+                        except (ValueError, TypeError):
+                            body = None
+                        if self._protected_body_has_data(body):
+                            self.base_path = base
+                            self.auth_mode = AUTH_NONE
+                            return AUTH_NONE
+                        # 200 + JSON code=401/403 是前后端分离版未登录的常见形态
+                        if isinstance(body, dict) and body.get("code") in (401, 403):
+                            continue
+
+                    if code in (301, 302, 303, 307, 308):
+                        location = (getattr(resp, "headers", {}) or {}).get("Location", "") or ""
+                        if location and self._is_login_location(location):
+                            mode = self._follow_login_location(location, url)
+                            if mode:
+                                self.base_path = base
+                                self.auth_mode = mode
+                                return mode
+                        continue
+
+                    if code in (401, 403):
+                        # 有鉴权，但响应里没有可用的登录页地址 → UNKNOWN
+                        continue
+
+        self.auth_mode = AUTH_UNKNOWN
+        return AUTH_UNKNOWN
 
     def detect_auth_mode(self) -> str:
-        """探测鉴权模式：v4 Session / v5 JWT / 无鉴权 / 探测失败（AUTH_ERROR）
+        """探测鉴权模式：v4 Session / v5 JWT / 无鉴权 / 未知 / 探测失败
 
-        判定依据：
-        - GET /login 返回 HTML 登录页 → v4 Session（Shiro 表单登录）
-        - GET /login 返回 JSON（{code:401} 或重定向）→ v5 JWT（前后端分离）
-        - GET /login 404 或无响应 → 无鉴权
-        - 传输失败（超时/连接拒绝/熔断）→ AUTH_ERROR（不等于无鉴权）
+        判定顺序（F6-1）：
+        1. GET /login：
+           - 200 + HTML/表单/JSON → v4/v5（保持原判定）
+           - 301/302 且 Location 指向登录页 → 跟随，用实际地址作为 login_url
+           - 404 → 进入第 2 步
+        2. 用受保护接口判断「到底有没有鉴权」：
+           - 200 + 业务 JSON（rows/data/total）→ AUTH_NONE
+           - 302/401/403 → 有鉴权；能发现登录页则按内容判 v4/v5，否则 AUTH_UNKNOWN
+           - 全部 404/异常 → AUTH_UNKNOWN
+        3. 传输失败 → AUTH_ERROR（不等于无鉴权）
+
+        关键：404 只说明「没有这个登录入口」，不能说明「没有鉴权」。
         """
+        self.login_url = join_url(self.target, "/login")
         try:
-            resp = self.session.get(join_url(self.target, "/login"))
+            # 必须自己看 3xx：requests 默认自动跟随会让 /login -> 登录页 的站点
+            # 丢掉 Location，login_url 仍停在 /login，后续 POST 自然打不中。
+            resp = self.session.get(self.login_url, allow_redirects=False)
         except Exception:
             # 传输失败绝不能当作「无鉴权」：那会让 login() 直接返回成功，
             # 调用方在「已认证」的错误前提下继续扫描。记 AUTH_ERROR，
@@ -212,36 +402,24 @@ class RuoYiAuthChain:
             return AUTH_ERROR
 
         http_code = int(resp.status_code) if hasattr(resp, "status_code") else 0
-        text = resp.text or ""
-        ct = (resp.headers.get("Content-Type", "") or "").lower()
-        text_lower = text.lower()
 
-        # 404 / 无响应 → 无鉴权
+        if http_code in (301, 302, 303, 307, 308):
+            location = (getattr(resp, "headers", {}) or {}).get("Location", "") or ""
+            if location and self._is_login_location(location):
+                mode = self._follow_login_location(location, self.login_url)
+                if mode:
+                    self.auth_mode = mode
+                    return mode
+            # 重定向目标不像登录页：交给受保护接口判断是否存在鉴权
+            return self._detect_by_protected_endpoints()
+
         if http_code == 404:
-            self.auth_mode = AUTH_NONE
-            return AUTH_NONE
+            # 没有 /login 不代表没有鉴权（C2-2 的 Tomcat 应用 /login 就是 404）
+            return self._detect_by_protected_endpoints()
 
-        # JSON 响应优先判定（v5 JWT，前后端分离）
-        # 注意：必须先于 HTML 关键字判定，避免 JSON msg 含"登录"二字被误判
-        if "json" in ct:
-            self.auth_mode = AUTH_V5_JWT
-            return AUTH_V5_JWT
-        try:
-            _json.loads(text)
-            self.auth_mode = AUTH_V5_JWT
-            return AUTH_V5_JWT
-        except (ValueError, TypeError):
-            logger.debug("鉴权模式 JSON 响应解析失败", exc_info=True)
-
-        # HTML 响应（含登录表单/html 标签）→ v4 Session
-        # 严格判定：<html> 或 <form> 标签，避免 JSON msg 含"登录"误判
-        if "html" in ct or "<html" in text_lower or "<form" in text_lower:
-            self.auth_mode = AUTH_V4_SESSION
-            return AUTH_V4_SESSION
-
-        # 默认按 v4 Session 处理（最常见）
-        self.auth_mode = AUTH_V4_SESSION
-        return AUTH_V4_SESSION
+        mode = self._classify_login_response(resp)
+        self.auth_mode = mode
+        return mode
 
     def login(self, captcha_code: Optional[str] = None, max_attempts: int = 8) -> Tuple[bool, str]:
         """按探测到的鉴权模式登录（验证码错误时自动重试）
@@ -270,8 +448,16 @@ class RuoYiAuthChain:
             self.detect_auth_mode()
 
         if self.auth_mode == AUTH_NONE:
-            # 无鉴权，直接返回成功
+            # 受保护接口已返回业务数据：确实无鉴权，direct 成功
             return True, LOGIN_OK
+
+        if self.auth_mode == AUTH_UNKNOWN:
+            # /login 不存在且受保护接口没有给出「无鉴权」证据：
+            # 绝不能返回 True——那会把「没发生登录」写成「登录成功」。
+            return False, "login_endpoint_not_found"
+
+        if self.auth_mode == AUTH_ERROR:
+            return False, f"{LOGIN_ERROR}: 鉴权模式探测失败"
 
         # 只有 None（自动探测）才需要重试 OCR 识别错误；''（跳过）与手动验证码都不重试
         attempts = 1 if captcha_code is not None else max(1, max_attempts)
@@ -330,7 +516,7 @@ class RuoYiAuthChain:
         elif captcha_code:
             validate_code = captcha_code
 
-        url = join_url(self.target, "/login")
+        url = self.login_url
         data = {
             "username": self.username,
             "password": self.password,
@@ -360,6 +546,16 @@ class RuoYiAuthChain:
         success_code = isinstance(r_code, int) and not isinstance(r_code, bool) and r_code in (0, 200)
         if success_code:
             return True, LOGIN_OK
+        # 定制登录端点可能不用若依 AjaxResult：D1 的 /portal/auth/signin 返回
+        # {"success":true,"message":"登录成功"}。只认严格的 JSON true，
+        # 不能把字符串 "true"/1 当成功（服务端/代理可能回显任意值）。
+        if body.get("success") is True:
+            return True, LOGIN_OK
+
+        # 二次验证必须先于「验证码」判断：「验证码已发送」也含"验证码"，
+        # 但它指 MFA 短信/邮件，不是图形验证码，重试换图没有意义。
+        if self._mentions_mfa(str(body.get("msg", ""))) or self._mentions_mfa(resp.text or ""):
+            return False, LOGIN_MFA
 
         # 验证码错误 → 需要验证码（D1 不处理，留 D3 OCR）
         msg = str(body.get("msg", ""))
@@ -427,7 +623,7 @@ class RuoYiAuthChain:
             # 手动提供验证码：无对应 uuid 可用（调用方无法得知），如实提交
             validate_code = captcha_code
 
-        url = join_url(self.target, "/login")
+        url = self.login_url
         json_data = {
             "username": self.username,
             "password": self.password,
@@ -458,6 +654,8 @@ class RuoYiAuthChain:
             return False, f"{LOGIN_FAIL}: 响应无 token 字段"
 
         msg = str(body.get("msg", ""))
+        if self._mentions_mfa(msg) or self._mentions_mfa(resp.text or ""):
+            return False, LOGIN_MFA
         if "验证码" in msg or "captcha" in msg.lower():
             return False, LOGIN_CAPTCHA
 

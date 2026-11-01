@@ -114,6 +114,9 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
 
     # D26：解析认证配置
     auth_config = None
+    # --auth-login 的登录链路可能明确判定「目标启用了二次验证」，需要带回状态；
+    # 仅凭 auth_config 是否为空只能区分 ok/failed，无法区分 MFA。
+    auth_status_hint = ""
     if getattr(args, "auth", None) or getattr(args, "auth_file", None) or getattr(args, "auth_login", None):
         from lib.auth_scan import auto_login, load_auth_file, parse_auth_arg, parse_login_arg
 
@@ -139,6 +142,9 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
             try:
                 username, password = parse_login_arg(args.auth_login)
                 login_config = auto_login(target, username, password, verbose=True)
+                hint = login_config.get("auth_status") if isinstance(login_config, dict) else None
+                if hint:
+                    auth_status_hint = str(hint)
                 if login_config["cookies"] or login_config["headers"]:
                     auth_config["cookies"].update(login_config["cookies"])
                     auth_config["headers"].update(login_config["headers"])
@@ -159,6 +165,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         auth_status = "not_attempted"
     elif auth_config:
         auth_status = "ok"
+    elif auth_status_hint == "mfa_required":
+        auth_status = "mfa_required"
     else:
         auth_status = "failed"
 
@@ -317,7 +325,7 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{YELLOW}[*]WAF 绕过已启用（{mode} 模式）{RESET}")
 
     elif event_type == "plugin_fallback":
-        print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi 插件包（阶段一兼容）{RESET}")
+        print(f"{YELLOW}[*]未匹配插件包，回退默认 ruoyi + spring 插件包（阶段一兼容）{RESET}")
 
     elif event_type == "plugins_loaded":
         # 插件按来源分批加载，每个来源各发一次事件（common / 外部目录 / 用户安装 /
@@ -392,7 +400,9 @@ def _cli_event_handler(event_type: str, payload):
         print(f"{RED}[!]扫描异常: {payload.get('error', '')}{RESET}")
 
 
-def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> List[ScanResult]:
+def run_mode(
+    mode: str, target: str, args: Namespace, show_cta: bool = True, exit_on_auth_failure: bool = True
+) -> List[ScanResult]:
     """分发到各扫描模式：指纹→路由→插件 主流程
 
     重构后：核心扫描流程委托 ScanOrchestrator.run_sync()，
@@ -404,6 +414,8 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         args: CLI 参数命名空间
         show_cta: 是否在结尾输出仓库引导。批量扫描与被动代理会重复调用本函数，
             需传 False 避免刷屏，改由上层在汇总后统一输出一次。
+        exit_on_auth_failure: 显式认证失败（含 MFA）时是否用 EXIT_PARTIAL 退出。
+            单目标为 True（CI 才能感知覆盖不全）；批量由上层统一判定，传 False。
     """
     from core.orchestrator import ScanOrchestrator
 
@@ -457,6 +469,11 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
         print(
             f"{RED}[!] 主扫描未认证：{auth_desc} 登录失败，"
             f"主扫描中需要会话的插件结论不可信（--auth-surface 使用独立会话，另计）{RESET}"
+        )
+    elif getattr(req, "auth_status", "not_attempted") == "mfa_required":
+        print(
+            f"{RED}[!] 主扫描未认证：目标启用了二次验证（动态口令/OTP/MFA），"
+            f"无法自动登录；请用 --auth cookie=... 复用已登录会话{RESET}"
         )
 
     # --auth-surface 尚未执行时也要有确定状态，供报告摘要使用；后续 G1 段会覆盖。
@@ -702,6 +719,11 @@ def run_mode(mode: str, target: str, args: Namespace, show_cta: bool = True) -> 
     if show_cta and not getattr(args, "ci", False):
         print_star_cta(explicit_off=getattr(args, "no_cta", False))
 
+    # F6-3：显式要求认证但没拿到可用会话 → EXIT_PARTIAL（4），CI 才能感知
+    # 「报告里的 UNKNOWN 是覆盖不全，而不是目标干净」。未传认证参数时保持 0。
+    if exit_on_auth_failure and getattr(req, "auth_status", "not_attempted") in ("failed", "mfa_required"):
+        sys.exit(EXIT_PARTIAL)
+
     return all_results
 
 
@@ -730,7 +752,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
         try:
-            results = run_mode(mode, target, scan_args, show_cta=False)
+            results = run_mode(mode, target, scan_args, show_cta=False, exit_on_auth_failure=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             return []
@@ -883,7 +905,7 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
             skipped.append(target)
             continue
         try:
-            results = run_mode(mode, target, scan_args, show_cta=False)
+            results = run_mode(mode, target, scan_args, show_cta=False, exit_on_auth_failure=False)
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             failed.append(target)

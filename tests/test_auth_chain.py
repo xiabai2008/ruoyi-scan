@@ -16,6 +16,7 @@ except ImportError:
 
 from core.auth_chain import (
     AUTH_NONE,
+    AUTH_UNKNOWN,
     AUTH_V4_SESSION,
     AUTH_V5_JWT,
     LOGIN_CAPTCHA,
@@ -57,11 +58,25 @@ class TestDetectAuthMode(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_detect_none(self, m):
-        """GET /login 返回 404 → 无鉴权"""
+        """GET /login 404 但受保护接口返回业务数据 → 无鉴权（F6-1）"""
         m.get(MOCK_TARGET + "/login", status_code=404)
+        for path in ("/system/user/list", "/monitor/job/list", "/system/dept/list"):
+            m.get(MOCK_TARGET + path, json={"rows": [{"id": 1}], "total": 1})
+            m.post(MOCK_TARGET + path, json={"rows": [], "total": 0})
         chain = RuoYiAuthChain(MOCK_TARGET, SessionManager())
         mode = chain.detect_auth_mode()
         self.assertEqual(mode, AUTH_NONE)
+
+    @requests_mock.Mocker()
+    def test_detect_unknown_when_login_missing(self, m):
+        """GET /login 404 且受保护接口全 404 → AUTH_UNKNOWN，绝不当作无鉴权"""
+        m.get(MOCK_TARGET + "/login", status_code=404)
+        for path in ("/system/user/list", "/monitor/job/list", "/system/dept/list"):
+            m.get(MOCK_TARGET + path, status_code=404)
+            m.post(MOCK_TARGET + path, status_code=404)
+        chain = RuoYiAuthChain(MOCK_TARGET, SessionManager())
+        mode = chain.detect_auth_mode()
+        self.assertEqual(mode, AUTH_UNKNOWN)
 
 
 class TestLoginV4Session(unittest.TestCase):
@@ -164,16 +179,32 @@ class TestLoginV5Jwt(unittest.TestCase):
 
 
 class TestLoginNone(unittest.TestCase):
-    """无鉴权模式"""
+    """无鉴权模式（必须有受保护接口业务数据作证）"""
 
     @requests_mock.Mocker()
     def test_login_skip(self, m):
-        """无鉴权：GET /login 404 → login() 直接返回成功"""
+        """受保护接口返回 rows → 确实无鉴权，login() 返回成功"""
         m.get(MOCK_TARGET + "/login", status_code=404)
+        m.get(
+            MOCK_TARGET + "/system/user/list",
+            json={"rows": [{"userId": 1}], "total": 1},
+        )
         chain = RuoYiAuthChain(MOCK_TARGET, SessionManager())
         ok, reason = chain.login()
         self.assertTrue(ok)
         self.assertEqual(reason, LOGIN_OK)
+
+    @requests_mock.Mocker()
+    def test_login_unknown_never_succeeds(self, m):
+        """/login 与受保护接口都 404 → login() 必须失败（F6 最严重误报的根因）"""
+        m.get(MOCK_TARGET + "/login", status_code=404)
+        for path in ("/system/user/list", "/monitor/job/list", "/system/dept/list"):
+            m.get(MOCK_TARGET + path, status_code=404)
+            m.post(MOCK_TARGET + path, status_code=404)
+        chain = RuoYiAuthChain(MOCK_TARGET, SessionManager())
+        ok, reason = chain.login()
+        self.assertFalse(ok)
+        self.assertEqual(reason, "login_endpoint_not_found")
 
 
 if __name__ == "__main__":

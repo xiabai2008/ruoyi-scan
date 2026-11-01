@@ -133,7 +133,7 @@ def test_batch_ci_does_not_exit_after_first_target(tmp_path, monkeypatch):
     targets_file = _write_targets(tmp_path, ["http://a.example.com/", "http://b.example.com/", "http://c.example.com/"])
     scanned = []
 
-    def _fake_run_mode(mode, target, args, show_cta=True):
+    def _fake_run_mode(mode, target, args, show_cta=True, **kwargs):
         scanned.append(target)
         # 断言单目标 CI 退出码已被禁用：args.ci 必须为 False
         assert not getattr(args, "ci", False), "批量内必须禁用单目标 CI 退出码逻辑"
@@ -157,7 +157,7 @@ def test_batch_async_disables_per_target_ci_exit(monkeypatch):
     scanned = []
     captured_args = {}
 
-    def _fake_run_mode(mode, target, args, show_cta=True):
+    def _fake_run_mode(mode, target, args, show_cta=True, **kwargs):
         scanned.append(target)
         captured_args["ci"] = getattr(args, "ci", False)
         # 返回一条真实结果，避免空结果触发 EXIT_UNREACHABLE 分支

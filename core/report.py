@@ -32,14 +32,22 @@ def _normalize_auth_status(value: Any) -> Dict[str, str]:
     兼容旧报告/旧调用方的字符串形式：字符串视为 admin 状态，surface 记为未尝试。
     两类状态必须分开：主扫描（--auth-login）失败不等于 --auth-surface 失败，
     后者用自己的独立会话，可能成功并产出 CONFIRMED。
+
+    F6-3：mfa_required 是独立状态（不是笼统 failed），旧数据里的 mfa/otp 也归一到这里，
+    报告读者据此判断「需要人工完成二次验证」而不是「口令错误」。
     """
+
+    def _one(v: Any) -> str:
+        s = str(v or "not_attempted")
+        return "mfa_required" if s in ("mfa", "otp", "mfa_required") else s
+
     if isinstance(value, dict):
         return {
-            "admin": str(value.get("admin", "not_attempted") or "not_attempted"),
-            "surface": str(value.get("surface", "not_attempted") or "not_attempted"),
+            "admin": _one(value.get("admin", "not_attempted")),
+            "surface": _one(value.get("surface", "not_attempted")),
         }
     if isinstance(value, str) and value:
-        return {"admin": value, "surface": "not_attempted"}
+        return {"admin": _one(value), "surface": "not_attempted"}
     return {"admin": "not_attempted", "surface": "not_attempted"}
 
 
@@ -434,6 +442,11 @@ class ReportBuilder:
         auth_msgs = []
         if admin_status == "failed":
             auth_msgs.append("主扫描（--auth-login）高权登录失败，主扫描中需要会话的插件结论已降级为 UNKNOWN。")
+        elif admin_status == "mfa_required":
+            auth_msgs.append(
+                "主扫描（--auth-login）目标启用了二次验证（动态口令/OTP/MFA），无法自动登录；"
+                "需人工登录后用 --auth cookie=... 复用会话。"
+            )
         elif admin_status == "not_attempted":
             auth_msgs.append(
                 "主扫描未提供认证凭据（--auth-login / --auth / --auth-file），主扫描中需要会话的插件结论为 UNKNOWN。"
