@@ -570,3 +570,59 @@ def test_unauth_batch_not_confirmed_on_spring_boot4_page():
 
     res = UnauthBatchPlugin().verify("http://t/", _S())
     assert res.status != "CONFIRMED", f"Spring Boot 4 包装页被误判为暴露：{res.evidence}"
+
+
+# ============================================================
+# 8. job_rce 不能被通用 AjaxResult 骗（v1.6 P0-5）
+#
+# 旧判据是「code in (200,500) 且响应含 code/msg 两键」——任何
+# @RestControllerAdvice 的全局异常响应都满足，实测三条全被判 CONFIRMED，
+# 包括「系统异常，请联系管理员」这种与定时任务毫无关系的文案。
+# ============================================================
+
+
+def _job_verify(body):
+    import json as _json
+
+    from plugins.ruoyi.job_rce import JobRcePlugin
+
+    class _R:
+        def __init__(self, t):
+            self.text = t
+            self.status_code = 200
+            self.headers = {"Content-Type": "application/json"}
+            self.content = t.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        session = None
+
+        def get(self, u, **k):
+            return _R(body)
+
+        def post(self, u, **k):
+            return _R(body)
+
+        def anonymous(self):
+            return self
+
+    return JobRcePlugin().verify("http://t/", _S())
+
+
+def test_generic_ajaxresult_is_not_unauth_rce():
+    """通用异常响应不能判 CONFIRMED（它只证明「有个若依风格的应用」）"""
+    for body in ('{"code":500,"msg":"系统异常，请联系管理员"}', '{"code":500,"msg":"参数校验失败"}'):
+        res = _job_verify(body)
+        assert res.status == "UNKNOWN", f"{body} 应判 UNKNOWN，实际 {res.status}"
+
+
+def test_real_ruoyi_job_message_still_confirms():
+    """若依对不存在 jobId 的真实文案仍是 CONFIRMED（盲测 v4 的 4 条命中全是它）"""
+    assert _job_verify('{"code":500,"msg":"任务不存在"}').status == "CONFIRMED"
+
+
+def test_jobid_echo_confirms():
+    """响应里有 jobId 回显 → 确实进入了业务层"""
+    assert _job_verify('{"code":200,"msg":"操作成功","jobId":1}').status == "CONFIRMED"
