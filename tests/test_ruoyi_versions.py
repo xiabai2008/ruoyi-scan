@@ -179,15 +179,17 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertEqual(len(plugins), 18, f"4.2.0 应跑全部 18 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_7_8(self):
-        """4.7.8：只过滤真实已修的 3 个（文件读取×2、定时任务调用目标）
+        """4.7.8：只过滤「定时任务调用目标未校验」这 1 个
 
-        依据 lab/REAL-RUOYI.md（真实 4.7.8 实测）：报错注入 role/dept、任意文件上传、
-        定时任务 RCE 未授权在 4.7.8 上均为 CONFIRMED；路径穿越类为 SAFE。
-        此前把注入/上传也标成 <4.7，导致真实 4.7.8 目标上这些 POC 被版本过滤直接跳过。
+        v1.6 修正：任意文件读取 ×2 不再设版本门。实测 R1(4.5.1)/R2(4.6.2)/
+        R3(4.7.8)/R4(4.8.0)/R5(4.8.3) 的 FileUtils.checkAllowDownload()
+        全部含 contains(resource, "..") 拦截——该漏洞在可验证范围内不存在。
+        错误的版本区间会让插件在真实受影响的目标上反被跳过
+        （这正是下方注释记录的、注入/上传类已经踩过的坑）。
         """
         fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 15, f"4.7.8 应过滤掉 3 个已修 POC，剩 15 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 17, f"4.7.8 应过滤掉 1 个已修 POC，剩 17 个，实际 {len(plugins)}")
 
     def test_filter_by_version_4_6_0(self):
         """4.6.0：全部 POC 适用（注入/上传/任务 RCE 已按源码复核取消上界）"""
@@ -196,10 +198,13 @@ class TestRouterVersionFilter(unittest.TestCase):
         self.assertEqual(len(plugins), 18, f"4.6.0 应跑全部 18 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_8_3(self):
-        """4.8.3：源码复核确认注入/上传/任务 RCE 仍适用（13 个），仅越权/路径类被过滤"""
+        """4.8.3：注入/上传/任务 RCE 仍适用，仅越权/任务调用目标类被过滤（15 个）
+
+        v1.6：任意文件读取 ×2 去掉版本门后 +2。
+        """
         fp = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 13, f"4.8.3 应跑 13 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 15, f"4.8.3 应跑 15 个 POC，实际 {len(plugins)}")
 
     def test_no_version_runs_all(self):
         """版本未识别 → 跑全部 POC（保守策略）"""
@@ -212,10 +217,9 @@ class TestRouterVersionFilter(unittest.TestCase):
         fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
         plugin_names = [cls.name for cls in plugins]
-        # 4.7.8 不该跑的：仅真实已修的三类（REAL-RUOYI.md 实测 SAFE）
-        self.assertNotIn("任意文件读取", plugin_names)
-        self.assertNotIn("任意文件读取（路径穿越）", plugin_names)
+        # 4.7.8 不该跑的：任务调用目标（源码确认该版本已加白名单）
         self.assertNotIn("定时任务调用目标未校验", plugin_names)
+        # 任意文件读取不再被版本门跳过（v1.6）：让插件自己测、测不到判 SAFE。
         # 4.7.8 应跑的 POC
         self.assertIn("Thymeleaf/SpEL 模板注入", plugin_names)
 
