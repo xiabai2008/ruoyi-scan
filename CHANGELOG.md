@@ -4,6 +4,28 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.5.6] - 2026-11-02
+
+口径正确性版：v1.5.5 解决了「该报的能报」，本版解决「报出来的能不能直接信、能不能直接用于交付」。
+盲测 v4 复测 48/54 插件有 CONFIRMED（v1.5.5 为 46，新增 2 项，0 丢失，0 B 类误报）。
+
+### Added
+- **自定义 context-path 识别**：此前候选前缀表写死 5 个（`/prod-api` `/dev-api` `/api` `/jeecg-boot` `/jeecg`），二开站点把后端挂在 `/portal` 这类自定义前缀下时一个判据都对不上，路径类插件整类探错基准。现在从 `Set-Cookie` 的 `Path=`、302 的 `Location`（相对与绝对都认）、JS/HTML 里的 `baseURL` 被动提取候选（不发额外请求），抽出的候选仍要过验证码判据才采纳。新增 `--base-path` 显式指定（优先级最高，同样要过判据）
+- **RuoYi 4.x 图片型验证码判据**：4.x 单机版/Thymeleaf 版的验证码是 `/captcha/captchaImage` 返回 `image/jpeg` 而非 JSON，此前完全认不出。判据同时校验 `Content-Type` 与最小字节数（512）——必须带 `type=char`，无参返回 200 + **0 字节**（`BufferedImage` 为 null、异常被框架吞），只看 Content-Type 会把「探测失败」当成「接口存在」
+- **`--redis-port` / `RUOYI_SCAN_REDIS_PORT`**：Redis 未授权插件此前把 6379 写死，现场常用非默认端口（云厂商安全组也优先封 6379），写死端口时这类目标恒判「连接失败」。连不上的证据里现在带上实际探测端口与开关名
+- **Windows `win.ini` 文件读取判据**：`lib/matcher.is_windows_ini()` 认 `for 16-bit app support` 注释行（win.ini 独有）或 ≥3 个特征段头；单段不判（`[files]`/`[Mail]` 在任意 INI/HTML 里都可能出现）。`file_read` / `file_read_path` 改为双载荷（Linux 读 `/etc/passwd`、Windows 读 `win.ini`），任一命中即 CONFIRMED
+- **归属判定（站点级 vs 宿主级）**：中间件插件探的是目标主机的**另一个端口**，发现的资产属于这台主机而不是这个站点。新增 `lib/attribution.py` 按「探测坐标的端口轴」标注，只标注不降级（端口确实无认证，CONFIRMED 不变）。单目标报告新增 `host_level`（total 的子集）、HTML 归属列 + 横幅、CSV 归属列、JSON `host_level_count`；批量报告概览表单列「其中宿主级」+ 归属说明；终端输出同步标注
+
+### Fixed
+- **端点不存在被冒充成「确认安全」**：RuoYi-Vue-Plus 5.6.2 的定时任务已迁到 SnailJob（独立调度中心），源码里没有 `SysJobController`，`/monitor/job/**` 返回 `HTTP 200 + code=404`。`plus_job_unauth` 此前把这种情况判 SAFE，等于用「地址错了」冒充「系统是安全的」。改为按若依 `AjaxResult` 业务码判 UNKNOWN（若依对未知路由返 HTTP 200，看状态码会漏），并补 `affected_versions=">=5.0,<5.6"`
+- **认证链假设登录入口是 `{base}/login`**：二开站点常改登录路径（D1 是 `/portal/auth/signin`），硬编码假设导致 `--auth-login` 恒 exit 4、依赖会话的插件全部拿不到结论。改为从登录页的 form action 读真实入口，只认同源 + `method=post` + 含 `password` 输入框的表单（否则搜索框/筛选器都会被当成登录入口）
+- **Shiro 插件能力虚报**：此前挂 `CVE-2016-4437` + `severity=high` + 名称带「反序列化」，但只做指纹识别、设计上永不 CONFIRMED——报告里出现「high 级 Shiro 反序列化 RCE」会让读者以为扫描器确认了可利用性。改为 `cve=N/A`、`severity=low`、`category=recon`、名称去掉「反序列化」、`vuln_type` 置空；保留手工验证步骤在 `reproduce` 里。新增能力边界护栏测试挡住回退
+- **插件自带前缀被双拼**：`plus_job_unauth` 的路径自带 `/prod-api`，站点 context-path 也是 `/prod-api` 时引擎再追加一次会拼成 `/prod-api/prod-api/...` → 302 登录墙 → 假阴性。新增 `PluginBase.self_prefixes`，仅在「插件自带前缀 == 站点 context-path」时退回站点根，两者不同时仍推进
+- **文档与代码漂移**：`lab/README.md` 与 `lab/server.py` 仍描述早已改名的 `file_read_time`（现为 `job_invoke_target`）与「读 2.txt」oracle；验证矩阵表头补「57 = 54 扫描插件 + 3 链步骤」的口径说明
+
+### Changed
+- **报告加列**：单目标 HTML/CSV 新增「归属」列（表头 11 → 12 列）。空结果行的 `colspan` 改为按表头列数动态校验，避免下次加列再漏改
+
 ## [1.5.5] - 2026-11-02
 
 检出能力版：用真实组件靶场补盲测 v2 暴露的「该报的报不出来」，54 个插件中有 CONFIRMED 产出的从 29 个提升到 46 个。
