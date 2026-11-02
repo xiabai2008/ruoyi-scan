@@ -221,3 +221,64 @@ if __name__ == "__main__":
     test_parser_bypass_waf_default_auto()
     test_parser_bypass_waf_choices()
     print("All D7.2 engine integration tests passed!")
+
+
+# === v1.5.6 WP1：自带前缀插件不得双拼 ===
+
+
+def test_engine_does_not_double_prefix_self_prefixed_plugin():
+    """插件自带的前缀与站点 context-path 重合时，基准退回站点根
+
+    背景（2026-11-02 D1 实测）：plus_job_unauth 的路径写死 /prod-api/...，
+    站点 context-path 也是 /prod-api 时，引擎若再追加一次就拼成
+    /prod-api/prod-api/... → 302 登录墙 → 本该 CONFIRMED 的项判 SAFE（假阴性）。
+    """
+    seen = {}
+
+    class SelfPrefixedPlugin(PluginBase):
+        name = "自带前缀插件"
+        category = "vuln"
+        self_prefixes = ("/prod-api",)
+
+        def verify(self, target, session):
+            seen["target"] = target
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, evidence="ok")
+
+    class PlainPlugin(PluginBase):
+        name = "普通插件"
+        category = "vuln"
+
+        def verify(self, target, session):
+            seen["plain"] = target
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, evidence="ok")
+
+    engine = ScanEngine(threads=1)
+    engine.run(
+        [SelfPrefixedPlugin, PlainPlugin],
+        "http://t/prod-api/",  # 已提升的基准
+        MagicMock(),
+        root_target="http://t/",  # 站点根
+    )
+    # 自带同名前缀 → 退回根，由插件自己拼
+    assert seen["target"] == "http://t/"
+    # 普通插件 → 跟随提升后的基准
+    assert seen["plain"] == "http://t/prod-api/"
+
+
+def test_engine_keeps_prefix_when_plugin_prefix_differs():
+    """插件自带前缀与站点 context-path 不同时不豁免（真实前缀才是探测基准）"""
+    seen = {}
+
+    class SelfPrefixedPlugin(PluginBase):
+        name = "自带 /prod-api 的插件"
+        category = "vuln"
+        self_prefixes = ("/prod-api",)
+
+        def verify(self, target, session):
+            seen["target"] = target
+            return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, evidence="ok")
+
+    engine = ScanEngine(threads=1)
+    engine.run([SelfPrefixedPlugin], "http://t/portal/", MagicMock(), root_target="http://t/")
+    # 站点是 /portal，插件自带 /prod-api —— 两者不同，基准仍应推进到 /portal
+    assert seen["target"] == "http://t/portal/"

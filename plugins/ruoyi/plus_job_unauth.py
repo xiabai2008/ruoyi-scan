@@ -35,6 +35,12 @@ class PlusJobUnauthPlugin(PluginBase):
     vuln_type = "unauth"
     supports_waf_bypass = False
     variant = "ruoyi-plus"
+    # v1.5.6 WP1：本插件路径里**自带** /prod-api（Plus 的固定对外前缀）。
+    # 站点真实 context-path 也是 /prod-api 时，引擎不能再把它追加到基准上，
+    # 否则拼成 /prod-api/prod-api/... 双前缀 → 302 登录墙 → 判 SAFE（假阴性）。
+    # 两者不同时（如 D1 的 /portal）不豁免，基准仍推进到真实 context-path。
+    path_scope = "api"
+    self_prefixes = ("/prod-api",)
 
     def verify(self, target, session):
         """不带认证凭证访问定时任务列表接口，验证未授权访问是否成立。

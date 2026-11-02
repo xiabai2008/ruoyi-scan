@@ -163,3 +163,140 @@ def test_plugin_target_for_jeecg_does_not_double_prefix():
 
     assert plugin_target_for("http://target/", "/jeecg-boot") == "http://target/"
     assert plugin_target_for("http://target/", "/jeecg") == "http://target/"
+
+
+# ── v1.5.6 WP1：自定义 context-path 识别 ────────────────────────────────
+# 背景：候选表写死时，二开站点把后端挂在 /portal 这类自定义前缀下，
+# 一个判据都对不上 → 路径类插件整类探错基准（D1 实测：/jeecg-boot/doc.html
+# 未授权 200 却报「不存在 Swagger 文档泄露」）。
+
+
+class ImageResp(FakeResp):
+    """图片型验证码响应替身（RuoYi 4.x 单机版形态）"""
+
+    def __init__(self, size=3102, status_code=200):
+        super().__init__("", status_code, {"Content-Type": "image/jpeg"})
+        self.content = b"\xff\xd8\xff\xe0" + b"\x00" * size
+
+
+def test_basepath_detects_image_captcha_for_ruoyi4():
+    """RuoYi 4.x 单机版验证码是图片而非 JSON → 仍能识别前缀
+
+    实测 D1（4.6.2 二开，context-path=/portal）：
+        GET / -> 302 Location: http://host/portal/
+        GET /portal/captcha/captchaImage?type=char -> 200 image/jpeg 3092 字节
+    这里同时模拟根路径的 302，因为被动提取靠它拿到 /portal 线索。
+    """
+    sess = FakeSession(
+        {
+            "http://target/": FakeResp("", 302, {"Location": "http://target/portal/"}),
+            "http://target/portal/captcha/captchaImage?type=char": ImageResp(3092),
+        }
+    )
+    assert detect_api_base("http://target/", sess) == "/portal"
+
+
+def test_basepath_detects_image_captcha_without_hints():
+    """没有任何被动线索时，写死候选表里的前缀仍靠图片判据识别（兜底路径）"""
+    sess = FakeSession({"http://target/prod-api/captcha/captchaImage?type=char": ImageResp(3102)})
+    assert detect_api_base("http://target/", sess) == "/prod-api"
+
+
+def test_basepath_rejects_zero_byte_captcha_image():
+    """0 字节图片不算命中——这是缺 type 参数时的经典失败形态
+
+    实测 R1：不带 type 时返回 200 + image/jpeg + **0 字节**（BufferedImage 为 null、
+    异常被框架吞掉）。只看 Content-Type 会把「探测失败」当成「接口存在」。
+    """
+    sess = FakeSession({"http://target/portal/captcha/captchaImage?type=char": ImageResp(0)})
+    assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_rejects_tiny_fake_image():
+    """几十字节的「图片」多半是 WAF/兜底页错误声明 Content-Type"""
+    sess = FakeSession({"http://target/portal/captcha/captchaImage?type=char": ImageResp(50)})
+    assert detect_api_base("http://target/", sess) == ""
+
+
+def test_basepath_hint_from_absolute_location():
+    """nginx return 302 http://host/portal/ —— 绝对 Location 也要能提取
+
+    实测 D1：GET / -> 302 Location: http://127.0.0.1:19321/portal/
+    """
+    from core.basepath import extract_base_hints
+
+    class LocSession:
+        def get(self, url, **kw):
+            return FakeResp("", 302, {"Location": "http://host/portal/", "Content-Type": "text/html"})
+
+    assert extract_base_hints("http://host/", LocSession()) == ["/portal"]
+
+
+def test_basepath_hint_from_set_cookie_path():
+    """Set-Cookie: Path=/portal —— 后端自己声明的 cookie 作用域最可靠"""
+    from core.basepath import extract_base_hints
+
+    class CookieSession:
+        def get(self, url, **kw):
+            return FakeResp("", 200, {"Set-Cookie": "JSESSIONID=abc; Path=/portal; HttpOnly"})
+
+    assert extract_base_hints("http://host/", CookieSession()) == ["/portal"]
+
+
+def test_basepath_hint_from_js_baseurl():
+    """前端 JS 里写死的 baseURL 也能当前缀线索"""
+    from core.basepath import extract_base_hints
+
+    html = "<script>window.__CONFIG__={baseURL:'/portal'}</script>"
+    class HtmlSession:
+        def get(self, url, **kw):
+            return FakeResp(html, 200, {"Content-Type": "text/html"})
+
+    assert extract_base_hints("http://host/", HtmlSession()) == ["/portal"]
+
+
+def test_basepath_hint_rejects_business_module_paths():
+    """业务模块路径（/system、/monitor）不是 context-path，不能当候选
+
+    误当前缀会把「业务接口可达」当成「前缀存在」，进而把整站插件基准推错位置。
+    """
+    from core.basepath import _accept_candidate
+
+    for bad in ("/system", "/monitor", "/login", "/actuator", "/v3", "/druid"):
+        assert _accept_candidate(bad) == "", bad
+    assert _accept_candidate("/portal") == "/portal"
+    assert _accept_candidate("/portal/") == "/portal"
+
+
+def test_basepath_hint_rejects_absolute_urls():
+    """绝对地址是跨域 CDN/网关，不是 context-path"""
+    from core.basepath import _accept_candidate
+
+    assert _accept_candidate("http://evil.test/x") == ""
+    assert _accept_candidate("//cdn.test/x") == ""
+
+
+def test_explicit_base_path_takes_priority():
+    """--base-path 显式指定优先于自动探测（运维知道真实前缀时不该赌探测）"""
+    sess = FakeSession({"http://target/portal/captcha/captchaImage?type=char": ImageResp(3092)})
+    assert detect_api_base("http://target/", sess, extra_hints=["/portal"]) == "/portal"
+
+
+def test_explicit_base_path_still_requires_evidence():
+    """显式指定也要过判据：写错的前缀不能被采纳（否则整站探错基准）"""
+    sess = FakeSession({})
+    assert detect_api_base("http://target/", sess, extra_hints=["/wrong"]) == ""
+
+
+def test_plugin_target_skips_when_plugin_carries_same_prefix():
+    """插件路径自带 /prod-api 时不能再追加同名前缀（否则 /prod-api/prod-api/...）
+
+    实测 D1：plus_job_unauth 探 /prod-api/monitor/job/list，基准是 /portal 时
+    拼成 /portal/prod-api/... → 302 登录墙 → 判 SAFE（假阴性）。
+    """
+    from core.basepath import plugin_target_for
+
+    assert plugin_target_for("http://t/", "/prod-api", plugin_prefixes=("/prod-api",)) == "http://t/"
+    # 前缀不同则不豁免：插件自带的 /prod-api 与站点真实的 /portal 不是一回事，
+    # 此时仍应把基准推进到真实 context-path
+    assert plugin_target_for("http://t/", "/portal") == "http://t/portal/"

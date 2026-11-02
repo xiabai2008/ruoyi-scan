@@ -228,6 +228,9 @@ class ScanRequest:
     auth: Optional[Dict[str, Any]] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
     # 显式低权账号（--surface-account user:pass，可多次；越权对照的唯一来源）
     surface_account: Optional[List[str]] = None
+    # v1.5.6 WP1：显式指定的 API 前缀（--base-path 可多次）。优先级高于自动探测——
+    # 现场运维知道真实 context-path 时不该再赌探测，也不该因为探测逻辑判据不匹配就漏扫。
+    base_paths: Optional[List[str]] = None
     # 主扫描（admin）认证状态：ok / failed / not_attempted（报告元信息与「需会话插件」统一降级用）
     auth_status: str = "not_attempted"
     # --auth-surface 的独立会话状态：ok / failed / not_attempted（与主扫描分开记录）
@@ -765,12 +768,15 @@ class ScanOrchestrator:
             # 该报的 Druid/Actuator/默认口令/定时任务全部落空 = 系统性漏报。
             # 实测 2026-10-29 R7（严格只反代 /prod-api/）：除宿主级 Redis 外无任何命中。
             # 根路径已直连后端（单机版）时 detect_api_base 返回空串，行为不变。
+            # v1.5.6 WP1：候选表写死 → 自定义 context-path（如二开的 /portal）永远识别不出。
+            # 现改为：显式 --base-path 优先 → 被动提取（Set-Cookie/Location/JS baseURL）
+            # → 写死候选兜底。抽出的前缀仍要过「真图片/真 JSON」判据才采纳，判定不放松。
             plugin_target = target
             api_base = ""
             try:
                 from core.basepath import detect_api_base
 
-                api_base = detect_api_base(target, session)
+                api_base = detect_api_base(target, session, extra_hints=req.base_paths)
             except Exception:
                 logger.debug("API 前缀探测失败", exc_info=True)
             if api_base:

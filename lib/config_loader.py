@@ -177,6 +177,11 @@ _KEY_ALIASES = {
     "debug": "debug",
     "timeout": "timeout",
     "cms": "cms",
+    # v1.5.6：显式 API 前缀 + Redis 端口（YAML 里写 base_path: /portal、redis_port: 16379）
+    "base-path": "base_path",
+    "base_path": "base_path",
+    "redis-port": "redis_port",
+    "redis_port": "redis_port",
     "pass-level": "pass_level",
     "pass_level": "pass_level",
     "portscan": "portscan",
@@ -396,6 +401,10 @@ no_dedup: false                    # 关闭去重
 # 端口扫描
 portscan: false                    # 扫描前执行端口扫描
 ports: 80,443,8080                 # 自定义端口
+redis_port: 6379                   # Redis 未授权检测端口（现场常改）
+
+# API 前缀（前后端分离 / 自定义 context-path）
+base_path: /portal                 # 显式指定，留空自动探测
 
 # 口令字典
 pass_level: full                   # top100/top1000/full

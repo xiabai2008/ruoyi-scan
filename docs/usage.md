@@ -290,6 +290,14 @@ ruoyi-scan -u http://target:8080/ --report ./reports --report-format all --lang 
 
 # 6. 使用 deep 模板（深度扫描）
 ruoyi-scan -u http://target:8080/ --template deep
+
+# 7. 自定义 context-path（二开/非标准部署）
+#    扫描器默认自动探测（含 Set-Cookie Path / 302 Location / JS baseURL 线索），
+#    探测不出时用 --base-path 显式指定
+ruoyi-scan -u http://target:8080/ --base-path /portal
+
+# 8. Redis 跑在非默认端口
+ruoyi-scan -u http://target:8080/ --redis-port 16379
 ```
 
 **执行阶段**：
@@ -1910,6 +1918,8 @@ python -m venv .venv
 | `--js-extract` | 启用 JS 端点提取 |
 | `--portscan` | 端口扫描 + 服务识别 |
 | `--ports <p1,p2>` | 自定义端口列表（逗号分隔） |
+| `--redis-port <n>` | Redis 未授权检测的目标端口（默认 6379；现场常用非默认端口） |
+| `--base-path <prefix>` | 显式指定 API 前缀（如 `/portal`，可多次）。默认自动探测，自定义 context-path 探测不出时用它兜底 |
 | `--passive` | 启动被动代理模式 |
 | `--passive-host <addr>` | 代理监听地址（默认 127.0.0.1） |
 | `--passive-port <n>` | 代理监听端口（默认 8080） |

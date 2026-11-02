@@ -66,7 +66,12 @@ class ScanEngine:
         _root = root_target or target
 
         def _target_for(cls: type) -> str:
-            """按插件的 path_scope 选择探测基准（F9 单一入口）。"""
+            """按插件的 path_scope 选择探测基准（F9 单一入口）。
+
+            v1.5.6 WP1 补充：插件路径自带前缀（`self_prefixes`）且与站点
+            context-path 相同时，基准必须退回站点根——否则拼成双前缀，
+            请求落到登录墙，本该 CONFIRMED 的项会判 SAFE（D1 实测）。
+            """
             scope = getattr(cls, "path_scope", "api")
             if scope == "root":
                 return _root
@@ -74,6 +79,12 @@ class ScanEngine:
             # 这里给它根路径作为基准，插件自己拼前缀版本。
             if scope == "both" and _root != target:
                 return _root
+            # 插件自带的前缀与探测到的 context-path 重合 → 它自己会拼这一段
+            self_prefixes = getattr(cls, "self_prefixes", ()) or ()
+            if self_prefixes and _root != target:
+                base = target[len(_root) :].strip("/")
+                if base and ("/" + base) in self_prefixes:
+                    return _root
             return target
 
         def _exec(cls: type) -> Optional[ScanResult]:

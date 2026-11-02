@@ -126,6 +126,13 @@ def build_parser():
         metavar="PORT",
         help="Redis 未授权检测的目标端口（默认 6379；现场常用非默认端口）",
     )
+    group.add_argument(
+        "--base-path",
+        action="append",
+        default=None,
+        metavar="PREFIX",
+        help="显式指定 API 前缀（如 /portal，可多次）。默认自动探测，自定义 context-path 探测不出时用它兜底",
+    )
     group.add_argument("--portscan", action="store_true", default=False, help="端口扫描")
     group.add_argument("--ports", default=None, help="自定义端口（逗号分隔）")
     group.add_argument("--passive", action="store_true", default=False, help="被动代理模式")
@@ -399,6 +406,7 @@ def print_help():
         ("--verify-tls", "校验目标 TLS 证书（默认不校验，兼容内网自签名证书）"),
         ("--portscan", "扫描前执行端口扫描 + 服务识别"),
         ("--redis-port", "Redis 未授权检测端口（默认 6379）"),
+        ("--base-path", "显式指定 API 前缀（如 /portal，可多次）"),
         ("--ports <p1,p2>", "自定义端口列表（逗号分隔）"),
         ("--passive", "启动被动代理模式（监听 HTTP/HTTPS 流量）"),
         ("--passive-host", "代理监听地址（默认 127.0.0.1）"),
@@ -528,16 +536,6 @@ def main(argv=None):
     if getattr(args, "verify_tls", False):
         settings.VERIFY_TLS = True
 
-    # Redis 端口覆盖：中间件插件走 socket 直连，端口由插件从 settings 读取。
-    # 非法值静默忽略（沿用 _parse_port_override 的容错策略），保持默认 6379。
-    redis_port = getattr(args, "redis_port", None)
-    if redis_port is not None:
-        parsed_port = settings._parse_port_override(redis_port)
-        if parsed_port is None:
-            print(f"{YELLOW}[!]忽略非法 --redis-port 值：{redis_port}（应为 1-65535）{RESET}")
-        else:
-            settings.REDIS_PORT = parsed_port
-
     print_banner()
 
     # D27：加载 YAML 配置文件
@@ -574,6 +572,16 @@ def main(argv=None):
 
         print(f"{YELLOW}[*]应用扫描模板: {args.template}{RESET}")
         apply_template(args, args.template, verbose=True)
+
+    # Redis 端口覆盖：必须在 YAML 配置/模板回填**之后**应用，否则配置文件里的
+    # redis_port 会被覆盖或漏读（顺序敏感项一律放在参数定型之后）。
+    # 非法值静默忽略（沿用 _parse_port_override 的容错策略），保持默认 6379。
+    if getattr(args, "redis_port", None) is not None:
+        parsed_port = settings._parse_port_override(args.redis_port)
+        if parsed_port is None:
+            print(f"{YELLOW}[!]忽略非法 --redis-port 值：{args.redis_port}（应为 1-65535）{RESET}")
+        else:
+            settings.REDIS_PORT = parsed_port
 
     # 检查是否有任何模式被指定
     has_mode = any(

@@ -223,6 +223,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         exploit=getattr(args, "exploit", False),
         auth=auth_config,
         surface_account=getattr(args, "surface_account", None),
+        # v1.5.6 WP1：显式 API 前缀（--base-path），优先级高于自动探测
+        base_paths=getattr(args, "base_path", None),
         auth_status=auth_status,
         template=getattr(args, "template", "") or "",
         crawl=getattr(args, "crawl", False),

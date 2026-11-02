@@ -1,7 +1,7 @@
 # 插件抽象基类（agents.md §5：每漏洞一插件，继承 PluginBase）
 import math
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from common.models import STATUS_CONFIRMED, ScanResult
 
@@ -178,6 +178,11 @@ class PluginBase(ABC):
     #   "both"  —— 两种可能都要探（命中任一即算），代价是多一倍请求
     # 默认 "api"：与历史行为一致，不会让已有插件静默改变探测位置。
     path_scope = "api"
+    # 插件路径里**自带**的 API 前缀（如 Plus 的 /prod-api）。
+    # 引擎探测到站点 context-path 与其中之一相同时，不再追加到探测基准上——
+    # 否则会拼成 /prod-api/prod-api/... 的双前缀，请求落到登录墙 → 假阴性。
+    # 空元组 = 路径里不含前缀（绝大多数插件）。
+    self_prefixes: Tuple[str, ...] = ()
     description = ""  # 漏洞描述
     fix = ""  # 修复建议（一句话概要）
     # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤）
