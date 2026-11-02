@@ -220,10 +220,13 @@ def decide_install_path(filepath: str, category: str, verdict: str) -> Optional[
     Returns:
         目标路径；fail（误报红线）返回 None（不落盘）
     """
+    # category 参与安装目录拼接：非白名单值（如 ../../）一律不落盘
+    # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
+    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
+    from core.loader import known_categories
     from lib.plugin_sdk import _to_filename
 
-    # category 参与安装目录拼接：非白名单值（如 ../../）一律不落盘
-    if category not in ("ruoyi", "spring", "common"):
+    if category not in known_categories():
         return None
     filename = _to_filename(os.path.splitext(os.path.basename(filepath))[0]) + ".py"
     if verdict == VERDICT_PASS:

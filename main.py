@@ -54,6 +54,24 @@ def print_banner():
 [*]联系方式:{settings.CONTACT}{RESET}""")
 
 
+def _known_categories():
+    """已安装的插件类别（供 --cms 的 choices 用）。
+
+    从 plugins/ 下的包发现派生，而不是写死 ["ruoyi", "spring"]——
+    写死的版本会让 `--cms jeecgboot` 被 argparse 直接拒绝（v1.6 WP-R 修的债）。
+
+    发现失败时退回内置的最小集合：argparse 的 choices 必须是可迭代且非空的，
+    抛异常会让整个 CLI 无法启动。
+    """
+    try:
+        from core.loader import known_categories
+
+        cats = known_categories()
+        return cats if cats else ["ruoyi", "spring"]
+    except Exception:
+        return ["ruoyi", "spring"]
+
+
 def build_parser():
     """构建参数解析（-h/-u/-m/-p/-l 向后兼容，新增能力用长参数）"""
     # 禁用 argparse 内置 -h：自建 dest="help" 参数，帮助输出对齐原脚本（print_help）。
@@ -96,7 +114,9 @@ def build_parser():
         metavar="SECONDS",
         help="单目标扫描时间预算；超出后剩余插件标记为 UNKNOWN（默认 0 = 不限制）",
     )
-    group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
+    # 类别从已安装的插件包派生，新增框架时无需改这里（v1.6 WP-R）。
+    # 曾经写死 ["ruoyi", "spring"]，导致 --cms jeecgboot 被 argparse 直接拒绝。
+    group.add_argument("--cms", default=None, choices=_known_categories(), help="手动指定 CMS（默认自动识别）")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
     group.add_argument(

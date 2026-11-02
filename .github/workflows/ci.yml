@@ -72,6 +72,12 @@ jobs:
         # docs/promo/ruoyi-scan-plugins.txt 是 users 判断「覆盖不覆盖我的目标」的依据，
         # 插件增删改后忘了重新生成，清单就是错的——直接卡住，而不是等发布后才发现。
         run: python scripts/export_plugin_list.py --check
+      - name: 框架注册完整性
+        # JeecgBoot 接入时只做了扫描路径，配套清单全漏（--cms 拒绝该选项、
+        # --plugin-new/AI 生成拒绝该类别、export_plugins 导不出、API 归错类、
+        # nightly acceptance 不跑）——这批漏项 CI 全都不查，所以第 3 个框架会再漏一遍。
+        # 本门禁把「哪些地方需要登记」固化成断言（v1.6 WP-R）。
+        run: python scripts/check_framework_registration.py
 
       - name: 版本号一致性（settings / pyproject / 桌面端 / CHANGELOG）
         # 版本号散落 5 个文件，任何一处漏改都不会让测试失败，但会让用户装到

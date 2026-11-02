@@ -489,7 +489,11 @@ def generate_plugin_template(name, category="ruoyi"):
         ValueError: 不支持的类别
         FileExistsError: 目标文件已存在
     """
-    if category not in ("ruoyi", "spring", "common"):
+    # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
+    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
+    from core.loader import known_categories
+
+    if category not in known_categories():
         raise ValueError(f"unsupported category: {category}")
     # 路径安全：名称不可含目录分隔符或 ..，防止写出 plugins/<category>/
     if not name or "/" in name or "\\" in name or ".." in name:

@@ -1,7 +1,7 @@
 {
   "schema": "ruoyi-scan-acceptance-baseline",
-  "version": "1.0.4",
-  "description": "lab/ 签名靶场（Tier A）真实环境验收基线：vuln 模式核心命中门禁 / safe 模式零误报门禁（无害探测项豁免）",
+  "version": "1.0.5",
+  "description": "lab/ 签名靶场（Tier A）真实环境验收基线：vuln 模式核心命中门禁 / safe 模式零误报门禁（无害探测项豁免）；jeecgboot 尚无签名靶场（真实靶场 R10 需 Maven 构建，不适合 nightly），该项登记为待建，见 docs/_plan_v1.6_labs.md",
   "targets": [
     {
       "name": "lab-ruoyi-vuln",
@@ -44,9 +44,41 @@
       "mode": "safe",
       "scan_mode": "u",
       "expected_confirmed": [],
-      "allowed_confirmed": ["HTTP 方法探测"],
+      "allowed_confirmed": [
+        "HTTP 方法探测"
+      ],
       "expected_safe_all": true,
       "note": "safe 模式除豁免项外应全部 SAFE/UNKNOWN，零 CONFIRMED（误报门禁）"
+    },
+    {
+      "name": "lab-spring-vuln",
+      "url": "http://127.0.0.1:8091",
+      "mode": "vuln",
+      "scan_mode": "p",
+      "expected_confirmed": [
+        "CVE-2022-22947 Spring Cloud Gateway 远程代码执行",
+        "CVE-2022-22963 Spring Cloud Function 远程代码执行",
+        "CVE-2022-22965 Spring4Shell 远程代码执行",
+        "Spring Boot Actuator H2 Console 未授权 JNDI RCE",
+        "Spring Boot Actuator Jolokia MLet 链远程代码执行",
+        "Spring Boot Actuator Jolokia 远程代码执行",
+        "Spring Boot Actuator env 配置覆盖 RCE",
+        "Spring Cloud Config 配置未授权读取",
+        "Spring Boot Actuator /mappings 路由映射泄露",
+        "Spring Boot Actuator /trace 请求历史泄露",
+        "Spring Boot Actuator heapdump 敏感信息泄露",
+        "Spring Boot Actuator 未授权访问",
+        "Spring Boot Admin 未授权访问",
+        "Spring Data REST 信息泄露"
+      ],
+      "allowed_confirmed": [
+        ".env 配置文件泄露",
+        ".git 源码泄露",
+        "IDE/SCM 残留文件泄露",
+        "CORS 跨域配置不当",
+        "Swagger API 文档泄露",
+        "备份文件泄露"
+      ]
     }
   ]
 }

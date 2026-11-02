@@ -215,6 +215,23 @@ def discover_plugin_packages() -> List[str]:
     return packages
 
 
+def known_categories() -> List[str]:
+    """已安装的插件类别名（`ruoyi` / `spring` / `jeecgboot` / ...）。
+
+    用于替换散落各处的硬编码三元组 `("ruoyi", "spring", "common")`。
+    **新增框架时不需要再改这些地方**——这正是 v1.6 WP-R 要还的债。
+
+    背景：JeecgBoot 接入时只改了扫描路径，配套清单全漏了，导致
+    `--cms jeecgboot` 被 argparse 拒绝、`--plugin-new --category jeecgboot` 抛错、
+    `export_plugins()` 导不出 jeecg 插件（模板仓库与 Ed25519 签名分发链路里没有它）、
+    nightly acceptance 不跑 jeecg。每条都是「新框架接了一半」。
+
+    现在统一从包发现派生，并配套 scripts/check_framework_registration.py 做门禁。
+    顺序保持 discover 的字母序，保证 `--help` 输出稳定（测试会断言）。
+    """
+    return [pkg.split(".", 1)[1] for pkg in discover_plugin_packages()]
+
+
 def load_entry_point_plugins() -> List[type]:
     """通过 entry_points 加载第三方注册的插件（P1: pip install 插件包）
 
