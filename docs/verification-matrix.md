@@ -3,7 +3,7 @@
 > 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。
 > 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。
 
-**总计 57 个插件**：L3 10 个，L2 11 个，L1 33 个，none 3 个
+**总计 57 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 33 个，none 3 个
 
 | 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |
 |------|------|-----|--------|---------|---------|------|
@@ -19,7 +19,7 @@
 | L1 | MinIO 未授权访问 | N/A | medium | 是 | — | `plugins/common/minio_unauth.py` |
 | L1 | Redis 未授权访问 | N/A | high | 是 | — | `plugins/common/redis_unauth.py` |
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
-| L1 | Shiro RememberMe 反序列化（指纹） | CVE-2016-4437 | high | 是 | — | `plugins/common/shiro_rememberme.py` |
+| L1 | Shiro 框架指纹（rememberMe） | N/A | low | 是 | — | `plugins/common/shiro_rememberme.py` |
 | L1 | IDE/SCM 残留文件泄露 | N/A | medium | 是 | — | `plugins/common/source_leak.py` |
 | L1 | Swagger API 文档泄露 | N/A | medium | 是 | — | `plugins/common/swagger_leak.py` |
 | L1 | HTTP 方法探测 | N/A | low | 是 | — | `plugins/common/trace_method.py` |

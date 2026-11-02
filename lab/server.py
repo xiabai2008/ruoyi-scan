@@ -20,7 +20,7 @@ HOST = os.environ.get("LAB_HOST", "127.0.0.1")
 
 app = Flask(__name__)
 
-# /etc/passwd 特征内容（file_read / file_read_time 判定要求同时含 'root' 与 ':/'）
+# /etc/passwd 特征内容（file_read / file_read_path 判定要求：≥2 个 passwd 格式行且含 root 或系统账户）
 PASSWD = (
     "root:x:0:0:root:/root:/bin/bash\n"
     "bin:x:1:1:bin:/bin:/sbin/nologin\n"
@@ -317,7 +317,7 @@ def dispatch(path, method):
     if path == "/":
         return html_body(_render_login_page())
 
-    # 任意文件读取（file_read + file_read_time 读取落地文件 2.txt）
+    # 任意文件读取（file_read / file_read_path 共用此端点，响应体即 /etc/passwd 真实行特征）
     # Step 8 新增 file_read_path：resource 参数以 ../ 开头（相对路径穿越探针）
     #   三个探针共用此端点，响应体一致（含 root 与 :/ 的真实 /etc/passwd 特征），
     #   resource 查询参数不影响判定，无需分流
@@ -326,7 +326,7 @@ def dispatch(path, method):
             return Response(PASSWD, mimetype="text/plain; charset=utf-8")
         return whitelabel_404()
 
-    # 定时任务 list / edit / run（job_rce + file_read_time + job_invoke_target）
+    # 定时任务 list / edit / run（job_rce + job_invoke_target；后者原名 file_read_time）
     if path == "/monitor/job/list":
         if vuln:
             # job_invoke_target 的判定依赖「写入后回读可见」，故回传有状态存储

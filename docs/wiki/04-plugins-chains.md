@@ -211,12 +211,15 @@ plugin_list = [
 | 7 | `SourceLeak` | `source_leak.py` | 源码泄露 |
 | 8 | `MinioUnauth` | `minio_unauth.py` | MinIO 未授权 |
 | 9 | `RocketmqUnauth` | `rocketmq_unauth.py` | RocketMQ 未授权 |
-| 10 | `ShiroRememberme` | `shiro_rememberme.py` | Shiro rememberMe 指纹（SAFE/UNKNOWN） |
+| 10 | `ShiroRememberme` | `shiro_rememberme.py` | Shiro 框架指纹（rememberMe 特征，SAFE/UNKNOWN） |
 | 11 | `DirListing` | `dir_listing.py` | 目录列表 |
 | 12 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
 
-> `shiro_rememberme` 为**指纹类插件**：只输出 `SAFE`（无 rememberMe 特征）或 `UNKNOWN`
-> （检测到特征，需进一步验证密钥可利用性），设计上永不输出 `CONFIRMED`；其探测思路同时被
+> `shiro_rememberme` 为**指纹类插件**（`category=recon`、`severity=low`、不挂 CVE）：
+> 只输出 `SAFE`（无 rememberMe 特征）或 `UNKNOWN`（检测到特征，密钥可利用性需人工验证），
+> 设计上永不输出 `CONFIRMED`。2026-11-02 方案 A 收口：原先挂 `CVE-2016-4437` + `high` 属能力虚报
+> （报告会显示 high 级 RCE，读者以为已验证可利用性），真正的密钥爆破验证留待后续版本。
+> 其探测思路同时被
 > [lib/component_detect.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/component_detect.py)
 > 的 Shiro 组件版本检测复用。
 

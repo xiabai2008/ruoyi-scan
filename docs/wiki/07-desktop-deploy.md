@@ -295,7 +295,7 @@ diff -u docs/verification-matrix.md /tmp/matrix.md
 **e2e 的 `--allow-safe` 名单**：`signature-e2e` 要求全部 `CONFIRMED`，但显式豁免 4 项，理由是它们**结构性不可能 CONFIRMED**：
 
 - `Redis 未授权访问` / `MinIO 未授权访问` / `RocketMQ Dashboard 未授权`——中间件探测，靶机无该服务即 `SAFE`；
-- `shiro_rememberme`——指纹类探测，只有 `SAFE`（无特征）或 `UNKNOWN`（有特征需验密钥）两种判定。
+- `shiro_rememberme`——指纹类探测（`category=recon`，不挂 CVE），只有 `SAFE`（无特征）或 `UNKNOWN`（有特征需验密钥）两种判定。
 
 **Windows 矩阵的作用**：`os: [ubuntu-latest, windows-latest]`，注释写"国内使用主力环境之一，防编码（GBK）/路径分隔符回归"。pytest 超时方式也随平台切换：POSIX 用 `signal`，Windows 用 `thread`。
 

@@ -221,8 +221,15 @@ def render(rows: List[Dict[str, object]]) -> str:
     out.append("> 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。")
     out.append("> 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。")
     out.append("")
+    # 总数口径必须写清：本表按「插件源码文件」计数（plugins/**/*.py，排除 __init__/base），
+    # 与 `--plugin-list` 的「可扫描插件数」不同——前者含 plugins/chain/ 下 3 个链步骤，
+    # 那三个不在任何 plugin_list 里，不是独立扫描项。两个数字都对，但读者不加区分会
+    # 以为插件清单漏登记了 3 个（2026-11-02 核查过：57 文件 = 54 扫描插件 + 3 链步骤）。
+    chains = sum(1 for r in rows if str(r["path"]).startswith("plugins/chain/"))
+    scope_note = f"（含 `plugins/chain/` 下 {chains} 个链步骤类，`--plugin-list` 不计入）" if chains else ""
     out.append(
-        f"**总计 {len(rows)} 个插件**：" + "，".join(f"{k} {counts.get(k, 0)} 个" for k in ("L3", "L2", "L1", "none"))
+        f"**总计 {len(rows)} 个插件源码文件**{scope_note}："
+        + "，".join(f"{k} {counts.get(k, 0)} 个" for k in ("L3", "L2", "L1", "none"))
     )
     out.append("")
     out.append("| 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |")

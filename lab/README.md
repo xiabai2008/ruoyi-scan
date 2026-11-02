@@ -86,7 +86,7 @@ python main.py -u http://127.0.0.1:8081
 |---|---|---|
 | 指纹识别 | `cms=ruoyi 置信度=0.70` | `login:RuoYi` + `keyword:RuoYi` |
 | 任意文件读取 | `存在` | 响应含 `root:x:0:0` |
-| 定时任务任意文件读取 | `存在` | edit/run 200 + 2.txt 含 `root:/` |
+| 定时任务调用目标未校验 | `存在` | edit 写入后 list 回读可见（`job_invoke_target`，原名 `file_read_time`） |
 | POST 报错注入（role） | `存在` | 响应含 `运行时异常` + `extractvalue` |
 | POST 报错注入（dept） | `存在` | 响应含 `database()` |
 | 任意文件上传 | `存在` | JSON 含 `url` 或 `fileName` |

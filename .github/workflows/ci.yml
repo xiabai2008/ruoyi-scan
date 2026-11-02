@@ -152,7 +152,7 @@ jobs:
       - name: RuoYi signature lab
         # allow-safe 名单均为「结构性非 CONFIRMED」插件：
         # - Redis/MinIO/RocketMQ：中间件探测，靶机未部署即 SAFE；
-        # - Shiro RememberMe：指纹探测设计上只有 SAFE/UNKNOWN 两种判定；
+        # - Shiro 框架指纹：只做 rememberMe 特征识别，设计上只有 SAFE/UNKNOWN 两种判定；
         # - 6 个越权/鉴权类：F6/F7 起没有 --auth-login / --surface-account 时
         #   诚实降级 UNKNOWN（签名靶场没有真实登录链与低权账号），不再像旧版
         #   那样在未认证请求上判 CONFIRMED。
@@ -160,13 +160,13 @@ jobs:
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
             --target http://127.0.0.1:8080/ --mode p \
             --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro RememberMe 反序列化（指纹）,POST型报错注入（role）,POST型报错注入（dept）,RuoYi 代码生成模块 SSTI,定时任务调用目标未校验,重置密码页数据权限绕过,部门树越权访问"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro 框架指纹（rememberMe）,POST型报错注入（role）,POST型报错注入（dept）,RuoYi 代码生成模块 SSTI,定时任务调用目标未校验,重置密码页数据权限绕过,部门树越权访问"
       - name: Spring signature lab
         run: |
           python scripts/run_e2e.py --lab lab/spring_server.py --lab-port 8091 \
             --target http://127.0.0.1:8091/ --mode p \
             --report-dir /tmp/e2e/spring --name spring-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro RememberMe 反序列化（指纹）"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro 框架指纹（rememberMe）"
 
   # ── G4：RuoYi nuclei 模板包验证（语法校验 + 签名靶场双模式功能门）──
   # 功能门 = 与本地 EVIDENCE.md 相同的判定：vuln 模式 ≥3 命中、safe 模式 0 误报

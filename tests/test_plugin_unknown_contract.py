@@ -105,6 +105,27 @@ def test_shiro_no_feature_returns_safe():
     assert result.status == STATUS_SAFE
 
 
+def test_shiro_plugin_does_not_claim_rce_capability():
+    """能力边界护栏：Shiro 插件只做指纹，不得挂 CVE / high / vuln 类别
+
+    历史问题（2026-11-02 方案 A 收口）：插件曾挂 CVE-2016-4437 + severity=high +
+    name 带「反序列化」，但判定只到 UNKNOWN，永远 CONFIRMED 不了——报告里出现一条
+    「high 级 Shiro 反序列化 RCE」会让读者以为扫描器确认了可利用性。
+
+    这条断言的作用是**挡住回退**：以后谁想再挂回 CVE 或提回 high，必须先让插件
+    真的能验证密钥（v1.6 计划中的回显验证），而不是改个字段把报告做好看。
+    """
+    from common.models import SEVERITY_LOW
+    from plugins.common.shiro_rememberme import ShiroRemembermePlugin
+
+    assert ShiroRemembermePlugin.cve == "N/A", "指纹类插件不得挂 CVE 编号（会造成 CVE 统计虚报）"
+    assert ShiroRemembermePlugin.severity == SEVERITY_LOW, "指纹本身不是 high 风险，风险取决于密钥是否可利用"
+    assert ShiroRemembermePlugin.category == "recon", "属侦察信息，不是漏洞判定"
+    assert "反序列化" not in ShiroRemembermePlugin.name, "名称不得暗示已完成反序列化验证"
+    # vuln_type 置空：否则 dedup 会把指纹结果和真正的 rce 结果聚合到一起
+    assert ShiroRemembermePlugin.vuln_type == ""
+
+
 def test_swagger_non_200_is_skipped_then_safe():
     from plugins.common.swagger_leak import SwaggerLeakPlugin
 

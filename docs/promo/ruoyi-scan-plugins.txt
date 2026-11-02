@@ -1,7 +1,7 @@
 ﻿===============================================================================
  Ruoyi-Scan 插件清单（POC 覆盖范围）
  版本：v1.5.5　共 54 个插件
- 高危 31　中危 18　低危 5　含 CVE 编号 15 个
+ 高危 30　中危 18　低危 6　含 CVE 编号 14 个
  说明：本清单由 scripts/export_plugin_list.py 从插件源码导出，与运行时一致；
        装好后可用 ruoyi-scan --plugin-list 实时查看同一份数据。
 ===============================================================================
@@ -220,45 +220,45 @@
       说明：Redis 服务未设置认证（requirepass 为空），任意连接可执行 INFO/CONFIG 等命令
       修复：为 Redis 设置 requirepass；bind 仅内网；禁用 CONFIG 命令
 
- 038  高危  漏洞  CVE-2016-4437
-      名称：Shiro RememberMe 反序列化（指纹）
-      说明：Apache Shiro rememberMe 反序列化远程代码执行漏洞。Shiro 默认使用 AES-128-CBC 加密 rememberMe Cookie，密钥硬编码为 kPH+bIxk5D2deZiIxcaaaA==。攻击者可利用已知密钥构造恶意序列化对象，实现 RCE。
-      修复：更换 Shiro rememberMe 加密密钥，升级 Shiro 至 1.2.5+，并配置反序列化过滤器
-
- 039  中危  漏洞
+ 038  中危  漏洞
       名称：备份文件泄露
       说明：目标服务器上存在可访问的备份文件（.bak/.swp/.DS_Store 等），可能泄露源码或配置
       修复：禁止 Web 服务器对外提供备份/交换/系统文件的访问，或在部署时清理此类文件
 
- 040  中危  漏洞
+ 039  中危  漏洞
       名称：CORS 跨域配置不当
       说明：目标服务器 CORS 配置不当，允许任意 Origin 跨域请求，可被利用发起 CSRF 攻击窃取数据
       修复：将 Access-Control-Allow-Origin 限制为可信域名白名单，禁止使用 * 或反射任意 Origin
 
- 041  中危  漏洞
+ 040  中危  漏洞
       名称：MinIO 未授权访问
       说明：MinIO 对象存储未授权访问（默认配置匿名可列举/读取 bucket）
       修复：配置 MinIO 访问凭证（AccessKey/SecretKey）；关闭匿名策略
 
- 042  中危  漏洞  CVE-2023-33246
+ 041  中危  漏洞  CVE-2023-33246
       名称：RocketMQ Dashboard 未授权
       说明：RocketMQ Dashboard 控制台未授权访问（可查看/操作集群）
       修复：为 RocketMQ Dashboard 配置认证；限制管理端口访问来源
 
- 043  中危  漏洞
+ 042  中危  漏洞
       名称：IDE/SCM 残留文件泄露
       说明：目标服务器上存在 IDE 配置或版本控制残留文件，可能泄露项目结构、源码路径等敏感信息
       修复：禁止 Web 服务器对外提供 .svn/.hg/.idea/.vscode 等隐藏目录的访问，部署时清理这些目录
 
- 044  中危  漏洞
+ 043  中危  漏洞
       名称：Swagger API 文档泄露
       说明：目标存在未授权的 API 文档界面，攻击者可了解全部 API 接口、参数及数据结构，辅助进一步攻击
       修复：为 Swagger/API 文档添加访问认证，或在生产环境中禁用 Swagger 端点
 
- 045  低危  信息
+ 044  低危  信息
       名称：目录遍历探测
       说明：目标服务器开启了目录列表功能，攻击者可浏览目录结构发现隐藏文件和敏感路径
       修复：在 Web 服务器配置中关闭目录列表功能（nginx: autoindex off; apache: Options -Indexes）
+
+ 045  低危  信息
+      名称：Shiro 框架指纹（rememberMe）
+      说明：站点使用 Apache Shiro 框架（响应含 rememberMe=deleteMe 特征）。Shiro 的 rememberMe Cookie 在默认配置下使用硬编码 AES 密钥，存在反序列化 RCE 风险（CVE-2016-4437），但**是否可利用需人工验证密钥**——本插件只确认框架存在。
+      修复：确认 Shiro 版本 ≥1.2.5 且 rememberMe 密钥已更换（默认密钥 kPH+bIxk5D2deZiIxcaaaA== 必须替换）
 
  046  低危  信息
       名称：HTTP 方法探测
@@ -317,7 +317,6 @@
    CNVD-2021-27656   JeecgBoot jmreport 文件上传
    CNVD-2022-30348   JeecgBoot jmreport SQL注入
    CNVD-2022-39817   JeecgBoot 任意文件读取
-   CVE-2016-4437     Shiro RememberMe 反序列化（指纹）
    CVE-2021-29441    RuoYi-Cloud Nacos 配置泄露 / Nacos 未授权访问
    CVE-2022-22947    CVE-2022-22947 Spring Cloud Gateway 远程代码执行
    CVE-2022-22963    CVE-2022-22963 Spring Cloud Function 远程代码执行

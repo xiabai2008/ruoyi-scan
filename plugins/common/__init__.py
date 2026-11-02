@@ -26,7 +26,7 @@ plugin_list = [
     SourceLeakPlugin,  # IDE/SCM 残留文件泄露
     MinioUnauthPlugin,  # MinIO 未授权（F7 中间件）
     RocketmqUnauthPlugin,  # RocketMQ Dashboard 未授权（F7 中间件）
-    ShiroRemembermePlugin,  # Shiro rememberMe 指纹（CVE-2016-4437，SAFE/UNKNOWN）
+    ShiroRemembermePlugin,  # Shiro 框架指纹（rememberMe 特征；只到 SAFE/UNKNOWN，需人工验密钥）
     # recon：信息收集
     DirListingPlugin,  # 目录遍历探测
     TraceMethodPlugin,  # HTTP 方法探测（OPTIONS/TRACE）
