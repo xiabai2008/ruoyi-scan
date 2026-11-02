@@ -388,9 +388,20 @@ class RuoYiAuthChain:
                 self.login_style = "ruoyi-vue"
                 self.auth_mode = AUTH_V5_JWT
                 return AUTH_V5_JWT
-        # 前缀已确认通到后端，但验证码接口形态不识别：按 RuoYi-Vue 约定兜底，
-        # 至少不再把登录请求打到 SPA 的 /login。
-        self.login_url = join_url(base_url, "/login")
+        # 前缀已确认通到后端，但验证码接口形态不识别：先按 RuoYi-Vue 约定兜底，
+        # 但**必须校验该约定路径真的存在**——二开站点的登录入口常被改名
+        # （D1 是 /portal/auth/signin，不是 /portal/login）。无条件假设 /login
+        # 会让后续 POST 打到 404，--auth-login 恒 exit 4
+        # （2026-11-02 v1.5.6 WP1 补上 context-path 识别后暴露）。
+        default_login = join_url(base_url, "/login")
+        verified = self._login_form_action(base_url.rstrip("/") + "/")
+        if verified and verified.rstrip("/") != default_login.rstrip("/"):
+            # 从登录页表单读到真实入口，且与约定路径不同 → 以真实入口为准
+            self.login_url = verified
+            self.login_style = "form"
+            self.auth_mode = AUTH_V4_SESSION
+            return AUTH_V4_SESSION
+        self.login_url = default_login
         self.login_style = "ruoyi-vue"
         self.auth_mode = AUTH_V5_JWT
         return AUTH_V5_JWT
@@ -498,12 +509,97 @@ class RuoYiAuthChain:
             return self._detect_by_protected_endpoints()
 
         if http_code == 404:
-            # 没有 /login 不代表没有鉴权（C2-2 的 Tomcat 应用 /login 就是 404）
+            # 根路径没有 /login 有两种可能，必须分开处理：
+            #   a) 应用根本不走 /login（C2-2 的 Tomcat 应用）→ 交给受保护接口判定
+            #   b) 应用部署在子路径下（D1 的 /portal），真实入口是 /portal/<登录路径>
+            # 旧实现直接跳 a，把 b 也当成「没有登录入口」——D1 因此 --auth-login
+            # 恒 exit 4（2026-11-02 v1.5.6 WP1 补上 context-path 识别后暴露）。
+            ctx_mode = self._try_context_login_entry()
+            if ctx_mode:
+                self.auth_mode = ctx_mode
+                return ctx_mode
             return self._detect_by_protected_endpoints()
 
         mode = self._classify_login_response(resp)
         self.auth_mode = mode
         return mode
+
+    def _try_context_login_entry(self) -> Optional[str]:
+        """根路径 /login 404 时，尝试在 context-path 下找登录入口。
+
+        场景（2026-11-02 D1 实测）：应用部署在 /portal，
+            GET  /login            -> 404（Nginx 只映射 /portal/）
+            GET  /portal/          -> 302 -> /portal/auth/signin
+            GET  /portal/auth/signin -> 200 + <form action="/portal/auth/signin" method="post">
+
+        登录路径不一定是 /login：D1 是 /auth/signin（二开自定义），
+        所以**从登录页的 form action 读**，不猜路径——猜路径等于对单座靶场特判。
+
+        只接受同源、method=post、含 password 输入框的表单——否则任意带表单的页面
+        （搜索框、筛选器）都会被当成登录入口。
+
+        Returns:
+            鉴权模式字符串；找不到返回 None（调用方继续走原逻辑）。
+        """
+        context_base = self._discover_context_base()
+        if not context_base:
+            return None
+        entry = self._login_form_action(join_url(self.target, context_base + "/"))
+        if not entry:
+            return None
+        self.login_url = entry
+        # 表单登录 = 会话型（Cookie）；具体是 v4 还是 v5 由后续 classify 决定
+        mode = self._classify_login_response_by_get(entry)
+        logger.debug("context-path 登录入口: %s（模式 %s）", entry, mode)
+        return mode
+
+    def _login_form_action(self, page_url: str) -> str:
+        """从登录页 HTML 里取表单 POST 目标（绝对化），失败返回空串。"""
+        try:
+            resp = self.session.get(page_url, allow_redirects=True)
+        except Exception:
+            logger.debug("登录页请求失败: %s", page_url, exc_info=True)
+            return ""
+        if int(getattr(resp, "status_code", 0) or 0) != 200:
+            return ""
+        html = getattr(resp, "text", "") or ""
+        if not html:
+            return ""
+        # 逐个 form 检查：只认 method=post 且含 password 输入的那个
+        for form_match in re.finditer(r"<form\b[^>]*>", html, re.IGNORECASE):
+            tag = form_match.group(0)
+            if not re.search(r'method\s*=\s*["\']?post', tag, re.IGNORECASE):
+                continue
+            # 取该 form 到 </form> 之间的内容（找不到闭合标签就取后 2000 字符）
+            tail = html[form_match.end() : form_match.end() + 2000]
+            end = tail.lower().find("</form>")
+            body = tail[:end] if end >= 0 else tail
+            if not re.search(r'type\s*=\s*["\']?password', body, re.IGNORECASE):
+                continue
+            action = re.search(r'action\s*=\s*["\']([^"\']+)["\']', tag, re.IGNORECASE)
+            if not action:
+                continue
+            # 绝对化：action 可能是 /portal/auth/signin（绝对路径）或 auth/signin（相对）
+            return str(urljoin(page_url, action.group(1)))
+        return ""
+
+    def _classify_login_response_by_get(self, login_url: str) -> str:
+        """对已确定的登录入口 GET 一次，判断是表单会话还是 JWT 接口。
+
+        取不到响应时保守返回 AUTH_V4_SESSION（表单登录最常见），
+        由 login() 实际尝试后决定成败——这里只负责给出「往哪个方向试」。
+        """
+        try:
+            resp = self.session.get(login_url, allow_redirects=False)
+        except Exception:
+            logger.debug("登录入口探测失败: %s", login_url, exc_info=True)
+            return AUTH_V4_SESSION
+        code = int(getattr(resp, "status_code", 0) or 0)
+        if code in (301, 302, 303, 307, 308):
+            location = (getattr(resp, "headers", {}) or {}).get("Location", "") or ""
+            if location and self._is_login_location(location):
+                self._follow_login_location(location, login_url)
+        return self._classify_login_response(resp)
 
     def login(self, captcha_code: Optional[str] = None, max_attempts: int = 8) -> Tuple[bool, str]:
         """按探测到的鉴权模式登录（验证码错误时自动重试）

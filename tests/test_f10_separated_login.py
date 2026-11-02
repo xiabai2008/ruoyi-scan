@@ -131,3 +131,83 @@ def test_jeecg_login_uses_sys_login_and_x_access_token(monkeypatch):
     assert ok, reason
     assert sess.session.headers["X-Access-Token"] == "tok-jeecg"
     assert sess.session.headers["Authorization"] == "Bearer tok-jeecg"
+
+
+# ── v1.5.6 WP1 配套：context-path 下的自定义登录入口 ─────────────────────
+# 背景（2026-11-02 D1 实测）：应用部署在 /portal，登录入口是二开改名的
+# /portal/auth/signin（不是 /portal/login）。旧逻辑在验证码形态不识别时
+# **无条件假设**登录入口是 {base}/login，POST 打到 404 → --auth-login 恒 exit 4，
+# 依赖会话的插件（如代码生成 SSTI）全部拿不到 CONFIRMED。
+
+LOGIN_PAGE_HTML = """<html><body>
+<form id="signupForm" action="/portal/auth/signin" method="post" autocomplete="off">
+  <input name="username"><input type="password" name="password">
+</form></body></html>"""
+
+
+def test_custom_login_entry_read_from_form_action(monkeypatch):
+    """登录入口改名时，从登录页 form action 读真实地址，而不是假设 {base}/login"""
+    _chain_with_base(monkeypatch, "/portal")
+    sess = FakeSession(
+        {
+            ("get", "/portal/"): FakeResp(LOGIN_PAGE_HTML, status=200, headers={"Content-Type": "text/html"}),
+            ("get", "/portal/auth/signin"): FakeResp(
+                LOGIN_PAGE_HTML, status=200, headers={"Content-Type": "text/html"}
+            ),
+        }
+    )
+    chain = RuoYiAuthChain("http://target/", sess)
+    chain.detect_auth_mode()
+    assert chain.login_url == "http://target/portal/auth/signin", chain.login_url
+
+
+def test_default_login_entry_kept_when_no_form(monkeypatch):
+    """登录页没有可识别表单时，保持 {base}/login 约定（不因读不到就乱改）"""
+    _chain_with_base(monkeypatch, "/prod-api")
+    sess = FakeSession({("get", "/prod-api/"): FakeResp("<html>no form</html>", status=200)})
+    chain = RuoYiAuthChain("http://target/", sess)
+    chain.detect_auth_mode()
+    assert chain.login_url == "http://target/prod-api/login", chain.login_url
+
+
+def test_form_action_requires_password_field():
+    """只认含 password 输入框的 POST 表单——搜索框/筛选器不是登录入口"""
+    chain = RuoYiAuthChain("http://target/", FakeSession({}))
+    sess = FakeSession(
+        {
+            ("get", "/portal/"): FakeResp(
+                '<form action="/portal/search" method="post"><input name="q"></form>', status=200
+            ),
+        }
+    )
+    chain.session = sess
+    assert chain._login_form_action("http://target/portal/") == ""
+
+
+def test_form_action_requires_post_method():
+    """GET 表单不是登录入口（登录必须 POST）"""
+    chain = RuoYiAuthChain("http://target/", FakeSession({}))
+    sess = FakeSession(
+        {
+            ("get", "/portal/"): FakeResp(
+                '<form action="/portal/auth/signin" method="get"><input type="password" name="p"></form>',
+                status=200,
+            ),
+        }
+    )
+    chain.session = sess
+    assert chain._login_form_action("http://target/portal/") == ""
+
+
+def test_relative_form_action_is_absolutized():
+    """action 是相对路径时也要能拼成绝对地址"""
+    chain = RuoYiAuthChain("http://target/", FakeSession({}))
+    sess = FakeSession(
+        {
+            ("get", "/portal/"): FakeResp(
+                '<form action="auth/signin" method="post"><input type="password" name="p"></form>', status=200
+            ),
+        }
+    )
+    chain.session = sess
+    assert chain._login_form_action("http://target/portal/") == "http://target/portal/auth/signin"
