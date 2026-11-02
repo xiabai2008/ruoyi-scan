@@ -448,3 +448,56 @@ def test_no_plugin_returns_safe_without_evidence():
             if ev is None or (isinstance(ev, ast.Constant) and not str(ev.value).strip()):
                 bad.append(f"{p}:{node.lineno}")
     assert not bad, f"SAFE 缺判定证据：{bad}"
+
+
+def test_spring_unauth_plugins_use_anonymous_session():
+    """8 个 Spring 未授权插件必须用匿名会话（P1-13）
+
+    复现过的假 CONFIRMED：带 admin cookie 的会话 → actuator_unauth 报
+    「/actuator/env 可匿名访问」CONFIRMED——证据自己都写着「匿名」，实际带着凭据。
+    """
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+    from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
+    from plugins.spring.jolokia_rce import SpringJolokiaRcePlugin
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.spring_boot_admin import SpringBootAdminPlugin
+    from plugins.spring.spring_data_rest import SpringDataRestPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    classes = [
+        SpringActuatorUnauthPlugin,
+        SpringHeapdumpLeakPlugin,
+        SpringMappingsLeakPlugin,
+        SpringTraceLeakPlugin,
+        SpringJolokiaRcePlugin,
+        SpringBootAdminPlugin,
+        SpringDataRestPlugin,
+    ]
+    for cls in classes:
+        sess = _Session(_Resp("{}"))
+        cls().verify("http://t/", sess)
+        assert sess.anonymous_called, f"{cls.__name__} 必须用匿名会话探测"
+
+
+def test_spring_unauth_plugins_declare_anonymous_probe():
+    """8 个 Spring 未授权插件都应声明 anonymous_probe=True（可审计）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+    from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
+    from plugins.spring.jolokia_mlet_rce import SpringJolokiaMletRcePlugin
+    from plugins.spring.jolokia_rce import SpringJolokiaRcePlugin
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.spring_boot_admin import SpringBootAdminPlugin
+    from plugins.spring.spring_data_rest import SpringDataRestPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    for cls in (
+        SpringActuatorUnauthPlugin,
+        SpringHeapdumpLeakPlugin,
+        SpringMappingsLeakPlugin,
+        SpringTraceLeakPlugin,
+        SpringJolokiaRcePlugin,
+        SpringJolokiaMletRcePlugin,
+        SpringBootAdminPlugin,
+        SpringDataRestPlugin,
+    ):
+        assert getattr(cls, "anonymous_probe", False) is True, f"{cls.__name__} 未声明 anonymous_probe"

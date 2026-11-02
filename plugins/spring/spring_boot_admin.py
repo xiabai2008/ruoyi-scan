@@ -17,6 +17,9 @@ class SpringBootAdminPlugin(PluginBase):
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     category = "vuln"
+    # v1.6：判定的是「**未登录**能否访问」，必须用匿名会话探测
+    # （实际隔离动作在 verify() 里，见 core/session.py::SessionManager.anonymous）。
+    anonymous_probe = True
     description = "Spring Boot Admin 监控界面未设置认证，可查看所有注册服务的状态、配置、日志等敏感信息"
     fix = "为 Spring Boot Admin Server 添加 spring-boot-admin-server-ui 的登录认证"
     fix_detail = (
@@ -72,7 +75,24 @@ class SpringBootAdminPlugin(PluginBase):
                     return len(value)
         return 0
 
-    def verify(self, target, session) -> ScanResult:
+    def verify(self, target, session):
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 ruoyi 侧的 nacos/minio/unauth_batch 同一口径（core.session.SessionManager.anonymous）。
+        复用共享会话时，若调用方注入了 cookie/token（--auth / --auth-login），
+        本插件会把「已鉴权的正常响应」误读成「未授权暴露」——
+        客户现场最常见的形态是「Actuator 开了但配了认证」，此时报告会写
+        「可匿名访问」，复核时被当场打回（2026-11-02 能力缺口调研 P1-13）。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_anonymous(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_anonymous(self, target, session) -> ScanResult:
         """验证 SBA 未授权访问：带 Accept: application/json 探测 3 个管理端点。
 
         判定顺序：

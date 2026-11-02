@@ -21,6 +21,9 @@ class SpringHeapdumpLeakPlugin(PluginBase):
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     category = "vuln"
+    # v1.6：判定的是「**未登录**能否访问」，必须用匿名会话探测
+    # （实际隔离动作在 verify() 里，见 core/session.py::SessionManager.anonymous）。
+    anonymous_probe = True
     description = "/actuator/heapdump 可匿名下载堆转储，内含口令/密钥/Token 等敏感信息"
     fix = "为 /actuator/heapdump 端点配置认证；或设置 management.endpoints.web.exposure.exclude=heapdump"
     fix_detail = (
@@ -56,6 +59,23 @@ class SpringHeapdumpLeakPlugin(PluginBase):
     )
 
     def verify(self, target, session):
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 ruoyi 侧的 nacos/minio/unauth_batch 同一口径（core.session.SessionManager.anonymous）。
+        复用共享会话时，若调用方注入了 cookie/token（--auth / --auth-login），
+        本插件会把「已鉴权的正常响应」误读成「未授权暴露」——
+        客户现场最常见的形态是「Actuator 开了但配了认证」，此时报告会写
+        「可匿名访问」，复核时被当场打回（2026-11-02 能力缺口调研 P1-13）。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_anonymous(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_anonymous(self, target, session):
         """验证 heapdump 端点泄露：流式读取响应头 64KB，检测 JVM 堆转储二进制特征。
         @param target: 目标站点根 URL
         @param session: 共享 HTTP 会话
