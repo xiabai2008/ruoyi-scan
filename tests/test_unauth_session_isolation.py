@@ -266,3 +266,70 @@ def test_enrich_writes_capability_metadata():
     first = dict(cap)
     inst.enrich(r)
     assert r.extra["plugin_capability"] == first
+
+
+# ============================================================
+# 5. JSON 信封鉴权墙（v1.6 WP-U1）
+#
+# 芋道/Jeecg 的未授权响应是 HTTP 200 + JSON 业务码（不设 status），
+# 旧正则要求 code 后紧跟 [:=]，认不出 "code":401（中间有引号）→
+# 插件判的 SAFE 不会被升级成 UNKNOWN → 「把没测到写成确认不存在」。
+# 这份语料就是「加新框架时的注册点」：把新框架的未授权响应加进来即可。
+# ============================================================
+
+# (响应文本, 是否应被识别为「请求被拒」, 来源框架)
+_AUTH_DENY_CORPUS = [
+    ('{"code":401,"msg":"账号未登录"}', True, "芋道 yudao"),
+    ('{"code":403,"data":null}', True, "芋道 yudao"),
+    ('{"code": 401}', True, "芋道（带空格）"),
+    ('{"code":"401"}', True, "字符串状态码"),
+    ('{"success":false,"code":500,"message":"Token校验失败"}', True, "JeecgBoot"),
+    ("状态码=401", True, "若依（插件原生格式）"),
+    ("HTTP 403", True, "通用"),
+    # 这三类**绝不能**被当成拒绝，否则正常结果会被误降级
+    ('{"code":0,"data":[]}', False, "芋道成功（业务码是 0 不是 200）"),
+    ('{"code":200,"rows":[]}', False, "若依成功"),
+    ('{"totalCount":1,"pageItems":[]}', False, "普通业务数据"),
+]
+
+
+def test_deny_regex_recognizes_json_envelope():
+    """JSON 信封形态的鉴权拒绝必须被认出（旧正则会漏掉全部引号形态）"""
+    from lib.reachability import _DENY_RE
+
+    for text, expect, source in _AUTH_DENY_CORPUS:
+        got = bool(_DENY_RE.search(text))
+        assert got == expect, f"{source}: {text!r} 期望 {expect} 实际 {got}"
+
+
+def test_deny_regex_does_not_match_partial_codes():
+    """4010 不能被当成 401"""
+    from lib.reachability import _DENY_RE
+
+    assert bool(_DENY_RE.search('{"code":4010}')) is False
+
+
+def test_upgrade_denied_handles_yudao_envelope():
+    """端到端：芋道形态的 SAFE 必须被升级成 UNKNOWN"""
+    from common.models import STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+    from lib.reachability import upgrade_denied_safe_to_unknown
+
+    r = ScanResult(
+        kind="info",
+        name="某接口",
+        status=STATUS_SAFE,
+        evidence='响应 {"code":401,"msg":"账号未登录"}，未命中漏洞特征',
+    )
+    assert upgrade_denied_safe_to_unknown([r]) == 1
+    assert r.status == STATUS_UNKNOWN
+
+
+def test_upgrade_denied_keeps_business_success_safe():
+    """业务成功响应不能被误升级（芋道 code:0 / 若依 code:200）"""
+    from common.models import STATUS_SAFE, ScanResult
+    from lib.reachability import upgrade_denied_safe_to_unknown
+
+    for body in ('{"code":0,"data":[]}', '{"code":200,"rows":[]}'):
+        r = ScanResult(kind="info", name="某接口", status=STATUS_SAFE, evidence=f"响应 {body}，未命中漏洞特征")
+        upgrade_denied_safe_to_unknown([r])
+        assert r.status == STATUS_SAFE, f"{body} 不应被升级为 UNKNOWN"

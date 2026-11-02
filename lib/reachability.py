@@ -240,7 +240,33 @@ def downgrade_safe_results(results: List[Any], block: Dict[str, Any]) -> int:
 # 不再匹配裸词 Forbidden/Unauthorized/无权限/没有权限：它们会误伤
 # 「响应未含 Forbidden 关键字」「未检测到 Unauthorized」，以及
 # 「没有权限访问用户数据」——后者恰恰是防护生效的正证据（对抗审计实测）。
-_DENY_RE = re.compile(r"(?:状态码|status|code|HTTP)\s*[:=]?\s*(401|403|429)\b|认证失败", re.IGNORECASE)
+# 「请求被拒绝」的识别。除了显式的 401/403/429，还要认 **JSON 信封形态**：
+#   {"code":401,"msg":"账号未登录"} / {"success":false,"code":500,"message":"Token校验失败"}
+#
+# 为什么必须认（v1.6 WP-U1，2026-11-02 实测）：
+#   - 芋道（yudao）的未授权响应是 `HTTP 200 + {"code":401}`——它的
+#     AuthenticationEntryPoint 用 hutool 直接 writeJSON，**不设 HTTP status**。
+#   - Jeecg 是 `HTTP 200 + {"success":false,"code":500,"message":"Token校验失败"}`。
+#   - 旧正则要求 `code` 后紧跟 `[:=]`，`"code":401` 中间隔了个引号 → 认不出
+#     → 插件判的 SAFE 不会被升级成 UNKNOWN → 「把没测到写成确认不存在」（B 类缺陷）。
+#
+# 实测旧正则表现（2026-11-02）：
+#   {"code":401,...}  → False ❌     {"code": 401} → False ❌
+#   状态码=401        → True  ✅     HTTP 401      → True  ✅
+#
+# ⚠ 只匹配 401/403/429，**绝不匹配 200**：芋道的业务成功码是 `code:0`（不是 200），
+#   若依是 `code:200`，两者都是正常响应，命中就会把正常结果误降级。
+# 两个必须处理的 JSON 细节（2026-11-02 实测踩过）：
+#   ① JSON 的键名**自带引号**：`"code":401` —— 不只是 `code:401`。
+#      正则必须在关键字**前后**都允许引号，否则 `"code":` 里多出的那个 `"` 会让匹配失败。
+#   ② 状态码后面不能用 `\b`：`401"`、`401,`、`401}` 的边界行为与前面的可选引号组合会错位。
+#      改用「后面不能再跟数字」的负向断言 `(?!\d)`，既精确又不受引号影响
+#      （`4010` 不会被误认成 `401`）。
+_DENY_RE = re.compile(
+    r"[\"']?(?:状态码|status|code|HTTP)[\"']?\s*[:=]?\s*[\"']?\s*(401|403|429)(?!\d)"
+    r"|认证失败|Token校验失败|token.*(?:失效|过期|无效)",
+    re.IGNORECASE,
+)
 # 匹配点前出现这些词 = 否定式证据（"没出现拒绝"），不能据此降级
 _NEGATIONS = ("未含", "未出现", "未检测到", "不含", "不存在", "没有出现")
 # 请求根本没拿到有效响应：SAFE 结论不成立（网络异常 ≠ 确认不存在）
