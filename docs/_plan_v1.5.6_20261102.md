@@ -58,27 +58,42 @@
 - **约束**：`[boot loader]`（boot.ini）**不算** win.ini 特征——XP 时代的 boot.ini 与 win.ini 是不同文件，
   混用会让判定在 Win10/11 上漏报。
 
-### WP3 · RuoYi-Plus 定时任务未授权（靶场侧，不建新站）
+### WP3 · RuoYi-Plus 定时任务未授权（**已改为判定层修复**，2026-11-02 实测推翻原方案）
 
-**已核实**：`plugins/ruoyi/plus_job_unauth.py` 探 `/prod-api/monitor/job/list`，要求 JSON + rows+total。
-R9 是「生产配置规范」负样本（判 SAFE 正确，**不要为此改插件**）。
+**原计划**：给 R9 加 vuln 模式（`security.excludes` 追加 `/monitor/**`），让插件 CONFIRMED。
 
-- **做法**：沿用 R10 的 `--lab-mode safe|vuln` 机制（`scripts/lab.py:839` 已有 `LAB_MODE` 透传），
-  给 R9 加 vuln 模式：`application.yml` 的 `security.excludes` 追加 `/monitor/**`
-  （`src/R9/ruoyi-admin/src/main/resources/application.yml:110` 的 excludes 列表）。
-- **验收**：R9-vuln 上插件 CONFIRMED；R9-safe（默认）仍 0 CONFIRMED（负样本能力不丢）。
-- **理由**：R10 已证明这套双模式成本极低（一个 yml 开关），且**同站点双模式比新建站点更贴近真实误配**。
+**实测发现（推翻原计划）**：RuoYi-Vue-Plus **5.6.2 的定时任务已迁到 SnailJob**
+（独立调度中心，`snailjob.version=1.10.0`，依赖 `snail-job-client-*`），
+源码里**根本没有 SysJobController**，`/monitor/job/**` 返回
+`HTTP 200 + {"code":404,"msg":"请求地址不存在","data":null}`。
+→ **不是误配能造出来的**：这个端点在 5.6.2 里不存在，任何配置都变不出来。
 
-### WP4 · 备份文件靶场（低风险补漏）
+**真正的问题在判定层**：插件把「端点不存在」和「鉴权生效」都判成 SAFE，
+等于用「地址错了」冒充「系统是安全的」。三态纪律里 SAFE = 测过了、确认不存在；
+端点不存在时没有可测的东西，应当 UNKNOWN。
 
-**已核实**：`backup_scan` 的字典是**可预测名**（`index.bak` / `config.old` / `.env.swp` / `.DS_Store` 等，
-`base_names = ["index", "config", ".env", "web", "app"]` × 12 后缀）。
-2026-11-01 回退过的「常见目录 × 后缀」是**另一回事**（那个是猜不可预测的带日期文件名，本质无解）。
+- **已做**：`plus_job_unauth` 按若依 AjaxResult 业务码判「端点不存在」→ UNKNOWN；
+  `affected_versions` 补 `>=5.0,<5.6`（按 5.6.2 实测 + 5.6 引入 SnailJob 推定，
+  5.0–5.5 未逐版本验证，注释里已标明）。
+- **靶场侧**：R9 的 `--lab-mode vuln`（SPRING_APPLICATION_JSON 追加 excludes）仍保留，
+  供 **Plus 5.5 及更早** 形态复用；对 5.6.2 无效，因为端点不存在。
+- **重要**：版本过滤只在指纹识别出版本时生效。R9 的 api-docs 需认证（401）、
+  根路径是纯 SPA，版本识别不出 → 过滤不生效。**这就是必须在插件判定层修的根本原因。**
+- **验收**：R9（5.6.2）上插件判 UNKNOWN 且证据写明 SnailJob；5.5 及更早的真实误配站
+  仍需另行建站才能验证 CONFIRMED（列为后续候选）。
 
-- **做法**：在 R7 的 `runtime/R7/ui/` 放 2–3 个可预测名的备份文件（如 `index.html.bak`、`config.js.old`），
-  用真实运维遗留形态（内容是原文件的陈旧拷贝，不是 marker）。
-- **验收**：`backup_scan` 在 R7 上 CONFIRMED 且证据列出真实文件名；
-  R1–R5（无备份资产）仍 SAFE，**不得因本次改动新增误报**。
+### WP4 · 备份文件靶场（✅ 已完成，`24382f0`）
+
+**已核实**：`backup_scan` 的字典是**可预测名**（`base_names = ["index", "config", ".env", "web", "app"]`
+× 12 后缀）。2026-11-01 回退过的「常见目录 × 后缀」是**另一回事**（猜不可预测的带日期文件名，本质无解）。
+
+- **做法**：`lab_assets/R7-ui-backup/` 放 `index.bak` / `config.old`，由 `lab_assets.py` 铺到 `ui/`。
+  内容是原文件的陈旧拷贝（不是 marker）。
+- **踩到的坑**：第一版造了 `index.html.bak` / `config.js.old`——**扫描器根本不探这两个名字**
+  （字典是 `{base}{suffix}` 拼接，base 只有 index/config/.env/web/app）。
+  资产名必须**命中插件字典**，否则靶场再真也检不出。
+- **验收**：`backup_scan` 在 R7 上 CONFIRMED，证据列出 `/index.bak, /config.old`；
+  且站点有兜底路由时判定正确（兜底页 12623 字节 vs 备份文件 217 字节）。
 - **约束**：**禁止**重做 2026-11-01 已回退的「目录 × 后缀字典扩充」——那是已知无效方向。
 
 ### WP5 · 能力虚报清理与口径对齐（质量债，必做）
