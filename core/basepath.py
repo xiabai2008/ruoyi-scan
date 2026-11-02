@@ -16,7 +16,7 @@
 # 时返回空串，行为不变。
 import json
 import re
-from typing import Any, List
+from typing import Any, List, Tuple
 from urllib.parse import urlsplit
 
 from common.logger import get_logger
@@ -24,7 +24,12 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 # 候选前缀：RuoYi-Vue 官方脚手架为 /prod-api/，其余为常见改法
-CANDIDATES = ("/prod-api", "/dev-api", "/api", "/jeecg-boot", "/jeecg")
+#
+# v1.6 补 /admin-api 与 /app-api：芋道 yudao 的固定前缀是这两个
+# （`/admin-api` 管理端、`/app-api` 移动端）。缺了它们，芋道站点的
+# **所有 api-scope 插件都会探错基准 → 整类系统性漏报**，
+# 与 v1.5.5 修 R7 之前的症状完全一样。
+CANDIDATES = ("/prod-api", "/dev-api", "/api", "/jeecg-boot", "/jeecg", "/admin-api", "/app-api")
 
 # 验证码接口（用来确认「这个前缀确实通到若依后端」）
 #   RuoYi-Vue（3.8.x/3.9.x）: /captchaImage  -> {"code":200,"captchaEnabled":...}
@@ -154,28 +159,55 @@ def _looks_like_image_captcha(resp: Any) -> bool:
         return False
 
 
-def _probe_api_base(base: str, session: Any) -> bool:
-    """在给定前缀下尝试对应验证码接口，任一命中即说明该前缀通到后端。
+# ── 前缀探针表（v1.6 WP-F0）────────────────────────────────────────────
+# 此前 _probe_api_base() 里是 `if base.endswith("/jeecg-boot"): ... else: ...`
+# 的硬分支——每加一个框架就要再写一个 if，且「某个前缀属于哪个框架」的判断
+# 散落在字符串 endswith 里。改成数据表：加框架 = 加一行，不改控制流。
+#
+# 每项：(所属框架, 该框架特有的前缀, 探针路径, 判定函数)
+#   - 前缀为 None 表示「通用探针」，对所有前缀（含根路径）都试
+#   - 判定函数接收 response，返回是否「确实是该框架的后端」
+_PROBES: List[Tuple[Any, Any, str, Any]] = [
+    # 若依全家（Vue / Cloud / Plus / 4.x 单机版）的验证码接口
+    (None, None, "/captchaImage", None),  # 判定见 _looks_like_ruoyi_api / image
+    (None, None, "/code", None),
+    (None, None, "/auth/code", None),
+    (None, None, "/captcha/captchaImage?type=char", None),
+    # JeecgBoot：/sys/randomImage/{key}，result 是 data URI 图片
+    ("jeecgboot", ("/jeecg-boot", "/jeecg"), JEECG_CAPTCHA_PATH, "_jeecg"),
+]
 
-    Jeecg 前缀只用 Jeecg 专用探针：/captchaImage 是 RuoYi 的路径，
-    在 Jeecg 里并不存在，不能拿它当判据。
+
+def _probe_api_base(base: str, session: Any) -> bool:
+    """在给定前缀下依次试探针表，任一命中即说明该前缀通到后端。
+
+    探针互不干扰：Jeecg 的前缀只试 Jeecg 探针（/captchaImage 在 Jeecg 里不存在，
+    拿它当判据会得到假阴性）；若依的前缀试通用探针。
     """
-    is_jeecg = base.endswith("/jeecg-boot") or base.endswith("/jeecg")
-    if not is_jeecg:
-        for path in CAPTCHA_PATHS:
-            try:
-                resp = session.get(base + path)
-                # 两种形态都认：分离版/Cloud/Plus 是 JSON，4.x 单机版是图片
-                if _looks_like_ruoyi_api(resp) or _looks_like_image_captcha(resp):
-                    return True
-            except Exception:
-                logger.debug("验证码接口探测失败: %s%s", base, path, exc_info=True)
-        return False
-    try:
-        return _looks_like_jeecg_api(session.get(base + JEECG_CAPTCHA_PATH))
-    except Exception:
-        logger.debug("Jeecg 验证码接口探测失败: %s%s", base, JEECG_CAPTCHA_PATH, exc_info=True)
-        return False
+    # 该前缀是否属于某个框架（决定「通用探针要不要试」）
+    _owned = any(fw is not None and any(base.endswith(p) for p in (pfx or ())) for fw, pfx, _p, _j in _PROBES)
+    for _fw, prefixes, path, judge in _PROBES:
+        # 框架专属探针只用于该框架的前缀
+        if prefixes is not None and not any(base.endswith(p) for p in prefixes):
+            continue
+        # 通用探针不用于「已被某框架认领」的前缀：
+        # /jeecg-boot/captchaImage 是错误假设（Jeecg 没有该端点），
+        # 拿通用探针试它会因任意 200 JSON 而误判前缀存在。
+        if prefixes is None and _owned:
+            continue
+        try:
+            resp = session.get(base + path)
+        except Exception:
+            logger.debug("验证码接口探测失败: %s%s", base, path, exc_info=True)
+            continue
+        if judge == "_jeecg":
+            if _looks_like_jeecg_api(resp):
+                return True
+        else:
+            # 两种形态都认：分离版/Cloud/Plus 是 JSON，4.x 单机版是图片
+            if _looks_like_ruoyi_api(resp) or _looks_like_image_captcha(resp):
+                return True
+    return False
 
 
 # JeecgBoot 的 context-path（插件内部路径已自带）
