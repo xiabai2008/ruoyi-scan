@@ -12,6 +12,10 @@ from lib.colors import no, ok
 from lib.reporter import emit
 from plugins.base import PluginBase
 
+# 若依 AjaxResult 里表示「路由/端点不存在」的业务码。
+# 若依对未知路由返回 HTTP 200 + code=404（不是 HTTP 404），所以必须看业务码。
+_ENDPOINT_MISSING_CODES = frozenset({"404"})
+
 
 class PlusJobUnauthPlugin(PluginBase):
     name = "RuoYi-Plus 定时任务未授权"
@@ -35,6 +39,17 @@ class PlusJobUnauthPlugin(PluginBase):
     vuln_type = "unauth"
     supports_waf_bypass = False
     variant = "ruoyi-plus"
+    # 版本范围（2026-11-02 v1.5.6 WP3 实测补正）：
+    # Plus 5.6.2 的定时任务已迁到 **SnailJob**（独立调度中心，依赖 snail-job-client-*），
+    # 源码里**根本没有 SysJobController**，/monitor/job/** 返回 code=404「请求地址不存在」。
+    # 此前 affected_versions 为空 = 全版本适用，等于对 5.6.2 这种结构性无该端点的站点
+    # 也照样探测并判 SAFE——把「端点不存在」和「鉴权生效」混为一谈。
+    #
+    # 上限取 <5.6：5.6 系列起改用 SnailJob。更早的 5.x（含 5.5）仍是 Quartz +
+    # MonitorJobController 形态，插件适用。
+    # ⚠ 该上限是按「5.6.2 实测无该端点 + 5.6 引入 SnailJob」推定的，未逐一验证
+    # 5.0–5.5 每个小版本；若现场遇到 5.5.x 也判 SAFE，应先确认端点是否真的存在。
+    affected_versions = ">=5.0,<5.6"
     # v1.5.6 WP1：本插件路径里**自带** /prod-api（Plus 的固定对外前缀）。
     # 站点真实 context-path 也是 /prod-api 时，引擎不能再把它追加到基准上，
     # 否则拼成 /prod-api/prod-api/... 双前缀 → 302 登录墙 → 判 SAFE（假阴性）。
@@ -115,6 +130,30 @@ class PlusJobUnauthPlugin(PluginBase):
                 evidence=f"未携带 token 返回任务列表 JSON（rows/total 键存在，HTTP {resp.status_code}）",
                 fix=self.fix,
                 extra={"vuln_type": "unauth", "plugin_name": "plus_job_unauth"},
+            )
+        # 端点结构性不存在 → UNKNOWN，不能判 SAFE（2026-11-02 WP3 实测）
+        #
+        # Plus 5.6.2 的定时任务已迁到 SnailJob（独立调度中心），源码里根本没有
+        # SysJobController，/monitor/job/** 返回 code=404「请求地址不存在」。
+        # 这与「接口存在但鉴权生效」是两件完全不同的事：
+        #   - 鉴权生效 → SAFE（确认安全）
+        #   - 端点不存在 → UNKNOWN（没有可测的东西，不能宣称"确认不存在漏洞"）
+        # 旧实现把两者都归到 SAFE，等于用「地址错了」冒充「系统是安全的」。
+        #
+        # 判据用若依 AjaxResult 的业务错误码，不猜 HTTP 状态（若依未知路由也返回 200）：
+        #   {"code":404,"msg":"请求地址不存在","data":null}
+        if isinstance(body, dict) and str(body.get("code")) in _ENDPOINT_MISSING_CODES:
+            emit(no("RuoYi-Plus 定时任务端点不存在（版本已改用 SnailJob）"))
+            return ScanResult(
+                kind="info",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=(
+                    f"业务码 code={body.get('code')}（{body.get('msg') or '请求地址不存在'}）："
+                    "该站点无 /monitor/job/** 端点（Plus 5.6+ 定时任务改用 SnailJob），"
+                    "本项无从判定，不构成「不存在漏洞」"
+                ),
             )
         emit(no("不存在 RuoYi-Plus 定时任务未授权"))
         return ScanResult(

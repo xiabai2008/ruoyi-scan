@@ -899,6 +899,35 @@ class TestPlusJobUnauth(unittest.TestCase):
         result = plugin.verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_CONFIRMED, f"业务列表 JSON 应判 CONFIRMED，实际 {result.status}")
 
+    @requests_mock.Mocker()
+    def test_endpoint_missing_is_unknown_not_safe(self, m):
+        """端点结构性不存在 → UNKNOWN，不得冒充 SAFE（2026-11-02 WP3 实测）
+
+        Plus 5.6.2 的定时任务已迁到 SnailJob（独立调度中心），源码里根本没有
+        SysJobController，/monitor/job/** 返回：
+            HTTP 200 + {"code":404,"msg":"请求地址不存在","data":null}
+        （若依对未知路由返 HTTP 200，所以必须看业务码，不能看 HTTP 状态。）
+
+        「端点不存在」和「鉴权生效」是两件完全不同的事：
+          - 鉴权生效 → SAFE（确认安全）
+          - 端点不存在 → UNKNOWN（没有可测的东西）
+        旧实现两者都判 SAFE，等于用「地址错了」冒充「系统是安全的」。
+        """
+        m.get(
+            requests_mock.ANY,
+            status_code=200,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            text='{"code":404,"msg":"请求地址不存在","data":null}',
+        )
+        plugin = PlusJobUnauthPlugin()
+        result = plugin.verify(MOCK_TARGET, SessionManager())
+        self.assertEqual(result.status, STATUS_UNKNOWN, f"端点不存在应判 UNKNOWN，实际 {result.status}")
+        self.assertIn("SnailJob", result.evidence)
+
+    def test_affected_versions_excludes_snailjob_era(self):
+        """版本上限必须排除 5.6+（改用 SnailJob 后无该端点）"""
+        self.assertEqual(PlusJobUnauthPlugin.affected_versions, ">=5.0,<5.6")
+
 
 class TestCve202546174ResetPwdScope(unittest.TestCase):
     """CVE-2025-46174：重置密码页数据权限绕过（差分判定）
