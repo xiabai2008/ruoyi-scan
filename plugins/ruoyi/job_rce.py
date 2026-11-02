@@ -49,7 +49,13 @@ class JobRcePlugin(PluginBase):
     # 版本范围：REAL-RUOYI.md 在 4.7.8 实例上实测 CONFIRMED（/monitor/job/edit
     # 返回 AjaxResult 业务层响应，未在鉴权层被拦）；4.8.x 未取得「已修复」证据。
     # 原范围 <4.7 会把 4.7.8 跳过，故放宽为不设上界，由响应证据判定。
-    affected_versions = ">=4.0"
+    # v1.6：下界从 4.0 放宽到 3.0 —— RuoYi-Vue（3.x）与单机版（4.x）是**两条并行的版本线**，
+    # 不是前后代关系。3.8.9 / 3.9.2 的同一批接口路径实测全部存在：
+    #   /prod-api/common/download/resource、/monitor/job/edit、/common/upload、/system/user/list
+    # 原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6 3.9.2 与 R7 3.8.9 各有 9 个插件
+    # 被 version_matrix 标为 applicable=False，含文件读取/上传/定时任务/SQL 注入）。
+    # 这与本文件上方注释记录的「原范围过窄造成漏报」是同一类问题，只是当时只考虑了 4.x 内部。
+    affected_versions = ">=3.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"

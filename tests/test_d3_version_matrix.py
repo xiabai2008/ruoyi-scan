@@ -27,15 +27,23 @@ def test_all_ruoyi_plugins_have_versions():
 
 
 def test_versioned_pocs_defined():
-    """已知有版本限制的 7 个 POC 范围正确"""
+    """已知有版本限制的 7 个 POC 范围正确
+
+    v1.6 调整：下界从 4.0 放宽到 3.0。RuoYi-Vue（3.x）与单机版（4.x）是
+    **两条并行的版本线**，不是前后代关系——3.8.9/3.9.2 的
+    /common/download/resource、/monitor/job/edit、/common/upload 实测全部存在。
+    原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6/R7 各 9 个插件
+    被 version_matrix 标为 applicable=False）。
+    上界不变（<4.7 已修复的仍然跳过）。
+    """
     expected = {
-        "任意文件读取": ">=4.0,<4.7",
-        "定时任务调用目标未校验": ">=4.0,<4.7",
-        "POST型报错注入（role）": ">=4.0",
-        "POST型报错注入（dept）": ">=4.0",
-        "任意文件上传": ">=4.0",
-        "任意文件读取（路径穿越）": ">=4.0,<4.7",
-        "定时任务 RCE（未授权访问）": ">=4.0",
+        "任意文件读取": ">=3.0,<4.7",
+        "定时任务调用目标未校验": ">=3.0,<4.7",
+        "POST型报错注入（role）": ">=3.0",
+        "POST型报错注入（dept）": ">=3.0",
+        "任意文件上传": ">=3.0",
+        "任意文件读取（路径穿越）": ">=3.0,<4.7",
+        "定时任务 RCE（未授权访问）": ">=3.0",
     }
     plugins = {getattr(cls, "name", ""): cls for cls in _ruoyi_plugins()}
     for name, spec in expected.items():
@@ -84,15 +92,24 @@ def test_new_version_skip_old_pocs():
 
 
 def test_latest_version_matrix():
-    """v3.9.2（RuoYi-Vue 最新版，版本号 3.9.2）→ 全部旧版 POC 被跳过"""
+    """v3.9.2（RuoYi-Vue 最新版）→ 路径类 POC 必须执行，CVE 类按版本跳过
+
+    v1.6 修正：原断言是「3.x 不在 >=4.0 区间 → 全部跳过」，把 RuoYi-Vue
+    当成了 4.x 的后代。实际两条线并行，3.9.2 的接口路径与 4.x 一致
+    （实测 /common/download/resource、/monitor/job/edit 均 200），
+    跳过等于对最常见的现场分支完全不检测。
+
+    CVE 类仍按版本跳过：CVE 编号绑定特定版本区间，放宽会失真。
+    """
     fp = FingerprintResult(cms="ruoyi", version="3.9.2", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp)
     names = [getattr(cls, "name", "") for cls in plugins]
-    # 版本号 3.x 不在 >=4.0 区间 → 带范围 POC 全部跳过，仅剩全版本 POC
-    assert "任意文件读取" not in names, f"v3.9.2 不应包含 4.x 版 POC: {names}"
-    # 全版本 POC 保留（默认口令/目录扫描/未授权等）
-    assert any("默认口令" in n for n in names), names
-    print("PASS test_latest_version_matrix: v3.9.2 → %d 个插件（全版本 POC 保留）" % len(plugins))
+    # 路径类 POC 在 3.x 上必须执行（这些接口 3.x 与 4.x 同形）
+    assert "任意文件读取" in names, f"v3.9.2 应包含路径类 POC: {names}"
+    assert "后台默认口令（admin/admin123）" in names or any("默认口令" in n for n in names), names
+    # CVE 类绑定 4.x 区间，3.x 上仍应跳过
+    assert "重置密码页数据权限绕过" not in names, f"CVE-2025-46174 上限 4.8.0，3.x 不应执行: {names}"
+    print("PASS test_latest_version_matrix: v3.9.2 → %d 个插件（路径类执行、CVE 类跳过）" % len(plugins))
 
 
 def test_version_in_range_semantics():

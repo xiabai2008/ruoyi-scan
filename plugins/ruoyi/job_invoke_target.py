@@ -92,7 +92,10 @@ class JobInvokeTargetPlugin(PluginBase):
     description = "RuoYi <=4.6.x 的定时任务 edit 不限制 invokeTarget，可写入任意方法调用（任意文件读取/RCE 前提）"
     # D2: 影响版本（实测：4.6.2 接受任意调用目标；4.7.8/4.8.0/4.8.2/4.8.3 均拒绝）
     # 注意：运算符与版本号之间不能有空格（version_in_range 的正则会静默跳过带空格的条件）
-    affected_versions = ">=4.0,<4.7"
+    # v1.6：下界从 4.0 放宽到 3.0 —— RuoYi-Vue（3.x）与单机版（4.x）是**两条并行的版本线**，
+    # 不是前后代关系。3.9.2 的 /prod-api/monitor/job/edit 实测存在（200）。
+    # 原 `>=4.0` 把这条线整片跳过（盲测 v4：R6/R7 各 9 个插件被标 applicable=False）。
+    affected_versions = ">=3.0,<4.7"
     cvss_vector = "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A01:2021"
     fix = "升级至 RuoYi 4.7.0+（editSave 增加 ScheduleUtils.whiteList 白名单校验 + JOB_ERROR_STR 黑名单）"
