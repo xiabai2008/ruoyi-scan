@@ -7,7 +7,11 @@ from plugins.base import PluginBase
 
 
 class RedisUnauthPlugin(PluginBase):
-    """检测 Redis 未授权访问（F7 中间件）：直连 6379 发送 INFO，能读到版本信息即未授权"""
+    """检测 Redis 未授权访问（F7 中间件）：直连 Redis 端口发送 INFO，能读到版本信息即未授权
+
+    端口默认 6379（官方默认），可用 --redis-port / RUOYI_SCAN_REDIS_PORT 覆盖：
+    现场常用非默认端口，写死端口的插件在那类目标上只会得到一个「连接失败」。
+    """
 
     name = "Redis 未授权访问"
     # Redis 未授权访问无专属 CVE（对应 Redis 官方安全公告 + 配置缺陷）。
@@ -40,8 +44,25 @@ class RedisUnauthPlugin(PluginBase):
     vuln_type = "unauth"
     supports_waf_bypass = False
 
+    # 官方默认端口。放在类属性上便于测试与文档引用，也避免 verify() 内的魔法数字。
+    default_port = 6379
+
+    def _resolve_port(self):
+        """返回本次要探测的 Redis 端口：显式配置优先，否则用官方默认。
+
+        settings.REDIS_PORT 由 --redis-port / RUOYI_SCAN_REDIS_PORT 写入，
+        在 import 期已做过范围校验；这里再兜一次 None，保证插件单独调用
+        （单测、嵌入式 API）时行为不变。
+        """
+        from config import settings
+
+        port = getattr(settings, "REDIS_PORT", None)
+        if isinstance(port, int) and 1 <= port <= 65535:
+            return port
+        return self.default_port
+
     def verify(self, target, session):
-        """通过 TCP 直连 6379 发送 INFO 命令检测是否未授权（非破坏性）
+        """通过 TCP 直连 Redis 端口发送 INFO 命令检测是否未授权（非破坏性）
 
         @param target: 目标站点 URL（仅取其 host 部分）
         @param session: HTTP 会话（本检测实际走 socket，参数仅为保持插件接口一致）
@@ -49,20 +70,28 @@ class RedisUnauthPlugin(PluginBase):
         """
         from urllib.parse import urlparse
 
-        # 从目标 URL 提取 host（Redis 走独立端口，默认 6379）
+        # 从目标 URL 提取 host（Redis 走独立端口）
         parsed = urlparse(target)
         host = parsed.hostname or ""
         if not host:
             return ScanResult(
                 kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=target, evidence="无法解析目标主机"
             )
-        port = 6379
+        port = self._resolve_port()
         url = "%s:%d" % (host, port)
         try:
             sock = socket.create_connection((host, port), timeout=5)
         except OSError as e:
             # 仅连接建立失败归为「连接失败」；编程错误不再被宽泛的 except 吞掉
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence="连接失败: %s" % e)
+            # 端口可配后必须把「探的是哪个端口」写进证据——否则用户看到
+            # 「连接失败」无从判断是目标没开 Redis，还是 --redis-port 传错了。
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence="连接 %s 失败: %s（Redis 端口可用 --redis-port 或 RUOYI_SCAN_REDIS_PORT 指定）" % (url, e),
+            )
 
         data = b""
         try:

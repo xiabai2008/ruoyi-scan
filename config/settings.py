@@ -5,6 +5,7 @@
 """
 
 import os
+from typing import Any, Optional
 
 # 项目根目录（config/ 的上一级）
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,6 +73,42 @@ REPORT_DIR = os.environ.get("RUOYI_SCAN_REPORT_DIR") or os.path.join(BASE_DIR, "
 
 # Druid 爆破用户名清单（沿用原 web_login，6 个）
 DRUID_USERS = ["ruoyi", "druid", "admin", "admin123", "auth", "123456"]
+
+
+# 中间件（Redis 等）的探测端口。None = 用插件内的官方默认端口。
+#
+# 为什么需要它：Redis 未授权插件走 socket 直连，历史上把 6379 写死在插件里。
+# 真实客户现场几乎不会用默认端口（云厂商安全组也优先封 6379），靶场/攻防演练
+# 同样常把 Redis 挪到高端口；写死端口时这些目标恒判「连接失败 → UNKNOWN」，
+# 而插件本身完全有能力在任意端口验证。属「端口可配」而非「改判定」，
+# 不触碰三态纪律（连不上仍是 UNKNOWN）。
+#
+# 形式：环境变量 RUOYI_SCAN_REDIS_PORT，或 CLI --redis-port。
+# 非数字/越界值忽略并回退 None（与 settings 其余项一致的容错策略：解析发生在
+# import 期，抛异常会让整个工具无法启动）。
+
+
+def _parse_port_override(raw: Any) -> Optional[int]:
+    """把 CLI/环境变量里的端口文本收敛成合法的 int 或 None。
+
+    非法输入不抛异常：端口是可选增强项，用户手滑写错不该让整次扫描崩掉。
+    范围校验到 1..65535，避免 socket 抛 OverflowError 而不是预期的连接失败。
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        port = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    if not 1 <= port <= 65535:
+        return None
+    return port
+
+
+REDIS_PORT: Optional[int] = _parse_port_override(os.environ.get("RUOYI_SCAN_REDIS_PORT"))
+
+
+REDIS_PORT = _parse_port_override(os.environ.get("RUOYI_SCAN_REDIS_PORT"))
 
 # 定时任务任意文件读取：固定 JSESSIONID（沿用原脚本）
 # D1 后：定时任务类插件已改用 RuoYiAuthChain 登录链，此值仅保留兼容
