@@ -312,6 +312,18 @@ class PluginBase(ABC):
         # 下游报告统一按 status 筛选，此处仅修正语义一致性
         if result.status != STATUS_CONFIRMED and result.kind == "vuln":
             result.kind = "info"
+        # v1.6：把插件的能力声明带进结果，供下游降级链判断「该怎么解锁」。
+        # 降级函数（lib/reachability）只拿到 ScanResult 列表，拿不到插件类；
+        # 没有这份元信息它就只会写一句「需登录后才能判定」，读者不知道该怎么办。
+        # 只写一次（幂等）：enrich 在 WAF 绕过路径上会被调用两次。
+        result.extra = dict(result.extra or {})
+        if "plugin_capability" not in result.extra:
+            result.extra["plugin_capability"] = {
+                "path_scope": self.path_scope,
+                "vuln_type": self.vuln_type or "",
+                "requires_auth": bool(self.requires_auth),
+                "anonymous_probe": bool(self.anonymous_probe),
+            }
         return result
 
     def meta(self) -> Dict[str, Any]:

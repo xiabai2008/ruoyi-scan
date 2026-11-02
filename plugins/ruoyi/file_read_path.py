@@ -9,7 +9,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import is_windows_ini
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -171,7 +171,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=last_url,
-                evidence=f"请求被登录墙拦截（{auth_wall}），无法判定路径穿越是否存在",
+                evidence=login_wall_evidence(auth_wall, "路径穿越是否存在"),
             )
 
         # 全部请求网络异常 → UNKNOWN（测不到 ≠ 安全）

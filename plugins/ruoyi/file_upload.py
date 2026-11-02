@@ -3,7 +3,7 @@ from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -130,7 +130,7 @@ class FileUploadPlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"请求被登录墙拦截（{_wall}），无法判定上传接口是否可写",
+                evidence=login_wall_evidence(_wall, "上传接口是否可写"),
             )
 
         # 响应体文本（错误页可能非 JSON，需容错）

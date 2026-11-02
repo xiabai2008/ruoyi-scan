@@ -196,3 +196,73 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn()
             print("PASS", name)
+
+
+# ============================================================
+# 4. 降级证据的「解锁提示」（A2 配套）
+# ============================================================
+
+
+def _mk_safe(name, cap):
+    from common.models import ScanResult
+
+    r = ScanResult(kind="info", name=name, status="SAFE", evidence="状态码=200, 未检测到特征")
+    r.extra = {"plugin_capability": cap}
+    return r
+
+
+def test_unauth_plugin_hint_warns_against_login_rescan():
+    """未授权类必须明确「登录后重扫结论无效」——给错建议比不给更糟"""
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe("未授权类", {"path_scope": "api", "anonymous_probe": True, "requires_auth": False})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert r.status == "UNKNOWN"
+    assert "登录后重扫得到的结论无效" in r.evidence
+
+
+def test_root_scope_plugin_hint_mentions_static_files():
+    """.git/.env 类提示「登录后放行才能探测 web 根」"""
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe(".git 泄露", {"path_scope": "root", "anonymous_probe": False, "requires_auth": False})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert "--auth-login" in r.evidence
+    assert "静态文件" in r.evidence
+
+
+def test_requires_auth_plugin_hint_mentions_high_priv_account():
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe("需会话类", {"path_scope": "api", "anonymous_probe": False, "requires_auth": True})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert "--auth-login" in r.evidence
+    assert "高权账号" in r.evidence
+
+
+def test_missing_capability_falls_back_to_generic_hint():
+    """没有能力元信息时退化到通用提示，不能崩"""
+    from common.models import ScanResult
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = ScanResult(kind="info", name="无元信息", status="SAFE", evidence="状态码=200")
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert r.status == "UNKNOWN"
+    assert "--auth-login" in r.evidence
+
+
+def test_enrich_writes_capability_metadata():
+    """PluginBase.enrich() 必须把能力声明带进结果，且幂等"""
+    from common.models import ScanResult
+    from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+
+    inst = RuoyiNacosUnauthPlugin()
+    r = ScanResult(kind="info", name="x", status="SAFE", evidence="e")
+    inst.enrich(r)
+    cap = r.extra["plugin_capability"]
+    assert cap["anonymous_probe"] is True
+    assert cap["path_scope"] == "api"
+    # 幂等：再调一次不覆盖
+    first = dict(cap)
+    inst.enrich(r)
+    assert r.extra["plugin_capability"] == first

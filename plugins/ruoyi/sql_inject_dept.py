@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -121,7 +121,7 @@ class SqlInjectDeptPlugin(PluginBase):
                     name=self.name,
                     status=STATUS_UNKNOWN,
                     url=url,
-                    evidence=f"{_label}请求被登录墙拦截（{_wall}），无法判定注入是否存在",
+                    evidence=f"{_label}" + login_wall_evidence(_wall, "注入是否存在"),
                 )
             # 若依的鉴权失败是 HTTP 200 + {"code":401}，因此状态码与业务码都要看
             _why = f"HTTP {_resp.status_code}" if _resp.status_code in (401, 403, 429) else ""

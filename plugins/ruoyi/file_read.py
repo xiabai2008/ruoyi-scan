@@ -5,7 +5,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import is_windows_ini, match_file_read_leak
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -135,7 +135,7 @@ class FileReadPlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=last_url,
-                evidence=f"请求被登录墙拦截（{wall_reason}），无法判定文件读取是否存在",
+                evidence=login_wall_evidence(wall_reason, "文件读取是否存在"),
             )
         # 全部载荷都没拿到有效响应（网络异常）→ 同样不能判 SAFE
         if all("网络异常" in t for t in tried):
