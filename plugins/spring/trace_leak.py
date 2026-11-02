@@ -109,11 +109,21 @@ class SpringTraceLeakPlugin(PluginBase):
                 evidence="响应含 /trace 请求历史特征（traces 数组 / timeTaken），证实 trace 端点暴露",
                 fix=self.fix,
             )
+        # 401/403 = 端点存在但拒绝访问 ≠ 不存在（2026-11-02 C5 靶场实测）
+        if resp.status_code in (401, 403):
+            emit(no("Actuator /trace 存在但需认证"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"/trace 返回 HTTP {resp.status_code}：端点存在但要求认证，无法确认是否未授权暴露",
+            )
         emit(no("不存在 Spring Boot Actuator /trace 请求历史泄露漏洞"))
         return ScanResult(
             kind="vuln",
             name=self.name,
             status=STATUS_SAFE,
             url=url,
-            evidence="响应未含 /trace 泄露特征（端点不可达或已修复）",
+            evidence=f"/trace 未含泄露特征（HTTP {resp.status_code}），端点不可达或已修复",
         )

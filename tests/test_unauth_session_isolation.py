@@ -626,3 +626,63 @@ def test_real_ruoyi_job_message_still_confirms():
 def test_jobid_echo_confirms():
     """响应里有 jobId 回显 → 确实进入了业务层"""
     assert _job_verify('{"code":200,"msg":"操作成功","jobId":1}').status == "CONFIRMED"
+
+
+# ============================================================
+# 9. 「暴露但需认证」语义（v1.6 C5 靶场验证）
+#
+# C5 = C2-1b（真实 Actuator，/actuator/env 34KB）前面加 HTTP Basic 认证。
+# 现有靶场没有一座能复现这个边界：R1/R7 端点不存在，C1/C2 本来就未授权。
+#
+# 关键区分：
+#   404 → 端点不存在 → SAFE（确认没有）
+#   401/403 → 端点存在但拒绝访问 → UNKNOWN（有，但不知道是否未授权可达）
+# 把 401 判成 SAFE，等于告诉读者「这套系统没开 Actuator」——而它开着。
+# ============================================================
+
+
+class _Status:
+    """固定返回某个状态码的会话替身"""
+
+    def __init__(self, code):
+        self.code = code
+        self.session = SimpleNamespace(cookies={}, headers={})
+
+    def get(self, url, **kw):
+        class _R:
+            status_code = self.code
+            text = ""
+            content = b""
+            headers = {"Content-Type": "text/plain"}
+
+        return _R()
+
+    def anonymous(self):
+        return self
+
+
+def test_actuator_401_is_unknown_not_safe():
+    """Actuator 返回 401 → UNKNOWN（端点存在但需认证）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+
+    res = SpringActuatorUnauthPlugin().verify("http://t/", _Status(401))
+    assert res.status == "UNKNOWN", f"401 应判 UNKNOWN，实际 {res.status}: {res.evidence}"
+    assert "需认证" in res.evidence or "要求认证" in res.evidence
+
+
+def test_actuator_404_is_safe():
+    """Actuator 返回 404 → SAFE（端点确实不存在）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+
+    res = SpringActuatorUnauthPlugin().verify("http://t/", _Status(404))
+    assert res.status == "SAFE", f"404 应判 SAFE，实际 {res.status}"
+
+
+def test_mappings_and_trace_401_are_unknown():
+    """mappings / trace 同样不能把 401 当 SAFE"""
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    for cls in (SpringMappingsLeakPlugin, SpringTraceLeakPlugin):
+        res = cls().verify("http://t/", _Status(401))
+        assert res.status == "UNKNOWN", f"{cls.__name__} 401 应判 UNKNOWN，实际 {res.status}"

@@ -89,6 +89,21 @@ class SpringActuatorUnauthPlugin(PluginBase):
         # application/vnd.spring-boot.actuator.v3+json 等厂商标型（不含字面量 application/json），
         # 故按 JSON 子类型判定，避免真实目标被误判为不可达；纯 200 HTML 错误页无效
         if r1.status_code != 200 or "json" not in (r1.headers.get("Content-Type", "") or "").lower():
+            # 401/403 = 端点**存在但拒绝访问**，与「不存在」是两件事。
+            # 判 SAFE 会让「Actuator 开了但配了认证」的现场被写成「确认不存在」，
+            # 而报告读者据此会认为该系统没开 Actuator（2026-11-02 C5 靶场实测）。
+            if r1.status_code in (401, 403):
+                emit(no("Spring Boot Actuator 存在但需认证"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url_root,
+                    evidence=(
+                        f"/actuator 返回 HTTP {r1.status_code}：端点存在但要求认证。"
+                        "本次以未授权视角探测，无法确认是否存在未授权暴露"
+                    ),
+                )
             emit(no("不存在 Spring Boot Actuator 未授权（/actuator 不可达）"))
             return ScanResult(
                 kind="vuln",

@@ -94,11 +94,21 @@ class SpringMappingsLeakPlugin(PluginBase):
                 evidence="响应含 dispatcherServlets 映射（泄露控制器与请求方法）",
                 fix=self.fix,
             )
+        # 401/403 = 端点存在但拒绝访问 ≠ 不存在（2026-11-02 C5 靶场实测）
+        if resp.status_code in (401, 403):
+            emit(no("Actuator /mappings 存在但需认证"))
+            return ScanResult(
+                kind="vuln",
+                name=self.name,
+                status=STATUS_UNKNOWN,
+                url=url,
+                evidence=f"/actuator/mappings 返回 HTTP {resp.status_code}：端点存在但要求认证，无法确认是否未授权暴露",
+            )
         emit(no("不存在 Spring Boot Actuator /mappings 路由映射泄露"))
         return ScanResult(
             kind="vuln",
             name=self.name,
             status=STATUS_SAFE,
             url=url,
-            evidence="/actuator/mappings 不可达或需认证（404/401）",
+            evidence=f"/actuator/mappings 不可达（HTTP {resp.status_code}），未含 dispatcherServlets 映射",
         )
