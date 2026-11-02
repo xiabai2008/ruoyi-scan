@@ -210,8 +210,7 @@ def wait_for_stack(
             last = f"TLS error: {exc.__class__.__name__}"
             if not hint_printed and not as_json:
                 print(
-                    "\n[HINT] TLS 校验失败（自签证书）。加 --insecure，"
-                    "或 --ca-cert lab/prod/certs/server.crt。",
+                    "\n[HINT] TLS 校验失败（自签证书）。加 --insecure，或 --ca-cert lab/prod/certs/server.crt。",
                     file=sys.stderr,
                 )
                 hint_printed = True
@@ -288,9 +287,7 @@ def check_captcha(session, base, tier, timeout) -> Result:
         path="/captcha/captchaImage?type=math",
         expected=expected_text(tier, "captcha"),
     )
-    resp, err = request(
-        session, "GET", url_of(base, "/captcha/captchaImage?type=math"), timeout, allow_redirects=False
-    )
+    resp, err = request(session, "GET", url_of(base, "/captcha/captchaImage?type=math"), timeout, allow_redirects=False)
     if err:
         r.note = err
         return r
@@ -348,8 +345,13 @@ def check_druid(session, base, tier, timeout) -> Result:
 
 def check_role_list(session, base, tier, timeout) -> Result:
     path = "/system/role/list"
-    r = Result(key="role_list", title="未认证 POST role/list", method="POST", path=path,
-               expected=expected_text(tier, "role_list"))
+    r = Result(
+        key="role_list",
+        title="未认证 POST role/list",
+        method="POST",
+        path=path,
+        expected=expected_text(tier, "role_list"),
+    )
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -357,8 +359,13 @@ def check_role_list(session, base, tier, timeout) -> Result:
         "Referer": url_of(base, "/system/role"),
     }
     resp, err = request(
-        session, "POST", url_of(base, path), timeout,
-        data=ROLE_LIST_BODY, headers=headers, allow_redirects=False,
+        session,
+        "POST",
+        url_of(base, path),
+        timeout,
+        data=ROLE_LIST_BODY,
+        headers=headers,
+        allow_redirects=False,
     )
     if err:
         r.note = err
@@ -406,8 +413,9 @@ def check_role_list(session, base, tier, timeout) -> Result:
 
 def check_traversal(session, base, tier, timeout) -> Result:
     path = "/common/download/resource?resource=../../../../etc/passwd"
-    r = Result(key="traversal", title="路径穿越读取 passwd", method="GET", path=path,
-               expected=expected_text(tier, "traversal"))
+    r = Result(
+        key="traversal", title="路径穿越读取 passwd", method="GET", path=path, expected=expected_text(tier, "traversal")
+    )
     resp, err = request(session, "GET", url_of(base, path), timeout, allow_redirects=False)
     if err:
         r.note = err
@@ -498,20 +506,23 @@ def build_parser() -> argparse.ArgumentParser:
             "      不是 401 JSON；脚本对两种形态都识别并标注。"
         ),
     )
-    parser.add_argument("--base-url", default="https://127.0.0.1:8443",
-                        help="目标根 URL（默认 %(default)s）")
-    parser.add_argument("--tier", choices=("stock", "harden", "waf", "auto"), default="stock",
-                        help="期望档位（默认 %(default)s）")
-    parser.add_argument("--wait", type=int, default=240, metavar="SECONDS",
-                        help="等待 /login 就绪的最长秒数（默认 %(default)s；0=只试一次）")
-    parser.add_argument("--timeout", type=float, default=8.0, metavar="SECONDS",
-                        help="单请求超时（默认 %(default)s）")
-    parser.add_argument("--insecure", action="store_true",
-                        help="关闭 TLS 校验（自签证书实验室；与 --ca-cert 互斥时以 --ca-cert 为准）")
-    parser.add_argument("--ca-cert", metavar="PEM",
-                        help="用指定 CA/证书校验 TLS（例如 lab/prod/certs/server.crt）")
-    parser.add_argument("--json", action="store_true", dest="as_json",
-                        help="输出机器可读 JSON，便于 CI 消费")
+    parser.add_argument("--base-url", default="https://127.0.0.1:8443", help="目标根 URL（默认 %(default)s）")
+    parser.add_argument(
+        "--tier", choices=("stock", "harden", "waf", "auto"), default="stock", help="期望档位（默认 %(default)s）"
+    )
+    parser.add_argument(
+        "--wait",
+        type=int,
+        default=240,
+        metavar="SECONDS",
+        help="等待 /login 就绪的最长秒数（默认 %(default)s；0=只试一次）",
+    )
+    parser.add_argument("--timeout", type=float, default=8.0, metavar="SECONDS", help="单请求超时（默认 %(default)s）")
+    parser.add_argument(
+        "--insecure", action="store_true", help="关闭 TLS 校验（自签证书实验室；与 --ca-cert 互斥时以 --ca-cert 为准）"
+    )
+    parser.add_argument("--ca-cert", metavar="PEM", help="用指定 CA/证书校验 TLS（例如 lab/prod/certs/server.crt）")
+    parser.add_argument("--json", action="store_true", dest="as_json", help="输出机器可读 JSON，便于 CI 消费")
     return parser
 
 
@@ -527,8 +538,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     ready, last = wait_for_stack(session, base, args.wait, args.timeout, args.as_json)
     if not ready:
         if args.as_json:
-            print(json.dumps({"ok": False, "reason": "stack_not_ready", "last": last,
-                              "base_url": base}, ensure_ascii=False, indent=2))
+            print(
+                json.dumps(
+                    {"ok": False, "reason": "stack_not_ready", "last": last, "base_url": base},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         else:
             print_not_ready(base, args.wait, last)
         return 1
@@ -536,7 +552,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not args.as_json:
         print(f"目标: {base}")
         print(f"档位: {args.tier} — {TIER_LABEL[args.tier]}")
-        print(f"TLS : {'verify=' + str(session.verify) if session.verify is not False else 'verify=False (--insecure)'}")
+        print(
+            f"TLS : {'verify=' + str(session.verify) if session.verify is not False else 'verify=False (--insecure)'}"
+        )
         print("")
 
     results: list[Result] = []
@@ -561,27 +579,30 @@ def main(argv: Optional[list[str]] = None) -> int:
             "warn": sum(r.verdict == "WARN" for r in results),
             "fail": sum(r.verdict == "FAIL" for r in results),
         }
-        print(json.dumps({
-            "ok": summary["fail"] == 0,
-            "tier": args.tier,
-            "base_url": base,
-            "summary": summary,
-            "results": [asdict(r) for r in results],
-        }, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "ok": summary["fail"] == 0,
+                    "tier": args.tier,
+                    "base_url": base,
+                    "summary": summary,
+                    "results": [asdict(r) for r in results],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
         for result in results:
             print_result(result)
         n_pass = sum(r.verdict == "PASS" for r in results)
         n_warn = sum(r.verdict == "WARN" for r in results)
         n_fail = sum(r.verdict == "FAIL" for r in results)
-        print(f"结论: {n_pass} PASS / {n_warn} WARN / {n_fail} FAIL  "
-              f"(tier={args.tier}, target={base})")
+        print(f"结论: {n_pass} PASS / {n_warn} WARN / {n_fail} FAIL  (tier={args.tier}, target={base})")
         if n_fail:
-            print("提示: FAIL 表示与期望档位不符；WARN 多为 stock 档的真实安全发现，不改变退出码。",
-                  file=sys.stderr)
+            print("提示: FAIL 表示与期望档位不符；WARN 多为 stock 档的真实安全发现，不改变退出码。", file=sys.stderr)
         elif n_warn:
-            print("提示: 有 WARN（通常是真实发现）。如用于 CI 门禁，请显式按 WARN 处理。",
-                  file=sys.stderr)
+            print("提示: 有 WARN（通常是真实发现）。如用于 CI 门禁，请显式按 WARN 处理。", file=sys.stderr)
 
     return 2 if any(r.verdict == "FAIL" for r in results) else 0
 

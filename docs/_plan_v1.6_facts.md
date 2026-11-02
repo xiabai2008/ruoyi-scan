@@ -91,56 +91,48 @@ R1（4.5.1 单机版，Shiro 全路径保护）实测：
 这不算 bug（链式兜底有效），但让「哪些插件需要会话」这件事散落在两套机制里，
 不好维护。属于可维护性债务，不是正确性缺陷。
 
-### 缺陷 C：越权类插件缺低权账号时无法判定（107 条）
+### 缺陷 C：越权类插件「缺低权账号」——**是测试方法问题，不是产品缺陷**
 
-| 插件 | UNKNOWN 条数 | 依赖的账号能力 |
-|---|---|---|
-| 部门树越权访问 | 37 | 无 `system:dept:list` 权限的账号 |
-| 重置密码页数据权限绕过 | 37 | 有 `system:user:resetPwd` 但数据范围不含目标用户的账号 |
-| 定时任务调用目标未校验 | 33 | 有 `monitor:job:edit` 权限的普通账号 |
+> ⚠ 这条我连续判断错了三次，逐条记录以免后人重蹈：
+>
+> **第一次**：凭记忆写「靶场只有 R1-R5 建了 scanner_low」。
+> **第二次**：grep `seed/r*_business.py` 看到 R2-R7 有 `scanner_low`，改口「R2-R7 有，R1 没有」。
+> **第三次（最终，实测确认）**：
+> - `scanner_low` 在 seed 里**只是** `build_logins()` 中用来生成伪造登录日志的假数据，
+>   `staff += [("admin", ...), ("scanner_low", ...)]` 与真实账号创建无关；
+> - 但数据库里**确实有**该账号（`ry_r2.sys_user` user_id=100, dept_id=105），
+>   salt=`mtrx01`，密码 `LowPriv_2026`（md5 校验通过）；
+> - 用**扫描器自己的登录链**登录 R2 成功（`login_with_password` → ok=True）。
+>   裸 POST 失败只是因为 R2 是 4.6.2、登录必须带验证码。
 
-**根因**：靶场只有 R1-R5 建了 `scanner_low/LowPriv_2026`，R9/R8 没有
-（来源：`.workbuddy/memory/2026-10-29.md` 记录「R9 的 scanner_low 未建」「ry_r8 没有 scanner_low」）。
+**真实根因**：盲测 v4 驱动脚本 `run_blind_v4.ps1` 里，
+**只有 R1-R5 的 surface 轮传了 `--surface-account`**（第 62 行），其余 40+ 轮都没传。
+所以 107 条「缺少低权账号」是**扫描方式问题**。
 
-这不是扫描器能力问题，是**靶场供给问题** + **账号供给不统一**。
+证据：传了账号的 surface 轮次**完全正常**——
 
-### 缺陷 D：SAFE 缺证据被降级（49 条）
+```
+R1-surface: 定时任务调用目标未校验 CONFIRMED、重置密码页越权 CONFIRMED
+R2-surface: 定时任务调用目标未校验 CONFIRMED、重置密码页越权 CONFIRMED
+R3-surface: 重置密码页越权 CONFIRMED、部门树越权 CONFIRMED
+```
 
-「SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定」——49 条。
-这是插件质量问题：写 SAFE 但没给可复核的理由，违反三态纪律。
-属于「批量补齐 evidence」的机械工作，适合作为 Good First Issue。
+**结论**：WP-U2 不需要补账号供给，需要的是**修正盲测方法**——
+驱动脚本给所有 ruoyi 站点都传 `--surface-account`。这是测试脚本的事，不是产品代码的事。
 
-### 缺陷 B：requires_auth 声明严重不全
+### 缺陷 D：SAFE 缺证据 —— ✅ 已修（`f0e8ebe`）
 
-`PluginBase.requires_auth` 只有 **3 个插件**声明为 True：
-`POST型报错注入（role）`、`POST型报错注入（dept）`、`RuoYi 代码生成模块 SSTI`。
+盲测 v4 里「SAFE 缺少判定证据」降级 49 条，**全部来自 jeecgboot 的 7 处 SAFE 分支**。
+已逐处补齐证据，并加了 AST 门禁 `test_no_plugin_returns_safe_without_evidence`
+（全库 SAFE 缺证据已清零）。
 
-但实际被「缺高权会话 / 登录墙」拦住的有 **240 条**，涉及至少这些插件：
-定时任务 RCE（未授权访问）、Thymeleaf/SpEL 模板注入、任意文件上传、
-任意文件读取 ×2、.git/.env/备份/CORS/Swagger 等。
+### 缺陷 B：requires_auth 声明不全（P2，可维护性，非正确性）
 
-要么这些插件不该被降级（缺陷 A），要么它们该声明依赖却没声明。
-**必须逐个判定，不能一刀切**——这正是 v1.5.6 反复踩的坑
-（降级口径改了三次才对齐）。
+只有 3 个插件声明 `requires_auth=True`（POST 注入 role/dept、代码生成 SSTI）。
+其余插件在缺会话时靠登录墙降级兜底，而不是自己声明依赖。
+链式兜底有效，不算 bug；但「哪些插件需要会话」散落在两套机制里，不好维护。
 
-### 缺陷 C：越权类插件缺低权账号时无法判定（107 条）
-
-| 插件 | UNKNOWN 条数 | 依赖的账号能力 |
-|---|---|---|
-| 部门树越权访问 | 37 | 无 `system:dept:list` 权限的账号 |
-| 重置密码页数据权限绕过 | 37 | 有 `system:user:resetPwd` 但数据范围不含目标用户的账号 |
-| 定时任务调用目标未校验 | 33 | 有 `monitor:job:edit` 权限的普通账号 |
-
-**根因**：靶场只有 R1-R5 建了 `scanner_low/LowPriv_2026`，R9/R8 没有
-（来源：`.workbuddy/memory/2026-10-29.md` 记录「R9 的 scanner_low 未建」「ry_r8 没有 scanner_low」）。
-
-这不是扫描器能力问题，是**靶场供给问题** + **账号供给不统一**。
-
-### 缺陷 D：SAFE 缺证据被降级（49 条）
-
-「SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定」——49 条。
-这是插件质量问题：写 SAFE 但没给可复核的理由，违反三态纪律。
-属于「批量补齐 evidence」的机械工作，适合作为 Good First Issue。
+---
 
 ---
 

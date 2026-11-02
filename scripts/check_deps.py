@@ -104,7 +104,7 @@ def main() -> int:
         if extra_name not in extras:
             continue
         if f"[{extra_name}]" not in req_text:
-            errors.append(f"requirements.txt 未提示 extras 安装方式：pip install \"ruoyi-scan[{extra_name}]\"")
+            errors.append(f'requirements.txt 未提示 extras 安装方式：pip install "ruoyi-scan[{extra_name}]"')
 
     if errors:
         print("[!] 依赖清单存在漂移：")
