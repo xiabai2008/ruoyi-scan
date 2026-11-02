@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from lib.attribution import ATTR_KEY, classify
 
 if TYPE_CHECKING:
     from core.session import SessionManager
@@ -139,6 +140,12 @@ class ScanEngine:
                             "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。"
                             f"原证据：{original.evidence}"
                         )
+                # 归属标注同样必须在回调（CLI 逐条打印）之前完成——与 F13 同一条纪律：
+                # 终端与报告口径必须一致。放在 orchestrator 末尾时，终端打出
+                # 「存在 Redis 未授权访问」而报告里标着「宿主级」，读者无从分辨
+                # 这是本站点的漏洞还是这台机器上别的服务（2026-11-02 实测）。
+                original.extra = dict(original.extra or {})
+                original.extra[ATTR_KEY] = classify(_root, getattr(original, "url", "") or "")
                 return original
             except Exception as e:
                 # 网络异常等不阻断整体流程，判为 UNKNOWN（绝不判 SAFE）

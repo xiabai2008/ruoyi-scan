@@ -366,10 +366,15 @@ class TestHTMLReportD18D24:
         assert "reproduce" in html
 
     def test_html_colspan_updated(self):
-        """HTML 空结果行 colspan 更新为 11"""
+        """HTML 空结果行 colspan 与表头列数一致（v1.5.6 新增「归属」列 → 12）
+
+        colspans 写死数字，所以加列时必须同步；这里同时校验两者相等，
+        避免下次加列只改表头、空结果行却撑不开表格。
+        """
         rb = ReportBuilder(results=[], target="http://x/", summary={"target": "http://x/"})
         html = rb.to_html()
-        assert 'colspan="11"' in html
+        header_cols = html.count("<th>", html.index("<thead>"), html.index("</thead>"))
+        assert f'colspan="{header_cols}"' in html
 
 
 # ============================================================

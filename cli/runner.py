@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 from argparse import Namespace
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from cli.preflight import EXIT_PARTIAL, EXIT_UNREACHABLE, preflight_target
 from common.logger import get_logger
@@ -21,6 +21,7 @@ from core.http import normalize_target
 from core.orchestrator import ScanRequest
 from core.report import BatchReport, ReportBuilder
 from core.session import SessionManager
+from lib.attribution import ATTR_KEY, SCOPE_HOST, scope_of
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 from lib.reporter import is_findings_muted, set_findings_muted
 from lib.star_cta import print_star_cta
@@ -43,6 +44,35 @@ MODE_LABELS = {
 }
 
 
+def _PayloadView(payload: dict) -> Any:  # noqa: N802 — 轻量只读视图，命名贴近数据形状
+    """把事件 payload（dict）包装成 scope_of() 可读的对象。
+
+    事件流里传的是 `ScanResult.to_dict()`，不是 ScanResult 本体。归属标记的读取
+    逻辑只依赖 `extra`，所以给个最小视图即可，避免为打印再重建一次结果对象。
+    """
+
+    class _View:
+        def __init__(self, data: dict) -> None:
+            self.extra = data.get("extra") or {}
+
+    return _View(payload)
+
+
+def _attribution_tag(res: Any) -> str:
+    """宿主级确认项的终端标记（空串 = 站点级，不打扰输出）
+
+    为什么终端也要标：CLI 的「存在 Redis 未授权访问」和报告里的「宿主级」如果
+    只在一处出现，读者看到的结论就会随查看渠道变化。归属标注在 engine 里完成
+    （见 core/engine.py 与 F13 同一条纪律），这里只负责呈现。
+    """
+    if scope_of(res) != SCOPE_HOST:
+        return ""
+    info = getattr(res, "extra", None) or {}
+    attr = info.get(ATTR_KEY) if isinstance(info, dict) else None
+    reason = attr.get("reason", "") if isinstance(attr, dict) else ""
+    return f"{YELLOW}（宿主级：{reason}）{RESET}"
+
+
 def _print_scan_result(res: ScanResult) -> None:
     """实时输出扫描结果（作为 ScanEngine.run 的 on_result 回调）
 
@@ -52,7 +82,7 @@ def _print_scan_result(res: ScanResult) -> None:
     - UNKNOWN → 黄色 [?]（无法判定）
     """
     if res.status == STATUS_CONFIRMED:
-        print(f"{GREEN}[*]存在{res.name}{RESET}")
+        print(f"{GREEN}[*]存在{res.name}{RESET}{_attribution_tag(res)}")
     elif res.status == STATUS_SAFE:
         print(f"{RED}[/]不存在{res.name}{RESET}")
     else:
@@ -402,7 +432,8 @@ def _cli_event_handler(event_type: str, payload):
         status = payload.get("status", "")
         evidence = payload.get("evidence", "")
         if status == STATUS_CONFIRMED:
-            print(f"{GREEN}[*]存在{name}{RESET}")
+            # payload 是 ScanResult.to_dict()，extra 里带 attribution → 复用同一标记函数
+            print(f"{GREEN}[*]存在{name}{RESET}{_attribution_tag(_PayloadView(payload))}")
         elif status == STATUS_SAFE:
             print(f"{RED}[/]不存在{name}{RESET}")
         else:

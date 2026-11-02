@@ -1029,6 +1029,7 @@ class ScanOrchestrator:
             for cr in component_results:
                 all_results.append(to_scan_result(cr))
             # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
+            from lib.attribution import annotate as annotate_attribution
             from lib.reachability import (
                 downgrade_auth_wall_safe,
                 downgrade_evidence_less_safe,
@@ -1066,6 +1067,22 @@ class ScanOrchestrator:
                         "count": downgraded,
                         "status": block_info.get("status", 0),
                         "reason": block_info.get("reason", ""),
+                        "task_id": task.task_id,
+                    },
+                )
+
+            # 归属标注：中间件插件探的是「目标主机的另一个端口」，发现的资产属于
+            # 这台主机而不是这个站点。不标注的话，批量扫描时同一个宿主 Redis 会在
+            # N 份站点报告里各报一次（2026-11-02 实测：R1 单机版根本不带 Redis，
+            # 却因宿主 C4-1 的 16379 无认证而报「R1 存在 Redis 未授权」）。
+            # 只标注不降级：端口确实无认证，归属是另一个正交维度。
+            attribution_stats = annotate_attribution(all_results, target)
+            if attribution_stats["host_level"]:
+                _emit(
+                    "attribution",
+                    {
+                        "host_level": attribution_stats["host_level"],
+                        "site_level": attribution_stats["site_level"],
                         "task_id": task.task_id,
                     },
                 )

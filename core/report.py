@@ -21,9 +21,23 @@ from common.models import (
 )
 from common.paths import safe_filename, safe_join
 from config import settings
+from lib.attribution import ATTR_KEY, SCOPE_HOST, scope_of
 from lib.star_cta import REPO_URL
 
 logger = get_logger(__name__)
+
+
+def _attribution_text(result: Any) -> str:
+    """归属列的文本：宿主级写原因，站点级留空。
+
+    留空而不是写「站点级」：绝大多数结果是站点级，满屏「站点级」等于没有信息量；
+    空列在有异常项时反而更醒目。
+    """
+    if scope_of(result) != SCOPE_HOST:
+        return ""
+    info = (getattr(result, "extra", None) or {}).get(ATTR_KEY) or {}
+    reason = info.get("reason", "") if isinstance(info, dict) else ""
+    return f"宿主级：{reason}" if reason else "宿主级"
 
 
 def _normalize_auth_status(value: Any) -> Dict[str, str]:
@@ -108,9 +122,14 @@ class ReportBuilder:
         """统计确认漏洞的严重度分布（UNKNOWN/SAFE 不计入）
 
         Returns:
-            dict: {"high": n, "medium": n, "low": n, "total": n}
+            dict: {"high": n, "medium": n, "low": n, "total": n, "host_level": n}
+
+        host_level 是 total 的**子集**（不是并列项）：这些 CONFIRMED 探的是目标主机的
+        另一个端口，资产无法证明属于该站点。批量扫描时同一个宿主 Redis 会在每份站点
+        报告里各报一次，读者据此就能分辨「这是站点的漏洞」还是「这台机器上还有别的
+        服务」。total 口径保持不变，避免动摇既有报表与 CI 基线。
         """
-        dist = {"high": 0, "medium": 0, "low": 0, "total": 0}
+        dist: Dict[str, int] = {"high": 0, "medium": 0, "low": 0, "total": 0, "host_level": 0}
         for r in self._effective_results():
             if r.status != STATUS_CONFIRMED:
                 continue
@@ -118,6 +137,8 @@ class ReportBuilder:
             # dist 的键名与严重度取值相同（high/medium/low），因此可直接用 r.severity 作下标
             if r.severity in dist:
                 dist[r.severity] += 1
+            if scope_of(r) == SCOPE_HOST:
+                dist["host_level"] += 1
         return dist
 
     # 仅保留确认存在的漏洞条目（UNKNOWN/SAFE 不计入漏洞数，见开发方案 §三 Step 4）
@@ -219,6 +240,10 @@ class ReportBuilder:
             "blocked": self.summary.get("blocked", {}),
             "risk_distribution": dist,
             "vuln_count": dist["total"],
+            # 宿主级确认项数（vuln_count 的子集，不是并列口径）：探的是目标主机的
+            # 另一个端口，资产无法证明属于该站点。CI/看板据此把「站点漏洞数」
+            # 与「主机暴露数」分开统计，避免批量扫描时同一宿主发现重复计入 N 次。
+            "host_level_count": dist.get("host_level", 0),
             "results": [r.to_dict() for r in self._effective_results()],
         }
 
@@ -243,6 +268,7 @@ class ReportBuilder:
                 "修复建议",
                 "修复详情",
                 "复现命令",
+                "归属",
             ]
         )
         for r in self._effective_results():
@@ -262,6 +288,7 @@ class ReportBuilder:
                     r.fix,
                     getattr(r, "fix_detail", "") or "",
                     getattr(r, "reproduce", "") or "",
+                    _attribution_text(r),
                 ]
             )
         return buf.getvalue()
@@ -377,6 +404,8 @@ class ReportBuilder:
             # D18/D24：修复详情 + 复现命令（保留换行，转义 HTML）
             fix_detail_text = html_module.escape(getattr(r, "fix_detail", "") or "").replace("\n", "<br>") or "—"
             reproduce_text = html_module.escape(getattr(r, "reproduce", "") or "").replace("\n", "<br>") or "—"
+            attr_text = html_module.escape(_attribution_text(r)) or "—"
+            attr_cls = "attr-host" if scope_of(r) == SCOPE_HOST else "attr-site"
             rows_html.append(
                 f'<tr class="{row_class}">'
                 f'<td class="sev-{r.severity}"><span class="badge" style="background:{color}">{html_module.escape(sev_text)}</span></td>'
@@ -390,9 +419,10 @@ class ReportBuilder:
                 f'<td class="fix-detail">{fix_detail_text}</td>'
                 f'<td class="reproduce">{reproduce_text}</td>'
                 f'<td class="compliance">{compliance_text}</td>'
+                f'<td class="{attr_cls}">{attr_text}</td>'
                 "</tr>"
             )
-        rows = "\n".join(rows_html) if rows_html else '<tr><td colspan="11" class="empty">无扫描结果</td></tr>'
+        rows = "\n".join(rows_html) if rows_html else '<tr><td colspan="12" class="empty">无扫描结果</td></tr>'
 
         # 摘要区 + CMS 感知标题
         started = html_module.escape(str(self.summary.get("started_at", "")))
@@ -431,6 +461,22 @@ class ReportBuilder:
                 f"（probe HTTP {block.get('status', 0)} / root HTTP {block.get('root_status', 0)}）。"
                 "本次 SAFE 结论已统一降级为 UNKNOWN——报告里出现大量「未知」不是工具故障，"
                 "而是目标没有给出可判定的响应。</div>"
+            )
+
+        # 归属横幅：报告里出现宿主级确认项时，必须说清「这些不是本站点的漏洞」。
+        # 否则批量扫描的读者会以为每个站点都有同一个 Redis 未授权（同一个宿主漏洞
+        # 在 N 份报告里各报一次），交付物变成噪声。
+        attribution_html = ""
+        host_level = dist.get("host_level", 0)
+        if host_level:
+            attribution_html = (
+                '<div style="background:#fef5e7;border:1px solid #b9770e;color:#8a5c0b;'
+                'padding:10px 14px;border-radius:4px;margin:12px 0;font-size:13px">'
+                f"<b>⚠ 归属提示：{host_level} 个确认项属宿主级资产</b><br>"
+                "这些结果的探测地址是目标主机的**另一个端口**（中间件/独立服务），"
+                "发现本身为真，但无法证明它们属于被扫的这个站点——同一台机器上的多份站点报告"
+                "会重复出现同一批宿主发现。修复责任方是主机/中间件运维，不是本站点的应用团队。"
+                "</div>"
             )
 
         # 认证状态横幅：按 admin（主扫描）/ surface（--auth-surface）两条链分别措辞。
@@ -527,6 +573,9 @@ class ReportBuilder:
   td.cve {{ font-family: Consolas, monospace; font-size: 11px; color: #8e44ad; }}
   td.cvss {{ font-family: Consolas, monospace; font-size: 12px; font-weight: bold; text-align: center; }}
   td.compliance {{ font-size: 11px; color: #555; }}
+  /* 归属列：宿主级资产（目标主机的其它端口）需要一眼可辨 */
+  td.attr-host {{ font-size: 12px; color: #b9770e; background: #fef5e7; }}
+  td.attr-site {{ color: #999; }}
   td.empty {{ text-align: center; color: #999; padding: 20px; }}
   .badge {{ color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 12px; }}
   .bypass-badge {{ display: inline-block; background: #8e44ad; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px; }}
@@ -556,6 +605,7 @@ function toggleFilter() {{
   <span><b>请求数：</b>{req_count}</span>
 </div>
 {blocked_html}
+{attribution_html}
 {auth_html}
 <h2>风险分布（仅统计确认存在的漏洞）</h2>
 <div>
@@ -573,7 +623,7 @@ function toggleFilter() {{
 <table>
   <thead>
     <tr>
-      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>CVE</th><th>CVSS</th><th>证据</th><th>修复建议</th><th>修复详情</th><th>复现命令</th><th>合规映射</th>
+      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>CVE</th><th>CVSS</th><th>证据</th><th>修复建议</th><th>修复详情</th><th>复现命令</th><th>合规映射</th><th>归属</th>
     </tr>
   </thead>
   <tbody>
@@ -686,10 +736,15 @@ class BatchReport:
         return sum(b.risk_distribution()["total"] for b in self.builders)
 
     def to_csv(self) -> str:
-        """CSV：目标,CMS,高,中,低,合计,请求数,耗时(秒)"""
+        """CSV：目标,CMS,高,中,低,合计,其中宿主级,请求数,耗时(秒)
+
+        「其中宿主级」是合计的子集：这些确认项探的是目标主机的另一个端口，
+        无法证明属于该站点。批量交付物里必须有这一列——否则同一个宿主 Redis
+        会在每行「合计」里各算一次，读者以为每个站点都有该漏洞。
+        """
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["目标", "CMS", "高", "中", "低", "合计", "请求数", "耗时秒"])
+        writer.writerow(["目标", "CMS", "高", "中", "低", "合计", "其中宿主级", "请求数", "耗时秒"])
         for b in self.builders:
             dist = b.risk_distribution()
             fp = (b.summary or {}).get("fingerprint", {}) or {}
@@ -701,6 +756,7 @@ class BatchReport:
                     dist["medium"],
                     dist["low"],
                     dist["total"],
+                    dist.get("host_level", 0),
                     (b.summary or {}).get("request_count", 0),
                     round((b.summary or {}).get("duration", 0), 1),
                 ]
@@ -769,7 +825,7 @@ class BatchReport:
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         bar_svg = self._render_targets_bar_svg()
         rows = []
-        total_high = total_medium = total_low = total_vuln = total_req = 0
+        total_high = total_medium = total_low = total_vuln = total_req = total_host = 0
         total_dur = 0.0
         for b in self.builders:
             dist = b.risk_distribution()
@@ -777,10 +833,12 @@ class BatchReport:
             cms = html_module.escape(str(fp.get("cms", "未识别")))
             dur = round((b.summary or {}).get("duration", 0), 1)
             req = (b.summary or {}).get("request_count", 0)
+            host_level = dist.get("host_level", 0)
             total_high += dist["high"]
             total_medium += dist["medium"]
             total_low += dist["low"]
             total_vuln += dist["total"]
+            total_host += host_level
             total_req += req
             total_dur += dur
             rows.append(
@@ -789,10 +847,24 @@ class BatchReport:
                 f"<td>{cms}</td>"
                 f"<td>{dist['high']}</td><td>{dist['medium']}</td><td>{dist['low']}</td>"
                 f"<td><b>{dist['total']}</b></td>"
+                f'<td class="attr-host">{host_level}</td>'
                 f"<td>{req}</td><td>{dur}s</td>"
                 "</tr>"
             )
-        rows_html = "\n".join(rows) if rows else '<tr><td colspan="8" class="empty">无扫描目标</td></tr>'
+        rows_html = "\n".join(rows) if rows else '<tr><td colspan="9" class="empty">无扫描目标</td></tr>'
+        # 宿主级说明：批量报告最容易误导的地方是「合计」列把宿主漏洞算进每个站点。
+        # 数字口径保持不变（漏洞确实存在），但必须点明这些项在多个站点间会重复出现。
+        attribution_note = ""
+        if total_host:
+            attribution_note = (
+                '<div style="background:#fef5e7;border:1px solid #b9770e;color:#8a5c0b;'
+                'padding:10px 14px;border-radius:4px;margin:12px 0;font-size:13px">'
+                f"<b>⚠ 归属说明：「其中宿主级」共 {total_host} 项（已计入合计，不是额外增加）</b><br>"
+                "这些确认项探的是目标主机的另一个端口（中间件/独立服务），发现为真，但无法证明"
+                "属于该站点。同一台主机上的多个站点会各自报出同一批宿主发现——按「主机」去重看待，"
+                "不要按站点重复计数；修复责任方是主机/中间件运维。"
+                "</div>"
+            )
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -831,13 +903,15 @@ class BatchReport:
   <span class="risk-box risk-medium">中 {total_medium}</span>
   <span class="risk-box risk-low">低 {total_low}</span>
   <span>合计确认漏洞：{total_vuln}</span>
+  <span style="color:#b9770e"><b>其中宿主级：{total_host}</b></span>
 </div>
+{attribution_note}
 {bar_svg}
 <h2>各目标详情</h2>
 <table>
   <thead>
     <tr>
-      <th>目标</th><th>CMS</th><th>高</th><th>中</th><th>低</th><th>合计漏洞</th><th>请求数</th><th>耗时</th>
+      <th>目标</th><th>CMS</th><th>高</th><th>中</th><th>低</th><th>合计漏洞</th><th>其中宿主级</th><th>请求数</th><th>耗时</th>
     </tr>
   </thead>
   <tbody>
