@@ -96,7 +96,13 @@ class UnauthBatchPlugin(PluginBase):
     # 收紧说明：原列表含泛用英文子串 "login"/"signin"。/system/user/list 的真实暴露响应
     # 常含 loginName/lastLoginTime 等字段（都带 "login"），会在正特征前被误判为「已鉴权」，
     # 造成确定性漏报（false negative）。现仅保留不会与业务字段冲突的鉴权文案。
-    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源"]
+    #
+    # ⚠ 中文也有同一个坑（2026-11-02 修正）：裸字串「登录」同样会误伤——
+    #   真实暴露的 /system/user/list 页面常含「退出登录」「登录名」字样，
+    #   命中即判 SAFE，把真实未授权暴露报成「已鉴权拦截」（假阴性）。
+    #   只保留**完整鉴权提示语**（"请先登录" 这类整句），不用单词。
+    #   正确写法参考 job_rce.py 的「登录若依系统」。
+    AUTH_BLOCK_KEYWORDS = ["请先登录", "登录若依", "unauthorized", "认证失败", "无法访问系统资源"]
 
     def verify(self, target, session):
         """批量探测多个常见未授权端点（在**完全未认证**的会话上探测）

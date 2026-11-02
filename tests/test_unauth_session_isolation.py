@@ -33,8 +33,20 @@ def test_detects_jwt_token():
     assert looks_authenticated('{"access_token":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}')[0] is True
 
 
-def test_detects_session_cookie_issued():
-    assert looks_authenticated("{}", {"Set-Cookie": "JSESSIONID=abc123; Path=/"})[0] is True
+def test_jsessionid_is_not_an_auth_signal():
+    """JSESSIONID 不是认证信号——任何 Java 应用对匿名请求都会下发它
+
+    2026-11-02 修正：初版把 JSESSIONID 当成「刚才被认证了」，
+    实测任何 Tomcat/Shiro 站点匿名请求都带它 → 「未授权访问」被判 SAFE（假阴性）。
+    方向与三态纪律相反：该报没报。只认应用层自己签发的 token。
+    """
+    assert looks_authenticated("{}", {"Set-Cookie": "JSESSIONID=abc123; Path=/"})[0] is False
+
+
+def test_detects_app_level_token_cookie():
+    """应用层 token（satoken / X-Access-Token / Admin-Token）才是认证信号"""
+    for cookie in ("satoken=xxx", "X-Access-Token=yyy", "Admin-Token=zzz"):
+        assert looks_authenticated("{}", {"Set-Cookie": f"{cookie}; Path=/"})[0] is True, cookie
 
 
 def test_plain_business_list_is_not_authenticated():
@@ -333,3 +345,77 @@ def test_upgrade_denied_keeps_business_success_safe():
         r = ScanResult(kind="info", name="某接口", status=STATUS_SAFE, evidence=f"响应 {body}，未命中漏洞特征")
         upgrade_denied_safe_to_unknown([r])
         assert r.status == STATUS_SAFE, f"{body} 不应被升级为 UNKNOWN"
+
+
+# ============================================================
+# 6. 回归护栏（2026-11-02 能力缺口调研发现）
+# ============================================================
+
+
+def test_plus_job_uses_anonymous_session():
+    """plus_job_unauth 必须用匿名会话——它在 v1.6 重构中被误删过
+
+    回归史：7a7bbd3 删掉手写会话隔离、改成声明 anonymous_probe 并注明
+    「引擎统一处理」，但引擎当时并无该能力 → 裸用共享会话 →
+    带 admin cookie 时假 CONFIRMED（已复现）。
+    """
+    import json as _json
+
+    from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
+
+    class _Resp:
+        text = '{"code":200,"rows":[{"jobId":1}],"total":1}'
+        status_code = 200
+        headers = {"Content-Type": "application/json"}
+        content = text.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        def __init__(self):
+            self.session = SimpleNamespace(cookies={}, headers={})
+            self.called = False
+
+        def get(self, url, **kw):
+            return _Resp()
+
+        def anonymous(self):
+            self.called = True
+            inst = self
+
+            class _A:
+                def get(self, u, **k):
+                    return _Resp()
+
+                def close(self):
+                    pass
+
+            return _A()
+
+    s = _S()
+    PlusJobUnauthPlugin().verify("http://t/", s)
+    assert s.called, "plus_job_unauth 必须调用 session.anonymous()"
+
+
+def test_unauth_batch_does_not_block_on_bare_login_word():
+    """裸字串「登录」不能当鉴权拦截信号——真实暴露页常含「退出登录」
+
+    复现：/system/user/list 返回「欢迎 admin <a>退出登录</a> userId 姓名 admin」
+    → 旧关键字判 SAFE（已鉴权拦截），把真实未授权暴露报成安全。
+    """
+    from lib.matcher import match_positive
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    exposed_page = '<html>欢迎 admin <a href="/logout">退出登录</a> <span>userId: 1</span> 姓名: admin</html>'
+    blocked = match_positive(exposed_page, UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS)
+    assert not blocked, f"真实暴露页不应被判成鉴权拦截，实际命中 {UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS}"
+
+
+def test_unauth_batch_still_detects_real_login_wall():
+    """真正的鉴权提示语仍要能识别（不能因为收紧就漏掉真拦截）"""
+    from lib.matcher import match_positive
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    for text in ("请先登录", "登录若依系统", '{"code":401,"msg":"认证失败"}'):
+        assert match_positive(text, UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS), text

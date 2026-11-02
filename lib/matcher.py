@@ -70,12 +70,20 @@ def looks_authenticated(body, headers=None):
         except Exception:
             return False, "响应体无法解码"
 
-    # Set-Cookie 里下发新的会话标识 = 刚才被认证了（而非本来就是匿名的）
+    # Set-Cookie 里下发**认证态**凭证 = 当前会话是登录的。
+    #
+    # ⚠ 这里刻意不含 JSESSIONID（2026-11-02 修正）：
+    #   任何 Java 应用（Tomcat/Shiro）对**匿名**请求也会下发 JSESSIONID，
+    #   它与「是否已登录」没有因果关系。把它当认证信号会让
+    #   「未授权访问」在这类站点上被判成 SAFE——一个假阴性就抵掉一次真实告警，
+    #   方向与三态纪律完全相反（该报没报）。
+    #   只认应用层自己签发的 token 名：Sa-Token 的 satoken、Jeecg 的 X-Access-Token、
+    #   以及若依 Plus 的 Admin-Token / Authorization。
     if headers:
         try:
             cookies = str(headers.get("Set-Cookie", "") or "")
-            if re.search(r"(?:JSESSIONID|Authorization|satoken|X-Access-Token)\s*=", cookies, re.I):
-                return True, "响应下发了会话凭证（Set-Cookie）"
+            if re.search(r"(?:satoken|X-Access-Token|Admin-Token|Authorization)\s*=", cookies, re.I):
+                return True, "响应下发了应用层会话凭证（Set-Cookie）"
         except Exception:
             pass
 

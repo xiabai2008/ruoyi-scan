@@ -65,22 +65,32 @@ class PlusJobUnauthPlugin(PluginBase):
         """不带认证凭证访问定时任务列表接口，验证未授权访问是否成立。
 
         @param target: 目标站点根 URL
-        @param session: 探测会话。引擎已在会话被登录污染时注入干净会话
-            （本插件声明了 anonymous_probe=True，见类属性说明）
+        @param session: 共享 HTTP 会话（仅作配置来源，实际探测走匿名克隆）
         @return: ScanResult — 返回 rows/total 任务列表 JSON 且无登录特征则 CONFIRMED，401/403 或无特征则 SAFE，网络异常则 UNKNOWN
         """
         # Plus 版对外请求统一经 /prod-api 网关前缀转发，探测路径须保留此前缀
         url = join_url(target, "/prod-api/monitor/job/list?pageNum=1&pageSize=10")
 
-        # 裸请求（不携带任何 Cookie/Token）：若仍返回业务数据即说明 Sa-Token 鉴权未生效。
-        # 会话隔离由引擎统一处理（anonymous_probe），此处直接使用传入的会话。
+        # 判定的是「**未登录**能否访问」，必须在匿名会话上探测。
+        #
+        # ⚠ 回归记录（2026-11-02）：本插件原本手写 _has_auth_state() + 自建 SessionManager
+        # 做隔离，v1.6 重构时被删掉、改成声明 anonymous_probe=True 并注明「引擎统一处理」——
+        # 但引擎当时并没有实现该能力（core/engine.py 无任何 anonymous_probe 引用），
+        # 结果是裸用共享会话：默认口令插件登录后，这里拿到的 200 只证明「登录后能访问」，
+        # 却报成「未携带 token 返回任务列表」= 假 CONFIRMED。
+        # 现改用与 nacos/minio 等 7 个插件一致的 session.anonymous()。
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
         try:
             # allow_redirects=False：默认跟随重定向会把「302 → /login」透明转成 200 登录页，
             # 使下方 3xx「重定向 → 鉴权生效」分支不可达（与 plus_auth_login.py 保持一致）
-            resp = session.get(url, allow_redirects=False)
+            resp = probe.get(url, allow_redirects=False)
         except Exception as e:
             emit(no("RuoYi-Plus 定时任务未授权（网络异常）"))
             return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
+        finally:
+            if probe is not session:
+                probe.close()
         # 判定（2026-09-17 多版本矩阵实测后加固）
         # 真实缺陷：原判定为 `status==200 and match_positive(text, ["rows","total","code"],
         # negatives=["login","unauthorized"])`。问题有三：
