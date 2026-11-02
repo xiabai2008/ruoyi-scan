@@ -28,6 +28,19 @@ PASSWD = (
     "sys:x:3:3:sys:/dev:/sbin/nologin\n"
 )
 
+# Windows win.ini 特征内容（v1.5.6 WP2 双载荷）。
+# 内容照抄 Windows 10/11 的真实 win.ini（92 字节），不是自造 marker——
+# 判定函数 is_windows_ini 认的是真实结构（注释行 + 段头），不是约定字符串。
+WIN_INI = (
+    "; for 16-bit app support\n"
+    "[fonts]\n"
+    "[extensions]\n"
+    "[mci extensions]\n"
+    "[files]\n"
+    "[Mail]\n"
+    "MAPI=1\n"
+)
+
 # Druid 爆破：与扫描器 settings.DRUID_USERS 对齐的 6 个用户名
 DRUID_USERS = {"ruoyi", "druid", "admin", "admin123", "auth", "123456"}
 # 命中即返回 success 的弱口令集合（均存在于 password.txt 字典中）
@@ -317,14 +330,19 @@ def dispatch(path, method):
     if path == "/":
         return html_body(_render_login_page())
 
-    # 任意文件读取（file_read / file_read_path 共用此端点，响应体即 /etc/passwd 真实行特征）
+    # 任意文件读取（file_read / file_read_path 共用此端点）
     # Step 8 新增 file_read_path：resource 参数以 ../ 开头（相对路径穿越探针）
-    #   三个探针共用此端点，响应体一致（含 root 与 :/ 的真实 /etc/passwd 特征），
-    #   resource 查询参数不影响判定，无需分流
+    #
+    # v1.5.6 WP2 起按 resource 里的目标文件名分流：探 win.ini 返回 Windows 内容，
+    # 其余返回 /etc/passwd。两个载荷的判据不同（passwd 行格式 vs INI 段头），
+    # 用同一份响应会让其中一个判据永远无法被验证。
     if path == "/common/download/resource":
-        if vuln:
-            return Response(PASSWD, mimetype="text/plain; charset=utf-8")
-        return whitelabel_404()
+        if not vuln:
+            return whitelabel_404()
+        resource = (request.args.get("resource") or "").lower()
+        if "win.ini" in resource:
+            return Response(WIN_INI, mimetype="text/plain; charset=utf-8")
+        return Response(PASSWD, mimetype="text/plain; charset=utf-8")
 
     # 定时任务 list / edit / run（job_rce + job_invoke_target；后者原名 file_read_time）
     if path == "/monitor/job/list":

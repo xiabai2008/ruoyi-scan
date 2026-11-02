@@ -243,7 +243,7 @@ def match_sql_error(text):
 
 
 def match_file_read_leak(text):
-    """检测响应是否含敏感文件内容特征（/etc/passwd 等）
+    """检测响应是否含敏感文件内容特征（/etc/passwd、win.ini 等）
 
     用于文件读取类插件在真实漏洞环境上的判定补充。
     """
@@ -256,9 +256,54 @@ def match_file_read_leak(text):
         "nobody:x:65534:",  # /etc/passwd
         "www-data:x:33:",  # /etc/passwd Debian/Ubuntu
         "apache:x:48:",  # /etc/passwd CentOS
-        "[boot loader]",  # Windows boot.ini
+        "[boot loader]",  # Windows boot.ini（**不是** win.ini，见 is_windows_ini）
     ]
     return any(f in text for f in file_features)
+
+
+# win.ini 的真实结构（Windows 10/11 实测，2026-11-02，C:\Windows\win.ini 共 92 字节）：
+#     ; for 16-bit app support
+#     [fonts]
+#     [extensions]
+#     [mci extensions]
+#     [files]
+#     [Mail]
+#     MAPI=1
+#
+# 为什么必须要求**多个段头共现**，不能只认单个 `[fonts]`：
+#   - 单个段名太泛：`[files]`、`[Mail]` 在任意 INI 配置、甚至 HTML/JS 里都可能出现；
+#   - 而 win.ini 的真实特征恰恰是「这几个段同时存在且几乎为空」——这是 Windows
+#     为兼容 16 位程序保留的骨架，不是用户配置的产物。
+#   - 也不能用 `[boot loader]`：那是 boot.ini（XP 引导配置）的段，与 win.ini 是
+#     不同文件，混用会在 Win10/11 上漏报（boot.ini 早已不存在）。
+_WIN_INI_MARKER = "for 16-bit app support"
+_WIN_INI_SECTIONS = ("[fonts]", "[extensions]", "[mci extensions]", "[files]", "[Mail]")
+
+
+def is_windows_ini(text):
+    """判定响应是否为真实 win.ini 内容（Windows 任意文件读取的正向证据）
+
+    两条路径任一成立即判真（保守优先，避免误报）：
+      1. 含 `for 16-bit app support` 注释行（win.ini 独有，最可靠）；
+      2. 含 ≥3 个 win.ini 特征段头（用户可能删了注释行，但段头是骨架）。
+
+    Returns:
+        (hit: bool, evidence: str)
+    """
+    if not text:
+        return False, "空响应"
+    lowered = text.lower()
+    if _WIN_INI_MARKER in lowered:
+        return True, "读取到 Windows win.ini（含 for 16-bit app support 特征行）"
+    hit_sections = [s for s in _WIN_INI_SECTIONS if s.lower() in lowered]
+    if len(hit_sections) >= 3:
+        return True, "读取到 Windows win.ini（命中 %d 个特征段：%s）" % (len(hit_sections), ", ".join(hit_sections))
+    if hit_sections:
+        return False, "仅命中 %d 个 INI 段头（%s），不足以确认是 win.ini" % (
+            len(hit_sections),
+            ", ".join(hit_sections),
+        )
+    return False, "响应不含 win.ini 特征"
 
 
 def is_passwd_file(text):
