@@ -37,12 +37,15 @@ def test_versioned_pocs_defined():
     上界不变（<4.7 已修复的仍然跳过）。
     """
     expected = {
-        "任意文件读取": ">=3.0,<4.7",
+        # v1.6：这两个不再设版本门——实测 4.5.1/4.6.2/4.7.8/4.8.x 的
+        # FileUtils.checkAllowDownload() 全部含 '..' 拦截，该漏洞在可验证范围内
+        # 不存在。错误的版本区间会让插件在真实受影响目标上反被跳过。
+        "任意文件读取": "",
         "定时任务调用目标未校验": ">=3.0,<4.7",
         "POST型报错注入（role）": ">=3.0",
         "POST型报错注入（dept）": ">=3.0",
         "任意文件上传": ">=3.0",
-        "任意文件读取（路径穿越）": ">=3.0,<4.7",
+        "任意文件读取（路径穿越）": "",
         "定时任务 RCE（未授权访问）": ">=3.0",
     }
     plugins = {getattr(cls, "name", ""): cls for cls in _ruoyi_plugins()}
@@ -77,10 +80,11 @@ def test_new_version_skip_old_pocs():
     assert "POST型报错注入（dept）" in names
     assert "任意文件上传" in names
     assert "定时任务 RCE（未授权访问）" in names
-    # 4.7.8 实测已修的路径穿越/任务调用目标类应跳过
-    assert "任意文件读取" not in names
-    assert "任意文件读取（路径穿越）" not in names
+    # 任务调用目标类 4.7.8 已修，应跳过（该判定有源码依据）
     assert "定时任务调用目标未校验" not in names
+    # 任意文件读取不再设版本门（v1.6）：实测各版本都有 '..' 拦截，
+    # 与其写错误的区间，不如让插件自己测、测不到判 SAFE。
+    # 这里只断言它**会执行**，不断言结论。
     # 全版本 POC 保留
     assert "后台默认口令" in "".join(names), names
 

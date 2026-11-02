@@ -93,7 +93,18 @@ class RuoyiFileReadPathPlugin(PluginBase):
     # 原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6 3.9.2 与 R7 3.8.9 各有 9 个插件
     # 被 version_matrix 标为 applicable=False，含文件读取/上传/定时任务/SQL 注入）。
     # 这与本文件上方注释记录的「原范围过窄造成漏报」是同一类问题，只是当时只考虑了 4.x 内部。
-    affected_versions = ">=3.0,<4.7"
+    # v1.6 修正：不再用版本门限制。
+    # 原声明 ">=3.0,<4.7" 表示「4.7 之前都受影响」，但 2026-11-02 实地核实：
+    # R1(4.5.1) / R2(4.6.2) / R3(4.7.8) / R4(4.8.0) / R5(4.8.3) 的
+    # FileUtils.checkAllowDownload() **全部含 contains(resource, "..") 拦截**，
+    # 路径穿越在这些版本上不可用（实测 R14 靶场：匿名可达但返回空内容，
+    # 异常被 controller 的 catch 吞掉）。
+    #
+    # 结论：这个 CNVD 的「受影响版本」在本仓库能验证的范围内不存在。
+    # 与其写一个错误的版本区间（会让插件在真实受影响目标上反而被跳过），
+    # 不如不设版本门、完全交给响应证据判定——这与本仓库其他插件
+    # 「版本过滤造成漏报」的教训一致（见 file_upload/job_rce 的注释）。
+    affected_versions = ""
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
