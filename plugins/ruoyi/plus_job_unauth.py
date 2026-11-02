@@ -5,9 +5,7 @@
 import json
 
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
-from config import settings
 from core.http import join_url
-from core.session import SessionManager
 from lib.colors import no, ok
 from lib.reporter import emit
 from plugins.base import PluginBase
@@ -56,36 +54,33 @@ class PlusJobUnauthPlugin(PluginBase):
     # 两者不同时（如 D1 的 /portal）不豁免，基准仍推进到真实 context-path。
     path_scope = "api"
     self_prefixes = ("/prod-api",)
+    # v1.6：本插件原本手写了一套「共享会话有认证态就改用独立会话」的逻辑
+    # （_has_auth_state + 自建 SessionManager）。该逻辑已下沉到引擎：
+    # 声明 anonymous_probe=True 即可，引擎统一处理，不必每个插件各写一套。
+    # 手写实现保留了一段时间，现由基类能力接管，避免「各抄一遍然后各自漂移」
+    # （file_read / file_read_path 各自维护 passwd 判定最后必须抽到 lib/matcher 就是前车之鉴）。
+    anonymous_probe = True
 
     def verify(self, target, session):
         """不带认证凭证访问定时任务列表接口，验证未授权访问是否成立。
 
         @param target: 目标站点根 URL
-        @param session: 共享 HTTP 会话（SessionManager 管理连接复用）；若已残留认证态则改用独立无凭据会话
+        @param session: 探测会话。引擎已在会话被登录污染时注入干净会话
+            （本插件声明了 anonymous_probe=True，见类属性说明）
         @return: ScanResult — 返回 rows/total 任务列表 JSON 且无登录特征则 CONFIRMED，401/403 或无特征则 SAFE，网络异常则 UNKNOWN
         """
         # Plus 版对外请求统一经 /prod-api 网关前缀转发，探测路径须保留此前缀
         url = join_url(target, "/prod-api/monitor/job/list?pageNum=1&pageSize=10")
 
         # 裸请求（不携带任何 Cookie/Token）：若仍返回业务数据即说明 Sa-Token 鉴权未生效。
-        # 但共享 SessionManager 可能已被其它插件登录污染（认证状态泄漏，见 core/engine.py），
-        # 此时复用共享会话发出的请求实际已鉴权，会把「已鉴权可访问」误报成「未授权可访问」；
-        # 检测到认证态残留即改用独立的无凭据会话发探测请求。
-        probe_session = session
-        own_session = None
+        # 会话隔离由引擎统一处理（anonymous_probe），此处直接使用传入的会话。
         try:
-            if self._has_auth_state(session):
-                own_session = SessionManager(timeout=settings.TIMEOUT)
-                probe_session = own_session
             # allow_redirects=False：默认跟随重定向会把「302 → /login」透明转成 200 登录页，
             # 使下方 3xx「重定向 → 鉴权生效」分支不可达（与 plus_auth_login.py 保持一致）
-            resp = probe_session.get(url, allow_redirects=False)
+            resp = session.get(url, allow_redirects=False)
         except Exception as e:
             emit(no("RuoYi-Plus 定时任务未授权（网络异常）"))
             return ScanResult(kind="info", name=self.name, status=STATUS_UNKNOWN, url=url, evidence=str(e))
-        finally:
-            if own_session is not None:
-                own_session.close()
         # 判定（2026-09-17 多版本矩阵实测后加固）
         # 真实缺陷：原判定为 `status==200 and match_positive(text, ["rows","total","code"],
         # negatives=["login","unauthorized"])`。问题有三：
@@ -163,22 +158,3 @@ class PlusJobUnauthPlugin(PluginBase):
             url=url,
             evidence=f"HTTP {resp.status_code} / Content-Type={content_type or '(空)'}，非未授权业务 JSON",
         )
-
-    @staticmethod
-    def _has_auth_state(session):
-        """共享会话是否残留认证态（Cookie / Authorization 头）
-
-        其它插件（如后台默认口令登录）在共享 SessionManager 上登录后，凭证会一直保留
-        （认证状态泄漏）。本插件的「裸请求」前提随即失效，必须改用独立的无凭据会话发探测，
-        否则「已鉴权可访问」会被误判为「未授权可访问」。
-        """
-        inner = getattr(session, "session", None)  # SessionManager 内部的 requests.Session
-        if inner is None:
-            return False
-        try:
-            if len(list(inner.cookies)) > 0:
-                return True
-            headers = inner.headers or {}
-            return any(str(k).lower() == "authorization" for k in headers)
-        except Exception:
-            return False

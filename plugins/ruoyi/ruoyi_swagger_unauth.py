@@ -50,6 +50,11 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:

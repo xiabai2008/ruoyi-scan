@@ -1,7 +1,46 @@
 # 缺陷 A2 修复方案：未授权类插件的会话隔离
 
-- 状态：**设计待评审**（2026-11-02）
+- 状态：**已实现**（2026-11-02）
 - 前置阅读：`docs/_plan_v1.6_facts.md` §二（含一次判断被实测推翻的记录）
+
+## 实施记录：方案在落地时被修正了两次
+
+### 修正 1：不需要新建 `anonymous_probe` 引擎注入
+
+初稿设计是「在 `PluginBase` 加 `anonymous_probe`，引擎在会话被污染时注入干净会话」。
+实现时发现 **`core/session.py` 已有 `SessionManager.anonymous()`**，
+而且它的注释记录的误报事故（2026-10-29 若依 v4.8.3「定时任务 RCE」5 个站点误报）
+和我这次要修的是**同一类问题**。
+
+更关键的是：`unauth_batch` 与 `ruoyi_swagger_unauth` **已经在用**这个 API 了。
+我原本的方案是重复建设。
+
+引擎层注入已回退，改为在缺防护的 4 个插件里直接用现有 API
+（`minio_unauth` / `nacos_unauth` / `rocketmq_unauth` / `ruoyi_cloud_nacos`）。
+
+> **教训**：动手前先 grep 一遍 `session.anonymous`，比设计一套新机制便宜得多。
+> 这与 v1.5.6 的「先核实根因再动手」是同一条纪律。
+
+### 修正 2：`anonymous_probe` 标志保留，但用途变了
+
+保留 `PluginBase.anonymous_probe` 作为**声明**（表示「本插件判定未授权，必须用匿名视角」），
+只是不再由引擎注入会话。它的价值在于：
+- 让「哪些插件是未授权类」变成可查询的属性，便于审计与新插件检查；
+- 与 `requires_auth` 的互斥校验（加载期硬报错）仍然有效——
+  这两个标志同时为 True 是语义矛盾，早报错好过扫描时给一堆无法解释的 UNKNOWN。
+
+### 修正 3：`looks_authenticated` 的正向特征要避开「列表数据」
+
+测试暴露的坑：Nacos 未授权响应的 `pageItems` 里有 `username`/`password` 字段
+（那是**用户列表数据**），如果按裸关键字匹配会被误判成「已认证」，
+把真漏洞降级掉（假阴性）。
+
+判据因此收紧为「**当前登录用户**身份回显」：
+- ✅ 认：`"userName":"admin"` / `"nickName":` 出现在顶层、`"permissions":[...]`、`"access_token":`
+- ❌ 不认：数组元素里的 `username`（列表数据）、普通埋点 cookie
+
+两个测试用例专门锁住这条边界（`test_nacos_confirms_on_real_unauth_response` /
+`test_nacos_unknown_when_response_has_login_user`）。
 
 ---
 

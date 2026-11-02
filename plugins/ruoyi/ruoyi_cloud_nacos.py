@@ -52,6 +52,11 @@ class RuoyiCloudNacosPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     # Nacos 3.x 起 v1 的「空 dataId 列表查询」被移除（返回 400），
@@ -78,7 +83,23 @@ class RuoyiCloudNacosPlugin(PluginBase):
         low = text.lower()
         return any(k in low for k in ("spring:", "datasource", "password:", "redis:", "druid"))
 
-    def verify(self, target, session) -> ScanResult:
+    def verify(self, target, session):
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 unauth_batch / ruoyi_swagger_unauth 同一口径（core.session.SessionManager.anonymous）。
+        复用共享会话时，若调用方注入了 cookie/token（--auth / --auth-login），
+        本插件会把「已鉴权的正常响应」误读成「未授权暴露」——客户现场最常见的形态是
+        「接口开了但配了认证」，此时报告会写「未授权访问」，复核时被当场打回。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_anonymous(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_anonymous(self, target, session) -> ScanResult:
         """以空 dataId/group 的最小化查询探测 Nacos 配置接口是否免鉴权可达。
 
         @param target: 目标站点根 URL

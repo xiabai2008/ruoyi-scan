@@ -9,6 +9,7 @@ import json as _json
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import looks_authenticated
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -133,9 +134,30 @@ class RuoyiNacosUnauthPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     def verify(self, target, session):
+        """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。
+
+        与 unauth_batch / ruoyi_swagger_unauth 同一口径（core.session.SessionManager.anonymous）。
+        复用共享会话时，若调用方注入了 cookie/token（--auth / --auth-login），
+        本插件会把「已鉴权的正常响应」误读成「未授权暴露」——客户现场最常见的形态是
+        「接口开了但配了认证」，此时报告会写「未授权访问」，复核时被当场打回。
+        """
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        try:
+            return self._verify_anonymous(target, probe)
+        finally:
+            if probe is not session:
+                probe.close()
+
+    def _verify_anonymous(self, target, session):
         """探测 Nacos 未授权：v1 用户列表（2.x）+ v1 服务发现列表（3.x 兼容）
 
         @param target: 目标主机（可含端口），用于拼接接口地址
@@ -158,6 +180,19 @@ class RuoyiNacosUnauthPlugin(PluginBase):
         if code == 200:
             hit, reason_200 = _is_nacos_user_list(text)
             if hit:
+                # v1.6 第二道防线：Nacos 用户列表的响应对「匿名」和「已认证」是同一种形状，
+                # 若有身份回显（说明当前带着有效凭据）就不能判未授权。
+                authed, auth_reason = looks_authenticated(text, resp.headers)
+                if authed:
+                    emit(no("Nacos 响应疑似已认证，无法确认未授权"))
+                    return ScanResult(
+                        kind="vuln",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        evidence=f"接口可达且返回用户列表特征，但响应疑似已认证（{auth_reason}），"
+                        "无法确认是否真的无需授权；请用未带凭据的方式复核",
+                    )
                 emit(ok("存在 Nacos 未授权访问漏洞"))
                 return ScanResult(
                     kind="vuln",

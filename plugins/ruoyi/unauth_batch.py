@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import is_path_echo_page, match_positive
+from lib.matcher import is_path_echo_page, looks_authenticated, match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -57,6 +57,11 @@ class UnauthBatchPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     # 各端点判定规则：路径 + 特征关键字（任一命中即视为该端点未授权暴露）
@@ -165,6 +170,14 @@ class UnauthBatchPlugin(PluginBase):
                 # 非 200 的 JSON 错误体/自定义错误页（404/500 等）即使含关键字也不作为未授权证据
                 if code != 200:
                     all_status.append((ep["name"], "SAFE", f"含关键字 {matched_kw} 但 HTTP {code} 非 200"))
+                    continue
+                # v1.6 第二道防线：响应里带已登录用户特征 → 这是「登录后能访问」，
+                # 不是「未授权访问」。即便已用匿名会话探测，目标仍可能把两种响应返回得
+                # 一模一样（或匿名会话被网关按 IP 识别放行），此时身份回显是唯一区分信号。
+                # 降级为 UNKNOWN 而不是 SAFE：接口确实可达，只是无法确认是否真的无需授权。
+                authed, auth_reason = looks_authenticated(text, resp.headers)
+                if authed:
+                    all_status.append((ep["name"], "UNKNOWN", f"响应疑似已认证（{auth_reason}），不构成未授权证据"))
                     continue
                 hit_endpoints.append(
                     {

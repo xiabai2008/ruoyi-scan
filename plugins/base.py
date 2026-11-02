@@ -162,6 +162,23 @@ class PluginBase(ABC):
     # UNKNOWN（测不了 ≠ 不存在）。只应在「使用共享高权会话、没有会话就无法验证」的插件上置 True；
     # 自己负责登录/使用匿名会话/使用显式 --surface-account 的插件保持 False。
     requires_auth = False
+    # 该插件是否必须用「**无凭据**会话」探测才能给出有效结论。
+    # 为 True 时，引擎在调用 verify() 前检查共享会话是否已被登录污染
+    # （cookie / Authorization 头），污染了就注入一个干净的 SessionManager。
+    #
+    # 与 requires_auth 的关系：两者**正交且互斥**。
+    #   requires_auth=True    → 我需要登录才能测（登录后 CONFIRMED 是有效的）
+    #   anonymous_probe=True → 我必须**不登录**才能测（登录后 CONFIRMED 是无效的）
+    #   同时为 True 语义矛盾，引擎会在加载期拒绝。
+    #
+    # 为什么需要有这个声明（v1.6）：
+    #   「未授权访问」类插件的被测命题是「不需要登录就能访问」。共享会话可能已被
+    #   默认口令插件登录过，此时拿到的 200 只证明「登录后能访问」，不构成未授权漏洞。
+    #   真实事故形态：客户把 Swagger 开了但配了认证 → 扫描器报「Swagger 未授权访问」
+    #   → 客户复核「我们明明加了认证」，报告可信度归零。
+    #
+    # 背景细节见 lib/session_state.py 与 docs/_design_A2_unauth_session_isolation.md。
+    anonymous_probe = False
     # 路径作用域（F9）：决定引擎在探到 API 前缀（/prod-api、/jeecg-boot）时，
     # 是否要把本插件的探测基准一起推过去。
     #

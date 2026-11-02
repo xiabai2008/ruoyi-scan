@@ -19,6 +19,11 @@ class SwaggerLeakPlugin(PluginBase):
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     category = "vuln"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     description = "目标存在未授权的 API 文档界面，攻击者可了解全部 API 接口、参数及数据结构，辅助进一步攻击"
     fix = "为 Swagger/API 文档添加访问认证，或在生产环境中禁用 Swagger 端点"
     fix_detail = (

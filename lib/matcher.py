@@ -35,6 +35,58 @@ def is_auth_failure_page(text) -> bool:
     return bool(_AUTH_FAILURE_RE.search(text))
 
 
+# 「当前会话已认证」的响应特征。用于未授权类插件的**反向证据**：
+# 如果拿到的 200 是「某个已登录用户」的响应，就不能据此判「未授权访问」。
+#
+# 特征选择原则：只认**业务身份回显**，不认泛用词。
+# 宁可漏判（退回 UNKNOWN）也不能误伤——若把普通公开页误判成「已认证」，
+# 真正的未授权漏洞就会被降级成 UNKNOWN（假阴性）。
+_AUTHENTICATED_HINTS = (
+    # 若依/Jeecg 常见的登录用户回显字段（JSON）
+    re.compile(r'"(?:userName|loginName|nickName)"\s*:\s*"[^"]{1,40}"'),
+    re.compile(r'"userId"\s*:\s*\d+'),
+    # 权限/角色列表：只有已认证用户才会有这些东西
+    re.compile(r'"(?:permissions|roles)"\s*:\s*\[\s*[{\["]'),
+    # 会话 token 回显（部分网关把 token 放在响应体里）
+    re.compile(r'"(?:access_token|accessToken|token)"\s*:\s*"[A-Za-z0-9._\-]{16,}"'),
+)
+
+
+def looks_authenticated(body, headers=None):
+    """响应是否透露出「当前会话已认证」的迹象（未授权类插件的反向证据）。
+
+    为什么需要它（v1.6 A2）：未授权类插件的被测命题是「不登录就能访问」。
+    即使引擎已用干净会话探测（`anonymous_probe`），仍有一种情况无法排除——
+    目标把「未授权可访问」和「登录后可访问」返回得一模一样。
+    此时响应里的身份回显就是唯一能区分两者的信号。
+
+    Returns:
+        (hit: bool, reason: str)
+    """
+    text = body or ""
+    if not isinstance(text, str):
+        try:
+            text = text.decode("utf-8", errors="ignore")
+        except Exception:
+            return False, "响应体无法解码"
+
+    # Set-Cookie 里下发新的会话标识 = 刚才被认证了（而非本来就是匿名的）
+    if headers:
+        try:
+            cookies = str(headers.get("Set-Cookie", "") or "")
+            if re.search(r"(?:JSESSIONID|Authorization|satoken|X-Access-Token)\s*=", cookies, re.I):
+                return True, "响应下发了会话凭证（Set-Cookie）"
+        except Exception:
+            pass
+
+    for pat in _AUTHENTICATED_HINTS:
+        m = pat.search(text)
+        if m:
+            snippet = m.group(0)[:60]
+            return True, f"响应含已登录用户特征：{snippet}"
+    return False, "未发现已认证痕迹"
+
+
 def is_missing_resource_page(text) -> bool:
     """判断响应正文是否是「资源不存在」错误页
 
