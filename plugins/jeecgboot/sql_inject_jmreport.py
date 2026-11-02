@@ -111,4 +111,10 @@ class JeecgSqlInjectJmreportPlugin(PluginBase):
                 extra={"vuln_type": "sqli", "plugin_name": "jeecg_sqli_jmreport"},
             )
         emit(no("不存在 JeecgBoot jmreport SQL注入"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="注入后响应未出现数据库求值回显（基线差分无差异）",
+        )

@@ -77,4 +77,10 @@ class JeecgJmreportListUnauthPlugin(PluginBase):
                 kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error)
             )
         emit(no("不存在 JeecgBoot 报表未授权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=last_url,
+            evidence="报表列表接口响应未返回报表数据（无 records/total 或鉴权拦截）",
+        )

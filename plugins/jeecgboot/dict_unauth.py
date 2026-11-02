@@ -103,7 +103,13 @@ class JeecgDictUnauthPlugin(PluginBase):
             emit(no("JeecgBoot 字典越权（网络异常）"))
             return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=last_error)
         emit(no("不存在 JeecgBoot 字典越权"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=last_url,
+            evidence="已探测完候选路径，响应未出现未授权字典分页特征（无 records+total 组合）",
+        )
 
     @staticmethod
     def _is_dict_page(resp) -> bool:

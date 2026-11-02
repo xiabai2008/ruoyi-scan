@@ -419,3 +419,32 @@ def test_unauth_batch_still_detects_real_login_wall():
 
     for text in ("请先登录", "登录若依系统", '{"code":401,"msg":"认证失败"}'):
         assert match_positive(text, UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS), text
+
+
+def test_no_plugin_returns_safe_without_evidence():
+    """全库门禁：任何 SAFE 结果都必须带判定证据
+
+    三态纪律里 SAFE = 测过了、确认不存在。没有证据的 SAFE 读者无从复核，
+    downgrade_evidence_less_safe() 会把它降级为 UNKNOWN——盲测 v4 里这类
+    降级共 49 条，全部来自 jeecgboot 的 7 处 SAFE 分支（2026-11-02 已补齐）。
+    这条门禁用 AST 扫源码，防止新增插件再犯。
+    """
+    import ast
+    import pathlib
+
+    bad = []
+    for p in pathlib.Path("plugins").rglob("*.py"):
+        if p.name in ("__init__.py", "base.py"):
+            continue
+        tree = ast.parse(p.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "ScanResult"):
+                continue
+            kw = {k.arg: k.value for k in node.keywords}
+            st = kw.get("status")
+            if not (isinstance(st, ast.Name) and st.id == "STATUS_SAFE"):
+                continue
+            ev = kw.get("evidence")
+            if ev is None or (isinstance(ev, ast.Constant) and not str(ev.value).strip()):
+                bad.append(f"{p}:{node.lineno}")
+    assert not bad, f"SAFE 缺判定证据：{bad}"

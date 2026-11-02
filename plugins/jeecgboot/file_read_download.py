@@ -73,4 +73,10 @@ class JeecgFileReadDownloadPlugin(PluginBase):
                 extra={"vuln_type": "arbitrary_file_read", "plugin_name": "jeecg_file_read"},
             )
         emit(no("不存在 JeecgBoot 任意文件读取"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="下载接口响应未含系统文件的真实行特征（/etc/passwd 或 win.ini 结构）",
+        )
