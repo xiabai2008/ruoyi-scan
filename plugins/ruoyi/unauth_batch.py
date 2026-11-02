@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import is_path_echo_page, looks_authenticated, match_positive
+from lib.matcher import is_not_real_resource, looks_authenticated, match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -160,8 +160,10 @@ class UnauthBatchPlugin(PluginBase):
             # 于是 /swagger-ui.html 的响应体天然含 "swagger-ui" —— 不排除就 100% 误报。
             # 实测 2026-11-01 盲测 v2 C4-6：
             #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
-            if is_path_echo_page(text, ep["path"]):
-                all_status.append((ep["name"], "SAFE", "catch-all 路径回显，非真实端点"))
+            if is_not_real_resource(text, ep["path"]):
+                all_status.append(
+                    (ep["name"], "SAFE", "路径不存在（catch-all 回显 / Spring Boot 4 包装页），非真实端点")
+                )
                 continue
 
             matched_kw = [kw for kw in ep["keywords"] if kw.lower() in text.lower()]

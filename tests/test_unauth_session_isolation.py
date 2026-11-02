@@ -501,3 +501,72 @@ def test_spring_unauth_plugins_declare_anonymous_probe():
         SpringDataRestPlugin,
     ):
         assert getattr(cls, "anonymous_probe", False) is True, f"{cls.__name__} 未声明 anonymous_probe"
+
+
+# ============================================================
+# 7. Spring Boot 4 的 JSON 包装页（v1.6 P0-2）
+#
+# 若依 4.8.3（Spring Boot 4.0.3）对**任意未知路径**返回：
+#   {"msg":"No static resource swagger-ui.html for request '/swagger-ui.html'.","code":500}
+# 这是 JSON 不是 HTML，而旧守卫 is_path_echo_page 只认 <html>/<body>/<h2>
+# —— 直接绕过，5+ 个未授权插件会拿路径名当特征命中（假 CONFIRMED）。
+# ============================================================
+
+_SB4_BODY = '{"msg":"No static resource swagger-ui.html for request \'/swagger-ui.html\'.","code":500}'
+
+
+def test_unified_guard_catches_spring_boot4_json():
+    """统一守卫要认出 Spring Boot 4 的 JSON 包装页"""
+    from lib.matcher import is_not_real_resource
+
+    assert is_not_real_resource(_SB4_BODY, "/swagger-ui.html") is True
+
+
+def test_unified_guard_catches_html_path_echo():
+    """原有的 HTML catch-all 路径回显仍要能识别（不能只顾新的）"""
+    from lib.matcher import is_not_real_resource
+
+    assert is_not_real_resource("<html><body><h2>页面: rocketmq/</h2></body></html>", "/rocketmq/") is True
+
+
+def test_unified_guard_keeps_real_resources():
+    """真实资源不能被误伤（否则真漏洞会被判 SAFE，假阴性）"""
+    from lib.matcher import is_not_real_resource
+
+    real = [
+        ('{"openapi":"3.1.0","paths":{"/user/list":{}}}', "/v3/api-docs"),
+        ('{"total":1,"rows":[{"jobId":1}]}', "/monitor/job/list"),
+        ("<html><title>Swagger UI</title></html>", "/swagger-ui.html"),
+    ]
+    for body, path in real:
+        assert is_not_real_resource(body, path) is False, f"{path} 不应被判为不存在"
+
+
+def test_unauth_batch_not_confirmed_on_spring_boot4_page():
+    """端到端：Spring Boot 4 的未知路径响应不得判 CONFIRMED"""
+    import json as _json
+
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    class _R:
+        def __init__(self, t):
+            self.text = t
+            self.status_code = 200
+            self.headers = {"Content-Type": "application/json"}
+            self.content = t.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        session = None
+
+        def get(self, u, **k):
+            p = u.rsplit("/", 1)[-1]
+            return _R('{"msg":"No static resource %s for request \'/%s\'.","code":500}' % (p, p))
+
+        def anonymous(self):
+            return self
+
+    res = UnauthBatchPlugin().verify("http://t/", _S())
+    assert res.status != "CONFIRMED", f"Spring Boot 4 包装页被误判为暴露：{res.evidence}"

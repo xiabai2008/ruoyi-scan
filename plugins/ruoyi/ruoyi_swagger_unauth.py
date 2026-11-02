@@ -6,7 +6,7 @@ import requests
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from lib.matcher import is_path_echo_page
+from lib.matcher import is_not_real_resource
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -103,7 +103,7 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
                 # 正文天然含 "swagger-ui" 字样 → 旧实现 100% 误报。
                 # 实测 2026-11-01 盲测 v2 C4-6 靶场。
-                if is_path_echo_page(resp.text or "", path):
+                if is_not_real_resource(resp.text or "", path):
                     continue
 
                 if any(

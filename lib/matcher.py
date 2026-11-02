@@ -110,6 +110,42 @@ def is_missing_resource_page(text) -> bool:
     return any(m in low for m in _MISSING_RESOURCE_MARKERS)
 
 
+def is_not_real_resource(text, path="") -> bool:
+    """统一判断：该响应是不是「路径不存在」的兜底产物（而非真实资源）。
+
+    未授权类插件在关键字命中前必须过这一关。它合并了两种此前分散的陷阱：
+
+    ① **HTML catch-all 路径回显**（is_path_echo_page）：
+       `/**` 路由把请求路径写进页面 →
+       `GET /swagger-ui.html → <h2>页面: swagger-ui.html</h2>`，
+       而插件拿路径名当关键字（"swagger"），100% 误判。
+
+    ② **Spring Boot 4 的 JSON 包装页**（is_missing_resource_page）：
+       若依 4.8.3（Spring Boot 4.0.3）对**任意未知路径**返回
+       `{"msg":"No static resource swagger-ui.html for request '/swagger-ui.html'.","code":500}`
+       —— 这是 JSON 不是 HTML，`is_path_echo_page` 只认 `<html>/<body>/<h2>`，
+       于是直接绕过守卫（2026-11-02 能力缺口调研 P0-2）。
+
+    为什么合并成一个函数：此前两个判据分散，调用方经常只接其中一个
+    （unauth_batch 只接了 ①，ruoyi_swagger_unauth 也只接了 ①），
+    ②写好了一直没人用。合成单一入口后，新插件接一次就两样都有。
+
+    Args:
+        text: 响应正文
+        path: 请求路径（用于 ① 的路径回显判定；省略时跳过 ①）
+
+    Returns:
+        True 表示这不是真实资源，不应作为「暴露」的证据
+    """
+    if not text:
+        return False
+    if is_missing_resource_page(text):
+        return True
+    if path and is_path_echo_page(text, path):
+        return True
+    return False
+
+
 # HTML catch-all 路由的特征：把**请求路径本身**写进页面。
 #
 # 第三类「路径回显」陷阱（2026-11-01 盲测 v2 实测）：
