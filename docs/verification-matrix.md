@@ -3,7 +3,7 @@
 > 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。
 > 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。
 
-**总计 57 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 33 个，none 3 个
+**总计 59 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 35 个，none 3 个
 
 | 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |
 |------|------|-----|--------|---------|---------|------|
@@ -43,6 +43,8 @@
 | L1 | Spring Boot Admin 未授权访问 | N/A | medium | 是 | — | `plugins/spring/spring_boot_admin.py` |
 | L1 | Spring Cloud Config 配置未授权读取 | N/A | high | 是 | — | `plugins/spring/spring_cloud_config.py` |
 | L1 | Spring Data REST 信息泄露 | N/A | low | 是 | — | `plugins/spring/spring_data_rest.py` |
+| L1 | 芋道 Druid 监控未授权 | N/A | high | 是 | — | `plugins/yudao/druid_monitor_unauth.py` |
+| L1 | 芋道租户列表未授权 | N/A | medium | 是 | — | `plugins/yudao/tenant_unauth.py` |
 | L2 | Spring Boot Actuator env 配置覆盖 RCE | N/A | high | 是 | — | `plugins/spring/actuator_env_rce.py` |
 | L2 | Spring Boot Actuator 未授权访问 | N/A | medium | 是 | — | `plugins/spring/actuator_unauth.py` |
 | L2 | CVE-2022-22963 Spring Cloud Function 远程代码执行 | CVE-2022-22963 | high | 是 | — | `plugins/spring/cloud_function_rce.py` |
