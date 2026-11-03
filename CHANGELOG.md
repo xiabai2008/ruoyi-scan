@@ -4,6 +4,51 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.6.0] - 2026-11-03
+
+框架扩展版：在真实站点上验证后，把扫描器从「若依专项」扩到**芋道 yudao**，
+并修掉一批「能力存在但被自己的判定链关掉」的缺陷。54 → 56 个插件。
+
+核心方法变化：**先建真实站，再写插件**。本轮三次「源码/记忆判断」被真实站推翻
+（见下方 Notes），真实站不再是可选项。
+
+### Added
+- **芋道 yudao 插件包**（`plugins/yudao/`，2 个插件）：
+  - **租户列表未授权**（medium）：`/admin-api/system/tenant/simple-list` 匿名可读全部租户 ID 与名称。判据要求 `code==0`（芋道成功码，不是若依的 200）+ `data` 非空数组 + 元素含 id/name——只判 `code==0` 会被 `{"code":0,"data":null}` 骗到
+  - **Druid 监控未授权**（high）：`/druid/{datasource,sql,weburi}.json` 匿名返回真实监控数据。根因是芋道默认把 `stat-view-servlet` 的 `login-username`/`login-password` 留空
+- **芋道指纹**：`CMS_FEATURES["yudao"]`，强特征用 `tenant/simple-list`（芋道独有的免鉴权接口），版本正则支持日历式版本号 `2026.xx`
+- **芋道前缀探针**：`/admin-api` `/app-api` 加入候选表，用 `tenant/simple-list` 做免鉴权探针（比验证码可靠——芋道是 aj-captcha 滑块不可 OCR）
+- **`path_scope="both"` 由引擎统一双探**：插件只声明，引擎对「API 前缀」与「站点根」各跑一次取更严重结果。网关架构下运维页面在站点根、业务接口在前缀下，这个机制连着解决了 Swagger、Druid 两处漏报
+- **在线 JSON 鉴权墙识别**：`_DENY_RE` 认 `{"code":401}` 引号形态（此前只认 `code:401`）
+- **`is_not_real_resource()` 统一守卫**：合并「HTML 路径回显」与「Spring Boot 4 JSON 包装页」两种陷阱
+- **`looks_authenticated()` 反向证据**：未授权类插件在响应出现「当前登录用户」身份回显时降级 UNKNOWN
+- **`anonymous_probe` 插件能力声明**：未授权类插件必须在匿名会话上探测（与 `requires_auth` 互斥，加载期校验）
+- **`scripts/check_framework_registration.py`**：新增框架时必须登记 5 处清单，否则 CI 红
+
+### Fixed
+- **未授权类插件复用已登录会话产生假 CONFIRMED**（P0）：默认口令插件登录后，共享会话被污染，MinIO/Nacos/Swagger/Druid 等会报「可匿名访问」而实际带着凭据。7 个 ruoyi 侧 + 8 个 spring 侧 + 2 个芋道插件统一改用 `session.anonymous()`
+- **`JSESSIONID` 被当成认证信号**：任何 Java 应用匿名请求都会下发它，导致真实未授权访问被判 SAFE（假阴性）
+- **`unauth_batch` 鉴权关键字含裸「登录」**：真实暴露页常含「退出登录」字样 → 判 SAFE
+- **`job_rce` 把任意 `code=500` 当进入业务层**：`{"code":500,"msg":"系统异常"}` 也判 CONFIRMED。现要求 msg 命中定时任务专属文案
+- **Spring 插件 401 判 SAFE**：401/403 是「端点存在但拒绝访问」，应为 UNKNOWN 而非「确认不存在」
+- **RuoYi-Vue 3.x 被版本门整片跳过**：3.x 与 4.x 是**两条并行版本线**，接口路径一致。盲测里 R6/R7 各有 9 个插件被跳过，现放宽到 `>=3.0`
+- **`file_read` 版本门错误**：原声明 `>=3.0,<4.7` 表示 4.7 前都受影响，但实测 4.5.1–4.8.3 的 `checkAllowDownload()` 全部含 `..` 拦截。错误的版本区间会让插件在真实受影响目标上反被跳过
+- **jeecg 7 处 SAFE 缺判定证据**：盲测中 49 条降级全部来自这 7 行
+- **芋道对任意未知路径返回 `{"code":401}`**：导致若依的 `/prod-api/`、`/getInfo` 强特征全线误命中。`_looks_like_api_json` 现区分「通用 401」与「带框架专有文案的 401」
+
+### Changed
+- **降级证据补「怎么才能测到」**：按插件能力四类分流。未授权类明确写「登录后重扫结论无效」——避免用户踩进「登录后可访问 ≠ 未授权」的陷阱
+- **插件总数 54 → 56**（ruoyi 20 / spring 14 / common 12 / jeecgboot 8 / yudao 2）
+- 报告 HTML/CSV 新增「归属」列（标注站点级 vs 宿主级资产）
+
+### Notes
+- **三次判断被真实站推翻**：
+  1. v1.5.6 WP3：Plus 5.6.2 的定时任务已迁到 SnailJob，`/monitor/job` **端点不存在**——「加误配配置让它 CONFIRMED」不可行
+  2. v1.6 R14：`checkAllowDownload()` 在 4.5.1 起就拦 `..`——该漏洞在可验证版本上**不存在**
+  3. v1.6 WP-F1：`/jmreport/**` 源码是 `permitAll`，但**模块自身还有一层校验**，实测全部 401
+  共同规律：**源码里看到 permitAll/配置项，不等于运行时可利用**。
+- **靶场新增**：C5「暴露但需认证」（验证 A2 会话隔离）、Y1 芋道真实站
+
 ## [1.5.6] - 2026-11-02
 
 口径正确性版：v1.5.5 解决了「该报的能报」，本版解决「报出来的能不能直接信、能不能直接用于交付」。
