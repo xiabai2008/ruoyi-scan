@@ -39,9 +39,29 @@ def load_baseline(path: str) -> dict:
     return baseline
 
 
-def scan_target(url: str, scan_mode: str = "u") -> list:
-    """对目标执行全量扫描，返回 CONFIRMED 结果的 name 列表"""
+def scan_target(url: str, scan_mode: str = "u", auth_login: str = "", surface_account=None) -> list:
+    """对目标执行全量扫描，返回 CONFIRMED 结果的 name 列表
+
+    auth_login / surface_account 从基线配置读（v1.6 修复）：
+    有 5 个插件（POST 注入 role/dept、定时任务调用目标未校验、部门树越权、
+    重置密码页越权）需要高权会话或低权账号，不传凭据时它们恒为 UNKNOWN。
+    基线把它们列进 expected_confirmed 却不传凭据，等于要求一项永远不可能通过的断言
+    （2026-11-03 nightly 红了两天，missing 恒为这 5 项）。
+    """
     from core.orchestrator import ScanOrchestrator, ScanRequest
+
+    auth = None
+    if auth_login and ":" in auth_login:
+        user, _, pwd = auth_login.partition(":")
+        # 走认证链拿真实会话（含验证码 OCR），而不是手工塞 cookie
+        try:
+            from core.auth_chain import login_with_password
+
+            ok, _reason, cfg = login_with_password(url, user, pwd)
+            if ok:
+                auth = {"cookies": cfg.get("cookies") or {}, "headers": cfg.get("headers") or {}}
+        except Exception as e:  # noqa: BLE001 - 登录失败不应中断验收，只是结论会降级
+            print("[!] %s 登录失败: %s（相关插件将判 UNKNOWN）" % (url, e))
 
     req = ScanRequest(
         target=url,
@@ -49,6 +69,11 @@ def scan_target(url: str, scan_mode: str = "u") -> list:
         threads=4,
         timeout=10,
         no_dedup=True,
+        auth=auth,
+        auth_status="ok" if auth else "not_attempted",
+        # 必须是 list：orchestrator 里是 `for item in req.surface_account`，
+        # 传字符串会逐字符迭代（'s','c','a'...），parse_account 全部失败 → 账号丢失。
+        surface_account=[surface_account] if isinstance(surface_account, str) else (surface_account or None),
     )
     orch = ScanOrchestrator()
     try:
@@ -138,7 +163,12 @@ def run_acceptance(baseline_path: str, targets: list = None, output_path: str = 
         for cfg in target_cfgs:
             print("[*] 对拍目标: %s (%s)" % (cfg["url"], cfg.get("mode", "")))
             try:
-                actual = scan_target(cfg["url"], cfg.get("scan_mode", "u"))
+                actual = scan_target(
+                    cfg["url"],
+                    cfg.get("scan_mode", "u"),
+                    auth_login=cfg.get("auth_login", ""),
+                    surface_account=cfg.get("surface_account"),
+                )
                 result = check_target(cfg, actual)
             except Exception as e:
                 # 单个目标异常不中断整体验收：记录错误项后继续扫描剩余目标，
