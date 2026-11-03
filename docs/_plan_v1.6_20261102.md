@@ -32,8 +32,8 @@
 
 | 工作包 | 阻塞原因 |
 |---|---|
-| **WP-F1 芋道插件包** | 需 Y1（芋道真实站）。没有真实站无法验证 `/jmreport/**` 的 `permitAll` 是否仍生效——盲写插件会重演 v1.5.6 WP3「计划被实测推翻」 |
-| **WP-F2 芋道指纹** | 依赖 WP-F1 |
+| **WP-F1 芋道插件包** | ✅ 完成（`23cdd84`）：2 个插件，Y1 实测 CONFIRMED。⚠ 计划里的「6–8 个复用 jmreport」被实测推翻——见 §205 注 |
+| **WP-F2 芋道指纹** | ✅ 完成（同 `23cdd84`）：cms=yudao 识别正确（0.5 置信度，芋道独有探针） |
 | ~~C5 暴露但需认证靶场~~ | ✅ **已建成**（lab `dac0cff`），并立刻发现 3 个 Spring 插件的 401 语义缺陷（`8b466d2`） |
 | ~~R14 未授权文件读取点~~ | ✅ **调研后放弃**：该漏洞在 4.5.1–4.8.3 上都不存在（`checkAllowDownload` 全含 `..` 拦截）。顺带修正了两个插件的错误版本声明（`24f5ba5`） |
 
@@ -203,8 +203,8 @@ NVD 11 条命中全是「Quake3/Android 游戏」类噪声。
 | WP | 内容 | 依赖 |
 |---|---|---|
 | **WP-F0** | 通用能力数据化：`CANDIDATES` 加 `/admin-api` `/app-api`；前缀探测改成「每框架注册一个匿名探针」的数据表（不再写 `if`）；`_EXPANDED_PACKAGES` 改从 `discover_plugin_packages()` 派生 | WP-U1 |
-| **WP-F1** | `plugins/yudao/` 6–8 个插件：4 个 jmreport 复用 + GoView SQL 注入 + 租户绕过 + Druid + 默认口令 | WP-F0 |
-| **WP-F2** | `CMS_FEATURES["yudao"]` 指纹；日历版本号 `2026.xx` 提取 | WP-F1 |
+| **WP-F1** | ✅ **实际做了 2 个**（原计划 6–8 个）。**计划被实测推翻**：<br>• 「4 个 jeecg jmreport 插件可直接复用」✗——`/jmreport/**` 虽在 SecurityConfiguration 里 `permitAll`，但 jmreport 模块自己还拦一层，实测全部 `{"code":401,"msg":"账号未登录"}`<br>• 「租户绕过 / GoView SQL 注入」——Y1 上未复现出可利用路径<br>• **实测新发现 2 个真暴露**：租户列表未授权（`code=0`+4 个租户）、Druid 监控未授权（`login-username` 留空 → `ResultCode=1` 真实数据） | WP-F0 |
+| **WP-F2** | ✅ `CMS_FEATURES["yudao"]` 已加（强特征用 tenant/simple-list，版本正则 `(\d{4}\.\d{2})`） | WP-F1 |
 
 ---
 
