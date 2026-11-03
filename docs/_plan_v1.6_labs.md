@@ -118,7 +118,29 @@ R1-surface → CONFIRMED
 
 **没有它，A2 的 `looks_authenticated` 就是一行没被验证过的代码。**
 
-### P1 · Y1「芋道 yudao 真实站」（**扩框架的前置**）
+### P1 · Y1「芋道 yudao 真实站」—— ✅ **已建成**（lab `ac6587b`，2026-11-03）
+
+**三条关键论断全部在真实站上验证通过：**
+
+| 端点 | 实测 |
+|---|---|
+| `/admin-api/system/tenant/simple-list` | 200 + 736B（免鉴权探针可用） |
+| `/v3/api-docs` | 200 + 373KB（Swagger 暴露） |
+| `/jmreport/list` | 200 + `{"code":401,"msg":"账号未登录"}` |
+
+最后一条尤其有价值：**HTTP 200 + JSON 业务码**的鉴权拒绝形态，
+正是 WP-U1 要处理的场景，此前只能靠构造响应测试。
+
+**建站后立刻抓到两个扫描器真缺陷**（scanner `fedd0ae`）：
+1. 芋道前缀识别不出（候选表有 `/admin-api` 但没对应探针 → 整类漏报）
+2. Swagger 在网关架构下整类漏报（文档在站点根，不在 API 前缀下）
+   → 引出 `path_scope="both"` 由引擎统一双探
+
+**建站踩的坑**（已写进 `scripts/y1_start.py` 注释）：
+JDK8 泛型推断编译失败（改 JDK17）、Redisson 用 `spring.redis.port` 而非
+`spring.data.redis.port`、宿主 6379 有密码（改用 C4-1 的 16379）。
+
+### 原始评估（保留，供参考）
 
 | 项 | 设计 |
 |---|---|
