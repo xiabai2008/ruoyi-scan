@@ -31,7 +31,12 @@ echo [3/4] PyInstaller build ^(onefile, 1-2 min^)...
 
 echo [4/4] Smoke test...
 tools\cli_build\dist\ruoyi-scan.exe -V || goto :err
-tools\cli_build\dist\ruoyi-scan.exe --plugin-list | findstr /R /C:"^ *54 " >nul || goto :err
+rem 插件清单完整性检查（v1.6 改为派生）：
+rem   原先写死 `findstr /R /C:"^ *54 "` 只验证「第 54 行存在」。
+rem   新增芋道 2 个插件后，第 54 行变成了别的插件——检查仍然通过，
+rem   但已经不再验证「清单完整」，静默失效。
+rem   现在：把插件清单文档里的条目数与 --plugin-list 的输出条目数对比。
+powershell -NoProfile -Command "$e=(Select-String -Path 'docs/promo/ruoyi-scan-plugins.txt' -Pattern '^\s*名称：').Count; $a=(& 'tools\cli_build\dist\ruoyi-scan.exe' --plugin-list | Select-String -Pattern '^\s*\d+\s').Count; if($e -ne $a){Write-Host \"[FAIL] plugin list: expected $e, got $a\"; exit 1}" || goto :err
 
 echo.
 echo Done: tools\cli_build\dist\ruoyi-scan.exe

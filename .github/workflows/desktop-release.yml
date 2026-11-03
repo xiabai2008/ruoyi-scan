@@ -7,11 +7,11 @@
 #   - ruoyi-scan.exe                      （终端版：PyInstaller onefile，console，与 pip 版同一套 CLI）
 #   - ruoyi-scan-command-manual.txt       （命令速查，随资产分发，下载者无需回仓库翻 README）
 #   - ruoyi-scan-usage-guide.txt          （使用指导：场景 / 技巧 / 合规）
-#   - ruoyi-scan-plugins.txt              （54 个 POC 清单与 CVE 索引）
+#   - ruoyi-scan-plugins.txt              （56 个 POC 清单与 CVE 索引）
 #   - checksums-desktop.txt               （SHA256 供应链校验，覆盖上述三个 exe）
 #
 # 零配置体验说明：
-#   引擎（Python 运行时 + 54 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
+#   引擎（Python 运行时 + 56 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
 #   ruoyi-scan-engine.exe，编译期整块嵌入壳二进制（build.rs → include_bytes!）。
 #   首次运行自解压到 %LOCALAPPDATA%\Ruoyi-Scan\engine\ 并拉起 127.0.0.1:8123。
 #   用户：下载 → 双击 → 扫描。无需 Python / Node / Rust，安装器只是可选加分项。
@@ -161,15 +161,19 @@ jobs:
           Write-Host "version: $ver"
 
           $plugins = & "$iso/ruoyi-scan.exe" --plugin-list | Out-String
-          # 统计编号行而不是只匹配第 54 行：后者受表格换行/编码影响会假失败
+          # 统计编号行而不是只匹配某一行：后者受表格换行/编码影响会假失败
           $pluginRows = [regex]::Matches($plugins, '(?m)^\s*\d+\s+\S').Count
-          if ($pluginRows -ne 54) {
+          # 期望值从仓库里的插件清单派生，而不是写死数字（v1.6）。
+          # 写死 54 时，新增芋道 2 个插件后桌面端构建直接失败——
+          # 这是「插件数变更必须同步的位置」之一，动态派生才能根治。
+          $expected = [regex]::Matches((Get-Content docs/promo/ruoyi-scan-plugins.txt -Raw), '(?m)^\s*名称：').Count
+          if ($pluginRows -ne $expected) {
             Write-Host $plugins
-            throw "plugin list incomplete: expected 54 rows, got $pluginRows"
+            throw "plugin list incomplete: expected $expected rows, got $pluginRows"
           }
           $chains = & "$iso/ruoyi-scan.exe" --chain-list | Out-String
           if ($chains -notmatch 'ruoyi_sql_to_rce') { throw "--chain-list missing builtin chain" }
-          Write-Host "PLUGINS_OK (54) / CHAINS_OK"
+          Write-Host "PLUGINS_OK ($pluginRows) / CHAINS_OK"
 
           # 起本地签名靶场（flask 只在 CI 用，不进 exe）
           pip install flask==3.1.2
