@@ -1,7 +1,7 @@
 {
   "schema": "ruoyi-scan-acceptance-baseline",
-  "version": "1.0.5",
-  "description": "lab/ 签名靶场（Tier A）真实环境验收基线：vuln 模式核心命中门禁 / safe 模式零误报门禁（无害探测项豁免）；jeecgboot 尚无签名靶场（真实靶场 R10 需 Maven 构建，不适合 nightly），该项登记为待建，见 docs/_plan_v1.6_labs.md",
+  "version": "1.0.6",
+  "description": "lab/ 签名靶场（Tier A）真实环境验收基线：vuln 模式核心命中门禁 / safe 模式零误报门禁（无害探测项豁免）；jeecgboot 尚无签名靶场（真实靶场 R10 需 Maven 构建，不适合 nightly），该项登记为待建，见 docs/_plan_v1.6_labs.md；yudao（芋道）尚无签名靶场：真实站需 152MB jar + 独立 MySQL 库，不适合 nightly，登记为待建，见 docs/_plan_v1.6_labs.md 的 Y1",
   "targets": [
     {
       "name": "lab-ruoyi-vuln",

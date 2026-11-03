@@ -27,6 +27,9 @@ class Router:
         "ruoyi-magic": "plugins.ruoyi",
         "spring": "plugins.spring",
         "jeecgboot": "plugins.jeecgboot",
+        # 芋道 yudao：虽自称「RuoYi-Vue Pro 版」，但认证/前缀/业务码全不同，
+        # 混进 plugins.ruoyi 会让插件按若依形态判定芋道，全线误判。
+        "yudao": "plugins.yudao",
     }
 
     def candidates(self, fingerprint_result: FingerprintResult) -> List[type]:

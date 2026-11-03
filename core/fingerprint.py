@@ -250,11 +250,36 @@ def _looks_like_api_json(ct: str, body: str) -> bool:
     （实测 2026-10-29：/prod-api/app/ 与 /app/login 都命中变体强特征）。
 
     因此排除 code=500 的错误包装页；只有真正成功的接口响应才判定为 JSON 接口。
+
+    v1.6 补充排除 code=401：芋道 yudao 对**任意未知路径**都返回
+        HTTP 200 + {"code":401,"msg":"账号未登录","data":null}
+    于是若依的 "expect: json" 强特征（/prod-api/、/getInfo）在芋道站点上全部误命中，
+    实测 Y1 被识别成 cms=ruoyi 置信度 1.00，芋道插件整包不跑（2026-11-03）。
+    401 是「未认证」，任何路径都可能返回它，不构成「这个路径存在 JSON 接口」的证据。
+
+    ⚠ 只排除 401，不排除 200/code:0：
+      若依的业务码是 200、芋道是 0，两者都是**真实成功响应**，排除会把真站点打掉。
     """
     if "json" not in ct:
         return False
+    # 路径不存在（500）——任何框架都可能，不证明该路径有接口
     if '"code":500' in body or "'code':500" in body:
         return False
+    # 未认证（401）：**通用 401 不算证据，但带框架专有文案的算**。
+    #
+    # 为什么不能一刀切排除 401（2026-11-03 实测）：
+    #   - 芋道 yudao 对任意未知路径返回 {"code":401,"msg":"账号未登录","data":null}
+    #     → 若依的 /prod-api/、/getInfo 特征在芋道站点全部误命中，Y1 被识别成
+    #       cms=ruoyi 置信度 1.00，芋道插件整包不跑。
+    #   - 但若依自己的 401 带**专有文案**：
+    #       {"msg":"请求访问：/getInfo，认证失败，无法访问系统资源","code":401}
+    #     排除它会打掉真实的若依站点（tests/test_fingerprint.py 有专门用例）。
+    #
+    # 判据：401 时看正文是否含框架专有标记；没有就是通用的「你没登录」，
+    # 不能作为「这个路径存在 JSON 接口」的证据。
+    if '"code":401' in body or "'code':401" in body:
+        framework_markers = ("认证失败，无法访问系统资源", "请求访问：", "Request access:")
+        return any(m in body for m in framework_markers)
     return ("code" in body) or ("msg" in body)
 
 

@@ -65,6 +65,26 @@ CMS_FEATURES = {
         "weight_weak": 0.2,
     },
     # D15：JeecgBoot（低代码平台，常与若依混淆的 Java 框架，负向特征）
+    "yudao": {
+        "display": "Yudao",
+        "favicon_hashes": set(),
+        # 强特征用**芋道独有的免鉴权接口**，比页面关键字可靠得多：
+        #   /admin-api/system/tenant/simple-list 标了 @PermitAll @TenantIgnore，
+        #   返回 {"code":0,"data":[{...租户...}]}——code=0 是芋道口径（若依是 200），
+        #   且「多租户列表」这个语义只有芋道有。
+        # 实测 2026-11-03 Y1 真实站：200 + 736 字节，4 个租户。
+        "strong_paths": [
+            {"path": "/admin-api/system/tenant/simple-list", "expect": "json", "json_keys": ["code", "data"]},
+            {"path": "/admin-api/", "expect": "json"},
+        ],
+        "login_keywords": ["芋道", "Yudao", "yudao"],
+        "weak_keywords": ["芋道", "yudao", "ruoyi-vue-pro"],
+        # 芋道版本是日历式（2026.10），不是语义化版本——用专门的正则，
+        # 不能复用若依的 VERSION_PATTERN（只认 4.x/5.x 数字段）。
+        "version_regex": r"(\d{4}\.\d{2})",
+        "weight_strong": 0.5,
+        "weight_weak": 0.2,
+    },
     "jeecgboot": {
         "display": "JeecgBoot",
         "favicon_hashes": set(),
