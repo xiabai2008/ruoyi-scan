@@ -175,7 +175,41 @@ _PROBES: List[Tuple[Any, Any, str, Any]] = [
     (None, None, "/captcha/captchaImage?type=char", None),
     # JeecgBoot：/sys/randomImage/{key}，result 是 data URI 图片
     ("jeecgboot", ("/jeecg-boot", "/jeecg"), JEECG_CAPTCHA_PATH, "_jeecg"),
+    # 芋道 yudao：用**免鉴权探针**而不是验证码——/system/tenant/simple-list 标了
+    # @PermitAll @TenantIgnore，返回 {"code":0,"msg":"","data":[{...}]}。
+    # 比验证码可靠得多：芋道用 aj-captcha 滑块（不可 OCR），而本函数只需要
+    # 「这个前缀是否通到后端」这一个布尔值，不需要能解出验证码。
+    # 2026-11-03 在真实 Y1 站实测：/admin-api/system/tenant/simple-list → 200 + 736 字节。
+    ("yudao", ("/admin-api", "/app-api"), "/system/tenant/simple-list", "_yudao"),
 ]
+
+
+def _looks_like_yudao_api(resp: Any) -> bool:
+    """判断响应是否是芋道 yudao 的免鉴权探针响应。
+
+    真实响应（2026-11-03 Y1 实测）：
+        GET /admin-api/system/tenant/simple-list
+        {"code":0,"msg":"","data":[{"id":1,"name":"芋道源码",...}]}
+
+    判据要点：
+      - **code 是 0**（芋道的成功码，不是 200/401）——这是它与若依最明显的区别；
+      - data 必须是**非空数组**（只有租户列表这种真实业务数据才算），
+        空数组或 null 都可能是构造出来的错误包装页。
+    """
+    try:
+        if getattr(resp, "status_code", 0) != 200:
+            return False
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        text = resp.text or ""
+        if "json" not in ctype and not text.lstrip().startswith("{"):
+            return False
+        data = json.loads(text)
+        if not isinstance(data, dict) or data.get("code") != 0:
+            return False
+        payload = data.get("data")
+        return isinstance(payload, list) and len(payload) > 0
+    except Exception:
+        return False
 
 
 def _probe_api_base(base: str, session: Any) -> bool:
@@ -202,6 +236,9 @@ def _probe_api_base(base: str, session: Any) -> bool:
             continue
         if judge == "_jeecg":
             if _looks_like_jeecg_api(resp):
+                return True
+        elif judge == "_yudao":
+            if _looks_like_yudao_api(resp):
                 return True
         else:
             # 两种形态都认：分离版/Cloud/Plus 是 JSON，4.x 单机版是图片

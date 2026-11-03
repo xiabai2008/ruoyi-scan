@@ -17,6 +17,10 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     cve = "N/A"
     severity = SEVERITY_MEDIUM
     category = "vuln"
+    # v1.6：文档端点位置随框架而异——分离版在 {base}/v3/api-docs，
+    # 而芋道这类网关架构在**站点根**（实测 Y1：根 200+373KB，/admin-api/v3/api-docs
+    # 只有 48 字节错误页）。声明 both 让引擎对两个基准各探一次。
+    path_scope = "both"
     description = "RuoYi 的 Swagger/Knife4j API 文档可被未授权访问，暴露全部 API 接口及参数"
     fix = "在 SecurityConfig 中为 Swagger 相关路径添加认证拦截，或在生产环境禁用 Swagger"
     fix_detail = (

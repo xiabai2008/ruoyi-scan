@@ -19,6 +19,10 @@ class SwaggerLeakPlugin(PluginBase):
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     category = "vuln"
+    # v1.6：文档端点位置随框架而异——分离版在 {base}/v3/api-docs，
+    # 而芋道这类网关架构在**站点根**（实测 Y1：根 200+373KB，/admin-api/v3/api-docs
+    # 只有 48 字节错误页）。声明 both 让引擎对两个基准各探一次。
+    path_scope = "both"
     # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
     # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
     # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。

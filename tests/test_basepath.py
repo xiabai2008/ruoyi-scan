@@ -300,3 +300,49 @@ def test_plugin_target_skips_when_plugin_carries_same_prefix():
     # 前缀不同则不豁免：插件自带的 /prod-api 与站点真实的 /portal 不是一回事，
     # 此时仍应把基准推进到真实 context-path
     assert plugin_target_for("http://t/", "/portal") == "http://t/portal/"
+
+
+# ── v1.6 WP-F0：探针数据表 + 芋道 ──────────────────────────────────────
+
+
+def test_probe_table_is_data_driven():
+    """探针表结构：加框架应只需加一行，不改控制流"""
+    from core.basepath import _PROBES
+
+    assert isinstance(_PROBES, list) and len(_PROBES) >= 5
+    for item in _PROBES:
+        assert len(item) == 4, f"探针项应为 4 元组: {item}"
+
+
+def test_yudao_candidate_prefixes_present():
+    """芋道的固定前缀必须在候选表里（缺了会整类漏报）"""
+    from core.basepath import CANDIDATES
+
+    assert "/admin-api" in CANDIDATES
+    assert "/app-api" in CANDIDATES
+
+
+def test_looks_like_yudao_api():
+    """芋道免鉴权探针判据：code 必须是 0，data 必须是非空数组
+
+    真实响应（2026-11-03 Y1 实测）：
+      {"code":0,"msg":"","data":[{"id":1,"name":"芋道源码",...}]}
+    注意 code 是 **0** 而不是 200——这是它与若依最明显的区别。
+    """
+    from core.basepath import _looks_like_yudao_api
+
+    class R:
+        def __init__(self, body, code=200, ct="application/json"):
+            self.text = body
+            self.status_code = code
+            self.headers = {"Content-Type": ct}
+
+    assert _looks_like_yudao_api(R('{"code":0,"msg":"","data":[{"id":1,"name":"x"}]}')) is True
+    # code 不是 0 → 不是芋道成功响应
+    assert _looks_like_yudao_api(R('{"code":200,"data":[{"id":1}]}')) is False
+    # 空数组 → 可能只是错误包装，不算
+    assert _looks_like_yudao_api(R('{"code":0,"data":[]}')) is False
+    # data 不是数组
+    assert _looks_like_yudao_api(R('{"code":0,"data":null}')) is False
+    # 非 200
+    assert _looks_like_yudao_api(R('{"code":0,"data":[{"id":1}]}', code=401)) is False
