@@ -26,8 +26,9 @@ pip install ruoyi-scan
 > 全部命令见 [操作命令手册](docs/promo/ruoyi-scan-command-manual.txt)，能覆盖哪些漏洞见 [插件清单](docs/promo/ruoyi-scan-plugins.txt)。
 
 > **⚠️ 成熟度声明与共建邀请**
-> Ruoyi-Scan 目前以**内置签名靶场与真实版本栈**为主要验证环境，尚未经过大规模实战项目检验，
-> 因此**不对漏洞检出率（产出率）、漏报率与误报率做任何承诺** —— 拿不准的项一律如实标注 UNKNOWN，不凑数。
+> Ruoyi-Scan 的验证环境是一套自建的[仿真靶场](https://github.com/xiabai2008/ruoyi-lab)（真实版本栈 / 真实组件 / 二开项目 / 负样本与蜜罐），
+> **尚未经过大规模实战项目检验**，因此**不对漏洞检出率（产出率）、漏报率与误报率做任何承诺** —— 拿不准的项一律如实标注 UNKNOWN，不凑数。
+> 靶场是开源的，能力声明欢迎复核，也欢迎拿它去测别的扫描器。
 > 项目会保持小步快跑的迭代节奏，判定质量逐版本持续收敛。
 > 欢迎共建：提交 [Issue](https://github.com/xiabai2008/Ruoyi-Scan/issues/new/choose) 或 [PR](https://github.com/xiabai2008/Ruoyi-Scan/pulls)；
 > 也欢迎自行 fork 二次开发 —— 基于 MIT License，衍生作品**标注原版出处（XIABAI / Ruoyi-Scan）**即可。
@@ -98,7 +99,7 @@ pip install ruoyi-scan
 
 ## 桌面端 · 单个 exe，双击即用
 
-> 引擎、54 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+> 引擎、56 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
@@ -117,10 +118,10 @@ pip install ruoyi-scan
 <br />
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-03-vulndb.png" alt="漏洞库：54 个 POC 插件与 CVE / CNVD 映射" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-03-vulndb.png" alt="漏洞库：56 个 POC 插件与 CVE / CNVD 映射" width="900" />
 </p>
 
-**漏洞库** —— 54 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+**漏洞库** —— 56 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
 
 <br />
 
@@ -159,14 +160,14 @@ pip install ruoyi-scan
 |------|--------|------|----------------|
 | 定位 | 通用 POC 引擎 | 通用 Web 扫描器 | **若依 / 国产 Java 框架专项** |
 | 若依变体识别 | — | — | **5 变体**（Vue3 / App / Plus / Cloud-Plus / Magic） |
-| 版本感知 POC 过滤 | — | — | **4.2 / 4.7 / v5 / 3.9.x 版本矩阵** |
+| 版本感知 POC 过滤 | — | — | **4.6.2 / 4.7.8 / 4.8.0 / 4.8.2 / 4.8.3 逐版本实测矩阵** |
 | 未确认项的处理 | 无此概念 | 无此概念 | **三态判定**：CONFIRMED / SAFE / UNKNOWN |
 | 网络异常情形 | 报错或跳过 | — | **强制 UNKNOWN，绝不冒充 SAFE** |
 | 合规映射 | — | — | 等保 2.0 / OWASP **报告级章节** |
 | 安服交付物 | — | 部分 | 7 种格式 + **docx 模板引擎 + 整改复测** |
 | nuclei 模板 | 原生 | 不支持 | **兼容执行**（http 协议子集 + 安全白名单） |
-| **模板存量** | **数千个社区模板** | 内置规则库 | **54 个专项 POC**（数量级劣势） |
-| **跨框架广度** | **数十种框架** | 通用 Web | **若依 / Spring Boot / JeecgBoot**（仅 Java 生态） |
+| **模板存量** | **数千个社区模板** | 内置规则库 | **56 个专项 POC**（数量级劣势） |
+| **跨框架广度** | **数十种框架** | 通用 Web | **若依 / Spring Boot / JeecgBoot / 芋道 yudao**（仅 Java 生态） |
 | **社区规模** | **数千贡献者** | 活跃社区 | **单人维护**（响应与迭代速度受限） |
 
 > **把话说全**：模板存量、跨框架广度、社区规模这三项我们**明确落后** —— nuclei 数千个模板的存量与
@@ -180,6 +181,47 @@ pip install ruoyi-scan
 
 ---
 
+## 仿真靶场 · 检出能力的标尺
+
+> **[ruoyi-lab](https://github.com/xiabai2008/ruoyi-lab)** —— 一套独立维护的仿真靶场仓库。
+> 它不绑定本工具，谁都可以拿它测自己的扫描器。
+
+声明「判定准」很容易，难的是**证明**它。所以这个项目的所有能力声明都建立在一套自建靶场上，
+而不是「在我们自己构造的 mock 上跑通了」：
+
+| 靶场形态 | 作用 | 代表站点 |
+|---|---|---|
+| **真实版本栈** | 同一套工具在不同版本上必须给出**不同**结论 | R1 (4.5.1) → R5 (4.8.3) 逐版本递进 |
+| **真实组件** | 不是 mock，是跑起来的 Spring Gateway / SCF / Tomcat | C2 系列（真实 jar + vuln/safe 双模式） |
+| **二开真实项目** | 验证自定义 context-path、改名登录入口等现场形态 | D1（若依 4.6.2 二开，`/portal`） |
+| **负样本 / 蜜罐** | 测工具会不会「看错」—— 假漏洞、WAF hold-out、内部接口 | C3 蜜罐、R5/R11/R13 |
+| **新框架扩展** | 每接一个框架先建真实站，再写插件 | Y1（芋道 yudao，23 模块真实构建） |
+
+### 关键设计原则：靶场是标尺，标尺不能迁就被测物
+
+这条原则在实际开发中被反复用来**推翻错误决策**：
+
+- 某个漏洞在计划里「应该有」，但真实站上一测——**版本早已修复，漏洞根本不存在**。结论是删掉靶场，不是改靶场让它「有洞」。
+- 某个接口源码里写着 `permitAll`，但运行时模块自己还有一层校验。结论是**插件判定要改**，不是去改靶场的配置让它配合。
+- 某个插件零产出，根因是**扫描器自己的判定链把正确答案关掉了**。结论是修判定，不是造一个新靶场掩盖问题。
+
+### 能力是怎么验证的
+
+每一版发布前跑一轮**盲测**：用同一套扫描矩阵打全部靶场，逐站点 diff 上一版基线。
+
+| 版本 | 有 CONFIRMED 产出的插件 | 说明 |
+|---|---|---|
+| v1.5.4（盲测 v2） | 29 / 54 | 误报控制住了，但一半插件一次都没报出东西 |
+| v1.5.5（盲测 v3） | 46 / 54 | +17，v2 产出 0 丢失，B 类误报 0 |
+| v1.5.6（盲测 v4） | 48 / 54 | +2，v3 产出 0 丢失，B 类误报 0 |
+
+> 剩余项全部是**已识别边界**（侦察类插件、只到指纹的插件），报告里逐条写明原因，不做数字美化。
+
+靶场本身也可以拿来用：克隆 [ruoyi-lab](https://github.com/xiabai2008/ruoyi-lab) 后 `python scripts/lab.py up`
+按需启停，三级判定（UP / DEGRADED / DOWN）避免「端口在监听但后端已死」的假活。
+
+---
+
 ## 文档
 
 > 📖 **[在线文档站](https://xiabai2008.github.io/ruoyi-scan/)** —— 全部文档已编组上线（mkdocs-material），推荐从那里开始。
@@ -190,7 +232,7 @@ pip install ruoyi-scan
 | [用户指南](docs/usage.md) | 安装配置、扫描模式、CLI 参数详解 |
 | [使用指导](docs/promo/ruoyi-scan-usage-guide.txt) | 什么时候该用、六个场景怎么打、20 条技巧、合规边界（纯文本） |
 | [操作命令手册](docs/promo/ruoyi-scan-command-manual.txt) | 一页纸命令速查：四模式 / 报告 / 批量 / 认证 / 分布式 / FAQ |
-| [插件清单](docs/promo/ruoyi-scan-plugins.txt) | 54 个 POC 的名称、严重度、影响版本与 CVE 索引 |
+| [插件清单](docs/promo/ruoyi-scan-plugins.txt) | 56 个 POC 的名称、严重度、影响版本与 CVE 索引 |
 | [插件开发教程](docs/plugin_dev.md) | PluginBase、三态判定、entry_points 注册 |
 | [API 文档](docs/api.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
 | [桌面端](docs/desktop.md) | 单 exe 免安装双击即用（引擎内嵌） |
@@ -203,7 +245,7 @@ pip install ruoyi-scan
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.5.2
+- **版本**：1.6.0
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
@@ -218,6 +260,7 @@ pip install ruoyi-scan
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
 | `plugins/common/` | 通用漏洞包 12 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权、Shiro 指纹等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
+| `plugins/yudao/` | 芋道 yudao 插件包（2 个插件：租户列表未授权、Druid 监控未授权；真实 Y1 站验证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
 | 组件版本检测 | 20 个 Java 组件（fastjson/SpringBoot/Shiro/Nacos/Log4j/Tomcat/Jenkins/Grafana 等）版本比对 CVE 映射（`--components`） |
 | 三态判定 | CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定） |
@@ -413,6 +456,10 @@ docker compose down
 | prometheus | 9090 | 指标采集（`--profile monitor`） |
 | grafana | 3000 | 监控面板（`--profile monitor`） |
 
+> 这里的两个靶场是 **CI 用的签名靶场**（返回约定特征，跑得快，适合回归门禁）。
+> 完整的仿真靶场（真实版本栈 / 真实组件 / 二开项目 / 负样本与蜜罐）在独立仓库 [ruoyi-lab](https://github.com/xiabai2008/ruoyi-lab)，
+> 用于盲测与能力度量，不随镜像分发。
+
 ### CLI 参数速查
 
 > 完整参数说明请运行 `python main.py -h`。以下按功能分组列出全部参数。
@@ -458,6 +505,8 @@ docker compose down
 | `--js-extract` | 启用 JS 端点提取 |
 | `--portscan` | 端口扫描 + 服务识别 |
 | `--ports <p1,p2>` | 自定义端口列表（逗号分隔） |
+| `--redis-port <n>` | Redis 未授权检测的目标端口（默认 6379；现场常用非默认端口） |
+| `--base-path <prefix>` | 显式指定 API 前缀（如 `/portal`，可多次）。默认自动探测，自定义 context-path 探测不出时用它兜底 |
 | `--passive` | 启动被动代理模式 |
 | `--passive-host <addr>` | 代理监听地址（默认 127.0.0.1） |
 | `--passive-port <n>` | 代理监听端口（默认 8080） |
@@ -713,7 +762,7 @@ Ruoyi-Scan/
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
 ├── tests/                   # 67 个测试文件 / 1300+ 条用例
-├── lab/                     # 靶场环境
+├── lab/                     # 内置签名靶场（CI 用）；完整仿真靶场见 ruoyi-lab 仓库
 ├── web/                     # Web 控制台前端
 ├── monitoring/              # Grafana + Prometheus
 ├── desktop/                 # Tauri 桌面端（React 前端 + Rust 壳 + 内嵌引擎）
