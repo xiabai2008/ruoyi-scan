@@ -109,8 +109,8 @@ dev = [
     # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移。
     # 注意：dependabot 曾把这里 bump 到 0.16.10/2.4.0，但 CI 仍固定 0.16.2/2.1.0，
     # 导致本地 ruff format --check 与 CI 结论不同（42 个文件被要求重排）。两处同步升级时再一起改。
-    "ruff==0.16.2",
-    "mypy==2.1.0",
+    "ruff==0.17.3",
+    "mypy==2.4.1",
 ]
 
 # CLI 入口点：安装后可直接 ruoyi-scan -p http://target/
