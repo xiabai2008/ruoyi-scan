@@ -4,6 +4,18 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Fixed
+- **配置/模板合并误吸外部命令行参数**（工程一致性缺陷，2026-11-04 由外部评审报告指出、实测确认并修复）：
+  `merge_config_with_args()` / `apply_template()` 原先自己去扫全局 `sys.argv` 判断「用户是否显式指定」，
+  于是**任何**往 `sys.argv` 塞参数的东西都会被当成用户指定。实测触发：`pytest tests/test_d19_d27_template_config.py --timeout=30`
+  → `timeout` 被判为显式指定 → 配置文件里的 `timeout: 12` 不再生效 → 2 个用例稳定失败（无参时全绿）。
+  改为在 `main()` 的 `parse_args` 处解析一次显式键集合（`explicit_keys_from_argv`），作为参数传给下游，
+  彻底解除对全局状态的依赖。同时合并了 `lib/config_loader.py` 与 `lib/scan_templates.py` 中两份重复实现。
+  - 注：`pytest` 的 `addopts` **不会**进入 `sys.argv`（已实测），所以 CI 此前未受影响；但命令行手写该参数即会踩中
+  - 语义未变：CLI 显式传参仍优先于配置文件，配置文件仍优先于默认值（已做端到端验证）
+
 ## [1.6.0] - 2026-11-03
 
 框架扩展版：在真实站点上验证后，把扫描器从「若依专项」扩到**芋道 yudao**，

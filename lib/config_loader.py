@@ -245,22 +245,47 @@ def normalize_config_keys(config: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def _cli_explicitly_set(key: str) -> bool:
-    """检测 sys.argv 中是否显式出现该参数对应的命令行选项
+def explicit_keys_from_argv(argv: Optional[list] = None) -> set:
+    """从命令行参数列表算出「用户显式指定了哪些 dest」
 
-    仅比较 args 值与 parser 默认值，无法区分「显式传入等于默认值的参数」与
-    「未指定」，这里用原始 argv 补齐（库/测试场景 argv 无该选项，行为不变）。
+    为什么要有这个函数（改自 2026-11-04 评审报告 §4.4 的实测缺陷）：
+        旧实现让 merge_config_with_args / apply_template 自己去扫全局 sys.argv
+        判断「用户是否显式指定」。这很脆弱——**任何**往 sys.argv 里塞参数的
+        东西都会被误认成「用户指定」：pytest 的 --timeout=30、以及任何宿主进程
+        的参数都是。实测：`pytest tests/test_d19_d27_template_config.py
+        --timeout=30` 会让 timeout 被误判为显式指定，配置文件的 timeout=12
+        不再生效，2 个用例稳定失败（无参时全绿）。
+
+        注意 addopts 不会进 sys.argv，所以 CI 未受影响——但这个耦合本身
+        是定时炸弹：谁在命令行手写一次 --timeout=N 就会踩到。
+
+    做法：解析动作只在 main() 做一次，把结果作为集合传下去。判定依据不再
+    依赖全局状态，测试里也不会有外部参数混进来。
+
+    Args:
+        argv: 待解析的参数列表；None 表示取 sys.argv[1:]
+    Returns:
+        被显式指定的 argparse dest 名集合
     """
-    import sys
+    import sys as _sys
 
-    long_forms = {"--" + key.replace("_", "-"), "--" + key}
-    for token in sys.argv[1:]:
-        if token in long_forms or any(token.startswith(f + "=") for f in long_forms):
-            return True
-    return False
+    tokens = _sys.argv[1:] if argv is None else list(argv)
+    keys = set()
+    for token in tokens:
+        if not token.startswith("--"):
+            continue
+        name = token[2:].split("=", 1)[0].strip()
+        if not name:
+            continue
+        keys.add(name.replace("-", "_"))
+    return keys
 
 
-def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
+def merge_config_with_args(
+    args,
+    config: Dict[str, Any],
+    explicit_keys: Optional[set] = None,
+) -> Tuple[Any, Dict[str, Any]]:
     """将配置文件值合并到 argparse args
 
     优先级：CLI 显式参数 > 配置文件 > 默认值
@@ -268,15 +293,21 @@ def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str,
     判定"CLI 是否显式指定"的方法：
         - 获取 argparse 默认值
         - 当前 args 值与默认值不同 → CLI 显式指定 → 不覆盖
-        - 当前 args 值与默认值相同 → CLI 未指定 → 用配置文件值覆盖
+        - 当前 args 值与默认值相同 → 看 explicit_keys 是否含该键
+          （含 → 用户显式传了同值参数，不覆盖；不含 → 未指定，用配置文件覆盖）
 
     Args:
         args: argparse.Namespace 对象
         config: 标准化后的配置字典
+        explicit_keys: 用户在命令行显式指定的 dest 集合（见 explicit_keys_from_argv）。
+            None 表示「没有 CLI 上下文」（库调用 / 测试），此时一律视为未指定，
+            与旧行为一致，但不再去扫全局 sys.argv。
     Returns:
         (合并后的 args 对象, 被配置文件覆盖的参数名列表)
     """
     defaults = _get_parser_defaults()
+    if explicit_keys is None:
+        explicit_keys = set()
 
     overridden = []
     for key, config_value in config.items():
@@ -285,9 +316,9 @@ def merge_config_with_args(args, config: Dict[str, Any]) -> Tuple[Any, Dict[str,
             continue
         current_value = getattr(args, key, None)
         default_value = defaults.get(key)
-        # 当前值与默认值相同且 argv 未显式指定 → CLI 未指定 → 用配置文件值覆盖
-        # （argv 判定保证 --threads 5（等于默认值）这类显式参数不被配置文件覆盖）
-        if current_value == default_value and not _cli_explicitly_set(key):
+        # 当前值与默认值相同且 CLI 未显式指定 → 用配置文件值覆盖
+        # （explicit_keys 保证 --threads 5（等于默认值）这类显式参数不被配置文件覆盖）
+        if current_value == default_value and key not in explicit_keys:
             setattr(args, key, config_value)
             overridden.append(key)
 
@@ -331,13 +362,19 @@ def set_parser_defaults(defaults: Dict[str, Any]):
     _parser_defaults_cache = dict(defaults)
 
 
-def apply_config_to_args(args, filepath: str, verbose: bool = True) -> Tuple[Any, Dict[str, Any]]:
+def apply_config_to_args(
+    args,
+    filepath: str,
+    verbose: bool = True,
+    explicit_keys: Optional[set] = None,
+) -> Tuple[Any, Dict[str, Any]]:
     """加载 YAML 配置文件并合并到 args
 
     Args:
         args: argparse.Namespace 对象
         filepath: YAML 配置文件路径
         verbose: 是否打印应用日志
+        explicit_keys: 用户在命令行显式指定的 dest 集合，透传给 merge_config_with_args
     Returns:
         (合并后的 args 对象, 原始配置字典)
     Raises:
@@ -351,7 +388,7 @@ def apply_config_to_args(args, filepath: str, verbose: bool = True) -> Tuple[Any
         emit(f"  [*]加载配置文件: {filepath}")
         emit(f"      参数数: {len(config)}")
 
-    args, overridden = merge_config_with_args(args, config)
+    args, overridden = merge_config_with_args(args, config, explicit_keys=explicit_keys)
 
     if verbose and overridden:
         emit(f"      覆盖参数: {', '.join(overridden)}")

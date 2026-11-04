@@ -548,6 +548,13 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    # 这里解析一次「用户显式指定了哪些参数」，往下传给配置文件/模板合并逻辑。
+    # 不要在那边自己扫 sys.argv：pytest 等宿主塞进来的参数会被误认成用户指定
+    # （实测 --timeout=30 会让配置文件值失效，见 lib/config_loader.explicit_keys_from_argv）。
+    from lib.config_loader import explicit_keys_from_argv
+
+    explicit_keys = explicit_keys_from_argv(argv)
+
     # 初始化日志（--debug 启用 DEBUG 级别，默认 WARNING 静默）
     setup_logging(debug=getattr(args, "debug", False))
 
@@ -567,7 +574,9 @@ def main(argv=None):
         try:
             raw_config_data = load_yaml_config(args.config)
             config_data = normalize_config_keys(raw_config_data)
-            args, _overridden = apply_config_to_args(args, args.config, verbose=True)
+            args, _overridden = apply_config_to_args(
+                args, args.config, verbose=True, explicit_keys=explicit_keys
+            )
         except FileNotFoundError as e:
             print(f"{RED}[!]{e}{RESET}")
             return
@@ -591,7 +600,7 @@ def main(argv=None):
         from lib.scan_templates import apply_template
 
         print(f"{YELLOW}[*]应用扫描模板: {args.template}{RESET}")
-        apply_template(args, args.template, verbose=True)
+        apply_template(args, args.template, verbose=True, explicit_keys=explicit_keys)
 
     # Redis 端口覆盖：必须在 YAML 配置/模板回填**之后**应用，否则配置文件里的
     # redis_port 会被覆盖或漏读（顺序敏感项一律放在参数定型之后）。
