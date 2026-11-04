@@ -134,8 +134,12 @@ function EngineCard() {
 function ProgressCard() {
   const { tasks } = useApp();
   const active = tasks.find((t) => t.status === "running") ?? null;
-  const pct = 62; // 进度真值在 WS 流里，Widgets 层用任务列表近似；有 running 任务时显示环
-  const ring = active ? Math.min(100, pct) : 0;
+  // 进度真值在 WS 事件流里，Widgets 层拿不到逐插件进度。
+  // 旧实现写死 `const pct = 62`，从任务 0% 到结束一直显示 62 —— 这是给用户
+  // 看进度的浮窗，展示伪值比不显示更糟。改为不画百分比弧、只反映
+  // 「有没有任务在跑」，并明确标注为活动指示而非进度。
+  const pct = active ? 100 : 0;
+  const ring = pct;
   const dash = 2 * Math.PI * 16;
   return (
     <div className="flex items-center gap-2.5">
@@ -152,12 +156,13 @@ function ProgressCard() {
           strokeDasharray={`${(dash * ring) / 100} ${dash}`}
           transform="rotate(-90 20 20)"
         />
-        <text x="20" y="24" textAnchor="middle" fontFamily="JetBrains Mono" fontSize="10" fill="var(--c-text-primary)">
-          {active ? `${ring}` : "—"}
+        {/* 不显示百分比：拿不到真实进度，伪造一个数字比留空更误导 */}
+        <text x="20" y="24" textAnchor="middle" fontFamily="JetBrains Mono" fontSize="9" fill="var(--c-text-primary)">
+          {active ? "●" : "—"}
         </text>
       </svg>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="font-mono text-[8px] tracking-wider text-ink-3">PROGRESS</span>
+        <span className="font-mono text-[8px] tracking-wider text-ink-3">RUNNING</span>
         <span className="truncate font-mono text-[10px] text-ink" title={active?.target}>
           {active ? active.target.replace(/^https?:\/\//, "").slice(0, 14) : "NO RUNNING"}
         </span>

@@ -216,6 +216,78 @@ async function main() {
     if (info.len < 10) note("高", "导航", `「${label}」页面内容为空（innerText 长度 ${info.len}）`);
   }
 
+  // ── 4b. 自定义主题重复应用（原 bug：theme 已是 custom 时完全无效）──
+  await goSettings();
+  await sleep(500);
+  const applyCustomTwice = await evl(`(async () => {
+    const pick = (t) => {
+      const n = [...document.querySelectorAll('*')]
+        .filter(e=>e.children.length===0 && e.textContent.trim()===t)[0];
+      if(!n) return false; (n.closest('button')||n.parentElement.parentElement||n).click(); return true;
+    };
+    if (!pick('C 白瓷薄荷')) return { err: '未找到主题包' };
+    await new Promise(r=>setTimeout(r,400));
+    const before = getComputedStyle(document.documentElement).getPropertyValue('--c-bg-page').trim();
+    const btn = [...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='应用自定义主题');
+    if (!btn) return { err: '未找到应用按钮' };
+    btn.click();
+    await new Promise(r=>setTimeout(r,400));
+    const after1 = getComputedStyle(document.documentElement).getPropertyValue('--c-bg-page').trim();
+    // 再点一次：theme 已经是 custom，旧实现这里不会重跑 applyTheme
+    btn.click();
+    await new Promise(r=>setTimeout(r,400));
+    const after2 = getComputedStyle(document.documentElement).getPropertyValue('--c-bg-page').trim();
+    return { before, after1, after2, theme: document.documentElement.dataset.theme };
+  })()`);
+  if (applyCustomTwice && !applyCustomTwice.err) {
+    if (applyCustomTwice.theme !== "custom") {
+      note("中", "自定义主题", `点应用后 data-theme 不是 custom：${applyCustomTwice.theme}`);
+    }
+    // 关键是第二次点击后仍有正确的 custom 调色板（不是回到上一个主题的值）
+    if (applyCustomTwice.after2 !== applyCustomTwice.after1) {
+      note("中", "自定义主题", `重复应用后背景色漂移：${applyCustomTwice.after1} -> ${applyCustomTwice.after2}`);
+    }
+  } else if (applyCustomTwice?.err) {
+    note("中", "自定义主题", applyCustomTwice.err);
+  }
+
+  // ── 4c. accent-tint 变量必须随主题变化（原来从未定义，恒为蓝）──
+  const tintCheck = await evl(`(async () => {
+    const pick = (t) => {
+      const n = [...document.querySelectorAll('*')]
+        .filter(e=>e.children.length===0 && e.textContent.trim()===t)[0];
+      if(!n) return false; (n.closest('button')||n.parentElement.parentElement||n).click(); return true;
+    };
+    const read = () => getComputedStyle(document.documentElement).getPropertyValue('--c-accent-tint').trim();
+    if (!pick('V0 暗夜霓虹')) return null;
+    await new Promise(r=>setTimeout(r,500));
+    const dark = read();
+    if (!pick('C 白瓷薄荷')) return null;
+    await new Promise(r=>setTimeout(r,500));
+    const mint = read();
+    return { dark, mint };
+  })()`);
+  if (tintCheck && tintCheck.dark && tintCheck.mint && tintCheck.dark === tintCheck.mint) {
+    note("低", "主题强调色", `--c-accent-tint 未随主题变化，两主题都是 ${tintCheck.dark}`);
+  }
+
+  // ── 4d. 新建扫描弹窗打开时 Ctrl+K 不该抢焦点 ──
+  const ctrlK = await evl(`(async () => {
+    const btn = [...document.querySelectorAll('button')].find(b=>/新建扫描/.test(b.textContent));
+    if (!btn) return { err: '未找到新建扫描按钮' };
+    btn.click();
+    await new Promise(r=>setTimeout(r,400));
+    const dlgOpen = !!document.querySelector('.z-40');
+    window.dispatchEvent(new KeyboardEvent('keydown', {key:'k', ctrlKey:true, bubbles:true}));
+    await new Promise(r=>setTimeout(r,300));
+    const focusedId = document.activeElement ? document.activeElement.id : '';
+    const stillOpen = !!document.querySelector('.z-40');
+    return { dlgOpen, focusedId, stillOpen };
+  })()`);
+  if (ctrlK && !ctrlK.err && ctrlK.dlgOpen && ctrlK.focusedId === "rs-global-search") {
+    note("中", "快捷键冲突", "弹窗打开时 Ctrl+K 仍把焦点抢到搜索框（弹窗内 Esc 会失效）");
+  }
+
   // ── 5. 控制台错误 ──
   for (const e of consoleErrors.slice(0, 5)) {
     note("高", "控制台", e.slice(0, 220));

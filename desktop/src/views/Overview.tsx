@@ -13,7 +13,9 @@ const todayStr = () => {
 };
 
 export function Overview() {
-  const { tasks, online, engine, openDialog, apiBase } = useApp();
+  // theme 用于图表配色：写死 "bluewhite" 会让暗夜霓虹下的网格线仍是近白色，
+  // 铺在 #0A0A14 上非常刺眼。
+  const { tasks, online, engine, openDialog, apiBase, theme } = useApp();
   const [pluginCount, setPluginCount] = useState<number | null>(null);
   const [query, setQuery] = useState("");
 
@@ -114,7 +116,7 @@ export function Overview() {
           </div>
           <div className="min-h-0 flex-1">
             <TrendChart
-              theme="bluewhite"
+              theme={theme}
               dates={trendDates(chartNow)}
               found={taskTrend(tasks, "running", chartNow)}
               total={taskTrend(tasks, "done", chartNow)}
@@ -128,7 +130,7 @@ export function Overview() {
           <h2 className="text-[12px] font-semibold text-ink">三态判定 / VERDICT MIX</h2>
           <div className="flex min-h-0 flex-1 items-center gap-4">
             <div className="h-full w-[170px] shrink-0">
-              <MixDonut theme="bluewhite" data={verdictMixToChart(kpis.verdictMix)} centerValue={String(kpis.findings)} centerLabel="FINDINGS" />
+              <MixDonut theme={theme} data={verdictMixToChart(kpis.verdictMix)} centerValue={String(kpis.findings)} centerLabel="FINDINGS" />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               {kpis.verdictMix.map((v) => (

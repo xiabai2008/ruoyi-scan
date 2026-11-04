@@ -148,6 +148,17 @@ export function getApiBase(): string {
   }
 }
 
+/** 地址变更订阅：UI 上多处展示当前地址，改了要一起变，
+ *  否则会出现「请求已走新地址、界面还显示旧地址」。 */
+const apiBaseListeners = new Set<(base: string) => void>();
+
+export function subscribeApiBase(fn: (base: string) => void): () => void {
+  apiBaseListeners.add(fn);
+  return () => {
+    apiBaseListeners.delete(fn);
+  };
+}
+
 export function setApiBase(base: string) {
   const normalized = base.replace(/\/+$/, "");
   memApiBase = normalized;
@@ -155,6 +166,13 @@ export function setApiBase(base: string) {
     localStorage.setItem("ruoyi-scan.apiBase", normalized);
   } catch {
     /* 存储不可用：地址仅在本会话生效，不向调用方抛错 */
+  }
+  for (const fn of apiBaseListeners) {
+    try {
+      fn(normalized);
+    } catch (e) {
+      console.error("[apiBase] 订阅者回调异常", e);
+    }
   }
 }
 

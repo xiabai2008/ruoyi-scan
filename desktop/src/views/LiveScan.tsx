@@ -365,8 +365,17 @@ export function LiveScan() {
             />
           </div>
 
-          {/* 结果明细（可折叠，仅终态且有结果时展示） */}
-          {active && !running ? <ResultsTable taskId={active.task_id} refreshKey={`${active.task_id}-${console.taskDone}`} /> : null}
+          {/* 结果明细（可折叠，仅终态且有结果时展示）
+              key 必须带 taskId：否则在两个终态任务间切换时组件实例被复用，
+              上一个任务的折叠态/筛选条件会带过来，且新数据到达前表格里
+              还显示着上一个任务的行。 */}
+          {active && !running ? (
+            <ResultsTable
+              key={active.task_id}
+              taskId={active.task_id}
+              refreshKey={`${active.task_id}-${console.taskDone}`}
+            />
+          ) : null}
         </>
       )}
     </div>

@@ -246,6 +246,14 @@ function resolveTheme(name: ThemeName): { applied: ThemeName; theme: Theme } {
   return { applied: name, theme: THEMES[name] };
 }
 
+/** #RRGGBB → rgba(r,g,b,a)；解析失败时返回 fallback 原值 */
+function withAlpha(hex: string, alpha: number, fallback: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 /** 把当前主题写到 <html data-theme> + --c-* CSS 变量上（custom 读 localStorage） */
 export function applyTheme(name: ThemeName) {
   const root = document.documentElement;
@@ -255,6 +263,12 @@ export function applyTheme(name: ThemeName) {
   for (const [k, v] of Object.entries(theme)) {
     root.style.setProperty(`--c-${kebab(k)}`, v);
   }
+  // persona.css 的呼吸光环引用了 --c-accent-tint / --c-accent-tint-0，
+  // 但 TokenKey 里没有这两项（30 个 token 全都没定义过），于是永远走
+  // 兜底值 —— 无论切到哪个主题，头像光环都还是天选蓝白的蓝。
+  // 这里从 accentPrimary 派生，不必给每套主题加两个字段。
+  root.style.setProperty("--c-accent-tint", withAlpha(theme.accentPrimary, 0.28, "rgba(47,111,237,0.28)"));
+  root.style.setProperty("--c-accent-tint-0", withAlpha(theme.accentPrimary, 0, "rgba(47,111,237,0)"));
 }
 
 /** ECharts 等需要具体色值的场景直接取 token */
