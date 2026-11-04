@@ -9,7 +9,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "smoke:ui": "node scripts/smoke-ui.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:fonts": "node scripts/check-font-switch.mjs",
+    "check:ui": "node scripts/check-ui-runtime.mjs"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-sc": "^5.3.1",

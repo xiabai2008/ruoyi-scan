@@ -4,6 +4,16 @@
    applyTheme() 在 React useEffect（首帧之后）才写 --c-*，且 data-theme 缺失/拼错时
    不会有任何取值：这里先声明一套合法默认值，保证首屏与异常路径永远有颜色。 */
 :root {
+  /* ---- 字体栈默认值（等宽模式）----
+     @theme inline 里的 --font-* 只是转发到这些 --f-*。
+     为什么要这层间接：inline 会把值内联成字面量，运行时改不动；
+     经 var() 转发后，state/visual.ts 的 applyVisual() 才能真正切换字体。 */
+  --f-sans: "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --f-pixel: "JetBrains Mono", monospace;
+  --f-crt: "JetBrains Mono", monospace;
+  --f-chip: "JetBrains Mono", monospace;
+
   --c-bg-page: #F2F7FD;
   --c-bg-sidebar: #FFFFFF;
   --c-card: #FFFFFF;
@@ -71,11 +81,18 @@
   --color-ambertint: var(--c-sem-amber-tint);
   --color-alertstroke: var(--c-alert-stroke);
 
-  --font-sans: "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  --font-pixel: "JetBrains Mono", monospace;
-  --font-crt: "JetBrains Mono", monospace;
-  --font-chip: "JetBrains Mono", monospace;
+  /* 注意：字体必须经 --f-* 这层间接引用，不能写字面值。
+     @theme inline 会把字面值**直接烧进工具类**（构建产物是
+     `.font-mono{font-family:JetBrains Mono,...}`，没有 var()），
+     于是 state/visual.ts 的 applyVisual() 在运行时改 --font-mono 毫无效果 ——
+     「切换字体没反应」就是这么来的（2026-11-04 定位）。
+     多一层 var() 后，工具类输出 `.font-mono{font-family:var(--font-mono)}`，
+     开关才能真正生效。--f-* 的默认值定义在 :root。 */
+  --font-sans: var(--f-sans);
+  --font-mono: var(--f-mono);
+  --font-pixel: var(--f-pixel);
+  --font-crt: var(--f-crt);
+  --font-chip: var(--f-chip);
 }
 
 html,

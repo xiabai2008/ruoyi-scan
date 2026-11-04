@@ -444,6 +444,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm run smoke:ui
+      # 视觉签名字体切换回归：@theme inline 会把字体栈内联成字面值，
+      # 导致 applyVisual() 运行时改变量无效（切字体没反应）。tsc / build
+      # 都发现不了，只有真在浏览器里量 computed style 才看得见。
+      - run: npm run check:fonts
+      # 主题 / CRT / 偏好持久化 / 导航遍历的运行时交互检查
+      - run: npm run check:ui
       - name: Upload UI smoke failure screenshot
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
