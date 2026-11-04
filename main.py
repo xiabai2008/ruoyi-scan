@@ -574,9 +574,7 @@ def main(argv=None):
         try:
             raw_config_data = load_yaml_config(args.config)
             config_data = normalize_config_keys(raw_config_data)
-            args, _overridden = apply_config_to_args(
-                args, args.config, verbose=True, explicit_keys=explicit_keys
-            )
+            args, _overridden = apply_config_to_args(args, args.config, verbose=True, explicit_keys=explicit_keys)
         except FileNotFoundError as e:
             print(f"{RED}[!]{e}{RESET}")
             return
