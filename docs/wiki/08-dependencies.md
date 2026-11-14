@@ -178,13 +178,13 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 | `pytest` / `pytest-timeout` / `pytest-cov` / `pytest-asyncio` | 测试框架 |
 | `pytest-benchmark` | 性能基线（仅 pyproject 声明） |
 | `httpx2` | `starlette.testclient` 的隐式依赖 |
-| `ruff==0.16.2` / `mypy==2.1.0` | lint 与类型检查 |
+| `ruff==0.17.4` / `mypy==2.4.1` | lint 与类型检查 |
 
 **版本固定在 pyproject 里是刻意的**，注释：
 
 > `ruff format` 输出随版本演进，不固定会造成 CI 与本地格式漂移
 
-同一组版本号也出现在 [ci.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/ci.yml)（`pip install ruff==0.16.2 mypy==2.1.0`）与 [CHANGELOG.md](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/CHANGELOG.md) 的「CI lint 转绿」条目中，三处需保持一致——CI 注释已明确提醒"升级时需本地重跑 ruff format 并同步此处与 pyproject dev 依赖"。
+同一组版本号也出现在 [ci.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/.github/workflows/ci.yml)（`pip install ruff==0.17.4 mypy==2.4.1`），两处必须保持一致——CI 注释已明确提醒"升级时需本地重跑 ruff format 并同步此处与 pyproject dev 依赖"。CHANGELOG 中的版本号属于历史记录，不回改。
 
 ### 3.4 `cryptography`：可选但 fail-closed
 

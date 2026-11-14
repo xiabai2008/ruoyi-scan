@@ -38,7 +38,7 @@ jobs:
         # 重跑 ruff format 并同步此处与 pyproject dev 依赖。
         # 额外装项目本体：插件清单校验要 import plugins/*，插件顶层 import requests。
         run: |
-          pip install ruff==0.16.2 mypy==2.1.0
+          pip install ruff==0.17.4 mypy==2.4.1
           pip install -e .
       - name: Ruff lint
         # tests/ 纳入 lint 门禁：测试代码同样是仓库主体（65 文件），此前不受约束导致

@@ -266,7 +266,7 @@ unit ──┬── signature-e2e（ruoyi + spring 靶场，要求全部 CONFIR
 **lint job 的三道硬门禁**（都值得留意）：
 
 1. **ruff check 覆盖 `tests/` 与 `scripts/`**——注释说明"测试代码同样是仓库主体（65 文件），此前不受约束导致未用导入与导入顺序持续漂移"，而 `desktop/`、`lab/` 不纳入（独立产物 / 一次性脚本）。
-2. **版本固定**：`pip install ruff==0.16.2 mypy==2.1.0`。理由写在注释里：「ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移（v1.2.3/v1.2.4 期间 CI 连红的根因）」。
+2. **版本固定**：`pip install ruff==0.17.4 mypy==2.4.1`。理由写在注释里：「ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移（v1.2.3/v1.2.4 期间 CI 连红的根因）」。
 3. **mypy 门禁分层**：`common/` 与 `core/` 全量 `--strict`（G2 完成后从 350 个错误清零，去掉软门禁 `|| true`），`lib/` 只锁定已 strict 化的 `reporter.py`、`soft404.py`。
 
 **两道"文档—代码一致性"门禁**（较少见但很有价值）：
