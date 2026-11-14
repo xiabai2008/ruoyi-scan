@@ -47,8 +47,14 @@ jobs:
           # 此前只起 ruoyi 的两座，spring 目标恒全部 missing——
           # 加目标时忘了同步本工作流，nightly 从那以后一直红（2026-11-03 定位）。
           docker run -d --name lab-spring --rm -e LAB_HOST=0.0.0.0 -e LAB_PORT=8091 -e SERVER_FILE=spring_server.py -p 8091:8091 ruoyi-scan-lab
+          # spring 靶场不能用 GET / 做健康检查：spring_server.py 为避免指纹误报，
+          # GET / 恒返回 404（vuln/safe 都一样），curl -f 会以退出码 22 失败，
+          # 导致健康检查恒超时（2026-11-04 ~ 11-14 连续 11 天 nightly 红的根因）。
+          # /actuator/health 在两种模式下都返回 200，专用于存活探测。
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8080/ >/dev/null 2>&1 && curl -sf http://127.0.0.1:8081/ >/dev/null 2>&1 && curl -sf http://127.0.0.1:8091/ >/dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:8080/ >/dev/null 2>&1 \
+              && curl -sf http://127.0.0.1:8081/ >/dev/null 2>&1 \
+              && curl -sf http://127.0.0.1:8091/actuator/health >/dev/null 2>&1; then
               exit 0
             fi
             sleep 2
