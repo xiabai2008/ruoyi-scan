@@ -113,3 +113,8 @@ coverage.xml
 # 扫描/构建残留（F4：artifacts 与 desktop/dist_prev_* 不入库）
 artifacts/
 desktop/dist_prev_*/
+
+# local build leftovers (old desktop / CLI builds, generated docs output)
+/output/
+desktop/dist-old-*/
+tools/cli_build/build-old-local/
