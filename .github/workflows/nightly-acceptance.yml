@@ -46,7 +46,10 @@ jobs:
           # Spring 签名靶场（v1.6）：acceptance_baseline 的 lab-spring-vuln 指向 8091。
           # 此前只起 ruoyi 的两座，spring 目标恒全部 missing——
           # 加目标时忘了同步本工作流，nightly 从那以后一直红（2026-11-03 定位）。
-          docker run -d --name lab-spring --rm -e LAB_HOST=0.0.0.0 -e LAB_PORT=8091 -e SERVER_FILE=spring_server.py -p 8091:8091 ruoyi-scan-lab
+          # LAB_MODE 必须显式给 vuln：Dockerfile 默认 ENV LAB_MODE=safe，
+          # 漏传时 spring 靶场以安全模式启动，14 个签名全部返回 404，
+          # 验收对拍恒为「全部 missing」（2026-11-14 首轮修复健康检查后暴露）。
+          docker run -d --name lab-spring --rm -e LAB_MODE=vuln -e LAB_HOST=0.0.0.0 -e LAB_PORT=8091 -e SERVER_FILE=spring_server.py -p 8091:8091 ruoyi-scan-lab
           # spring 靶场不能用 GET / 做健康检查：spring_server.py 为避免指纹误报，
           # GET / 恒返回 404（vuln/safe 都一样），curl -f 会以退出码 22 失败，
           # 导致健康检查恒超时（2026-11-04 ~ 11-14 连续 11 天 nightly 红的根因）。
