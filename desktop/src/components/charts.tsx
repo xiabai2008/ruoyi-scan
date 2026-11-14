@@ -4,7 +4,7 @@ import { themeOf, type ThemeName } from "../tokens";
 
 function useChart(option: echarts.EChartsOption, theme: ThemeName) {
   const ref = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<echarts.ECharts>();
+  const chartRef = useRef<echarts.ECharts | null>(null);
   const lastSig = useRef<string | null>(null);
 
   useEffect(() => {
