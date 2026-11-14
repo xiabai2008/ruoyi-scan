@@ -54,6 +54,24 @@ def print_banner():
 [*]联系方式:{settings.CONTACT}{RESET}""")
 
 
+def _known_categories():
+    """已安装的插件类别（供 --cms 的 choices 用）。
+
+    从 plugins/ 下的包发现派生，而不是写死 ["ruoyi", "spring"]——
+    写死的版本会让 `--cms jeecgboot` 被 argparse 直接拒绝（v1.6 WP-R 修的债）。
+
+    发现失败时退回内置的最小集合：argparse 的 choices 必须是可迭代且非空的，
+    抛异常会让整个 CLI 无法启动。
+    """
+    try:
+        from core.loader import known_categories
+
+        cats = known_categories()
+        return cats if cats else ["ruoyi", "spring"]
+    except Exception:
+        return ["ruoyi", "spring"]
+
+
 def build_parser():
     """构建参数解析（-h/-u/-m/-p/-l 向后兼容，新增能力用长参数）"""
     # 禁用 argparse 内置 -h：自建 dest="help" 参数，帮助输出对齐原脚本（print_help）。
@@ -96,7 +114,9 @@ def build_parser():
         metavar="SECONDS",
         help="单目标扫描时间预算；超出后剩余插件标记为 UNKNOWN（默认 0 = 不限制）",
     )
-    group.add_argument("--cms", default=None, choices=["ruoyi", "spring"], help="手动指定 CMS")
+    # 类别从已安装的插件包派生，新增框架时无需改这里（v1.6 WP-R）。
+    # 曾经写死 ["ruoyi", "spring"]，导致 --cms jeecgboot 被 argparse 直接拒绝。
+    group.add_argument("--cms", default=None, choices=_known_categories(), help="手动指定 CMS（默认自动识别）")
     group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
     group.add_argument(
@@ -528,6 +548,13 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    # 这里解析一次「用户显式指定了哪些参数」，往下传给配置文件/模板合并逻辑。
+    # 不要在那边自己扫 sys.argv：pytest 等宿主塞进来的参数会被误认成用户指定
+    # （实测 --timeout=30 会让配置文件值失效，见 lib/config_loader.explicit_keys_from_argv）。
+    from lib.config_loader import explicit_keys_from_argv
+
+    explicit_keys = explicit_keys_from_argv(argv)
+
     # 初始化日志（--debug 启用 DEBUG 级别，默认 WARNING 静默）
     setup_logging(debug=getattr(args, "debug", False))
 
@@ -547,7 +574,7 @@ def main(argv=None):
         try:
             raw_config_data = load_yaml_config(args.config)
             config_data = normalize_config_keys(raw_config_data)
-            args, _overridden = apply_config_to_args(args, args.config, verbose=True)
+            args, _overridden = apply_config_to_args(args, args.config, verbose=True, explicit_keys=explicit_keys)
         except FileNotFoundError as e:
             print(f"{RED}[!]{e}{RESET}")
             return
@@ -571,7 +598,7 @@ def main(argv=None):
         from lib.scan_templates import apply_template
 
         print(f"{YELLOW}[*]应用扫描模板: {args.template}{RESET}")
-        apply_template(args, args.template, verbose=True)
+        apply_template(args, args.template, verbose=True, explicit_keys=explicit_keys)
 
     # Redis 端口覆盖：必须在 YAML 配置/模板回填**之后**应用，否则配置文件里的
     # redis_port 会被覆盖或漏读（顺序敏感项一律放在参数定型之后）。

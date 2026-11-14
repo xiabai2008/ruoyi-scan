@@ -162,6 +162,30 @@ class PluginBase(ABC):
     # UNKNOWN（测不了 ≠ 不存在）。只应在「使用共享高权会话、没有会话就无法验证」的插件上置 True；
     # 自己负责登录/使用匿名会话/使用显式 --surface-account 的插件保持 False。
     requires_auth = False
+    # 该插件判定的是「**未登录**能否访问」——必须用匿名会话探测。
+    #
+    # ⚠ 这是**声明**，不是引擎会自动处理的开关。真正的隔离动作在插件自己的
+    #   verify() 里：`anon = getattr(session, "anonymous", None); probe = anon() ...`
+    #   （`core/session.py::SessionManager.anonymous()`）。
+    #
+    # 曾经踩过的坑（2026-11-02，已修）：v1.6 重构时把 plus_job_unauth 的手写隔离
+    #   删掉、改成只声明本标志并注明「引擎统一处理」，但引擎当时并无该能力 →
+    #   裸用共享会话 → 带 admin cookie 时假 CONFIRMED（「未携带 token 返回任务列表」）。
+    #   教训：**声明必须与实现同批落地**，只写声明而留 TODO 会造成更隐蔽的回归。
+    #
+    # 与 requires_auth 的关系：两者**正交且互斥**。
+    #   requires_auth=True    → 我需要登录才能测（登录后 CONFIRMED 是有效的）
+    #   anonymous_probe=True → 我必须**不登录**才能测（登录后 CONFIRMED 是无效的）
+    #   同时为 True 语义矛盾，加载期会拒绝（core/loader.py::_validate_capability_flags）。
+    #
+    # 为什么需要（v1.6）：
+    #   「未授权访问」类插件的被测命题是「不需要登录就能访问」。共享会话可能已被
+    #   默认口令插件登录过，此时拿到的 200 只证明「登录后能访问」，不构成未授权漏洞。
+    #   真实事故形态：客户把 Swagger 开了但配了认证 → 扫描器报「Swagger 未授权访问」
+    #   → 客户复核「我们明明加了认证」，报告可信度归零。
+    #
+    # 背景细节见 docs/_design_A2_unauth_session_isolation.md。
+    anonymous_probe = False
     # 路径作用域（F9）：决定引擎在探到 API 前缀（/prod-api、/jeecg-boot）时，
     # 是否要把本插件的探测基准一起推过去。
     #
@@ -295,6 +319,18 @@ class PluginBase(ABC):
         # 下游报告统一按 status 筛选，此处仅修正语义一致性
         if result.status != STATUS_CONFIRMED and result.kind == "vuln":
             result.kind = "info"
+        # v1.6：把插件的能力声明带进结果，供下游降级链判断「该怎么解锁」。
+        # 降级函数（lib/reachability）只拿到 ScanResult 列表，拿不到插件类；
+        # 没有这份元信息它就只会写一句「需登录后才能判定」，读者不知道该怎么办。
+        # 只写一次（幂等）：enrich 在 WAF 绕过路径上会被调用两次。
+        result.extra = dict(result.extra or {})
+        if "plugin_capability" not in result.extra:
+            result.extra["plugin_capability"] = {
+                "path_scope": self.path_scope,
+                "vuln_type": self.vuln_type or "",
+                "requires_auth": bool(self.requires_auth),
+                "anonymous_probe": bool(self.anonymous_probe),
+            }
         return result
 
     def meta(self) -> Dict[str, Any]:

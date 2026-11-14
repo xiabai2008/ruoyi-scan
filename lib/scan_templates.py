@@ -145,22 +145,12 @@ def list_templates() -> List[ScanTemplate]:
     return list(TEMPLATES.values())
 
 
-def _cli_explicitly_set(key: str) -> bool:
-    """检测 sys.argv 中是否显式出现该参数对应的命令行选项
-
-    仅比较 args 值与 parser 默认值，无法区分「显式传入等于默认值的参数」与
-    「未指定」，这里用原始 argv 补齐（库/测试场景 argv 无该选项，行为不变）。
-    """
-    import sys
-
-    long_forms = {"--" + key.replace("_", "-"), "--" + key}
-    for token in sys.argv[1:]:
-        if token in long_forms or any(token.startswith(f + "=") for f in long_forms):
-            return True
-    return False
-
-
-def apply_template(args, template_name: str, verbose: bool = True) -> Optional[ScanTemplate]:
+def apply_template(
+    args,
+    template_name: str,
+    verbose: bool = True,
+    explicit_keys: Optional[set] = None,
+) -> Optional[ScanTemplate]:
     """将模板默认参数应用到 args 对象
 
     规则：用户显式指定的 CLI 参数优先，模板仅填充未指定的参数。
@@ -168,12 +158,17 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
     判定"用户是否显式指定"的逻辑：
         - argparse 的 default 值视为"未显式指定"
         - 布尔 flag（store_true）：default=False 时，值为 True 视为显式指定
-        - 数值参数：与 default 相同视为未显式指定
+        - 数值参数：与 default 相同 → 看 explicit_keys 是否含该键
+
+    注意：判定不再扫描全局 sys.argv（旧实现会误吸外部参数，如 pytest 的
+    --timeout=30，详见 lib/config_loader.py 的 explicit_keys_from_argv 注释）。
 
     Args:
         args: argparse.Namespace 对象
         template_name: 模板名称
         verbose: 是否打印应用日志
+        explicit_keys: 用户在命令行显式指定的 dest 集合；
+            None 表示没有 CLI 上下文（库调用 / 测试），一律视为未指定。
     Returns:
         应用的 ScanTemplate，或 None（模板不存在）
     """
@@ -185,14 +180,17 @@ def apply_template(args, template_name: str, verbose: bool = True) -> Optional[S
         emit(f"  [*]应用模板: {tmpl.display_name}（{tmpl.estimated_time}）")
         emit(f"      {tmpl.description}")
 
+    if explicit_keys is None:
+        explicit_keys = set()
+
     # 应用模板默认参数（仅填充未显式指定的）
     parser_defaults = _get_parser_defaults()
     for key, tmpl_value in tmpl.default_args.items():
         current_value = getattr(args, key, None)
         default_value = parser_defaults.get(key)
-        # 当前值与默认值相同且 argv 未显式指定 → 用户未指定 → 应用模板值
-        # （argv 判定保证 --threads 3 这类"显式传入默认值"的参数不被模板覆盖）
-        if current_value == default_value and not _cli_explicitly_set(key):
+        # 当前值与默认值相同且 CLI 未显式指定 → 应用模板值
+        # （explicit_keys 保证 --threads 3 这类"显式传入默认值"的参数不被模板覆盖）
+        if current_value == default_value and key not in explicit_keys:
             setattr(args, key, tmpl_value)
             if verbose:
                 emit(f"      {key}: {current_value} → {tmpl_value}")

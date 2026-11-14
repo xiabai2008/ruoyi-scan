@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import is_path_echo_page, match_positive
+from lib.matcher import is_not_real_resource, looks_authenticated, match_positive
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -57,6 +57,11 @@ class UnauthBatchPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     # 各端点判定规则：路径 + 特征关键字（任一命中即视为该端点未授权暴露）
@@ -91,7 +96,13 @@ class UnauthBatchPlugin(PluginBase):
     # 收紧说明：原列表含泛用英文子串 "login"/"signin"。/system/user/list 的真实暴露响应
     # 常含 loginName/lastLoginTime 等字段（都带 "login"），会在正特征前被误判为「已鉴权」，
     # 造成确定性漏报（false negative）。现仅保留不会与业务字段冲突的鉴权文案。
-    AUTH_BLOCK_KEYWORDS = ["登录", "请先登录", "unauthorized", "认证失败", "无法访问系统资源"]
+    #
+    # ⚠ 中文也有同一个坑（2026-11-02 修正）：裸字串「登录」同样会误伤——
+    #   真实暴露的 /system/user/list 页面常含「退出登录」「登录名」字样，
+    #   命中即判 SAFE，把真实未授权暴露报成「已鉴权拦截」（假阴性）。
+    #   只保留**完整鉴权提示语**（"请先登录" 这类整句），不用单词。
+    #   正确写法参考 job_rce.py 的「登录若依系统」。
+    AUTH_BLOCK_KEYWORDS = ["请先登录", "登录若依", "unauthorized", "认证失败", "无法访问系统资源"]
 
     def verify(self, target, session):
         """批量探测多个常见未授权端点（在**完全未认证**的会话上探测）
@@ -149,8 +160,10 @@ class UnauthBatchPlugin(PluginBase):
             # 于是 /swagger-ui.html 的响应体天然含 "swagger-ui" —— 不排除就 100% 误报。
             # 实测 2026-11-01 盲测 v2 C4-6：
             #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
-            if is_path_echo_page(text, ep["path"]):
-                all_status.append((ep["name"], "SAFE", "catch-all 路径回显，非真实端点"))
+            if is_not_real_resource(text, ep["path"]):
+                all_status.append(
+                    (ep["name"], "SAFE", "路径不存在（catch-all 回显 / Spring Boot 4 包装页），非真实端点")
+                )
                 continue
 
             matched_kw = [kw for kw in ep["keywords"] if kw.lower() in text.lower()]
@@ -165,6 +178,14 @@ class UnauthBatchPlugin(PluginBase):
                 # 非 200 的 JSON 错误体/自定义错误页（404/500 等）即使含关键字也不作为未授权证据
                 if code != 200:
                     all_status.append((ep["name"], "SAFE", f"含关键字 {matched_kw} 但 HTTP {code} 非 200"))
+                    continue
+                # v1.6 第二道防线：响应里带已登录用户特征 → 这是「登录后能访问」，
+                # 不是「未授权访问」。即便已用匿名会话探测，目标仍可能把两种响应返回得
+                # 一模一样（或匿名会话被网关按 IP 识别放行），此时身份回显是唯一区分信号。
+                # 降级为 UNKNOWN 而不是 SAFE：接口确实可达，只是无法确认是否真的无需授权。
+                authed, auth_reason = looks_authenticated(text, resp.headers)
+                if authed:
+                    all_status.append((ep["name"], "UNKNOWN", f"响应疑似已认证（{auth_reason}），不构成未授权证据"))
                     continue
                 hit_endpoints.append(
                     {

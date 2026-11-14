@@ -3,7 +3,7 @@ from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -44,7 +44,13 @@ class FileUploadPlugin(PluginBase):
     # 版本范围：REAL-RUOYI.md 在 4.7.8 实例上实测 CONFIRMED（上传探针返回
     # url/fileName，文件真实落盘）；4.8.x 未取得「已修复」证据。
     # 原范围 <4.7 会把 4.7.8 直接跳过，故放宽为不设上界，由响应证据判定。
-    affected_versions = ">=4.0"
+    # v1.6：下界从 4.0 放宽到 3.0 —— RuoYi-Vue（3.x）与单机版（4.x）是**两条并行的版本线**，
+    # 不是前后代关系。3.8.9 / 3.9.2 的同一批接口路径实测全部存在：
+    #   /prod-api/common/download/resource、/monitor/job/edit、/common/upload、/system/user/list
+    # 原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6 3.9.2 与 R7 3.8.9 各有 9 个插件
+    # 被 version_matrix 标为 applicable=False，含文件读取/上传/定时任务/SQL 注入）。
+    # 这与本文件上方注释记录的「原范围过窄造成漏报」是同一类问题，只是当时只考虑了 4.x 内部。
+    affected_versions = ">=3.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H"
     compliance = "等保2.0:8.1.4;OWASP:A04:2021"
@@ -130,7 +136,7 @@ class FileUploadPlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"请求被登录墙拦截（{_wall}），无法判定上传接口是否可写",
+                evidence=login_wall_evidence(_wall, "上传接口是否可写"),
             )
 
         # 响应体文本（错误页可能非 JSON，需容错）

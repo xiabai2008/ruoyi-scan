@@ -4,7 +4,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page, match_positive
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -49,7 +49,13 @@ class JobRcePlugin(PluginBase):
     # 版本范围：REAL-RUOYI.md 在 4.7.8 实例上实测 CONFIRMED（/monitor/job/edit
     # 返回 AjaxResult 业务层响应，未在鉴权层被拦）；4.8.x 未取得「已修复」证据。
     # 原范围 <4.7 会把 4.7.8 跳过，故放宽为不设上界，由响应证据判定。
-    affected_versions = ">=4.0"
+    # v1.6：下界从 4.0 放宽到 3.0 —— RuoYi-Vue（3.x）与单机版（4.x）是**两条并行的版本线**，
+    # 不是前后代关系。3.8.9 / 3.9.2 的同一批接口路径实测全部存在：
+    #   /prod-api/common/download/resource、/monitor/job/edit、/common/upload、/system/user/list
+    # 原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6 3.9.2 与 R7 3.8.9 各有 9 个插件
+    # 被 version_matrix 标为 applicable=False，含文件读取/上传/定时任务/SQL 注入）。
+    # 这与本文件上方注释记录的「原范围过窄造成漏报」是同一类问题，只是当时只考虑了 4.x 内部。
+    affected_versions = ">=3.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"
@@ -68,6 +74,23 @@ class JobRcePlugin(PluginBase):
         "登录若依系统",
         "redirect:/login",
         "unauthorized",
+    ]
+
+    # 「确实进入了定时任务业务层」的特征文案（v1.6 P0-5）。
+    #
+    # 为什么需要：判 CONFIRMED 的旧条件是「code in (200,500) 且响应含 code/msg 两键」，
+    # 任何 @RestControllerAdvice 的全局异常响应都满足：
+    #   {"code":500,"msg":"系统异常，请联系管理员"}  ← 与定时任务毫无关系
+    # 实测该响应会被误报成「未授权定时任务 RCE」。
+    #
+    # 这里只收**定时任务专属**的话术——它们出现即说明请求确实走到了
+    # SysJobController 的业务校验逻辑（而非在鉴权层就被拦掉）。
+    JOB_SPECIFIC_KEYWORDS = [
+        "任务不存在",  # 若依 4.6.2 对不存在的 jobId 的真实文案（盲测 v4 的 4 条命中全是它）
+        "定时任务",  # 版本间文案差异的兜底
+        "jobId",
+        "invokeTarget",
+        "cronExpression",
     ]
 
     def verify(self, target, session):
@@ -117,7 +140,7 @@ class JobRcePlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=url,
-                evidence=f"请求被登录墙拦截（{_wall}），无法判定接口是否未鉴权",
+                evidence=login_wall_evidence(_wall, "接口是否未鉴权"),
             )
         text = resp.text or ""
         code = getattr(resp, "status_code", 0)
@@ -182,7 +205,18 @@ class JobRcePlugin(PluginBase):
             # 业务层响应（200 成功 / 500 任务不存在）→ 绕过鉴权，存在未授权访问
             # 注意：仅 code==200/500 且形态匹配才判 CONFIRMED；其他业务码（400 参数错误等）不判，
             # 避免「r_code is not None」导致任意 JSON 响应均误报（P0 修复）
-            if r_code in (200, 500) and has_ajaxresult_shape:
+            #
+            # ⚠ v1.6 P0-5：光看「code=500 + 有 code/msg 两键」远远不够。
+            #   任何 @RestControllerAdvice 全局异常处理器都返回同样形状：
+            #     {"code":500,"msg":"系统异常，请联系管理员"}   ← 与定时任务毫无关系
+            #   实测这三条都会被判 CONFIRMED（2026-11-02）：
+            #     系统异常，请联系管理员 / 参数校验失败 / 任务不存在
+            #   而前两条证明不了任何事——它们只能说明「有个若依风格的应用」。
+            #
+            #   现在要求 msg 命中**定时任务专属**文案，或响应里有 jobId 回显。
+            #   这与项目一贯的「判据必须指向具体漏洞特征，不能只看通用结构」一致。
+            task_specific = match_positive(msg, self.JOB_SPECIFIC_KEYWORDS) or ("jobId" in body)
+            if r_code in (200, 500) and has_ajaxresult_shape and task_specific:
                 emit(ok("存在定时任务 RCE 漏洞（未授权访问编辑接口）"))
                 return ScanResult(
                     kind="vuln",
@@ -193,6 +227,20 @@ class JobRcePlugin(PluginBase):
                     evidence=f"未鉴权进入业务层：code={r_code} msg={msg}",
                     extra={"code": r_code, "msg": msg},
                     fix=self.fix,
+                )
+            # 有 AjaxResult 形状但响应与定时任务无关 → 无法证明是「进入业务层」，
+            # 判 UNKNOWN 而非 SAFE：接口可能存在，只是我们没拿到能定性的证据
+            if r_code in (200, 500) and has_ajaxresult_shape:
+                emit(no(f"定时任务 RCE（响应为通用 AjaxResult，无法定性：code={r_code} msg={msg}）"))
+                return ScanResult(
+                    kind="vuln",
+                    name=self.name,
+                    status=STATUS_UNKNOWN,
+                    url=url,
+                    evidence=(
+                        f"响应是若依 AjaxResult 形态（code={r_code}），但 msg 与定时任务无关"
+                        f"（{msg[:80]}），无法确认是否绕过鉴权进入业务层"
+                    ),
                 )
             # 其他情形（业务码不在已知范围，或 JSON 非 AjaxResult 形态）：无法判定是否绕过鉴权，标 UNKNOWN
             # （不判 SAFE 避免漏报已修复但返回奇怪码的系统；也不判 CONFIRMED 避免误报）

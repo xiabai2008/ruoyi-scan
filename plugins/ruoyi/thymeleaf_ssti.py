@@ -4,7 +4,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -164,7 +164,7 @@ class ThymeleafSstiPlugin(PluginBase):
                 name=self.name,
                 status=STATUS_UNKNOWN,
                 url=join_url(target, self.CANDIDATE_PATHS[0]),
-                evidence=f"候选路径请求被登录墙拦截（{wall_reasons[0]}），无法判定模板注入是否存在",
+                evidence=login_wall_evidence(wall_reasons[0], "模板注入是否存在"),
             )
 
         # 所有候选路径均无 49 出现 → 判 SAFE（无求值迹象）

@@ -110,7 +110,13 @@ class JeecgFileUploadJmreportPlugin(PluginBase):
                 kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=last_url, evidence=str(last_error)
             )
         emit(no("不存在 JeecgBoot jmreport 文件上传"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=last_url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=last_url,
+            evidence="上传接口响应未出现上传成功标记（url/fileName 字段）",
+        )
 
     @staticmethod
     def _upload_succeeded(text):

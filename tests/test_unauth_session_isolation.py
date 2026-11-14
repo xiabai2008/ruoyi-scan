@@ -1,0 +1,688 @@
+# 未授权类插件的会话隔离（v1.6 A2）
+#
+# 背景：未授权类插件的被测命题是「**不需要登录**就能访问」。
+# 共享 SessionManager 可能已被默认口令/爆破插件登录污染，此时拿到的 200
+# 只证明「登录后能访问」，不构成未授权漏洞。
+#
+# 真实会出事的场景（客户现场）：
+#   Swagger 开了但配了认证 → 扫描器先跑「后台默认口令」拿到会话
+#   → Swagger 插件复用该会话 → 200 + 真实页面 → 报「Swagger 未授权访问」
+#   → 客户复核「我们明明加了认证」，报告可信度归零。
+import os
+import sys
+from types import SimpleNamespace
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from lib.matcher import looks_authenticated  # noqa: E402
+
+# ============================================================
+# 1. looks_authenticated() 判据本身
+# ============================================================
+
+
+def test_detects_ruoyi_user_info():
+    assert looks_authenticated('{"code":200,"user":{"userId":1,"userName":"admin"}}')[0] is True
+
+
+def test_detects_permission_list():
+    assert looks_authenticated('{"permissions":["*:*:*"],"roles":["admin"]}')[0] is True
+
+
+def test_detects_jwt_token():
+    assert looks_authenticated('{"access_token":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}')[0] is True
+
+
+def test_jsessionid_is_not_an_auth_signal():
+    """JSESSIONID 不是认证信号——任何 Java 应用对匿名请求都会下发它
+
+    2026-11-02 修正：初版把 JSESSIONID 当成「刚才被认证了」，
+    实测任何 Tomcat/Shiro 站点匿名请求都带它 → 「未授权访问」被判 SAFE（假阴性）。
+    方向与三态纪律相反：该报没报。只认应用层自己签发的 token。
+    """
+    assert looks_authenticated("{}", {"Set-Cookie": "JSESSIONID=abc123; Path=/"})[0] is False
+
+
+def test_detects_app_level_token_cookie():
+    """应用层 token（satoken / X-Access-Token / Admin-Token）才是认证信号"""
+    for cookie in ("satoken=xxx", "X-Access-Token=yyy", "Admin-Token=zzz"):
+        assert looks_authenticated("{}", {"Set-Cookie": f"{cookie}; Path=/"})[0] is True, cookie
+
+
+def test_plain_business_list_is_not_authenticated():
+    """普通业务列表不能误判——否则真漏洞会被降级成 UNKNOWN（假阴性）"""
+    assert looks_authenticated('{"code":200,"total":2,"rows":[{"jobId":1}]}')[0] is False
+
+
+def test_plain_html_is_not_authenticated():
+    assert looks_authenticated("<html><body>Welcome</body></html>")[0] is False
+
+
+def test_auth_failure_message_is_not_authenticated():
+    """「认证失败」是**未**认证的证据，不能当成已认证"""
+    assert looks_authenticated('{"code":401,"msg":"认证失败"}')[0] is False
+
+
+def test_ordinary_cookie_is_not_authenticated():
+    """普通埋点 cookie 不是会话凭证"""
+    assert looks_authenticated("{}", {"Set-Cookie": "visited=1; Path=/"})[0] is False
+
+
+def test_empty_response_is_not_authenticated():
+    assert looks_authenticated("")[0] is False
+
+
+# ============================================================
+# 2. 插件用匿名会话探测
+# ============================================================
+
+
+class _Resp:
+    def __init__(self, text="", status_code=200, headers=None):
+        self.text = text
+        self.status_code = status_code
+        self.headers = headers or {"Content-Type": "application/json"}
+        self.content = text.encode()
+
+    def json(self):
+        import json
+
+        return json.loads(self.text)
+
+
+class _Session:
+    """记录是否调用了 anonymous()，并用固定响应作答"""
+
+    def __init__(self, resp, anonymous_resp=None):
+        self.resp = resp
+        self.anonymous_resp = anonymous_resp or resp
+        self.anonymous_called = False
+        self.session = SimpleNamespace(cookies={}, headers={})
+
+    def get(self, url, **kw):
+        return self.resp
+
+    def anonymous(self):
+        self.anonymous_called = True
+        inner = self
+        class _Anon:
+            def get(self, url, **kw):
+                return inner.anonymous_resp
+            def close(self):
+                pass
+        return _Anon()
+
+
+def test_unauth_plugins_use_anonymous_session():
+    """4 个原本裸用共享会话的插件，现在都必须走 anonymous()"""
+    from plugins.common.minio_unauth import MinioUnauthPlugin
+    from plugins.common.rocketmq_unauth import RocketmqUnauthPlugin
+    from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+    from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin
+
+    for cls in (MinioUnauthPlugin, RuoyiNacosUnauthPlugin, RocketmqUnauthPlugin, RuoyiCloudNacosPlugin):
+        sess = _Session(_Resp("{}"))
+        cls().verify("http://t/", sess)
+        assert sess.anonymous_called, f"{cls.__name__} 必须用匿名会话探测"
+
+
+def test_nacos_confirms_on_real_unauth_response():
+    """真实 Nacos 未授权响应 → CONFIRMED
+
+    形状：{"totalCount":1,"pageNumber":1,"pageItems":[{"username":"nacos",
+           "password":"$2a$10$..."}]}
+    注意这里的 username/password 是**列表数据**，不是「当前登录用户」——
+    looks_authenticated 不该把它误判成已认证，否则真漏洞会被降级掉（假阴性）。
+    """
+    from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+
+    body = (
+        '{"totalCount":1,"pageNumber":1,"pageSize":10,'
+        '"pageItems":[{"username":"nacos","password":"$2a$10$abcdefghijklmnop"}]}'
+    )
+    sess = _Session(_Resp("{}"), anonymous_resp=_Resp(body))
+    res = RuoyiNacosUnauthPlugin().verify("http://t/", sess)
+    assert res.status == "CONFIRMED", f"真实未授权响应应 CONFIRMED，实际 {res.status}: {res.evidence}"
+
+
+def test_nacos_unknown_when_response_has_login_user():
+    """Nacos 响应里出现「当前登录用户」身份回显 → UNKNOWN
+
+    与上一个用例的区别：那里 username 在 pageItems 数组里（用户列表数据），
+    这里 userName/nickName 出现在顶层（当前会话的身份）——后者说明带着有效凭据。
+    """
+    from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+
+    body = (
+        '{"totalCount":1,"pageNumber":1,'
+        '"userName":"nacos","nickName":"运维管理员",'
+        '"pageItems":[{"username":"nacos","password":"$2a$10$abcdefghijklmnop"}]}'
+    )
+    sess = _Session(_Resp("{}"), anonymous_resp=_Resp(body))
+    res = RuoyiNacosUnauthPlugin().verify("http://t/", sess)
+    assert res.status == "UNKNOWN", f"带身份回显应降级 UNKNOWN，实际 {res.status}: {res.evidence}"
+    assert "已认证" in res.evidence or "无法确认" in res.evidence
+
+
+# ============================================================
+# 3. 能力标志互斥校验
+# ============================================================
+
+
+def test_conflicting_capability_flags_rejected():
+    """requires_auth 与 anonymous_probe 同时为 True 是语义矛盾，加载期就该报错"""
+    from core.loader import _validate_capability_flags
+    from plugins.base import PluginBase
+
+    class _Bad(PluginBase):
+        name = "矛盾插件"
+        requires_auth = True
+        anonymous_probe = True
+
+        def verify(self, target, session):
+            raise NotImplementedError
+
+    try:
+        _validate_capability_flags(_Bad)
+    except ValueError as e:
+        assert "互斥" in str(e)
+    else:
+        raise AssertionError("互斥标志应被拒绝")
+
+
+def test_normal_plugin_passes_validation():
+    from core.loader import _validate_capability_flags
+    from plugins.base import PluginBase
+
+    class _Ok(PluginBase):
+        name = "正常插件"
+
+        def verify(self, target, session):
+            raise NotImplementedError
+
+    _validate_capability_flags(_Ok)  # 不应抛异常
+
+
+if __name__ == "__main__":
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print("PASS", name)
+
+
+# ============================================================
+# 4. 降级证据的「解锁提示」（A2 配套）
+# ============================================================
+
+
+def _mk_safe(name, cap):
+    from common.models import ScanResult
+
+    r = ScanResult(kind="info", name=name, status="SAFE", evidence="状态码=200, 未检测到特征")
+    r.extra = {"plugin_capability": cap}
+    return r
+
+
+def test_unauth_plugin_hint_warns_against_login_rescan():
+    """未授权类必须明确「登录后重扫结论无效」——给错建议比不给更糟"""
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe("未授权类", {"path_scope": "api", "anonymous_probe": True, "requires_auth": False})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert r.status == "UNKNOWN"
+    assert "登录后重扫得到的结论无效" in r.evidence
+
+
+def test_root_scope_plugin_hint_mentions_static_files():
+    """.git/.env 类提示「登录后放行才能探测 web 根」"""
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe(".git 泄露", {"path_scope": "root", "anonymous_probe": False, "requires_auth": False})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert "--auth-login" in r.evidence
+    assert "静态文件" in r.evidence
+
+
+def test_requires_auth_plugin_hint_mentions_high_priv_account():
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = _mk_safe("需会话类", {"path_scope": "api", "anonymous_probe": False, "requires_auth": True})
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert "--auth-login" in r.evidence
+    assert "高权账号" in r.evidence
+
+
+def test_missing_capability_falls_back_to_generic_hint():
+    """没有能力元信息时退化到通用提示，不能崩"""
+    from common.models import ScanResult
+    from lib.reachability import downgrade_auth_wall_safe
+
+    r = ScanResult(kind="info", name="无元信息", status="SAFE", evidence="状态码=200")
+    downgrade_auth_wall_safe([r], {"wall": True, "reason": "200 登录页"})
+    assert r.status == "UNKNOWN"
+    assert "--auth-login" in r.evidence
+
+
+def test_enrich_writes_capability_metadata():
+    """PluginBase.enrich() 必须把能力声明带进结果，且幂等"""
+    from common.models import ScanResult
+    from plugins.ruoyi.nacos_unauth import RuoyiNacosUnauthPlugin
+
+    inst = RuoyiNacosUnauthPlugin()
+    r = ScanResult(kind="info", name="x", status="SAFE", evidence="e")
+    inst.enrich(r)
+    cap = r.extra["plugin_capability"]
+    assert cap["anonymous_probe"] is True
+    assert cap["path_scope"] == "api"
+    # 幂等：再调一次不覆盖
+    first = dict(cap)
+    inst.enrich(r)
+    assert r.extra["plugin_capability"] == first
+
+
+# ============================================================
+# 5. JSON 信封鉴权墙（v1.6 WP-U1）
+#
+# 芋道/Jeecg 的未授权响应是 HTTP 200 + JSON 业务码（不设 status），
+# 旧正则要求 code 后紧跟 [:=]，认不出 "code":401（中间有引号）→
+# 插件判的 SAFE 不会被升级成 UNKNOWN → 「把没测到写成确认不存在」。
+# 这份语料就是「加新框架时的注册点」：把新框架的未授权响应加进来即可。
+# ============================================================
+
+# (响应文本, 是否应被识别为「请求被拒」, 来源框架)
+_AUTH_DENY_CORPUS = [
+    ('{"code":401,"msg":"账号未登录"}', True, "芋道 yudao"),
+    ('{"code":403,"data":null}', True, "芋道 yudao"),
+    ('{"code": 401}', True, "芋道（带空格）"),
+    ('{"code":"401"}', True, "字符串状态码"),
+    ('{"success":false,"code":500,"message":"Token校验失败"}', True, "JeecgBoot"),
+    ("状态码=401", True, "若依（插件原生格式）"),
+    ("HTTP 403", True, "通用"),
+    # 这三类**绝不能**被当成拒绝，否则正常结果会被误降级
+    ('{"code":0,"data":[]}', False, "芋道成功（业务码是 0 不是 200）"),
+    ('{"code":200,"rows":[]}', False, "若依成功"),
+    ('{"totalCount":1,"pageItems":[]}', False, "普通业务数据"),
+]
+
+
+def test_deny_regex_recognizes_json_envelope():
+    """JSON 信封形态的鉴权拒绝必须被认出（旧正则会漏掉全部引号形态）"""
+    from lib.reachability import _DENY_RE
+
+    for text, expect, source in _AUTH_DENY_CORPUS:
+        got = bool(_DENY_RE.search(text))
+        assert got == expect, f"{source}: {text!r} 期望 {expect} 实际 {got}"
+
+
+def test_deny_regex_does_not_match_partial_codes():
+    """4010 不能被当成 401"""
+    from lib.reachability import _DENY_RE
+
+    assert bool(_DENY_RE.search('{"code":4010}')) is False
+
+
+def test_upgrade_denied_handles_yudao_envelope():
+    """端到端：芋道形态的 SAFE 必须被升级成 UNKNOWN"""
+    from common.models import STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+    from lib.reachability import upgrade_denied_safe_to_unknown
+
+    r = ScanResult(
+        kind="info",
+        name="某接口",
+        status=STATUS_SAFE,
+        evidence='响应 {"code":401,"msg":"账号未登录"}，未命中漏洞特征',
+    )
+    assert upgrade_denied_safe_to_unknown([r]) == 1
+    assert r.status == STATUS_UNKNOWN
+
+
+def test_upgrade_denied_keeps_business_success_safe():
+    """业务成功响应不能被误升级（芋道 code:0 / 若依 code:200）"""
+    from common.models import STATUS_SAFE, ScanResult
+    from lib.reachability import upgrade_denied_safe_to_unknown
+
+    for body in ('{"code":0,"data":[]}', '{"code":200,"rows":[]}'):
+        r = ScanResult(kind="info", name="某接口", status=STATUS_SAFE, evidence=f"响应 {body}，未命中漏洞特征")
+        upgrade_denied_safe_to_unknown([r])
+        assert r.status == STATUS_SAFE, f"{body} 不应被升级为 UNKNOWN"
+
+
+# ============================================================
+# 6. 回归护栏（2026-11-02 能力缺口调研发现）
+# ============================================================
+
+
+def test_plus_job_uses_anonymous_session():
+    """plus_job_unauth 必须用匿名会话——它在 v1.6 重构中被误删过
+
+    回归史：7a7bbd3 删掉手写会话隔离、改成声明 anonymous_probe 并注明
+    「引擎统一处理」，但引擎当时并无该能力 → 裸用共享会话 →
+    带 admin cookie 时假 CONFIRMED（已复现）。
+    """
+    import json as _json
+
+    from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
+
+    class _Resp:
+        text = '{"code":200,"rows":[{"jobId":1}],"total":1}'
+        status_code = 200
+        headers = {"Content-Type": "application/json"}
+        content = text.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        def __init__(self):
+            self.session = SimpleNamespace(cookies={}, headers={})
+            self.called = False
+
+        def get(self, url, **kw):
+            return _Resp()
+
+        def anonymous(self):
+            self.called = True
+            inst = self
+
+            class _A:
+                def get(self, u, **k):
+                    return _Resp()
+
+                def close(self):
+                    pass
+
+            return _A()
+
+    s = _S()
+    PlusJobUnauthPlugin().verify("http://t/", s)
+    assert s.called, "plus_job_unauth 必须调用 session.anonymous()"
+
+
+def test_unauth_batch_does_not_block_on_bare_login_word():
+    """裸字串「登录」不能当鉴权拦截信号——真实暴露页常含「退出登录」
+
+    复现：/system/user/list 返回「欢迎 admin <a>退出登录</a> userId 姓名 admin」
+    → 旧关键字判 SAFE（已鉴权拦截），把真实未授权暴露报成安全。
+    """
+    from lib.matcher import match_positive
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    exposed_page = '<html>欢迎 admin <a href="/logout">退出登录</a> <span>userId: 1</span> 姓名: admin</html>'
+    blocked = match_positive(exposed_page, UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS)
+    assert not blocked, f"真实暴露页不应被判成鉴权拦截，实际命中 {UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS}"
+
+
+def test_unauth_batch_still_detects_real_login_wall():
+    """真正的鉴权提示语仍要能识别（不能因为收紧就漏掉真拦截）"""
+    from lib.matcher import match_positive
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    for text in ("请先登录", "登录若依系统", '{"code":401,"msg":"认证失败"}'):
+        assert match_positive(text, UnauthBatchPlugin.AUTH_BLOCK_KEYWORDS), text
+
+
+def test_no_plugin_returns_safe_without_evidence():
+    """全库门禁：任何 SAFE 结果都必须带判定证据
+
+    三态纪律里 SAFE = 测过了、确认不存在。没有证据的 SAFE 读者无从复核，
+    downgrade_evidence_less_safe() 会把它降级为 UNKNOWN——盲测 v4 里这类
+    降级共 49 条，全部来自 jeecgboot 的 7 处 SAFE 分支（2026-11-02 已补齐）。
+    这条门禁用 AST 扫源码，防止新增插件再犯。
+    """
+    import ast
+    import pathlib
+
+    bad = []
+    for p in pathlib.Path("plugins").rglob("*.py"):
+        if p.name in ("__init__.py", "base.py"):
+            continue
+        tree = ast.parse(p.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "ScanResult"):
+                continue
+            kw = {k.arg: k.value for k in node.keywords}
+            st = kw.get("status")
+            if not (isinstance(st, ast.Name) and st.id == "STATUS_SAFE"):
+                continue
+            ev = kw.get("evidence")
+            if ev is None or (isinstance(ev, ast.Constant) and not str(ev.value).strip()):
+                bad.append(f"{p}:{node.lineno}")
+    assert not bad, f"SAFE 缺判定证据：{bad}"
+
+
+def test_spring_unauth_plugins_use_anonymous_session():
+    """8 个 Spring 未授权插件必须用匿名会话（P1-13）
+
+    复现过的假 CONFIRMED：带 admin cookie 的会话 → actuator_unauth 报
+    「/actuator/env 可匿名访问」CONFIRMED——证据自己都写着「匿名」，实际带着凭据。
+    """
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+    from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
+    from plugins.spring.jolokia_rce import SpringJolokiaRcePlugin
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.spring_boot_admin import SpringBootAdminPlugin
+    from plugins.spring.spring_data_rest import SpringDataRestPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    classes = [
+        SpringActuatorUnauthPlugin,
+        SpringHeapdumpLeakPlugin,
+        SpringMappingsLeakPlugin,
+        SpringTraceLeakPlugin,
+        SpringJolokiaRcePlugin,
+        SpringBootAdminPlugin,
+        SpringDataRestPlugin,
+    ]
+    for cls in classes:
+        sess = _Session(_Resp("{}"))
+        cls().verify("http://t/", sess)
+        assert sess.anonymous_called, f"{cls.__name__} 必须用匿名会话探测"
+
+
+def test_spring_unauth_plugins_declare_anonymous_probe():
+    """8 个 Spring 未授权插件都应声明 anonymous_probe=True（可审计）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+    from plugins.spring.heapdump_leak import SpringHeapdumpLeakPlugin
+    from plugins.spring.jolokia_mlet_rce import SpringJolokiaMletRcePlugin
+    from plugins.spring.jolokia_rce import SpringJolokiaRcePlugin
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.spring_boot_admin import SpringBootAdminPlugin
+    from plugins.spring.spring_data_rest import SpringDataRestPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    for cls in (
+        SpringActuatorUnauthPlugin,
+        SpringHeapdumpLeakPlugin,
+        SpringMappingsLeakPlugin,
+        SpringTraceLeakPlugin,
+        SpringJolokiaRcePlugin,
+        SpringJolokiaMletRcePlugin,
+        SpringBootAdminPlugin,
+        SpringDataRestPlugin,
+    ):
+        assert getattr(cls, "anonymous_probe", False) is True, f"{cls.__name__} 未声明 anonymous_probe"
+
+
+# ============================================================
+# 7. Spring Boot 4 的 JSON 包装页（v1.6 P0-2）
+#
+# 若依 4.8.3（Spring Boot 4.0.3）对**任意未知路径**返回：
+#   {"msg":"No static resource swagger-ui.html for request '/swagger-ui.html'.","code":500}
+# 这是 JSON 不是 HTML，而旧守卫 is_path_echo_page 只认 <html>/<body>/<h2>
+# —— 直接绕过，5+ 个未授权插件会拿路径名当特征命中（假 CONFIRMED）。
+# ============================================================
+
+_SB4_BODY = '{"msg":"No static resource swagger-ui.html for request \'/swagger-ui.html\'.","code":500}'
+
+
+def test_unified_guard_catches_spring_boot4_json():
+    """统一守卫要认出 Spring Boot 4 的 JSON 包装页"""
+    from lib.matcher import is_not_real_resource
+
+    assert is_not_real_resource(_SB4_BODY, "/swagger-ui.html") is True
+
+
+def test_unified_guard_catches_html_path_echo():
+    """原有的 HTML catch-all 路径回显仍要能识别（不能只顾新的）"""
+    from lib.matcher import is_not_real_resource
+
+    assert is_not_real_resource("<html><body><h2>页面: rocketmq/</h2></body></html>", "/rocketmq/") is True
+
+
+def test_unified_guard_keeps_real_resources():
+    """真实资源不能被误伤（否则真漏洞会被判 SAFE，假阴性）"""
+    from lib.matcher import is_not_real_resource
+
+    real = [
+        ('{"openapi":"3.1.0","paths":{"/user/list":{}}}', "/v3/api-docs"),
+        ('{"total":1,"rows":[{"jobId":1}]}', "/monitor/job/list"),
+        ("<html><title>Swagger UI</title></html>", "/swagger-ui.html"),
+    ]
+    for body, path in real:
+        assert is_not_real_resource(body, path) is False, f"{path} 不应被判为不存在"
+
+
+def test_unauth_batch_not_confirmed_on_spring_boot4_page():
+    """端到端：Spring Boot 4 的未知路径响应不得判 CONFIRMED"""
+    import json as _json
+
+    from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
+
+    class _R:
+        def __init__(self, t):
+            self.text = t
+            self.status_code = 200
+            self.headers = {"Content-Type": "application/json"}
+            self.content = t.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        session = None
+
+        def get(self, u, **k):
+            p = u.rsplit("/", 1)[-1]
+            return _R('{"msg":"No static resource %s for request \'/%s\'.","code":500}' % (p, p))
+
+        def anonymous(self):
+            return self
+
+    res = UnauthBatchPlugin().verify("http://t/", _S())
+    assert res.status != "CONFIRMED", f"Spring Boot 4 包装页被误判为暴露：{res.evidence}"
+
+
+# ============================================================
+# 8. job_rce 不能被通用 AjaxResult 骗（v1.6 P0-5）
+#
+# 旧判据是「code in (200,500) 且响应含 code/msg 两键」——任何
+# @RestControllerAdvice 的全局异常响应都满足，实测三条全被判 CONFIRMED，
+# 包括「系统异常，请联系管理员」这种与定时任务毫无关系的文案。
+# ============================================================
+
+
+def _job_verify(body):
+    import json as _json
+
+    from plugins.ruoyi.job_rce import JobRcePlugin
+
+    class _R:
+        def __init__(self, t):
+            self.text = t
+            self.status_code = 200
+            self.headers = {"Content-Type": "application/json"}
+            self.content = t.encode()
+
+        def json(self):
+            return _json.loads(self.text)
+
+    class _S:
+        session = None
+
+        def get(self, u, **k):
+            return _R(body)
+
+        def post(self, u, **k):
+            return _R(body)
+
+        def anonymous(self):
+            return self
+
+    return JobRcePlugin().verify("http://t/", _S())
+
+
+def test_generic_ajaxresult_is_not_unauth_rce():
+    """通用异常响应不能判 CONFIRMED（它只证明「有个若依风格的应用」）"""
+    for body in ('{"code":500,"msg":"系统异常，请联系管理员"}', '{"code":500,"msg":"参数校验失败"}'):
+        res = _job_verify(body)
+        assert res.status == "UNKNOWN", f"{body} 应判 UNKNOWN，实际 {res.status}"
+
+
+def test_real_ruoyi_job_message_still_confirms():
+    """若依对不存在 jobId 的真实文案仍是 CONFIRMED（盲测 v4 的 4 条命中全是它）"""
+    assert _job_verify('{"code":500,"msg":"任务不存在"}').status == "CONFIRMED"
+
+
+def test_jobid_echo_confirms():
+    """响应里有 jobId 回显 → 确实进入了业务层"""
+    assert _job_verify('{"code":200,"msg":"操作成功","jobId":1}').status == "CONFIRMED"
+
+
+# ============================================================
+# 9. 「暴露但需认证」语义（v1.6 C5 靶场验证）
+#
+# C5 = C2-1b（真实 Actuator，/actuator/env 34KB）前面加 HTTP Basic 认证。
+# 现有靶场没有一座能复现这个边界：R1/R7 端点不存在，C1/C2 本来就未授权。
+#
+# 关键区分：
+#   404 → 端点不存在 → SAFE（确认没有）
+#   401/403 → 端点存在但拒绝访问 → UNKNOWN（有，但不知道是否未授权可达）
+# 把 401 判成 SAFE，等于告诉读者「这套系统没开 Actuator」——而它开着。
+# ============================================================
+
+
+class _Status:
+    """固定返回某个状态码的会话替身"""
+
+    def __init__(self, code):
+        self.code = code
+        self.session = SimpleNamespace(cookies={}, headers={})
+
+    def get(self, url, **kw):
+        class _R:
+            status_code = self.code
+            text = ""
+            content = b""
+            headers = {"Content-Type": "text/plain"}
+
+        return _R()
+
+    def anonymous(self):
+        return self
+
+
+def test_actuator_401_is_unknown_not_safe():
+    """Actuator 返回 401 → UNKNOWN（端点存在但需认证）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+
+    res = SpringActuatorUnauthPlugin().verify("http://t/", _Status(401))
+    assert res.status == "UNKNOWN", f"401 应判 UNKNOWN，实际 {res.status}: {res.evidence}"
+    assert "需认证" in res.evidence or "要求认证" in res.evidence
+
+
+def test_actuator_404_is_safe():
+    """Actuator 返回 404 → SAFE（端点确实不存在）"""
+    from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
+
+    res = SpringActuatorUnauthPlugin().verify("http://t/", _Status(404))
+    assert res.status == "SAFE", f"404 应判 SAFE，实际 {res.status}"
+
+
+def test_mappings_and_trace_401_are_unknown():
+    """mappings / trace 同样不能把 401 当 SAFE"""
+    from plugins.spring.mappings_leak import SpringMappingsLeakPlugin
+    from plugins.spring.trace_leak import SpringTraceLeakPlugin
+
+    for cls in (SpringMappingsLeakPlugin, SpringTraceLeakPlugin):
+        res = cls().verify("http://t/", _Status(401))
+        assert res.status == "UNKNOWN", f"{cls.__name__} 401 应判 UNKNOWN，实际 {res.status}"

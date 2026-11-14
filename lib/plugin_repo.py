@@ -110,7 +110,11 @@ def export_plugins(out_dir: str) -> Dict[str, str]:
     meta_file = os.path.join(out_dir, "plugins_meta.json")
     meta_data = {}
 
-    for pkg_name in ["plugins.ruoyi", "plugins.spring", "plugins.common"]:
+    # 包列表从发现派生（v1.6 WP-R）：写死会让新框架的插件导不出去，
+    # 模板仓库与 Ed25519 签名分发链路里就没有它。
+    from core.loader import discover_plugin_packages
+
+    for pkg_name in discover_plugin_packages():
         try:
             pkg = importlib.import_module(pkg_name)
             pkg_path = os.path.dirname(pkg.__file__)

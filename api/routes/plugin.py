@@ -33,12 +33,28 @@ def _clean_meta(value) -> str:
     return "" if text.lower() in _META_PLACEHOLDERS else text
 
 
+def _cms_of(cls) -> str:
+    """插件所属的框架类别（从模块路径派生）。
+
+    曾经写死 cms="ruoyi"（注释还写着「扫描器面向若依框架」），
+    于是桌面端 / Web 端把 jeecgboot 插件也标成 ruoyi——前端按 CMS 筛选时
+    整个 jeecg 包都归错类（v1.6 WP-R）。
+
+    插件模块路径形如 `plugins.jeecgboot.dict_unauth`，第二段即类别。
+    拿不到时返回空串（前端按「未分类」处理，好过归错）。
+    """
+    mod = getattr(cls, "__module__", "") or ""
+    parts = mod.split(".")
+    if len(parts) >= 2 and parts[0] == "plugins":
+        return parts[1]
+    return ""
+
+
 def _to_dto(cls) -> PluginDTO:
     """插件类 → PluginDTO（list/get 两个端点共用，字段构造只保留一处）"""
     return PluginDTO(
         name=getattr(cls, "name", ""),
-        # 扫描器面向若依框架，CMS 固定标记为 ruoyi
-        cms="ruoyi",
+        cms=_cms_of(cls),
         category=getattr(cls, "category", ""),
         severity=getattr(cls, "severity", "low"),
         description=getattr(cls, "description", ""),

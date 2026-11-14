@@ -638,9 +638,7 @@ def test_realistic(profile):
             else:
                 check(
                     "safe 带载荷 -> 正常列表且无 XPATH",
-                    injected.status_code == 200
-                    and "XPATH" not in injected.text
-                    and injected.json().get("total") == 2,
+                    injected.status_code == 200 and "XPATH" not in injected.text and injected.json().get("total") == 2,
                     injected.text[:200],
                 )
 
@@ -662,7 +660,7 @@ def test_realistic(profile):
 
             upload = ua.post(
                 base + "/common/upload",
-                files={"file": ("shell.jsp", b"<%@ page language=\"java\" %>", "application/octet-stream")},
+                files={"file": ("shell.jsp", b'<%@ page language="java" %>', "application/octet-stream")},
                 timeout=15,
             )
             if profile == "vuln":
@@ -768,9 +766,7 @@ def test_realistic(profile):
                 blob = "\n".join(p.text for p in probes)
                 check(
                     "safe 关键特征总体扫描（XPATH / passwd / SESSIONID）",
-                    "XPATH" not in blob
-                    and "root:x:0:0" not in blob
-                    and "SESSIONID" not in blob,
+                    "XPATH" not in blob and "root:x:0:0" not in blob and "SESSIONID" not in blob,
                 )
                 check("safe 登录页无 49", "49" not in page.text)
                 check("safe gen edit 无 49", "49" not in gen_edit.text)

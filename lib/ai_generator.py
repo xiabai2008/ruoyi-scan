@@ -294,7 +294,11 @@ def _write_source(
         overwrite: 已存在时是否覆盖（同一生成会话内重试循环用 True）
     """
     # category 参与默认输出目录拼接，必须先白名单校验（CLI/调用方传入 ../../ 时拒绝）
-    if category not in ("ruoyi", "spring", "common"):
+    # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
+    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
+    from core.loader import known_categories
+
+    if category not in known_categories():
         raise ValueError("unsupported category: %s" % category)
     if output_dir is None:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

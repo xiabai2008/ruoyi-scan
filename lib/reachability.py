@@ -133,6 +133,27 @@ def detect_auth_wall(session: Any, target: str) -> Dict[str, Any]:
 _ABSENT_EVIDENCE_RE = re.compile(r"状态码\s*=\s*4\d\d|HTTP\s*4\d\d|\b(401|403|404)\b", re.IGNORECASE)
 
 
+def _unlock_hint(cap: Dict[str, Any]) -> str:
+    """按插件能力给出「怎么才能测到」的具体建议。
+
+    为什么需要（v1.6 A2 配套）：降级后的证据原本统一是「需登录后才能判定」，
+    读者只知道「测不了」，不知道下一步该做什么。而这三类插件的解法完全不同，
+    给错建议比不给更糟——比如让未授权类插件「加 --auth-login 重扫」，
+    重扫出来的 CONFIRMED 恰恰是假的（登录后可访问 ≠ 未授权访问）。
+    """
+    if cap.get("requires_auth"):
+        return "——需 --auth-login 提供高权账号后重扫"
+    # 未授权类：登录后重扫**不能**解决问题，反而会引入假阳性。
+    # 判定依据有两条：显式声明了 anonymous_probe，或 vuln_type 就是 unauth/info_leak
+    # （部分插件走 socket 直连不经过 HTTP 会话，没法用 anonymous_probe 语义表达，
+    #   但它们的被测命题仍然是「未授权可达」，同样不能靠登录解锁）。
+    if cap.get("anonymous_probe") or cap.get("vuln_type") in ("unauth", "info_leak"):
+        return "——本项判定的是「未登录能否访问」，登录后重扫得到的结论无效；应从目标网络侧确认该端点是否真的要求认证"
+    if cap.get("path_scope") == "root":
+        return "——可加 --auth-login 后重扫（登录后放行才能探测 web 根下的静态文件）"
+    return "——可加 --auth-login 后重扫"
+
+
 def downgrade_auth_wall_safe(results: List[Any], wall: Dict[str, Any]) -> int:
     """存在登录墙时，把「没有 4xx 证据」的 SAFE 降级为 UNKNOWN。
 
@@ -142,7 +163,7 @@ def downgrade_auth_wall_safe(results: List[Any], wall: Dict[str, Any]) -> int:
     """
     if not wall or not wall.get("wall"):
         return 0
-    note = f"目标存在登录墙（{wall.get('reason', '')}），需登录后才能判定"
+    base_note = f"目标存在登录墙（{wall.get('reason', '')}），需登录后才能判定"
     n = 0
     for r in results:
         if getattr(r, "status", "") != STATUS_SAFE:
@@ -151,8 +172,11 @@ def downgrade_auth_wall_safe(results: List[Any], wall: Dict[str, Any]) -> int:
         if _ABSENT_EVIDENCE_RE.search(ev):
             continue
         r.status = STATUS_UNKNOWN
-        r.evidence = f"{note}；原证据：{ev}" if ev else note
         extra = dict(getattr(r, "extra", None) or {})
+        # 能力元信息由 PluginBase.enrich() 写入；缺失时退化到通用提示
+        cap = extra.get("plugin_capability") or {}
+        note = base_note + _unlock_hint(cap if isinstance(cap, dict) else {})
+        r.evidence = f"{note}；原证据：{ev}" if ev else note
         extra["auth_wall"] = True
         r.extra = extra
         n += 1
@@ -216,7 +240,33 @@ def downgrade_safe_results(results: List[Any], block: Dict[str, Any]) -> int:
 # 不再匹配裸词 Forbidden/Unauthorized/无权限/没有权限：它们会误伤
 # 「响应未含 Forbidden 关键字」「未检测到 Unauthorized」，以及
 # 「没有权限访问用户数据」——后者恰恰是防护生效的正证据（对抗审计实测）。
-_DENY_RE = re.compile(r"(?:状态码|status|code|HTTP)\s*[:=]?\s*(401|403|429)\b|认证失败", re.IGNORECASE)
+# 「请求被拒绝」的识别。除了显式的 401/403/429，还要认 **JSON 信封形态**：
+#   {"code":401,"msg":"账号未登录"} / {"success":false,"code":500,"message":"Token校验失败"}
+#
+# 为什么必须认（v1.6 WP-U1，2026-11-02 实测）：
+#   - 芋道（yudao）的未授权响应是 `HTTP 200 + {"code":401}`——它的
+#     AuthenticationEntryPoint 用 hutool 直接 writeJSON，**不设 HTTP status**。
+#   - Jeecg 是 `HTTP 200 + {"success":false,"code":500,"message":"Token校验失败"}`。
+#   - 旧正则要求 `code` 后紧跟 `[:=]`，`"code":401` 中间隔了个引号 → 认不出
+#     → 插件判的 SAFE 不会被升级成 UNKNOWN → 「把没测到写成确认不存在」（B 类缺陷）。
+#
+# 实测旧正则表现（2026-11-02）：
+#   {"code":401,...}  → False ❌     {"code": 401} → False ❌
+#   状态码=401        → True  ✅     HTTP 401      → True  ✅
+#
+# ⚠ 只匹配 401/403/429，**绝不匹配 200**：芋道的业务成功码是 `code:0`（不是 200），
+#   若依是 `code:200`，两者都是正常响应，命中就会把正常结果误降级。
+# 两个必须处理的 JSON 细节（2026-11-02 实测踩过）：
+#   ① JSON 的键名**自带引号**：`"code":401` —— 不只是 `code:401`。
+#      正则必须在关键字**前后**都允许引号，否则 `"code":` 里多出的那个 `"` 会让匹配失败。
+#   ② 状态码后面不能用 `\b`：`401"`、`401,`、`401}` 的边界行为与前面的可选引号组合会错位。
+#      改用「后面不能再跟数字」的负向断言 `(?!\d)`，既精确又不受引号影响
+#      （`4010` 不会被误认成 `401`）。
+_DENY_RE = re.compile(
+    r"[\"']?(?:状态码|status|code|HTTP)[\"']?\s*[:=]?\s*[\"']?\s*(401|403|429)(?!\d)"
+    r"|认证失败|Token校验失败|token.*(?:失效|过期|无效)",
+    re.IGNORECASE,
+)
 # 匹配点前出现这些词 = 否定式证据（"没出现拒绝"），不能据此降级
 _NEGATIONS = ("未含", "未出现", "未检测到", "不含", "不存在", "没有出现")
 # 请求根本没拿到有效响应：SAFE 结论不成立（网络异常 ≠ 确认不存在）
@@ -226,6 +276,31 @@ _UNREACHABLE_RE = re.compile(
 )
 # 登录页特征（真实 RuoYi 未认证访问受保护接口：302 -> /login -> 200 登录页）
 _LOGIN_PAGE_MARKERS = ("/captcha/captchaImage", 'name="password"', "loginForm", "若依后台管理")
+
+
+def login_wall_evidence(reason: str, what: str = "", unlock_hint: str = "") -> str:
+    """构造「因登录墙无法判定」的证据文本（插件内部返回 UNKNOWN 时统一使用）。
+
+    为什么要有这个助手：7 个插件（file_read / file_read_path / file_upload /
+    job_rce / sql_inject_* / thymeleaf_ssti）各自手写证据文案，措辞已经漂移成
+    「无法判定文件读取是否存在」「无法判定上传接口是否可写」等多种说法，
+    且都没有告诉用户下一步该怎么做。
+
+    与 downgrade_auth_wall_safe() 的关系：那条路径处理「插件判了 SAFE、由链路降级」；
+    这里是「插件自己就判 UNKNOWN」，两条路径的**用户可见文案应当一致**。
+    统一到本函数，避免改一处漏一处。
+
+    Args:
+        reason: login_wall_reason() 的返回值
+        what: 被测对象（如「文件读取是否存在」），用于让证据读起来自然
+        unlock_hint: 覆盖默认解锁提示（缺省用通用提示）
+
+    Returns:
+        形如「请求被登录墙拦截（…），无法判定 X——可加 --auth-login 后重扫」的证据串
+    """
+    subject = f"无法判定{what}" if what else "无法判定"
+    tail = unlock_hint or "——可加 --auth-login 后重扫"
+    return f"请求被登录墙拦截（{reason}），{subject}{tail}"
 
 
 def login_wall_reason(resp: Any) -> str:

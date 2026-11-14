@@ -138,10 +138,18 @@ def test_static_leak_plugins_declare_root_scope():
         assert cls.path_scope == "root", f"{cls.__name__} 应声明 path_scope='root'，实际 {cls.path_scope!r}"
 
 
-def test_api_plugins_keep_api_scope():
-    """API 端点类插件保持默认 api，不能改成 root（否则分离版下探不到后端）。"""
+def test_api_plugins_keep_api_or_both_scope():
+    """API 端点类插件是 api 或 both，绝不能是 root（root 会完全无视前缀，分离版下探不到后端）。
+
+    v1.6：Swagger 类从 api 改为 both —— 文档端点位置随框架而异：
+      - 分离版（RuoYi-Vue）：{base}/v3/api-docs
+      - 网关架构（芋道 yudao）：站点根 /v3/api-docs（实测 Y1）
+    引擎对 both 跑两个基准各一次，取更严重结果。
+    """
     from plugins.common.swagger_leak import SwaggerLeakPlugin
     from plugins.spring.actuator_unauth import SpringActuatorUnauthPlugin
 
+    assert SpringActuatorUnauthPlugin.path_scope == "api", "Actuator 只在前缀下，保持 api"
+    assert SwaggerLeakPlugin.path_scope == "both", "Swagger 位置随框架而异，需要 both"
     for cls in (SwaggerLeakPlugin, SpringActuatorUnauthPlugin):
-        assert cls.path_scope == "api", f"{cls.__name__} 应保持 path_scope='api'，实际 {cls.path_scope!r}"
+        assert cls.path_scope != "root", f"{cls.__name__} 不能是 root（会无视 API 前缀）"

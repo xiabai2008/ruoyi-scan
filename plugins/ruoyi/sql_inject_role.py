@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
-from lib.reachability import login_wall_reason
+from lib.reachability import login_wall_evidence, login_wall_reason
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -43,7 +43,13 @@ class SqlInjectRolePlugin(PluginBase):
     # SysRoleMapper 的 ${params.dataScope} —— 该注入在 4.8.3 上仍然成立。
     # 原范围 <4.6 会把真实 4.7.8/4.8.x 目标直接跳过（版本过滤反而造成漏报）。
     # 依据：lab/version_matrix/src/v4.8.3 源码 + lab/REAL-RUOYI.md（4.7.8 实测 CONFIRMED）。
-    affected_versions = ">=4.0"
+    # v1.6：下界从 4.0 放宽到 3.0 —— RuoYi-Vue（3.x）与单机版（4.x）是**两条并行的版本线**，
+    # 不是前后代关系。3.8.9 / 3.9.2 的同一批接口路径实测全部存在：
+    #   /prod-api/common/download/resource、/monitor/job/edit、/common/upload、/system/user/list
+    # 原 `>=4.0` 把这条线上最常见的分支整片跳过（盲测 v4：R6 3.9.2 与 R7 3.8.9 各有 9 个插件
+    # 被 version_matrix 标为 applicable=False，含文件读取/上传/定时任务/SQL 注入）。
+    # 这与本文件上方注释记录的「原范围过窄造成漏报」是同一类问题，只是当时只考虑了 4.x 内部。
+    affected_versions = ">=3.0"
     # D12：CVSS v3.1 + 合规映射
     cvss_vector = "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
     compliance = "等保2.0:8.1.3;OWASP:A03:2021"
@@ -129,7 +135,7 @@ class SqlInjectRolePlugin(PluginBase):
                     name=self.name,
                     status=STATUS_UNKNOWN,
                     url=url,
-                    evidence=f"{_label}请求被登录墙拦截（{_wall}），无法判定注入是否存在",
+                    evidence=f"{_label}" + login_wall_evidence(_wall, "注入是否存在"),
                 )
             # 若依的鉴权失败是 HTTP 200 + {"code":401}，因此状态码与业务码都要看
             _why = f"HTTP {_resp.status_code}" if _resp.status_code in (401, 403, 429) else ""

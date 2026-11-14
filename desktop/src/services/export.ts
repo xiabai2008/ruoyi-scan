@@ -34,7 +34,20 @@ async function readError(res: Response): Promise<string> {
 
 /** 保存报告；返回保存路径（用户取消返回空串，浏览器回退返回文件名） */
 export async function saveReport(taskId: string, fmt: string): Promise<string> {
-  const res = await fetch(api.reportDownloadUrl(taskId, fmt));
+  // 必须带超时：裸 fetch 在引擎卡死/端口被丢包时永不返回，
+  // 调用方的 busyKey 只在 finally 清空 → 所有报告按钮永久变灰，只能重启窗口。
+  // 与 services/backend.ts 的 http() 保持同样的超时口径。
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120_000); // 报告可能在服务端现渲染，给足时间
+  let res: Response;
+  try {
+    res = await fetch(api.reportDownloadUrl(taskId, fmt), { signal: ctrl.signal });
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error("报告下载超时（120s），请确认引擎是否仍在运行");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(await readError(res));
   const buffer = await res.arrayBuffer();
   const name = `${taskId}_report.${fmt}`;

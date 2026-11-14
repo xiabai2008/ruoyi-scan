@@ -100,6 +100,10 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
   const probeFingerprint = async () => {
     const t = fpTarget.trim();
     if (!t) return;
+    // 入口守卫：按钮的 disabled 只挡鼠标点击，回车走的是 onKeyDown 这条路。
+    // 缺了这两行，离线时回车仍会发请求、连按回车会并发多个 25s 探测、
+    // 结果由最后返回的那个决定。
+    if (fpBusy || !online) return;
     setFpBusy(true);
     setFpErr("");
     setFpResult("");

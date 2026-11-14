@@ -3,7 +3,7 @@
  * 主题切换原本在 App.tsx，一并收编到这里，保证跨页面共享（LiveScan 停止后回列表等）。
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, getApiBase, type EngineInfo, type ScanMode, type ScanSubmitPayload, type ScanTask } from "../services/backend";
+import { api, getApiBase, subscribeApiBase, type EngineInfo, type ScanMode, type ScanSubmitPayload, type ScanTask } from "../services/backend";
 import type { ThemeName } from "../tokens";
 import type { ViewId } from "../data/mock";
 const POLL_MS = 2500;
@@ -18,6 +18,8 @@ interface AppCtx {
   /* 主题与导航 */
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
+  /** 自定义主题内容版本号：theme 恒为 custom 但调色板变了时靠它触发重绘 */
+  customRev: number;
   view: ViewId;
   setView: (v: ViewId) => void;
 
@@ -84,7 +86,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return new Set();
     }
   });
-  const apiBase = useMemo(getApiBase, []);
+  // 不能用 useMemo(..., []) 冻结：用户改服务地址后 setApiBase() 只改模块变量，
+  // 冻结的快照会让界面永远显示旧地址（真实请求已走新地址，显示却不变）。
+  // 用 state + 订阅，setApiBase 时同步刷新。
+  const [apiBase, setApiBaseState] = useState<string>(getApiBase);
   const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   // 健康检查序号：4s 轮询可能重叠，过期响应直接丢弃，避免乱序结果互相覆盖
   const healthSeq = useRef(0);
@@ -105,16 +110,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 服务地址变更时刷新展示。真实请求读的是模块变量，UI 走的是这个 state，
+  // 不订阅就会出现「请求已用新地址、界面还写旧地址」。
+  useEffect(() => subscribeApiBase(setApiBaseState), []);
+
+  // 任务列表序号：与 refreshHealth 同理，超出轮询间隔的慢响应会把新列表
+  // 覆盖回旧快照（表现为「停止」后徽标又跳回 RUNNING）。
+  const tasksSeq = useRef(0);
+
   const refreshTasks = useCallback(async () => {
+    const seq = ++tasksSeq.current;
     setRefreshing(true);
     try {
       const list = await api.listTasks();
+      if (seq !== tasksSeq.current) return; // 已有更新的请求发出，丢弃本次结果
       // 新任务在前
-      setTasks([...list].sort((a, b) => b.started_at - a.started_at));
+      const next = [...list].sort((a, b) => b.started_at - a.started_at);
+      // 内容没变就不换引用：Reports / Overview 的 effect 依赖 tasks，
+      // 每 2.5s 造一个新数组会让它们把所有任务的报告元数据重拉一遍
+      // （N 个任务 = N 请求 / 2.5s 的请求风暴）。
+      setTasks((prev) => {
+        if (prev.length === next.length) {
+          const same = prev.every((p, i) => {
+            const n = next[i];
+            return p.task_id === n.task_id && p.status === n.status
+              && p.result_count === n.result_count && p.finished_at === n.finished_at;
+          });
+          if (same) return prev;
+        }
+        return next;
+      });
     } catch {
       /* 后端离线时保留旧列表 */
     } finally {
-      setRefreshing(false);
+      if (seq === tasksSeq.current) setRefreshing(false);
     }
   }, []);
 
@@ -135,8 +164,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [online, refreshTasks]);
 
+  // 自定义主题版本号：theme 仍是 "custom" 但调色板内容变了时，光靠 theme
+  // 变化无法触发 applyTheme（值没变 React 会 bail out），表现为「应用自定义
+  // 主题/导入 JSON 后界面一个像素都不变」。自增这个计数强制重跑。
+  const [customRev, setCustomRev] = useState(0);
+
   const setTheme = useCallback((t: ThemeName) => {
     setThemeState(t);
+    // 目标就是 custom 时，无论之前是不是 custom，都要重放一次调色板
+    if (t === "custom") setCustomRev((n) => n + 1);
     try {
       localStorage.setItem("rs.theme", t);
     } catch {
@@ -174,7 +210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: AppCtx = {
-    theme, setTheme, view, setView,
+    theme, setTheme, customRev, view, setView,
     online, apiBase, engine, lastError, refreshHealth,
     tasks, refreshing, refreshTasks, dismissed, dismissTask,
     dialogOpen,

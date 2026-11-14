@@ -35,6 +35,66 @@ def is_auth_failure_page(text) -> bool:
     return bool(_AUTH_FAILURE_RE.search(text))
 
 
+# 「当前会话已认证」的响应特征。用于未授权类插件的**反向证据**：
+# 如果拿到的 200 是「某个已登录用户」的响应，就不能据此判「未授权访问」。
+#
+# 特征选择原则：只认**业务身份回显**，不认泛用词。
+# 宁可漏判（退回 UNKNOWN）也不能误伤——若把普通公开页误判成「已认证」，
+# 真正的未授权漏洞就会被降级成 UNKNOWN（假阴性）。
+_AUTHENTICATED_HINTS = (
+    # 若依/Jeecg 常见的登录用户回显字段（JSON）
+    re.compile(r'"(?:userName|loginName|nickName)"\s*:\s*"[^"]{1,40}"'),
+    re.compile(r'"userId"\s*:\s*\d+'),
+    # 权限/角色列表：只有已认证用户才会有这些东西
+    re.compile(r'"(?:permissions|roles)"\s*:\s*\[\s*[{\["]'),
+    # 会话 token 回显（部分网关把 token 放在响应体里）
+    re.compile(r'"(?:access_token|accessToken|token)"\s*:\s*"[A-Za-z0-9._\-]{16,}"'),
+)
+
+
+def looks_authenticated(body, headers=None):
+    """响应是否透露出「当前会话已认证」的迹象（未授权类插件的反向证据）。
+
+    为什么需要它（v1.6 A2）：未授权类插件的被测命题是「不登录就能访问」。
+    即使引擎已用干净会话探测（`anonymous_probe`），仍有一种情况无法排除——
+    目标把「未授权可访问」和「登录后可访问」返回得一模一样。
+    此时响应里的身份回显就是唯一能区分两者的信号。
+
+    Returns:
+        (hit: bool, reason: str)
+    """
+    text = body or ""
+    if not isinstance(text, str):
+        try:
+            text = text.decode("utf-8", errors="ignore")
+        except Exception:
+            return False, "响应体无法解码"
+
+    # Set-Cookie 里下发**认证态**凭证 = 当前会话是登录的。
+    #
+    # ⚠ 这里刻意不含 JSESSIONID（2026-11-02 修正）：
+    #   任何 Java 应用（Tomcat/Shiro）对**匿名**请求也会下发 JSESSIONID，
+    #   它与「是否已登录」没有因果关系。把它当认证信号会让
+    #   「未授权访问」在这类站点上被判成 SAFE——一个假阴性就抵掉一次真实告警，
+    #   方向与三态纪律完全相反（该报没报）。
+    #   只认应用层自己签发的 token 名：Sa-Token 的 satoken、Jeecg 的 X-Access-Token、
+    #   以及若依 Plus 的 Admin-Token / Authorization。
+    if headers:
+        try:
+            cookies = str(headers.get("Set-Cookie", "") or "")
+            if re.search(r"(?:satoken|X-Access-Token|Admin-Token|Authorization)\s*=", cookies, re.I):
+                return True, "响应下发了应用层会话凭证（Set-Cookie）"
+        except Exception:
+            pass
+
+    for pat in _AUTHENTICATED_HINTS:
+        m = pat.search(text)
+        if m:
+            snippet = m.group(0)[:60]
+            return True, f"响应含已登录用户特征：{snippet}"
+    return False, "未发现已认证痕迹"
+
+
 def is_missing_resource_page(text) -> bool:
     """判断响应正文是否是「资源不存在」错误页
 
@@ -48,6 +108,42 @@ def is_missing_resource_page(text) -> bool:
         return False
     low = text.lower()
     return any(m in low for m in _MISSING_RESOURCE_MARKERS)
+
+
+def is_not_real_resource(text, path="") -> bool:
+    """统一判断：该响应是不是「路径不存在」的兜底产物（而非真实资源）。
+
+    未授权类插件在关键字命中前必须过这一关。它合并了两种此前分散的陷阱：
+
+    ① **HTML catch-all 路径回显**（is_path_echo_page）：
+       `/**` 路由把请求路径写进页面 →
+       `GET /swagger-ui.html → <h2>页面: swagger-ui.html</h2>`，
+       而插件拿路径名当关键字（"swagger"），100% 误判。
+
+    ② **Spring Boot 4 的 JSON 包装页**（is_missing_resource_page）：
+       若依 4.8.3（Spring Boot 4.0.3）对**任意未知路径**返回
+       `{"msg":"No static resource swagger-ui.html for request '/swagger-ui.html'.","code":500}`
+       —— 这是 JSON 不是 HTML，`is_path_echo_page` 只认 `<html>/<body>/<h2>`，
+       于是直接绕过守卫（2026-11-02 能力缺口调研 P0-2）。
+
+    为什么合并成一个函数：此前两个判据分散，调用方经常只接其中一个
+    （unauth_batch 只接了 ①，ruoyi_swagger_unauth 也只接了 ①），
+    ②写好了一直没人用。合成单一入口后，新插件接一次就两样都有。
+
+    Args:
+        text: 响应正文
+        path: 请求路径（用于 ① 的路径回显判定；省略时跳过 ①）
+
+    Returns:
+        True 表示这不是真实资源，不应作为「暴露」的证据
+    """
+    if not text:
+        return False
+    if is_missing_resource_page(text):
+        return True
+    if path and is_path_echo_page(text, path):
+        return True
+    return False
 
 
 # HTML catch-all 路由的特征：把**请求路径本身**写进页面。

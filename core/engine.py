@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# 结果严重度排序（path_scope="both" 双探时取更严重者）
+_STATUS_RANK = {STATUS_SAFE: 0, STATUS_UNKNOWN: 1, STATUS_CONFIRMED: 2}
+
 
 class ScanEngine:
     """插件执行引擎：同步或并发运行插件，可选限速"""
@@ -116,7 +119,25 @@ class ScanEngine:
                 # F9：按插件声明的 path_scope 选探测基准。分离版站点探到 /prod-api 后，
                 # API 类插件要跟着前缀走，而根静态资源插件（.git/.env/备份）必须留在根路径。
                 exec_target = _target_for(cls)
-                original = cast(ScanResult, inst.verify(exec_target, session))
+                # v1.6：path_scope="both" 表示「端点既可能在 API 前缀下，也可能在站点根」，
+                # 引擎对两个基准各跑一次，取更严重的结果。
+                #
+                # 为什么需要（Y1 芋道实测 2026-11-03）：网关架构下 API 前缀归业务接口
+                # （/admin-api/system/**），而 Swagger 文档归应用根
+                # （/v3/api-docs 根路径 200+373KB，/admin-api/v3/api-docs 只有 48 字节错误页）。
+                # 引擎探到前缀后把基准推过去，文档插件就整类漏报。
+                #
+                # 放在引擎而不是让每个插件自己拼：插件只需声明 both，不必各自实现双探
+                # （file_read/file_read_path 各自维护 passwd 判定最后必须抽到 lib/matcher，
+                #  就是「各写一遍然后漂移」的前车之鉴）。
+                if getattr(cls, "path_scope", "api") == "both" and _root.rstrip("/") != exec_target.rstrip("/"):
+                    _pair = [
+                        cast(ScanResult, inst.verify(exec_target, session)),
+                        cast(ScanResult, inst.verify(_root, session)),
+                    ]
+                    original = max(_pair, key=lambda r: _STATUS_RANK.get(r.status, 0))
+                else:
+                    original = cast(ScanResult, inst.verify(exec_target, session))
                 # D7: WAF 绕过（仅当协调器存在且插件支持绕过且原结果非 CONFIRMED）
                 if (
                     waf_bypass_coordinator is not None

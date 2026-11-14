@@ -6,7 +6,7 @@ import requests
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from lib.matcher import is_path_echo_page
+from lib.matcher import is_not_real_resource
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -17,6 +17,10 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     cve = "N/A"
     severity = SEVERITY_MEDIUM
     category = "vuln"
+    # v1.6：文档端点位置随框架而异——分离版在 {base}/v3/api-docs，
+    # 而芋道这类网关架构在**站点根**（实测 Y1：根 200+373KB，/admin-api/v3/api-docs
+    # 只有 48 字节错误页）。声明 both 让引擎对两个基准各探一次。
+    path_scope = "both"
     description = "RuoYi 的 Swagger/Knife4j API 文档可被未授权访问，暴露全部 API 接口及参数"
     fix = "在 SecurityConfig 中为 Swagger 相关路径添加认证拦截，或在生产环境禁用 Swagger"
     fix_detail = (
@@ -50,6 +54,11 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
     compliance = "等保2.0:8.1.4;OWASP:A01:2021"
     # D7: WAF 绕过支持
     vuln_type = "info_leak"
+    # v1.6：被测命题是「**不登录**就能访问」。共享会话可能已被默认口令/爆破插件
+    # 登录污染，带着 admin 的 cookie 探到这里拿到的 200 只证明「登录后能访问」，
+    # 不构成未授权漏洞（客户现场：Swagger 开了但配了认证 → 误报「未授权访问」）。
+    # 声明后引擎会在会话被污染时注入干净的 SessionManager。
+    anonymous_probe = True
     supports_waf_bypass = True
 
     def verify(self, target, session) -> ScanResult:
@@ -98,7 +107,7 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
                 # 正文天然含 "swagger-ui" 字样 → 旧实现 100% 误报。
                 # 实测 2026-11-01 盲测 v2 C4-6 靶场。
-                if is_path_echo_page(resp.text or "", path):
+                if is_not_real_resource(resp.text or "", path):
                     continue
 
                 if any(

@@ -23,8 +23,30 @@ def load_plugins(package_name: str = "plugins.ruoyi") -> List[type]:
             # 直接是类对象（推荐写法）
             cls = item
         if cls is not None:
+            _validate_capability_flags(cls)
             result.append(cls)
     return result
+
+
+def _validate_capability_flags(cls: type) -> None:
+    """校验插件的能力声明是否自相矛盾。
+
+    `requires_auth` 与 `anonymous_probe` 语义互斥：
+      - requires_auth=True    ：我需要登录才能测
+      - anonymous_probe=True  ：我必须**不登录**才能测
+    同时为 True 的插件，引擎无论给不给凭据都测不出有效结论——
+    与其在扫描时给出一堆无法解释的 UNKNOWN，不如在加载期直接报错。
+
+    做成加载期硬校验而不是扫描期警告：这类矛盾是**作者写错**，
+    不是运行环境问题，越早暴露越好（与 plugins/*/__init__.py 必须显式登记
+    plugin_list 是同一个思路：静默失败比报错更难查）。
+    """
+    if getattr(cls, "requires_auth", False) and getattr(cls, "anonymous_probe", False):
+        raise ValueError(
+            f"插件 {getattr(cls, 'name', cls.__name__)} 同时声明了 "
+            f"requires_auth=True 与 anonymous_probe=True——两者语义互斥"
+            f"（前者要求带凭据，后者要求无凭据），只能选其一。"
+        )
 
 
 def load_external_plugins(plugin_paths: Optional[List[str]] = None) -> List[type]:
@@ -191,6 +213,23 @@ def discover_plugin_packages() -> List[str]:
             except (ImportError, AttributeError, ValueError):
                 continue
     return packages
+
+
+def known_categories() -> List[str]:
+    """已安装的插件类别名（`ruoyi` / `spring` / `jeecgboot` / ...）。
+
+    用于替换散落各处的硬编码三元组 `("ruoyi", "spring", "common")`。
+    **新增框架时不需要再改这些地方**——这正是 v1.6 WP-R 要还的债。
+
+    背景：JeecgBoot 接入时只改了扫描路径，配套清单全漏了，导致
+    `--cms jeecgboot` 被 argparse 拒绝、`--plugin-new --category jeecgboot` 抛错、
+    `export_plugins()` 导不出 jeecg 插件（模板仓库与 Ed25519 签名分发链路里没有它）、
+    nightly acceptance 不跑 jeecg。每条都是「新框架接了一半」。
+
+    现在统一从包发现派生，并配套 scripts/check_framework_registration.py 做门禁。
+    顺序保持 discover 的字母序，保证 `--help` 输出稳定（测试会断言）。
+    """
+    return [pkg.split(".", 1)[1] for pkg in discover_plugin_packages()]
 
 
 def load_entry_point_plugins() -> List[type]:

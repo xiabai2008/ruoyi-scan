@@ -96,4 +96,10 @@ class JeecgSqlInjectQueryUserPlugin(PluginBase):
                 evidence="基线请求与注入请求均含强 SQL 报错特征，疑似目标常驻内容，需人工复核",
             )
         emit(no("不存在 JeecgBoot queryUserByDepId SQL注入"))
-        return ScanResult(kind="vuln", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="vuln",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="注入后响应未出现 SQL 报错特征（基线差分无差异）",
+        )

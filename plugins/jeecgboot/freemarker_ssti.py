@@ -149,4 +149,10 @@ class JeecgFreemarkerSstiPlugin(PluginBase):
                 extra={"vuln_type": "ssti", "plugin_name": "jeecg_ssti"},
             )
         emit(no("不存在 JeecgBoot 报表 SSTI"))
-        return ScanResult(kind="info", name=self.name, status=STATUS_SAFE, url=url)
+        return ScanResult(
+            kind="info",
+            name=self.name,
+            status=STATUS_SAFE,
+            url=url,
+            evidence="注入模板表达式后响应未出现求值结果（基线差分无差异）",
+        )
