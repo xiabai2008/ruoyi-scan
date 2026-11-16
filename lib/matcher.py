@@ -461,6 +461,64 @@ def match_spring_actuator_env(text):
     return any(f in text for f in env_features)
 
 
+def is_real_swagger_doc(payload):
+    """结构化判定 payload 是否为「有实际接口」的 Swagger/OpenAPI 文档。
+
+    只看 `"swagger": "2.0"` 这种键会被伪造页骗过：C3 蜜罐的
+    `/v2/api-docs` 返回 `{"swagger":"2.0","paths":{}}`，旧实现据此判
+    CONFIRMED（B 类硬误报）。真正的文档必须能列出接口。
+
+    支持：
+      - 文档对象：`paths` 为非空 dict
+      - springdoc `swagger-config`：`urls` 为非空 list
+      - springfox `/swagger-resources`：非空数组且元素含 `swaggerVersion`
+    """
+    if isinstance(payload, dict):
+        paths = payload.get("paths")
+        if isinstance(paths, dict) and paths:
+            return True
+        urls = payload.get("urls")
+        if isinstance(urls, list) and urls:
+            return True
+        return False
+    if isinstance(payload, list):
+        return bool(payload) and all(isinstance(item, dict) and "swaggerVersion" in item for item in payload)
+    return False
+
+
+def is_real_actuator_env(payload):
+    """结构化判定 payload 是否为真实 Spring Boot Actuator `/actuator/env` 响应。
+
+    真实响应一定包含标准的 `systemProperties` / `systemEnvironment` 属性源
+    （`server.ports` 在 Web 应用中也必然存在），应用配置项还带 `origin`
+    注明来源配置文件。C3 蜜罐伪造了 `propertySources` + `systemEnvironment`，
+    但缺少 `systemProperties`、也没有任何 `origin` 字段，可据此排除。
+
+    要求：
+      - `propertySources` 为非空数组，每项有字符串 `name` 与 dict `properties`
+      - 且至少一个属性源名为 `systemProperties` / `server.ports`，
+        或至少一个配置项带 `origin`
+    """
+    if not isinstance(payload, dict):
+        return False
+    sources = payload.get("propertySources")
+    if not isinstance(sources, list) or not sources:
+        return False
+    names = set()
+    has_origin = False
+    for source in sources:
+        if not isinstance(source, dict):
+            return False
+        name = source.get("name")
+        properties = source.get("properties")
+        if not isinstance(name, str) or not isinstance(properties, dict):
+            return False
+        names.add(name)
+        if not has_origin and any(isinstance(v, dict) and "origin" in v for v in properties.values()):
+            has_origin = True
+    return bool(names & {"systemProperties", "server.ports"}) or has_origin
+
+
 def match_heapdump_binary(text):
     """检测响应是否是 Spring Boot heapdump 二进制内容
 

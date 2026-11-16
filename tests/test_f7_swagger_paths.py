@@ -1,7 +1,8 @@
 # F7-4：Swagger 文档泄露只认「有实际接口」的文档，不认空 paths / 空 urls / 纯 UI。
 #
 # 背景：C3 蜜罐 /v2/api-docs 返回 {"swagger":"2.0","paths":{}}，
-# 旧实现仍判 CONFIRMED（B 类硬误报）。纯 UI 页面交给 ruoyi_swagger_unauth。
+# 旧实现仍判 CONFIRMED（B 类硬误报）。v1.7.1 起 ruoyi_swagger_unauth 也只认非空文档，
+# 纯 UI 骨架页不再单独成立（C3 的假 UI 页即此类）。
 import json
 import os
 import sys

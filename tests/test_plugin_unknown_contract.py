@@ -134,7 +134,7 @@ def test_swagger_non_200_is_skipped_then_safe():
 
 
 def test_swagger_ui_only_is_not_document_leak():
-    """F7-4：纯 UI 页面不算文档泄露；由 ruoyi_swagger_unauth 单独报「UI 可访问」。"""
+    """F7-4/v1.7.1：纯 UI 页面不算文档泄露，也不能单独证明接口泄露（C3 假 UI 页）。"""
     from plugins.common.swagger_leak import SwaggerLeakPlugin
 
     resp = _StaticResp(200, "<html><head><title>swagger-ui</title></head></html>", {"Content-Type": "text/html"})

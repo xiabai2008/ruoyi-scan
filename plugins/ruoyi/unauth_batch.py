@@ -1,10 +1,18 @@
 """未授权访问批量检测——Actuator / Druid / Swagger / 后台用户列表端点。"""
 
 # 未授权访问批量检测：Actuator / Druid / Swagger / 后台 列表接口
+import json
+
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.matcher import is_not_real_resource, looks_authenticated, match_positive
+from lib.matcher import (
+    is_not_real_resource,
+    is_real_actuator_env,
+    is_real_swagger_doc,
+    looks_authenticated,
+    match_positive,
+)
 from lib.reporter import emit
 from plugins.base import PluginBase
 
@@ -65,30 +73,35 @@ class UnauthBatchPlugin(PluginBase):
     supports_waf_bypass = True
 
     # 各端点判定规则：路径 + 特征关键字（任一命中即视为该端点未授权暴露）
+    # validator：关键字命中后的结构复核（防伪造页），None 表示只按关键字判定。
     ENDPOINTS = [
         {
             "name": "Spring Actuator env",
             "path": "actuator/env",
             "keywords": ["propertySources", "activeProfiles", "applicationConfig", "environment"],
             "need_json": True,
+            "validator": "actuator_env",
         },
         {
             "name": "Druid 监控",
             "path": "druid/index.html",
             "keywords": ["Druid Stat Index", "druid-stat", "Druid Monitor"],
             "need_json": False,
+            "validator": "druid",
         },
         {
             "name": "Swagger UI",
             "path": "swagger-ui.html",
             "keywords": ["Swagger UI", "swagger-ui", "SwaggerBootstrap"],
             "need_json": False,
+            "validator": "swagger_ui",
         },
         {
             "name": "后台用户列表",
             "path": "system/user/list",
             "keywords": ['"rows"', '"code":200', "admin", "userId"],
             "need_json": True,
+            "validator": None,
         },
     ]
 
@@ -187,6 +200,11 @@ class UnauthBatchPlugin(PluginBase):
                 if authed:
                     all_status.append((ep["name"], "UNKNOWN", f"响应疑似已认证（{auth_reason}），不构成未授权证据"))
                     continue
+                # 结构复核：关键字可被伪造页/登录页满足（C3 蜜罐实测），必须再验真实结构
+                valid, invalid_reason = self._validate_endpoint(ep, text, probe, target)
+                if not valid:
+                    all_status.append((ep["name"], "SAFE", invalid_reason))
+                    continue
                 hit_endpoints.append(
                     {
                         "name": ep["name"],
@@ -234,3 +252,64 @@ class UnauthBatchPlugin(PluginBase):
 
         emit(no("未授权访问检测：所有端点网络异常，无法判定"))
         return ScanResult(kind="vuln", name=self.name, status=STATUS_UNKNOWN, url=target, evidence="所有端点均网络异常")
+
+    @staticmethod
+    def _is_druid_login_page(text):
+        """Druid 配置了口令时，`/druid/index.html` 返回的是登录表单而非监控台。
+
+        C3 蜜罐实测：假页面带 `loginUsername`/`loginPassword` 与
+        `action="/druid/submitLogin"`，正文却又含 "Druid Stat Index" 标题，
+        旧实现据此判「未授权访问」。登录页只证明口令保护存在，不证明可未授权进入。
+        """
+        low = (text or "").lower()
+        has_credentials_form = "loginusername" in low and "loginpassword" in low
+        return has_credentials_form or "druid/submitlogin" in low
+
+    def _swagger_has_real_docs(self, probe, target):
+        """Swagger UI 页面可达后，确认其文档 JSON 是否真有接口定义。
+
+        纯 UI 骨架页（C3 蜜罐：UI 200 但 `/v2/api-docs` 的 `paths` 为空）
+        不构成接口泄露，必须拿到非空文档才能确认。
+        """
+        for path in ("/v2/api-docs", "/v3/api-docs"):
+            url = join_url(target, path)
+            try:
+                resp = probe.get(url)
+            except Exception:
+                continue
+            if getattr(resp, "status_code", 0) != 200:
+                continue
+            text = resp.text or ""
+            if is_not_real_resource(text, path):
+                continue
+            ctype = (resp.headers.get("Content-Type") or "").lower() if hasattr(resp, "headers") else ""
+            if "json" not in ctype and not text.lstrip().startswith(("{", "[")):
+                continue
+            try:
+                payload = json.loads(text)
+            except (TypeError, ValueError):
+                continue
+            if is_real_swagger_doc(payload):
+                return True
+        return False
+
+    def _validate_endpoint(self, ep, text, probe, target):
+        """关键字命中后的结构复核，返回 (是否真实暴露, 不成立时的说明)。"""
+        validator = ep.get("validator")
+        if validator == "actuator_env":
+            try:
+                payload = json.loads(text)
+            except (TypeError, ValueError):
+                return False, "响应不是合法 JSON，非真实 Actuator env"
+            if not is_real_actuator_env(payload):
+                return False, "JSON 结构不是真实 Actuator env（缺 systemProperties/server.ports/origin 等标准字段）"
+            return True, ""
+        if validator == "druid":
+            if self._is_druid_login_page(text):
+                return False, "Druid 登录页（已配置口令），不是未授权监控台"
+            return True, ""
+        if validator == "swagger_ui":
+            if not self._swagger_has_real_docs(probe, target):
+                return False, "Swagger UI 页面可达但文档 JSON 为空/不可用（UI 页不证明接口泄露）"
+            return True, ""
+        return True, ""

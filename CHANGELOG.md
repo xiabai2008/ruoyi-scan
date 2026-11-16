@@ -20,6 +20,17 @@
 - **回归测试加严**：`test_report_column_present` 改为校验 CSV 的「未判定原因」列本身
   （旧断言只查整行字符串，证据里的「登录墙拦截」会让测试误绿）；
   新增去重透传与「低权账号成功 ≠ 缺账号」用例。
+- **C3 蜜罐 B 类误报（既有缺陷，经 v1.6.0 复跑确认非 v1.7 回归）**：
+  - `RuoYi Swagger 未授权访问`：旧实现只要 `/swagger-ui.html` 正文含 Swagger 关键字就判
+    CONFIRMED，C3 的假 UI 页（引用 `/v2/api-docs`，而该端点返回 `{"swagger":"2.0","paths":{}}`）
+    因此被误报。现要求文档 JSON 可解析且 `paths`/`urls`/`swagger-resources` 有实际内容
+    （新增 `lib.matcher.is_real_swagger_doc`）；UI 页只作为「可达」证据，不能单独成立。
+  - `未授权访问（批量）`：Actuator 改为结构复核（`systemProperties`/`server.ports`/`origin`
+    等真实字段，新增 `lib.matcher.is_real_actuator_env`）；Druid 登录页
+    （`loginUsername`/`loginPassword`/`submitLogin`）不再算未授权监控台；
+    Swagger UI 需有非空文档 JSON 佐证。
+  - 新增 `tests/test_c3_decoys.py` 覆盖 C3 三种假页面，并保留真实 Druid/Actuator/Swagger
+    正样本仍判 CONFIRMED。
 
 ## [1.7.0] - 2026-11-16
 
