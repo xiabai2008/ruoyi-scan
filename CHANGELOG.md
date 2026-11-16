@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-16
+
+可信度闭环版：**不新增检测能力**，把「三态判定」从实现升级为可度量、可复现、可辩护的方法论。
+
+### Added
+- **UNKNOWN 结构化归因（WP-1）**：`ScanResult` / `ComponentVersionResult` 新增 `unknown_reason`
+  一等字段；降级链、引擎预算/认证降级/异常兜底、组件转换、编排收口点都写入原因码。
+  7 种报告格式新增「未判定原因」列，API `ScanResultDTO` 与 SARIF `properties.unknown_reason` 同步透出。
+- **GT 指标与三态/二态对照实验（WP-2）**：新增 `data/verdict_experiment_gt.json` 与
+  `scripts/verdict_experiment.py`，产出 Precision / Recall / F1 / Youden J /
+  UNKNOWN 率 / 假阴性藏匿率，可一键复跑。
+- **插件数 SSOT 门禁（WP-3）**：新增 `scripts/check_plugin_count_ssot.py`，以
+  `export_plugin_list.collect()` 为唯一事实源，扫描 24 个对外文件。
+- **桌面端组件测试（WP-4）**：Vitest + Testing Library + jsdom，9 个用例；CI 接入
+  `npm run test`，覆盖 #66 条件 Hook 回归。
+- **`scripts/unknown_audit.py`**：输出 567 条 UNKNOWN 的逐类归因与 unclassified 明细。
+
+### Changed
+- **插件数口径统一**：对外统一为 **56**（ruoyi 20 / spring 14 / common 12 / jeecgboot 8 /
+  yudao 2）；历史盲测 `29/54`、`46/54`、`48/54` 保留并标注为「覆盖率代理指标，不是检出率」。
+- **README 新增 v1.7 GT 指标**：三态口径 P 75.00% / R 81.82% / F1 0.7826 / J 0.7963，
+  并注明适用范围为自建靶场、不外推生产环境。
+- **Python 兼容性修正**：为 5 处使用 PEP 604/585 注解的文件补
+  `from __future__ import annotations`，修复 Python 3.8/3.9 导入 `common/logger.py` 时的
+  `TypeError`；3.10+ 行为不变。
+
 ### Fixed
 - **配置/模板合并误吸外部命令行参数**（工程一致性缺陷，2026-11-04 由外部评审报告指出、实测确认并修复）：
   `merge_config_with_args()` / `apply_template()` 原先自己去扫全局 `sys.argv` 判断「用户是否显式指定」，
@@ -15,6 +41,11 @@
   彻底解除对全局状态的依赖。同时合并了 `lib/config_loader.py` 与 `lib/scan_templates.py` 中两份重复实现。
   - 注：`pytest` 的 `addopts` **不会**进入 `sys.argv`（已实测），所以 CI 此前未受影响；但命令行手写该参数即会踩中
   - 语义未变：CLI 显式传参仍优先于配置文件，配置文件仍优先于默认值（已做端到端验证）
+
+### Notes
+- 实验数据来自自建靶场与匿名视角，**不宣称生产环境检出率**。
+- 本数据集不支持「三态相对保守二态显著提高 Youden J」的强假设；三态的价值是可解释性与
+  风险分层（把 UNKNOWN 与 SAFE 分开），详见 `docs/verdict_experiment_v1.7.md`。
 
 ## [1.6.0] - 2026-11-03
 

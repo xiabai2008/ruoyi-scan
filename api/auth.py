@@ -14,6 +14,8 @@
 #      admin = scan + 插件管理 + 定时任务管理
 #   4. 无外部依赖；未设置 Key 时默认仅允许 127.0.0.1（开发模式）
 #   5. /docs /openapi.json /api/system/health 不需要鉴权
+from __future__ import annotations
+
 import hmac
 import os
 

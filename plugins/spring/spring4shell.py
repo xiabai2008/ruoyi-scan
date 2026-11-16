@@ -3,6 +3,8 @@
 #   文件 getshell（影响 Spring Framework 5.3.x + JDK9+ + Tomcat war 部署）。
 # 默认只做存在性验证（不发任何改写 AccessLogValve 的请求）；显式 --exploit 且目标为
 # 回环/内网地址时才执行真实利用链（写入一个只打印随机数字的无害 JSP）。
+from __future__ import annotations
+
 import ipaddress
 import re
 import secrets

@@ -11,6 +11,8 @@
 #   - core/router.py 零修改
 #   - core/models.py 零修改
 #   - ThreadPoolExecutor 使用 daemon 线程（避免测试/进程退出时后台线程阻塞）
+from __future__ import annotations
+
 import threading
 import time
 import uuid

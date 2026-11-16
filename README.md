@@ -253,7 +253,7 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 ## 项目定位
 
 - **作者**：XIABAI
-- **版本**：1.6.0
+- **版本**：1.7.0
 - **仓库**：https://github.com/xiabai2008/Ruoyi-Scan
 - **技术栈**：Python 3.8+ / requests / FastAPI / Docker
 - **许可**：MIT License
