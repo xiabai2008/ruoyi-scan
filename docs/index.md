@@ -47,7 +47,7 @@ Java 管理框架**，把指纹、变体、版本矩阵、利用链做透，并�
 
 === "检测"
 
-    - **54 个 POC 插件**：若依 20（含 2 个 Plus 变体专属）/ Spring Boot 14 / 通用 12 / JeecgBoot 8
+    - **56 个 POC 插件**：若依 20（含 2 个 Plus 变体专属）/ Spring Boot 14 / 通用 12 / JeecgBoot 8 / 芋道 2
     - 若依 5 变体识别（Vue3 / App / Plus / Cloud-Plus / Magic）
     - 20 组件 CVE 比对（fastjson / Shiro / Nacos / Log4j …，`--components`）
     - WAF 绕过 11 策略 + 三态保护矩阵

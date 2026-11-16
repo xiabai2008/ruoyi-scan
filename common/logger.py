@@ -10,6 +10,8 @@
 #   - 无配置时使用 WARNING 级别（生产安静，仅警告以上输出）
 #   - 通过 setup_logging(debug=True) 或环境变量 RUOYI_SCAN_DEBUG=1 切换 DEBUG 级别
 #   - 日志格式：[时间] [级别] [模块] 消息
+from __future__ import annotations
+
 import logging
 import os
 import sys

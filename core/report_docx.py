@@ -20,6 +20,7 @@ from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,
+    unknown_reason_label,
 )
 
 # 中文字体（Word/LibreOffice 会自动回退到系统可用字体）
@@ -288,7 +289,7 @@ def render_docx(builder: Any, out_path: str) -> str:
         empty_run = empty_para.add_run("未发现确认漏洞。")
         _set_run_font(empty_run, size=10, color=RGBColor(0x65, 0x6D, 0x76))
     else:
-        headers = ["漏洞名称", "严重度", "URL", "证据", "修复建议"]
+        headers = ["漏洞名称", "严重度", "未判定原因", "URL", "证据", "修复建议"]
         vuln_table = doc.add_table(rows=len(confirmed) + 1, cols=len(headers))
         vuln_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _set_table_borders(vuln_table)
@@ -303,17 +304,20 @@ def render_docx(builder: Any, out_path: str) -> str:
             if hasattr(r, "hit_count") and r.hit_count > 1:
                 hit_info = f" (x{r.hit_count})"
             name_color = _SEV_COLOR.get(r.severity)
+            code = str(getattr(r, "unknown_reason", "") or "")
+            reason_text = unknown_reason_label(code) if r.status == STATUS_UNKNOWN and code else ""
             _add_cell_text(vuln_table.rows[i].cells[0], r.name + hit_info, size=9, bold=True, color=name_color)
             _add_cell_text(vuln_table.rows[i].cells[1], sev_cn, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
-            _add_cell_text(vuln_table.rows[i].cells[2], r.url or "", size=8, mono=True)
-            _add_cell_text(vuln_table.rows[i].cells[3], r.evidence or "", size=8, mono=True)
-            _add_cell_text(vuln_table.rows[i].cells[4], r.fix or "", size=9)
+            _add_cell_text(vuln_table.rows[i].cells[2], reason_text, size=8)
+            _add_cell_text(vuln_table.rows[i].cells[3], r.url or "", size=8, mono=True)
+            _add_cell_text(vuln_table.rows[i].cells[4], r.evidence or "", size=8, mono=True)
+            _add_cell_text(vuln_table.rows[i].cells[5], r.fix or "", size=9)
             # 隔行底色
             if i % 2 == 0:
                 for cell in vuln_table.rows[i].cells:
                     _set_cell_bg(cell, "F6F8FA")
-        # 列宽
-        col_widths = [Cm(3.5), Cm(1.5), Cm(4), Cm(4), Cm(3.5)]
+        # 列宽（合计约 17cm，适配 A4 纵向页边距）
+        col_widths = [Cm(3.2), Cm(1.4), Cm(2.2), Cm(3.4), Cm(3.6), Cm(3.2)]
         for row in vuln_table.rows:
             for j, w in enumerate(col_widths):
                 row.cells[j].width = w

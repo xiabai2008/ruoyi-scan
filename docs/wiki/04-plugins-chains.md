@@ -20,7 +20,7 @@
 2. 插件的元信息（CVE/CVSS/修复建议/复现命令）与检测逻辑同居一处，不会漂移；
 3. `--plugin-list`、报告、API `/api/plugins` 都能直接从类属性生成，无需额外元数据表。
 
-代价是文件数量：54 个已注册插件 = 54 个文件 + 4 个 `__init__.py`。
+代价是文件数量：56 个已注册插件 = 56 个文件 + 5 个框架包 `__init__.py`（`plugins/chain/` 另计）。
 
 ---
 
@@ -251,14 +251,15 @@ plugin_list = [
 | `plugins.spring` | 14 |
 | `plugins.common` | 12 |
 | `plugins.jeecgboot` | 8 |
-| **合计** | **54** |
+| `plugins.yudao` | 2 |
+| **合计** | **56** |
 
 > **插件数量有三个口径，勿混用**：
-> - **57** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
-> - **54** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
-> - **52** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
+> - **59** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
+> - **56** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
+> - **54** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
 >
-> README 原先的「51 / 若依 18」即第三种口径，已统一为 54 / 20 并保留 Plus 专属说明。
+> README 原先的「51 / 若依 18」即第三种口径，v1.7 已统一为 56 / 20 并保留 Plus 专属说明。
 
 ---
 

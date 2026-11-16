@@ -34,9 +34,9 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | `cli/` | 8 | CLI 控制层（分发 + 各模式执行器） |
 | `common/` | 3 | 共享基础层（模型、日志、控制台） |
 | `config/` | 1 | 全局配置 |
-| `plugins/` | 54 个已注册插件 | 4 个框架包 + 1 个链专用包（详见 [04](04-plugins-chains.md)） |
+| `plugins/` | 56 个已注册插件 | 5 个框架包 + 1 个链专用包（详见 [04](04-plugins-chains.md)） |
 | `chains/` | 3 条利用链 | DAG 编排 |
-| `desktop/` | Tauri 2 + React 18 | 桌面端（含 Rust 壳与 Python 引擎） |
+| `desktop/` | Tauri 2 + React 19 | 桌面端（含 Rust 壳与 Python 引擎） |
 | `tests/` | 67 个测试文件 | pytest + 回归脚本 |
 | `lab/` | 多套靶场 | 签名靶场（vuln/safe 双模式） |
 
@@ -64,7 +64,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | [01 整体架构](01-architecture.md) | 分层结构、端到端数据流、扫描主流程 9 步、三态判定纪律、关键设计决策 | 项目怎么搭起来的？一次扫描发生什么？ |
 | [02 入口与 CLI](02-entrypoint-cli.md) | `main.py`、`cli/` 分发层、参数全景、预检、环境变量、运行方式 | 命令行怎么进来的？各模式怎么执行？ |
 | [03 核心引擎层](03-core.md) | `core/` 24 个模块逐模块说明（关键类/函数/依赖/设计要点） | 引擎、会话、指纹、路由、报告各自做什么？ |
-| [04 插件体系与利用链](04-plugins-chains.md) | `PluginBase` 契约、5 条插件发现路径、54 个插件清单、3 条链、`data/` 字典 | 插件怎么写、怎么被发现、怎么被路由？ |
+| [04 插件体系与利用链](04-plugins-chains.md) | `PluginBase` 契约、5 条插件发现路径、56 个插件清单、3 条链、`data/` 字典 | 插件怎么写、怎么被发现、怎么被路由？ |
 | [05 工具库层](05-lib.md) | `lib/` 41 个模块按功能分组说明 | WAF 绕过、OAST、nuclei 兼容、AI 闭环怎么做？ |
 | [06 API 与 Web 控制台](06-api-web.md) | FastAPI 应用工厂、鉴权分级、全部 REST 端点、WebSocket 事件、定时扫描 | 服务端接口契约是什么？ |
 | [07 桌面端与部署](07-desktop-deploy.md) | Tauri 桌面端、靶场、Docker、监控、CI/Release、测试 | 怎么打包、部署、验收？ |
@@ -112,8 +112,8 @@ Ruoyi-Scan/
 
 | 位置 | 原表述 | 修正为 |
 |------|--------|--------|
-| `README.md`、`README_EN.md`、`docs/index.md` | 「51 个 POC 插件」 | **54**（`plugin_list` 登记总数） |
-| `pyproject.toml` description | 「57 检测插件」 | **54**（与 README 口径统一） |
+| `README.md`、`README_EN.md`、`docs/index.md` | 「51 个 POC 插件」 | **56**（`plugin_list` 登记总数） |
+| `pyproject.toml` description | 「57 检测插件」 | **56**（与 README 口径统一） |
 | `README.md`、`README_EN.md` 目录结构 | `core/runner.py  # 扫描编排器` | 拆为 `cli/runner.py`（扫描模式执行器）与 `core/orchestrator.py`（CLI/API 共用编排器） |
 | `README.md`、`README_EN.md` | `plugins/ruoyi/` 18 个插件 | **20 个（含 2 个 Plus 变体专属）** |
 | `README.md`、`README_EN.md` | `lib/` 33 个模块 | **41** |
@@ -123,13 +123,13 @@ Ruoyi-Scan/
 
 #### 插件数量的三个口径（重要）
 
-原 README 的「51 / 18」并非随手写错，而是**按"通用目标实际执行数"统计**（54 登记数中减去 2 个 Plus 变体专属插件 = 52），与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 的断言一致。修正后统一到"登记总数"口径，并保留 Plus 专属的说明：
+原 README 的「51 / 18」并非随手写错，而是**按"通用目标实际执行数"统计**（v1.7 为 56 登记数中减去 2 个 Plus 变体专属插件 = 54），与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 的断言一致。修正后统一到"登记总数"口径，并保留 Plus 专属的说明：
 
 | 口径 | 数量 | 来源 | 说明 |
 |------|------|------|------|
 | `plugins/` 下插件文件总数 | **57** | `scripts/verification_matrix.py` 按文件统计 | 含 `plugins/chain/` 的 3 个链步骤文件 |
-| `plugin_list` 登记总数 | **54** | 各包 `__init__.py` | 本 Wiki 与 README 统一采用此口径 |
-| 通用目标实际执行数 | **52** | `Router().resolve()` | 减去 2 个 RuoYi-Plus 变体专属插件（`PlusAuthLoginProbePlugin`、`PlusJobUnauthPlugin`） |
+| `plugin_list` 登记总数 | **56** | 各包 `__init__.py` | 本 Wiki 与 README 统一采用此口径 |
+| 通用目标实际执行数 | **54** | `Router().resolve()` | 减去 2 个 RuoYi-Plus 变体专属插件（`PlusAuthLoginProbePlugin`、`PlusJobUnauthPlugin`） |
 
 ### 仍待处理（代码层，非文档问题）
 

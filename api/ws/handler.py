@@ -7,6 +7,8 @@
 #     （浏览器 WebSocket 无法设置自定义 Header，子协议是标准凭据通道；
 #      禁止 ?api_key= URL 传输，避免密钥泄露到日志/Referer）
 #   - 密钥比较一律使用 hmac.compare_digest（常量时间，防时序侧信道）
+from __future__ import annotations
+
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect

@@ -1,11 +1,12 @@
 {
   "name": "ruoyi-scan-desktop",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "lint": "eslint src",
+    "test": "vitest run",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "smoke:ui": "node scripts/smoke-ui.mjs",
@@ -29,15 +30,20 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.4",
     "@tauri-apps/cli": "^2.12.4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.12",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.1.4",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
-    "vite": "^7.3.8"
+    "vite": "^7.3.8",
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "source-map-js": "^1.2.2",

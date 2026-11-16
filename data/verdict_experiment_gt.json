@@ -1,0 +1,2840 @@
+{
+  "schema": "ruoyi-scan-verdict-gt",
+  "version": "1.0",
+  "description": "WP-2 三态/二态对照实验 GT 表：site × plugin → vulnerable/safe/unknown；逐条注明来源",
+  "entries": [
+    {
+      "site": "A2",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_lev"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_leh"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_druid"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/A2.json#g_idea",
+        "artifacts/blind_v2/gt/A2.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_actuator"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/A2.json#g_lbak"
+      ]
+    },
+    {
+      "site": "A2",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/A2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_lev"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_leh"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-1.json#g_idea",
+        "artifacts/blind_v2/gt/C1-1.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-1.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C1-1",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-1.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_lev"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_leh"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-2.json#g_idea",
+        "artifacts/blind_v2/gt/C1-2.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-2.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C1-2",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_lev"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_leh"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-3.json#g_idea",
+        "artifacts/blind_v2/gt/C1-3.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-3.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C1-3",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_lev"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_leh"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_druid"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-4.json#g_idea",
+        "artifacts/blind_v2/gt/C1-4.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C1-4.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C1-4",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C1-4.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_lev"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_leh"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-1a.json#g_idea",
+        "artifacts/blind_v2/gt/C2-1a.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-1a.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C2-1a",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1a.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_lev"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_leh"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-1b.json#g_idea",
+        "artifacts/blind_v2/gt/C2-1b.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-1b.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C2-1b",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-1b.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_lev"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_leh"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-2.json#g_idea",
+        "artifacts/blind_v2/gt/C2-2.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-2.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C2-2",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_lev"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_leh"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-3.json#g_idea",
+        "artifacts/blind_v2/gt/C2-3.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C2-3.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C2-3",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C2-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_lev"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": ".git 源码泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_leh"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C3.json#g_idea",
+        "artifacts/blind_v2/gt/C3.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C3.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C3",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/C3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_lev"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_leh"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-2.json#g_idea",
+        "artifacts/blind_v2/gt/C4-2.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-2.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C4-2",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-2.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_lev"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_leh"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-3.json#g_idea",
+        "artifacts/blind_v2/gt/C4-3.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-3.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C4-3",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-3.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_lev"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_leh"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-4.json#g_idea",
+        "artifacts/blind_v2/gt/C4-4.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-4.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C4-4",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-4.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_lev"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_leh"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-5.json#g_idea",
+        "artifacts/blind_v2/gt/C4-5.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-5.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C4-5",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-5.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_lev"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_leh"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_druid"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-6.json#g_idea",
+        "artifacts/blind_v2/gt/C4-6.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_actuator"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_swagger"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_docs_sql",
+        "artifacts/blind_v2/gt/C4-6.json#g_lbak"
+      ]
+    },
+    {
+      "site": "C4-6",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/C4-6.json#g_druid"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_lev"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_leh"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_druid"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/D1.json#g_idea",
+        "artifacts/blind_v2/gt/D1.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_actuator"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/D1.json#g_lbak"
+      ]
+    },
+    {
+      "site": "D1",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/D1.json#g_druid"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_lev"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_leh"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_druid"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R1.json#g_idea",
+        "artifacts/blind_v2/gt/R1.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R1.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R1",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R1.json#g_druid"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_lev"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": ".git 源码泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_leh"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_druid"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R10.json#g_idea",
+        "artifacts/blind_v2/gt/R10.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R10.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R10",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R10.json#g_druid"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_lev"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_leh"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_druid"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R11.json#g_idea",
+        "artifacts/blind_v2/gt/R11.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R11.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R11",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R11.json#g_druid"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_lev"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_leh"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_druid"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R12.json#g_idea",
+        "artifacts/blind_v2/gt/R12.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R12.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R12",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R12.json#g_druid"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_lev"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_leh"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_druid"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R2.json#g_idea",
+        "artifacts/blind_v2/gt/R2.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R2.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R2",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R2.json#g_druid"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_lev"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_leh"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_druid"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R3.json#g_idea",
+        "artifacts/blind_v2/gt/R3.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R3.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R3",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R3.json#g_druid"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_lev"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_leh"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_druid"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R4.json#g_idea",
+        "artifacts/blind_v2/gt/R4.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R4.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R4",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R4.json#g_druid"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_lev"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_leh"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_druid"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R5.json#g_idea",
+        "artifacts/blind_v2/gt/R5.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R5.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R5",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "artifacts/blind_v2/gt/R5.json#g_druid"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_lev"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": ".git 源码泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_leh"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_druid"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R6.json#g_idea",
+        "artifacts/blind_v2/gt/R6.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R6.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R6",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R6.json#g_druid"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_lev"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": ".git 源码泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_leh"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_druid"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R7.json#g_idea",
+        "artifacts/blind_v2/gt/R7.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R7.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R7",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R7.json#g_druid"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_lev"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": ".git 源码泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_leh"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_druid"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R9.json#g_idea",
+        "artifacts/blind_v2/gt/R9.json#g_lsvn"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_actuator"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_swagger"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_docs_sql",
+        "artifacts/blind_v2/gt/R9.json#g_lbak"
+      ]
+    },
+    {
+      "site": "R9",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "unknown",
+      "sources": [
+        "artifacts/blind_v2/gt/R9.json#g_druid"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": ".git 源码泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "CORS 跨域配置不当",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "CVE-2022-22947 Spring Cloud Gateway 远程代码执行",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "CVE-2022-22963 Spring Cloud Function 远程代码执行",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "HTTP 方法探测",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot jmreport SQL注入",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot jmreport 文件上传",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot queryUserByDepId SQL注入",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot 任意文件读取",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot 字典越权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot 报表 SSTI",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot 报表未授权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "JeecgBoot 默认口令",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "MinIO 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Nacos 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "POST型报错注入（dept）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "POST型报错注入（role）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Redis 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RocketMQ Dashboard 未授权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RuoYi 代码生成模块 SSTI",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RuoYi-Cloud Nacos 配置泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RuoYi-Plus 定时任务未授权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "RuoYi-Plus 认证接口探测",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Shiro 框架指纹（rememberMe）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator /mappings 路由映射泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator /trace 请求历史泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator H2 Console 未授权 JNDI RCE",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator Jolokia MLet 链远程代码执行",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator Jolokia 远程代码执行",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator env 配置覆盖 RCE",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator heapdump 敏感信息泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Boot Admin 未授权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Cloud Config 配置未授权读取",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Spring Data REST 信息泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "Thymeleaf/SpEL 模板注入",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "任意文件上传",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "任意文件读取",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "任意文件读取（路径穿越）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "后台默认口令（admin/admin123）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "备份文件泄露",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "定时任务 RCE（未授权访问）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "定时任务调用目标未校验",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "目录扫描",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "目录遍历探测",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "芋道 Druid 监控未授权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "芋道租户列表未授权",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "部门树越权访问",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-safe",
+      "plugin": "重置密码页数据权限绕过",
+      "gt_label": "safe",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-safe:expected_safe_all"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": ".git 源码泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "CORS 跨域配置不当",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "Druid 弱口令爆破",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "HTTP 方法探测",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "Nacos 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "POST型报错注入（dept）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "POST型报错注入（role）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "RuoYi Swagger 未授权访问",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "RuoYi 代码生成模块 SSTI",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "RuoYi-Cloud Nacos 配置泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "Thymeleaf/SpEL 模板注入",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "任意文件上传",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "任意文件读取",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "任意文件读取（路径穿越）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "后台默认口令（admin/admin123）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "定时任务 RCE（未授权访问）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "定时任务调用目标未校验",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "未授权访问（批量）",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "目录扫描",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "部门树越权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-ruoyi-vuln",
+      "plugin": "重置密码页数据权限绕过",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-ruoyi-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": ".env 配置文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": ".git 源码泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "CORS 跨域配置不当",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "CVE-2022-22947 Spring Cloud Gateway 远程代码执行",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "CVE-2022-22963 Spring Cloud Function 远程代码执行",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "IDE/SCM 残留文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator /mappings 路由映射泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator /trace 请求历史泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator H2 Console 未授权 JNDI RCE",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator Jolokia MLet 链远程代码执行",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator Jolokia 远程代码执行",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator env 配置覆盖 RCE",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator heapdump 敏感信息泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Actuator 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Boot Admin 未授权访问",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Cloud Config 配置未授权读取",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Spring Data REST 信息泄露",
+      "gt_label": "vulnerable",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:expected_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "Swagger API 文档泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    },
+    {
+      "site": "lab-spring-vuln",
+      "plugin": "备份文件泄露",
+      "gt_label": "unknown",
+      "sources": [
+        "data/acceptance_baseline.json#lab-spring-vuln:allowed_confirmed"
+      ]
+    }
+  ]
+}

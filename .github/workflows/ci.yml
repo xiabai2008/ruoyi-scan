@@ -79,6 +79,12 @@ jobs:
         # 本门禁把「哪些地方需要登记」固化成断言（v1.6 WP-R）。
         run: python scripts/check_framework_registration.py
 
+      - name: 插件数量 SSOT（对外口径）
+        # 56/54/59 三种口径混用过：README 写 56、ROADMAP 仍写 54、pyproject 写死 54。
+        # 本门禁以 export_plugin_list.collect() 为唯一事实源，检查对外口径文件；
+        # 历史盲测快照（29/54 等）由上下文白名单保留，不改历史数据。
+        run: python scripts/check_plugin_count_ssot.py
+
       - name: 版本号一致性（settings / pyproject / 桌面端 / CHANGELOG）
         # 版本号散落 5 个文件，任何一处漏改都不会让测试失败，但会让用户装到
         # 「自称 1.5.2、实际 1.5.1」的包。基准是 config/settings.py 的 VERSION。
@@ -424,6 +430,7 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
+      - run: npm run test  # WP-4：vitest 组件测试（含 #66 条件 Hook 回归）
 
   # 桌面端质量门禁 B：构建产物 CDP 冒烟
   # 加载 dist 后真实点击「新建扫描」并遍历全部导航页；任何未捕获异常/React 控制台错误即失败。

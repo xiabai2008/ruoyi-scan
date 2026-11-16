@@ -696,7 +696,21 @@ def to_scan_result(res: ComponentVersionResult) -> ScanResult:
     Returns:
         ScanResult（kind=vuln 仅当 CONFIRMED；severity 按 CVSS 映射）
     """
-    from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM
+    from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, UnknownReason
+
+    # v1.7 WP-1：组件检测的 UNKNOWN 原因码。
+    # 这里的 evidence 是本模块自己生成的固定句式（不是任意插件文本），因此在
+    # 转换点按句式归类是可靠的；插件仍可通过 ComponentVersionResult.unknown_reason
+    # 显式给出更精确的原因，显式值优先。
+    def _component_unknown_reason(evidence: str) -> str:
+        text = evidence or ""
+        if "网络异常" in text or "OAST 未收到回调" in text:
+            return UnknownReason.UNREACHABLE.value
+        return UnknownReason.INSUFFICIENT_EVIDENCE.value
+
+    unknown_reason = ""
+    if res.status == STATUS_UNKNOWN:
+        unknown_reason = res.unknown_reason or _component_unknown_reason(res.evidence)
 
     # CVSS → 严重度映射（与 SARIF level 映射一致：9+→high，4+→medium）
     if res.cvss_score >= 9.0:
@@ -728,4 +742,5 @@ def to_scan_result(res: ComponentVersionResult) -> ScanResult:
         cvss_score=res.cvss_score,
         compliance=res.compliance,
         extra={"component": res.component, "detected_version": res.detected_version},
+        unknown_reason=unknown_reason,
     )

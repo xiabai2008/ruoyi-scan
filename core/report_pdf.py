@@ -22,6 +22,7 @@ from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,
+    unknown_reason_label,
 )
 
 # 注册 CJK 字体（reportlab 内置 STSong-Light，零系统依赖）
@@ -146,6 +147,7 @@ def render_pdf(builder: Any, out_path: str) -> str:
         header = [
             Paragraph("漏洞名称", cell_header),
             Paragraph("严重度", cell_header),
+            Paragraph("未判定原因", cell_header),
             Paragraph("URL", cell_header),
             Paragraph("证据", cell_header),
             Paragraph("修复建议", cell_header),
@@ -156,10 +158,13 @@ def render_pdf(builder: Any, out_path: str) -> str:
             hit_info = ""
             if hasattr(r, "hit_count") and r.hit_count > 1:
                 hit_info = f" (x{r.hit_count})"
+            code = str(getattr(r, "unknown_reason", "") or "")
+            reason_text = unknown_reason_label(code) if r.status == STATUS_UNKNOWN and code else ""
             data.append(
                 [
                     Paragraph(escape(r.name + hit_info), cell_style),
                     Paragraph(escape(sev_cn), cell_style),
+                    Paragraph(escape(reason_text), cell_style),
                     Paragraph(escape(r.url or ""), cell_style),
                     Paragraph(escape(r.evidence or ""), cell_style),
                     Paragraph(escape(r.fix or ""), cell_style),
@@ -167,7 +172,7 @@ def render_pdf(builder: Any, out_path: str) -> str:
             )
 
         # 列宽合计 170mm = A4(210mm) - 左右页边距(2×20mm)，正好占满正文区
-        col_widths = [35 * mm, 18 * mm, 45 * mm, 40 * mm, 32 * mm]
+        col_widths = [30 * mm, 14 * mm, 22 * mm, 38 * mm, 36 * mm, 30 * mm]
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
             TableStyle(
@@ -200,21 +205,25 @@ def render_pdf(builder: Any, out_path: str) -> str:
             [
                 Paragraph("名称", cell_header),
                 Paragraph("状态", cell_header),
+                Paragraph("未判定原因", cell_header),
                 Paragraph("URL", cell_header),
                 Paragraph("证据", cell_header),
             ]
         ]
         for r in others:
+            code = str(getattr(r, "unknown_reason", "") or "")
+            reason_text = unknown_reason_label(code) if r.status == STATUS_UNKNOWN and code else ""
             other_data.append(
                 [
                     Paragraph(escape(r.name), cell_style),
                     Paragraph(escape(_STATUS_CN.get(r.status, r.status)), cell_style),
+                    Paragraph(escape(reason_text), cell_style),
                     Paragraph(escape(r.url or ""), cell_style),
                     Paragraph(escape(r.evidence or ""), cell_style),
                 ]
             )
         # 列宽同样合计 170mm 撑满正文区；repeatRows=1 使表头跨页重复
-        other_table = Table(other_data, colWidths=[40 * mm, 20 * mm, 60 * mm, 50 * mm], repeatRows=1)
+        other_table = Table(other_data, colWidths=[34 * mm, 16 * mm, 22 * mm, 50 * mm, 48 * mm], repeatRows=1)
         other_table.setStyle(
             TableStyle(
                 [

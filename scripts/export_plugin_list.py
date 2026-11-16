@@ -33,12 +33,17 @@ from plugins.base import PluginBase  # noqa: E402
 
 OUT = REPO / "docs" / "promo" / "ruoyi-scan-plugins.txt"
 
-CATEGORY_ORDER = ["ruoyi", "spring", "common", "jeecgboot"]
+# 展示顺序：已知框架保持历史顺序，后续新增框架从 discover 结果自动追加。
+# 不再硬编码 4 个包（v1.6 接入 yudao 后曾漏登记，导致顺序与标签都靠 fallback）。
+_DISCOVERED = [pkg.split(".", 1)[1] for pkg in discover_plugin_packages()]
+CATEGORY_ORDER = [c for c in ("ruoyi", "spring", "common", "jeecgboot") if c in _DISCOVERED]
+CATEGORY_ORDER += [c for c in _DISCOVERED if c not in CATEGORY_ORDER]
 CATEGORY_LABEL = {
     "ruoyi": "若依专项",
     "spring": "Spring 生态",
     "common": "通用 Web",
     "jeecgboot": "JeecgBoot",
+    "yudao": "芋道",
 }
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 WIDTH = 79

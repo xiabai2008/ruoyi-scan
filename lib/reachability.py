@@ -19,7 +19,7 @@ import uuid
 from typing import Any, Dict, List
 
 from common.logger import get_logger
-from common.models import STATUS_SAFE, STATUS_UNKNOWN
+from common.models import STATUS_SAFE, STATUS_UNKNOWN, UnknownReason
 
 logger = get_logger(__name__)
 
@@ -179,6 +179,7 @@ def downgrade_auth_wall_safe(results: List[Any], wall: Dict[str, Any]) -> int:
         r.evidence = f"{note}；原证据：{ev}" if ev else note
         extra["auth_wall"] = True
         r.extra = extra
+        r.unknown_reason = UnknownReason.AUTH_WALL.value
         n += 1
     if n:
         logger.warning("登录墙：%d 条 SAFE 已降级为 UNKNOWN", n)
@@ -203,6 +204,7 @@ def downgrade_evidence_less_safe(results: List[Any]) -> int:
         extra = dict(getattr(r, "extra", None) or {})
         extra["no_evidence"] = True
         r.extra = extra
+        r.unknown_reason = UnknownReason.NO_EVIDENCE.value
         n += 1
     if n:
         logger.warning("缺少证据的 SAFE：%d 条已降级为 UNKNOWN", n)
@@ -229,6 +231,7 @@ def downgrade_safe_results(results: List[Any], block: Dict[str, Any]) -> int:
         extra["blocked"] = True
         extra["blocked_status"] = block.get("status")
         r.extra = extra
+        r.unknown_reason = UnknownReason.BLOCKED.value
         n += 1
     if n:
         logger.warning("全站拦截：%d 条 SAFE 已降级为 UNKNOWN", n)
@@ -351,6 +354,7 @@ def upgrade_denied_safe_to_unknown(results: List[Any]) -> int:
             extra = dict(getattr(r, "extra", None) or {})
             extra["denied"] = True
             r.extra = extra
+            r.unknown_reason = UnknownReason.DENIED.value
         elif _UNREACHABLE_RE.search(ev):
             # 网络异常 / 基线探测失败：没拿到响应就不能宣称"不存在"
             r.status = STATUS_UNKNOWN
@@ -358,6 +362,7 @@ def upgrade_denied_safe_to_unknown(results: List[Any]) -> int:
             extra = dict(getattr(r, "extra", None) or {})
             extra["unreachable"] = True
             r.extra = extra
+            r.unknown_reason = UnknownReason.UNREACHABLE.value
         else:
             continue
         n += 1

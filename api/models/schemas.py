@@ -91,6 +91,8 @@ class ScanResultDTO(BaseModel):
     cvss_score: float = 0.0
     cvss_vector: str = ""
     compliance: dict = {}
+    # v1.7 WP-1：UNKNOWN 结构化原因码（见 common.models.UnknownReason）
+    unknown_reason: str = ""
 
 
 # === 报告模型 ===
