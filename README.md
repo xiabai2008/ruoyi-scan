@@ -839,7 +839,3 @@ gh attestation verify ruoyi_scan-<version>-py3-none-any.whl -R xiabai2008/ruoyi-
 ## License
 
 MIT License © 2026 XIABAI
-
----
-
-作者背景与致谢见 [AUTHOR.md](AUTHOR.md)。
