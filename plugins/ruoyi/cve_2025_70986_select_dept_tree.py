@@ -54,7 +54,7 @@ import json
 import re
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
 from config import settings
 from core.auth_chain import isolated_auth_session
 from core.http import join_url
@@ -129,6 +129,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                 "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权"
                 "（该验证需要一个没有 system:dept:list 权限的普通账号）"
             ),
+            unknown_reason=UnknownReason.NO_LOWPRIV.value,
             fix=(
                 "创建一个普通角色账号（不要用 admin），不授予 system:dept:list；"
                 "然后以 --surface-account 用户名:口令 重新扫描"
@@ -163,6 +164,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     name=self.name,
                     status=STATUS_UNKNOWN,
                     evidence=f"低权账号 {low_user} 登录失败：{reason}{hint}",
+                    unknown_reason=UnknownReason.NO_LOWPRIV.value,
                 )
 
             url_data = join_url(target, "/system/dept/treeData/0")
@@ -195,6 +197,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     status=STATUS_UNKNOWN,
                     url=url_data,
                     evidence=f"请求异常：{e}",
+                    unknown_reason=UnknownReason.UNREACHABLE.value,
                 )
             bodies = {"treeData": r_data.text or "", "selectDeptTree": r_page.text or ""}
 
@@ -222,6 +225,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                         f"探针 {'、'.join(missing)} 返回 404，目标未暴露部门树端点，"
                         f"无法区分「业务层无权限执行」与「端点不存在」，不予判定"
                     ),
+                    unknown_reason=UnknownReason.ENDPOINT_ABSENT.value,
                 )
 
             # 会话失效守卫：响应是登录页、或是分离版的「认证失败」JSON，说明认证态丢了，不能据此判定
@@ -233,6 +237,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     status=STATUS_UNKNOWN,
                     url=url_data,
                     evidence="低权请求返回登录页，会话未生效，不予判定",
+                    unknown_reason=UnknownReason.AUTH_WALL.value,
                 )
 
             denied = {k: (DENIED_MARKER in b) or bool(JSON_DENIED_RE.search(b)) for k, b in bodies.items()}
@@ -258,6 +263,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                     status=STATUS_UNKNOWN,
                     url=url_data,
                     evidence=f"两个探针一个被权限页拦截、一个未拦截（{denied}），形态矛盾，不予判定",
+                    unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,
                 )
 
             # 正向证据守卫：CONFIRMED 必须先看到「业务层确实执行」的正面形态——
@@ -276,6 +282,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                         f"无法证明业务层执行：treeData {len(bodies['treeData'])} 字节、"
                         f"selectDeptTree {len(bodies['selectDeptTree'])} 字节"
                     ),
+                    unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,
                 )
 
             # 全部未命中权限门 ⇒ 业务层在无权限下执行 ⇒ 缺少权限注解
@@ -307,6 +314,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                         f"selectDeptTree 返回 {len(bodies['selectDeptTree'])} 字节），"
                         "但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定"
                     ),
+                    unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,
                 )
             emit(ok("存在部门树越权访问（无权限账号可读取组织架构）"))
             return ScanResult(

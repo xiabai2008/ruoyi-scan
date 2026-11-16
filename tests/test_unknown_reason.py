@@ -153,6 +153,18 @@ def test_fill_unknown_reasons_maps_extra_flags_and_only_fills_empty():
     assert results[3].unknown_reason == ""
 
 
+def test_legacy_classifier_does_not_confuse_lowpriv_success_with_missing_account():
+    from lib.unknown_reasons import classify_legacy_unknown
+
+    assert classify_legacy_unknown("缺少低权账号，需 --surface-account user:pass 提供") == "no_lowpriv"
+    # 「低权账号 X 登录成功…但空列表不能证明越权」属于证据不足，不是缺账号。
+    # 旧白名单按「低权账号」子串命中，实测把这条正确 UNKNOWN 归成了 no_lowpriv。
+    assert (
+        classify_legacy_unknown("低权账号 scanner_low 登录成功；业务层在无权限下执行，但未返回任何部门数据行")
+        == "insufficient_evidence"
+    )
+
+
 def test_plugin_scaffold_contains_unknown_reason(monkeypatch, tmp_path):
     import lib.plugin_sdk as sdk
 
@@ -183,8 +195,32 @@ def test_report_column_present():
         target="http://x/",
         summary={"target": "http://x/"},
     )
-    assert "未判定原因" in rb.to_csv()
-    assert "登录墙拦截" in rb.to_csv()
+    import csv
+    import io
+
+    rows = list(csv.reader(io.StringIO(rb.to_csv())))
+    reason_col = rows[0].index("未判定原因")
+    # 必须校验“原因列”本身，而不是整行字符串：证据里也含“登录墙拦截”，
+    # 旧测试因此曾经在 dedup 丢字段时仍然通过。
+    assert rows[1][reason_col] == "登录墙拦截"
+    assert rb.to_dict()["results"][0]["unknown_reason"] == UnknownReason.AUTH_WALL.value
     html = rb.to_html()
     assert "未判定原因" in html
-    assert "登录墙拦截" in html
+    assert '<td class="unknown-reason" title="auth_wall">登录墙拦截</td>' in html
+
+
+def test_dedup_preserves_unknown_reason():
+    from core.dedup import aggregate
+
+    result = ScanResult(
+        kind="info",
+        name="去重后的登录墙项",
+        status=STATUS_UNKNOWN,
+        url="http://x/login",
+        evidence="请求被登录墙拦截",
+        extra={"auth_wall": True},
+        unknown_reason=UnknownReason.AUTH_WALL.value,
+    )
+    aggregated, _ = aggregate([result])
+    assert aggregated[0].unknown_reason == UnknownReason.AUTH_WALL.value
+    assert aggregated[0].to_dict()["unknown_reason"] == UnknownReason.AUTH_WALL.value
