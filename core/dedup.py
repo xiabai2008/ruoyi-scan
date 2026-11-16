@@ -127,6 +127,8 @@ class AggregatedVuln:
     # D18/D24：修复详情 + 复现命令（从首个 ScanResult 继承）
     fix_detail: str = ""
     reproduce: str = ""
+    # v1.7 WP-1：UNKNOWN 原因码（从组内首个非空值继承；CONFIRMED/SAFE 时为空）
+    unknown_reason: str = ""
 
     @property
     def is_vuln(self) -> bool:
@@ -153,6 +155,8 @@ class AggregatedVuln:
             "cvss_score": self.cvss_score,
             "cvss_vector": self.cvss_vector,
             "compliance": self.compliance,
+            # v1.7 WP-1：UNKNOWN 归因（AggregatedVuln 必须透传，否则去重后报告丢列）
+            "unknown_reason": self.unknown_reason,
             # 聚合扩展字段
             "fingerprint": self.fingerprint,
             "hit_count": self.hit_count,
@@ -301,6 +305,15 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
         # extra: 字段级合并
         extra = _merge_extra(group, primary_url)
 
+        # v1.7 WP-1：原因码只对 UNKNOWN 有意义；组内取首个非空值。
+        # 聚合可能把组状态升级为 CONFIRMED，此时原因码必须清空。
+        unknown_reason = ""
+        if status == STATUS_UNKNOWN:
+            unknown_reason = next(
+                (getattr(r, "unknown_reason", "") for r in group if getattr(r, "unknown_reason", "")),
+                "",
+            )
+
         aggregated.append(
             AggregatedVuln(
                 name=name,
@@ -321,6 +334,7 @@ def aggregate(results: List[Any]) -> Tuple[List[AggregatedVuln], DedupReport]:
                 # D18/D24：从首个结果继承修复详情 + 复现命令
                 fix_detail=getattr(group[0], "fix_detail", ""),
                 reproduce=getattr(group[0], "reproduce", ""),
+                unknown_reason=unknown_reason,
             )
         )
 

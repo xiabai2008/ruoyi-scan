@@ -31,15 +31,7 @@ PASSWD = (
 # Windows win.ini 特征内容（v1.5.6 WP2 双载荷）。
 # 内容照抄 Windows 10/11 的真实 win.ini（92 字节），不是自造 marker——
 # 判定函数 is_windows_ini 认的是真实结构（注释行 + 段头），不是约定字符串。
-WIN_INI = (
-    "; for 16-bit app support\n"
-    "[fonts]\n"
-    "[extensions]\n"
-    "[mci extensions]\n"
-    "[files]\n"
-    "[Mail]\n"
-    "MAPI=1\n"
-)
+WIN_INI = "; for 16-bit app support\n[fonts]\n[extensions]\n[mci extensions]\n[files]\n[Mail]\nMAPI=1\n"
 
 # Druid 爆破：与扫描器 settings.DRUID_USERS 对齐的 6 个用户名
 DRUID_USERS = {"ruoyi", "druid", "admin", "admin123", "auth", "123456"}
@@ -273,8 +265,10 @@ def _render_index_page(vuln):
     """渲染后台首页：展示当前靶场模式（vuln 红 / safe 绿），便于演示时区分"""
     mode_txt = "vuln · 漏洞演示" if vuln else "safe · 已修复"
     mode_cls = "" if vuln else " safe"
-    return _INDEX_PAGE_HTML.replace("__LAB_MODE__", mode_txt).replace("__MODE_CLASS__", mode_cls).replace(
-        "__LAB_ADDR__", "http://" + request.host
+    return (
+        _INDEX_PAGE_HTML.replace("__LAB_MODE__", mode_txt)
+        .replace("__MODE_CLASS__", mode_cls)
+        .replace("__LAB_ADDR__", "http://" + request.host)
     )
 
 
@@ -467,8 +461,43 @@ def dispatch(path, method):
     # 未授权访问批量端点
     if path == "/actuator/env":
         if vuln:
+            # 真实 Spring Boot /actuator/env 结构：systemProperties / systemEnvironment /
+            # server.ports 是标准属性源，应用配置项带 origin。假装成漏洞不能靠省略这些字段，
+            # 否则「结构复核」会把不真实的正样本判成 SAFE（2026-11-16 C3 蜜罐修正）。
             return json_body(
-                {"propertySources": [{"name": "applicationConfig"}], "activeProfiles": [], "environment": "dev"}
+                {
+                    "activeProfiles": [],
+                    "propertySources": [
+                        {
+                            "name": "server.ports",
+                            "properties": {"local.server.port": {"value": 8080}},
+                        },
+                        {
+                            "name": "systemProperties",
+                            "properties": {
+                                "java.runtime.name": {"value": "Java(TM) SE Runtime Environment"},
+                                "os.name": {"value": "Linux"},
+                            },
+                        },
+                        {
+                            "name": "systemEnvironment",
+                            "properties": {"PATH": {"value": "/usr/local/sbin:/usr/local/bin"}},
+                        },
+                        {
+                            "name": "applicationConfig: [classpath:/application.yml]",
+                            "properties": {
+                                "server.port": {
+                                    "value": 8080,
+                                    "origin": "class path resource [application.yml]:1:5",
+                                },
+                                "spring.datasource.url": {
+                                    "value": "jdbc:mysql://127.0.0.1:3306/ry",
+                                    "origin": "class path resource [application.yml]:5:9",
+                                },
+                            },
+                        },
+                    ],
+                }
             )
         return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/druid/index.html":
@@ -480,8 +509,8 @@ def dispatch(path, method):
             return html_body("<html><body><h1>swagger 接口文档</h1><p>swagger-ui</p></body></html>")
         return json_body({"code": 401, "msg": "请先登录"}, 401)
     if path == "/v2/api-docs":
-        # 真实若依 4.x 的 springfox 文档 JSON。F7-4 起 common/swagger_leak 只认
-        # 结构化文档（Content-Type=json 且 paths 非空）；纯 UI 页由 ruoyi_swagger 报。
+        # 真实若依 4.x 的 springfox 文档 JSON。F7-4/v1.7.1 起 swagger_leak 与
+        # ruoyi_swagger 都只认「paths 非空」的结构化文档；纯 UI 页不构成接口泄露。
         if vuln:
             return json_body(
                 {

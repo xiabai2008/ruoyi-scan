@@ -4,6 +4,7 @@ import json
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
+from lib.matcher import is_real_swagger_doc
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
@@ -88,27 +89,12 @@ class SwaggerLeakPlugin(PluginBase):
 
     @classmethod
     def _is_swagger_payload(cls, payload) -> bool:
-        """结构化识别 Swagger 文档，不做子串匹配。
+        """结构化识别 Swagger 文档，不做子串匹配（规则见 lib.matcher.is_real_swagger_doc）。
 
         F7-4：只有 **有内容** 的文档才算泄露。C3 蜜罐的 /v2/api-docs 返回
         {"swagger":"2.0","paths":{}}，旧实现只看 swagger 键就 CONFIRMED（B 类硬误报）。
-
-        支持：
-          - 文档对象：paths 是 dict 且非空
-          - springfox /swagger-resources 数组：非空且元素含 swaggerVersion
-          - springdoc swagger-config：urls 非空
         """
-        if isinstance(payload, dict):
-            paths = payload.get("paths")
-            if isinstance(paths, dict) and paths:
-                return True
-            urls = payload.get("urls")
-            if isinstance(urls, list) and urls:
-                return True
-            return False
-        if isinstance(payload, list):
-            return bool(payload) and all(isinstance(item, dict) and "swaggerVersion" in item for item in payload)
-        return False
+        return is_real_swagger_doc(payload)
 
     def verify(self, target, session) -> ScanResult:
         """未授权判定必须用**匿名会话**：高权会话下的 200 是「登录后可读」，不是未授权。

@@ -251,7 +251,8 @@ def dispatch(path, method):
             return html_body("<html><body><h1>swagger 接口文档</h1></body></html>")
         return json_body({"timestamp": "...", "status": 404, "error": "Not Found"}, 404)
 
-    # OpenAPI 文档 JSON（F7-4 起 common/swagger_leak 只认结构化文档，不认纯 UI 页）
+    # OpenAPI 文档 JSON（F7-4/v1.7.1 起 swagger_leak 与 ruoyi_swagger 都只认结构化文档；
+    # 纯 UI 页不再单独构成接口泄露）
     if path == "/v2/api-docs":
         if vuln:
             return json_body(

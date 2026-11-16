@@ -1,15 +1,44 @@
 """RuoYi Swagger/Knife4j API 文档未授权访问检测（信息泄露类）。"""
 
 # RuoYi Swagger 未授权 API 文档泄露
+import json
+
 import requests
 
 from common.logger import get_logger
 from common.models import SEVERITY_MEDIUM, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
-from lib.matcher import is_not_real_resource
+from lib.matcher import is_not_real_resource, is_real_swagger_doc
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)
+
+# UI 页面特征：仅证明「UI 可打开」，不证明「接口定义可读」
+_UI_KEYWORDS = [
+    "swagger-ui",
+    "swagger ui",
+    "swagger-ui-bundle",
+    "swagger-resources",
+    "knife4j",
+    "接口文档",
+    '"swagger"',
+    '"openapi"',
+]
+
+# 文档 JSON 端点：只有这些返回「有实际接口」的结构化文档才判 CONFIRMED
+_DOC_PATHS = (
+    "/v2/api-docs",
+    "/v3/api-docs",
+    "/v3/api-docs/swagger-config",
+    "/swagger-resources",
+)
+
+# UI 页面端点：可达但拿不到非空文档时，不作为未授权泄露证据
+_UI_PATHS = (
+    "/swagger-ui.html",
+    "/swagger-ui/index.html",
+    "/doc.html",
+)
 
 
 class RuoyiSwaggerUnauthPlugin(PluginBase):
@@ -77,61 +106,84 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 probe.close()
 
     def _verify_with_session(self, target, session) -> ScanResult:
-        """批量探测 Swagger/Knife4j 常见文档路径是否未授权公开。
+        """批量探测 Swagger/Knife4j 文档是否未授权公开。
+
+        C3 蜜罐实测（2026-11-16）：`/swagger-ui.html` 返回 200 + 一个真的
+        Swagger UI 骨架页，但它引用的 `/v2/api-docs` 是
+        `{"swagger":"2.0","paths":{}}`。旧实现命中 UI 页关键字就判 CONFIRMED，
+        把「假 UI 页」当成接口泄露（B 类误报）。UI 页本身不泄露接口，因此：
+
+        - 文档端点：必须是可解析 JSON 且 `paths`/`urls`/`swagger-resources`
+          有实际内容（见 `lib.matcher.is_real_swagger_doc`）；
+        - UI 页：只记为「可达」，不能单独成立；拿不到非空文档时判 SAFE。
 
         @param target: 目标站点根 URL
         @param session: 匿名（或测试用）HTTP 会话
-        @return: ScanResult — 任一路径命中文档特征则 CONFIRMED，全部无特征则 SAFE，全部请求失败则 UNKNOWN（不误判 SAFE）
+        @return: ScanResult — 有非空文档 CONFIRMED；UI 可达但文档为空 SAFE；
+                 全部请求失败/无法确认 UNKNOWN（不误判 SAFE）
         """
-        # P3 三态补全：所有请求异常 → UNKNOWN，不误判为 SAFE
         any_success = False
-        # 依次覆盖三种文档形态：springfox（swagger-ui.html）、knife4j（doc.html）、OpenAPI JSON（v2/api-docs）
-        # SpringDoc / RuoYi-Cloud 用 /swagger-ui/index.html（3.6.8 实测：200 + 真 Swagger UI 页面，
-        # 而 /swagger-ui.html 不存在），漏掉这条会把真实暴露判成 SAFE。
-        for path in ["/swagger-ui.html", "/swagger-ui/index.html", "/doc.html", "/v2/api-docs"]:
+        doc_requests_ok = False
+        ui_reachable = False
+        ui_url = ""
+
+        # 1) 文档 JSON：唯一能证明「接口定义真的泄露」的证据
+        for path in _DOC_PATHS:
             url = join_url(target, path)
             try:
                 resp = session.get(url)
             except requests.exceptions.RequestException as e:
                 # 仅吞掉传输异常（并留痕）：单路径不可达不中断整体探测，编程错误不再被静默吞没
-                logger.debug("Swagger 路径探测请求失败（%s）: %s", url, e, exc_info=True)
+                logger.debug("Swagger 文档端点请求失败（%s）: %s", url, e, exc_info=True)
                 continue
             any_success = True
-            if resp.status_code == 200:
-                # 匹配整个响应体（resp.text 已物化，[:500] 截断会在大型文档上漏掉标题标记）；
-                # 统一转小写比较，覆盖 "Swagger UI" 等大写形态；原 '"swagger"' 为 "swagger" 的子串冗余
-                body = (resp.text or "").lower()
+            doc_requests_ok = True
+            if resp.status_code != 200:
+                continue
+            text = resp.text or ""
+            # 先排除 catch-all 路径回显：`/**` 兜底会把请求路径写进正文
+            if is_not_real_resource(text, path):
+                continue
+            ctype = (resp.headers.get("Content-Type") or "").lower() if hasattr(resp, "headers") else ""
+            if "json" not in ctype and not text.lstrip().startswith(("{", "[")):
+                continue
+            try:
+                payload = json.loads(text)
+            except (TypeError, ValueError):
+                continue
+            if is_real_swagger_doc(payload):
+                if isinstance(payload, dict):
+                    count = len(payload.get("paths") or payload.get("urls") or {})
+                else:
+                    count = len(payload)
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=url,
+                    evidence=f"{path} 返回可用 API 文档（{count} 条接口定义）",
+                    fix=self.fix,
+                )
 
-                # 先排除 catch-all 路径回显：靶场/web 框架用 `/**` 兜底时，
-                # 任意路径都返回 200 HTML，且页面里带请求路径本身：
-                #   GET /swagger-ui.html → <html><body><h2>页面: swagger-ui.html</h2></body></html>
-                # 正文天然含 "swagger-ui" 字样 → 旧实现 100% 误报。
-                # 实测 2026-11-01 盲测 v2 C4-6 靶场。
-                if is_not_real_resource(resp.text or "", path):
-                    continue
+        # 2) UI 页面：只记录可达性，不单独构成「未授权访问」证据
+        for path in _UI_PATHS:
+            url = join_url(target, path)
+            try:
+                resp = session.get(url)
+            except requests.exceptions.RequestException as e:
+                logger.debug("Swagger UI 探测请求失败（%s）: %s", url, e, exc_info=True)
+                continue
+            any_success = True
+            if resp.status_code != 200:
+                continue
+            text = resp.text or ""
+            if is_not_real_resource(text, path):
+                continue
+            if any(kw in text.lower() for kw in _UI_KEYWORDS):
+                ui_reachable = True
+                ui_url = url
 
-                if any(
-                    kw in body
-                    for kw in [
-                        "swagger-ui",
-                        "swagger ui",
-                        "swagger-ui-bundle",
-                        "swagger-resources",
-                        "knife4j",
-                        "接口文档",
-                        '"swagger"',
-                        '"openapi"',
-                    ]
-                ):
-                    return ScanResult(
-                        kind=self.category,
-                        name=self.name,
-                        severity=self.severity,
-                        status=STATUS_CONFIRMED,
-                        url=url,
-                        evidence=f"{path} 可未授权访问",
-                        fix=self.fix,
-                    )
         if not any_success:
             return ScanResult(
                 kind=self.category,
@@ -140,6 +192,24 @@ class RuoyiSwaggerUnauthPlugin(PluginBase):
                 status=STATUS_UNKNOWN,
                 url=target,
                 evidence="所有 Swagger 路径请求失败（网络异常）",
+            )
+        if ui_reachable and not doc_requests_ok:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=ui_url,
+                evidence="Swagger UI 页面可达，但所有文档端点请求失败，无法确认接口定义是否泄露",
+            )
+        if ui_reachable:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_SAFE,
+                url=ui_url,
+                evidence="Swagger UI 页面可达但文档 JSON 为空或不可用（假 UI 页/文档未启用），不构成接口泄露",
             )
         return ScanResult(
             kind=self.category,

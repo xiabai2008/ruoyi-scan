@@ -580,14 +580,19 @@ class TestUnauthBatch(unittest.TestCase):
 
     @requests_mock.Mocker()
     def test_hit_actuator_env(self, m):
-        """命中：/actuator/env 含 propertySources"""
+        """命中：/actuator/env 返回真实 Actuator env 结构（systemProperties + origin）"""
         m.get(mock_url("druid/index.html"), status_code=404, text="Not Found")
         m.get(mock_url("swagger-ui.html"), status_code=404, text="Not Found")
         m.get(mock_url("system/user/list"), status_code=404, text="Not Found")
         m.get(
             mock_url("actuator/env"),
             headers={"Content-Type": "application/json"},
-            text='{"propertySources":[{"name":"systemEnvironment"}],"activeProfiles":["prod"]}',
+            text=(
+                '{"propertySources":['
+                '{"name":"systemProperties","properties":{"java.runtime.name":{"value":"Java(TM)"}}},'
+                '{"name":"systemEnvironment","properties":{"PATH":{"value":"/usr/bin"}}}'
+                '],"activeProfiles":["prod"]}'
+            ),
         )
         plugin = UnauthBatchPlugin()
         result = plugin.verify(MOCK_TARGET, SessionManager())
@@ -1124,7 +1129,15 @@ class TestSwaggerSpaFalsePositive(unittest.TestCase):
     @requests_mock.Mocker()
     def test_spa_icon_swagger_not_confirmed(self, m):
         spa = '<html><body><svg><symbol id="icon-swagger"></symbol></svg><div id="app"></div></body></html>'
-        for path in ["swagger-ui.html", "swagger-ui/index.html", "doc.html", "v2/api-docs"]:
+        for path in [
+            "swagger-ui.html",
+            "swagger-ui/index.html",
+            "doc.html",
+            "v2/api-docs",
+            "v3/api-docs",
+            "v3/api-docs/swagger-config",
+            "swagger-resources",
+        ]:
             m.get(mock_url(path), status_code=200, text=spa)
         result = RuoyiSwaggerUnauthPlugin().verify(MOCK_TARGET, SessionManager())
         self.assertEqual(result.status, STATUS_SAFE, f"SPA 图标名不应判 CONFIRMED，实际 {result.status}")
