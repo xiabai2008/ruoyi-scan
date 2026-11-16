@@ -508,7 +508,7 @@ def generate_plugin_template(name, category="ruoyi"):
 
     lines = []
     lines.append(f"# {name} - RuoYi plugin")
-    lines.append("from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult")
+    lines.append("from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason")
     lines.append("from core.http import join_url")
     lines.append("from plugins.base import PluginBase")
     lines.append("")
@@ -537,12 +537,14 @@ def generate_plugin_template(name, category="ruoyi"):
     lines.append("                kind=self.category, name=self.name,")
     lines.append("                severity=self.severity, status=STATUS_UNKNOWN,")
     lines.append('                url=url, evidence="plugin not implemented",')
+    lines.append("                unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,")
     lines.append("            )")
     lines.append("        except Exception as e:")
     lines.append("            return ScanResult(")
     lines.append('                kind="error", name=self.name,')
     lines.append("                status=STATUS_UNKNOWN,")
     lines.append('                evidence=f"exception: {e}",')
+    lines.append("                unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,")
     lines.append("            )")
 
     with open(filepath, "w", encoding="utf-8") as f:

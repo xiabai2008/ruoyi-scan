@@ -191,7 +191,7 @@ Ruoyi-Scan 提供 6 种扫描模式，覆盖从单点验证到全量攻防演练
 - 自动指纹识别（favicon hash + 特征路径 + 关键字）
 - 多版本适配（RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤）
 - 三态判定：CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定）
-- 54 个 POC：若依 20 个 + Spring Boot 14 个 + 通用 12 个 + JeecgBoot 8 个
+- 56 个 POC：若依 20 个 + Spring Boot 14 个 + 通用 12 个 + JeecgBoot 8 个 + 芋道 2 个
 
 **示例命令**：
 

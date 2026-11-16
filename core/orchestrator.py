@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult, UnknownReason
 from config import settings
 from core.cache import FingerprintCache
 from core.engine import ScanEngine
@@ -184,8 +184,61 @@ def downgrade_auth_required_results(results: List[ScanResult], auth_status: str,
                 f"未取得高权会话（auth_status={auth_status}），需登录的结论降级为 UNKNOWN。原证据：{r.evidence}"
             )
             r.status = STATUS_UNKNOWN
+            r.unknown_reason = UnknownReason.NO_SESSION.value
             count += 1
     return count
+
+
+# extra 布尔标记 → 原因码。标记由产生点在写 status 时同步写入（不是事后猜文本）。
+_EXTRA_REASON_MAP = (
+    ("auth_wall", UnknownReason.AUTH_WALL.value),
+    ("no_evidence", UnknownReason.NO_EVIDENCE.value),
+    ("blocked", UnknownReason.BLOCKED.value),
+    ("denied", UnknownReason.DENIED.value),
+    ("unreachable", UnknownReason.UNREACHABLE.value),
+)
+
+
+def fill_unknown_reasons(results: List[ScanResult]) -> Tuple[int, int]:
+    """给所有 UNKNOWN 结果补齐 `unknown_reason`（v1.7 WP-1 单一收口点）。
+
+    设计纪律（v1.6 复盘教训）：
+      - 只填空值，不覆盖产生点已经写入的精确原因（插件可显式传 unknown_reason）；
+      - 优先读 `extra` 里的结构化布尔标记；
+      - 仅对历史/第三方插件返回的**固定证据前缀**走受控白名单
+        （lib/unknown_reasons.py），不按目标响应文本猜；
+      - 仍无法归类的显式写 `unclassified`，保证「可计数」，目标 <5%。
+
+    Returns:
+        (本次补齐条数, 仍为 unclassified 的条数)
+    """
+    filled = 0
+    unclassified = 0
+    for r in results:
+        if getattr(r, "status", "") != STATUS_UNKNOWN:
+            continue
+        if getattr(r, "unknown_reason", ""):
+            continue
+        extra = getattr(r, "extra", None) or {}
+        reason = ""
+        if isinstance(extra, dict):
+            for key, code in _EXTRA_REASON_MAP:
+                if extra.get(key):
+                    reason = code
+                    break
+        if not reason:
+            # 兼容桥：历史/第三方插件直接构造 UNKNOWN 时没有原因码。只匹配
+            # 本仓库代码生成的固定证据前缀（见 lib/unknown_reasons.py），
+            # 不按目标响应文本猜；匹配不到就如实记 unclassified。
+            from lib.unknown_reasons import classify_legacy_unknown
+
+            reason = classify_legacy_unknown(str(getattr(r, "evidence", "") or ""))
+        if not reason:
+            reason = UnknownReason.UNCLASSIFIED.value
+            unclassified += 1
+        r.unknown_reason = reason
+        filled += 1
+    return filled, unclassified
 
 
 # === 数据模型 ===
@@ -1107,6 +1160,12 @@ class ScanOrchestrator:
                     },
                 )
 
+            # v1.7 WP-1：三态降级全部完成后统一补齐 UNKNOWN 原因码（只填空值）。
+            # 必须在报告生成与落盘之前：缺少原因码的 UNKNOWN 对用户不可解释。
+            _filled, _unclassified = fill_unknown_reasons(all_results)
+            if _unclassified:
+                logger.debug("UNKNOWN 原因码仍为 unclassified：%d 条", _unclassified)
+
             task.results = all_results
             # 三态降级全部完成后再落一次完整快照（增量落盘只覆盖到第 25n 条）
             self._persist_results(task.task_id, all_results)
@@ -1178,6 +1237,7 @@ class ScanOrchestrator:
             task.finished_at = time.time()
             task.duration = task.finished_at - task.started_at
             task.results = task.results or all_results
+            fill_unknown_reasons(task.results)
             self._persist_results(task.task_id, task.results)
             _emit("status", {"status": "cancelled", "task_id": task.task_id})
             return task.results
@@ -1189,6 +1249,7 @@ class ScanOrchestrator:
             task.finished_at = time.time()
             task.duration = task.finished_at - task.started_at
             task.results = all_results
+            fill_unknown_reasons(all_results)
             self._persist_results(task.task_id, all_results)
             _emit("error", {"error": task.error, "code": "unreachable", "task_id": task.task_id})
             _emit("status", {"status": "failed", "task_id": task.task_id})
@@ -1204,6 +1265,7 @@ class ScanOrchestrator:
             task.duration = task.finished_at - task.started_at
             # 保留失败前已收集的部分结果（引擎中途异常时 task.results 可能尚未赋值）
             task.results = task.results or all_results
+            fill_unknown_reasons(task.results)
             self._persist_results(task.task_id, task.results)
             _emit(
                 "error",

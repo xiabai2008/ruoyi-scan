@@ -18,6 +18,7 @@ from common.models import (
     STATUS_SAFE,
     STATUS_UNKNOWN,
     ScanResult,
+    unknown_reason_label,
 )
 from common.paths import safe_filename, safe_join
 from config import settings
@@ -38,6 +39,16 @@ def _attribution_text(result: Any) -> str:
     info = (getattr(result, "extra", None) or {}).get(ATTR_KEY) or {}
     reason = info.get("reason", "") if isinstance(info, dict) else ""
     return f"宿主级：{reason}" if reason else "宿主级"
+
+
+def _unknown_reason_text(result: Any) -> str:
+    """「未判定原因」列文本：仅 UNKNOWN 且原因码非空时展示中文标签。"""
+    if getattr(result, "status", "") != STATUS_UNKNOWN:
+        return ""
+    code = str(getattr(result, "unknown_reason", "") or "")
+    if not code:
+        return ""
+    return unknown_reason_label(code)
 
 
 def _normalize_auth_status(value: Any) -> Dict[str, str]:
@@ -261,6 +272,7 @@ class ReportBuilder:
                 "URL",
                 "危害等级",
                 "状态",
+                "未判定原因",
                 "CVE",
                 "CVSS",
                 "合规映射",
@@ -280,6 +292,7 @@ class ReportBuilder:
                     r.url,
                     SEVERITY_CN.get(r.severity, r.severity),
                     r.status,
+                    _unknown_reason_text(r),
                     r.cve or "",
                     # cvss_score<=0 视为未录入，留空避免输出 0.0 造成误导
                     f"{r.cvss_score:.1f}" if r.cvss_score > 0 else "",
@@ -406,12 +419,16 @@ class ReportBuilder:
             reproduce_text = html_module.escape(getattr(r, "reproduce", "") or "").replace("\n", "<br>") or "—"
             attr_text = html_module.escape(_attribution_text(r)) or "—"
             attr_cls = "attr-host" if scope_of(r) == SCOPE_HOST else "attr-site"
+            reason_code = str(getattr(r, "unknown_reason", "") or "")
+            reason_text = html_module.escape(_unknown_reason_text(r)) or "—"
+            reason_title = html_module.escape(reason_code) if reason_code else ""
             rows_html.append(
                 f'<tr class="{row_class}">'
                 f'<td class="sev-{r.severity}"><span class="badge" style="background:{color}">{html_module.escape(sev_text)}</span></td>'
                 f"<td>{html_module.escape(r.name)}</td>"
                 f'<td class="url">{html_module.escape(r.url)}</td>'
                 f'<td class="status">{html_module.escape(status_cn)}</td>'
+                f'<td class="unknown-reason" title="{reason_title}">{reason_text}</td>'
                 f'<td class="cve">{cve_text}</td>'
                 f'<td class="cvss">{cvss_text}</td>'
                 f'<td class="evidence">{html_module.escape(r.evidence)}{bypass_badge}</td>'
@@ -422,7 +439,7 @@ class ReportBuilder:
                 f'<td class="{attr_cls}">{attr_text}</td>'
                 "</tr>"
             )
-        rows = "\n".join(rows_html) if rows_html else '<tr><td colspan="12" class="empty">无扫描结果</td></tr>'
+        rows = "\n".join(rows_html) if rows_html else '<tr><td colspan="13" class="empty">无扫描结果</td></tr>'
 
         # 摘要区 + CMS 感知标题
         started = html_module.escape(str(self.summary.get("started_at", "")))
@@ -623,7 +640,7 @@ function toggleFilter() {{
 <table>
   <thead>
     <tr>
-      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>CVE</th><th>CVSS</th><th>证据</th><th>修复建议</th><th>修复详情</th><th>复现命令</th><th>合规映射</th><th>归属</th>
+      <th>危害等级</th><th>漏洞名称</th><th>URL</th><th>状态</th><th>未判定原因</th><th>CVE</th><th>CVSS</th><th>证据</th><th>修复建议</th><th>修复详情</th><th>复现命令</th><th>合规映射</th><th>归属</th>
     </tr>
   </thead>
   <tbody>

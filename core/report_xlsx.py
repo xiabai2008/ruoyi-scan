@@ -22,6 +22,7 @@ from common.models import (
     STATUS_CONFIRMED,
     STATUS_SAFE,
     STATUS_UNKNOWN,
+    unknown_reason_label,
 )
 
 # 中文字体（Excel 会用系统字体渲染）
@@ -204,16 +205,16 @@ def _build_summary_sheet(ws: Any, builder: Any, gen_time: str) -> None:
 
 
 def _build_vuln_sheet(ws: Any, builder: Any) -> None:
-    """Sheet 2: 漏洞详情（8 列表头 + 自动筛选 + 严重度着色 + 冻结表头）"""
+    """Sheet 2: 漏洞详情（9 列表头 + 自动筛选 + 严重度着色 + 冻结表头）"""
     ws.title = "漏洞详情"
-    headers = ["#", "漏洞名称", "严重度", "状态", "URL", "证据", "修复建议", "命中次数"]
+    headers = ["#", "漏洞名称", "严重度", "状态", "未判定原因", "URL", "证据", "修复建议", "命中次数"]
     for j, h in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=j, value=h)
         _style_header_cell(cell, fill=_HEADER_FILL)
     ws.row_dimensions[1].height = 24
 
     # 列宽
-    col_widths = [5, 22, 8, 10, 35, 30, 30, 10]
+    col_widths = [5, 22, 8, 10, 18, 35, 30, 30, 10]
     for j, w in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(j)].width = w
 
@@ -222,13 +223,25 @@ def _build_vuln_sheet(ws: Any, builder: Any) -> None:
         sev_cn = SEVERITY_CN.get(r.severity, r.severity)
         status_cn = _STATUS_CN.get(r.status, r.status)
         hit_count = getattr(r, "hit_count", 1)
-        row_data = [i - 1, r.name, sev_cn, status_cn, r.url or "", r.evidence or "", r.fix or "", hit_count]
+        code = str(getattr(r, "unknown_reason", "") or "")
+        reason_text = unknown_reason_label(code) if r.status == STATUS_UNKNOWN and code else ""
+        row_data = [
+            i - 1,
+            r.name,
+            sev_cn,
+            status_cn,
+            reason_text,
+            r.url or "",
+            r.evidence or "",
+            r.fix or "",
+            hit_count,
+        ]
         row_fill = _SEV_FILL.get(r.severity)
         for j, val in enumerate(row_data, start=1):
             cell = ws.cell(row=i, column=j, value=val)
             # 列格式映射：URL/证据等宽；序号/严重度/状态/命中次数居中；漏洞名称加粗
-            mono = j in (5, 6)  # URL/证据列用等宽字体
-            align = "center" if j in (1, 3, 4, 8) else "left"
+            mono = j in (6, 7)  # URL/证据列用等宽字体
+            align = "center" if j in (1, 3, 4, 9) else "left"
             bold = j == 2  # 漏洞名称加粗
             _style_data_cell(cell, mono=mono, bold=bold, fill=row_fill, align=align)
 
@@ -254,7 +267,7 @@ def _build_vuln_sheet(ws: Any, builder: Any) -> None:
         sep_cell.border = _THIN_BORDER
         ws.row_dimensions[sep_row].height = 22
 
-        other_headers = ["#", "名称", "严重度", "状态", "URL", "证据", "", ""]
+        other_headers = ["#", "名称", "严重度", "状态", "未判定原因", "URL", "证据", "", ""]
         for j, h in enumerate(other_headers, start=1):
             if h:
                 cell = ws.cell(row=sep_row + 1, column=j, value=h)
@@ -263,10 +276,22 @@ def _build_vuln_sheet(ws: Any, builder: Any) -> None:
         for i, r in enumerate(others, start=sep_row + 2):
             sev_cn = SEVERITY_CN.get(r.severity, r.severity)
             status_cn = _STATUS_CN.get(r.status, r.status)
-            row_data = [i - sep_row - 1, r.name, sev_cn, status_cn, r.url or "", r.evidence or "", "", ""]
+            code = str(getattr(r, "unknown_reason", "") or "")
+            reason_text = unknown_reason_label(code) if r.status == STATUS_UNKNOWN and code else ""
+            row_data = [
+                i - sep_row - 1,
+                r.name,
+                sev_cn,
+                status_cn,
+                reason_text,
+                r.url or "",
+                r.evidence or "",
+                "",
+                "",
+            ]
             for j, val in enumerate(row_data, start=1):
                 cell = ws.cell(row=i, column=j, value=val)
-                mono = j in (5, 6)
+                mono = j in (6, 7)
                 align = "center" if j in (1, 3, 4) else "left"
                 _style_data_cell(cell, mono=mono, align=align)
 

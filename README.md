@@ -215,7 +215,15 @@ pip install ruoyi-scan
 | v1.5.5（盲测 v3） | 46 / 54 | +17，v2 产出 0 丢失，B 类误报 0 |
 | v1.5.6（盲测 v4） | 48 / 54 | +2，v3 产出 0 丢失，B 类误报 0 |
 
-> 剩余项全部是**已识别边界**（侦察类插件、只到指纹的插件），报告里逐条写明原因，不做数字美化。
+> **口径声明**：上表的 `29/54`、`46/54`、`48/54` 是「插件至少报过一次 CONFIRMED」的**覆盖率代理指标**，不是检出率，也不覆盖 v1.6.0 之后的 56 个插件。历史数据保持原样，不做机械替换。
+
+v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，**不外推到生产环境**）：
+
+| 版本 | 判定口径 | Precision | Recall | F1 | Youden J | UNKNOWN 率 |
+|---|---|---:|---:|---:|---:|---:|
+| v1.7 | 三态（CONFIRMED/SAFE/UNKNOWN） | 75.00% | 81.82% | 0.7826 | 0.7963 | 23.46% |
+
+> 实验数据集：27 个有 GT 的自建站点 × 匿名报告，243 个 GT 条目；完整方法、二态对照组（G1/G2）与适用边界见 [docs/verdict_experiment_v1.7.md](docs/verdict_experiment_v1.7.md)。
 
 靶场本身也可以拿来用：克隆 [ruoyi-lab](https://github.com/xiabai2008/ruoyi-lab) 后 `python scripts/lab.py up`
 按需启停，三级判定（UP / DEGRADED / DOWN）避免「端口在监听但后端已死」的假活。

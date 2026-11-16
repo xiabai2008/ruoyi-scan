@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
 from lib.attribution import ATTR_KEY, classify
 
 if TYPE_CHECKING:
@@ -17,6 +17,25 @@ logger = get_logger(__name__)
 
 # 结果严重度排序（path_scope="both" 双探时取更严重者）
 _STATUS_RANK = {STATUS_SAFE: 0, STATUS_UNKNOWN: 1, STATUS_CONFIRMED: 2}
+
+
+def _exception_unknown_reason(exc: Exception) -> str:
+    """把插件执行异常归到可解释的原因码（v1.7 WP-1）。
+
+    超时/连接类异常 → unreachable（用户可检查连通性）；其余（插件自身 bug、
+    解析失败等）→ insufficient_evidence。不把插件 bug 伪装成网络问题。
+    """
+    try:
+        from core.session import is_timeout_error
+
+        if is_timeout_error(exc):
+            return UnknownReason.UNREACHABLE.value
+    except Exception:
+        pass
+    name = type(exc).__name__.lower()
+    if "timeout" in name or "connection" in name or "maxretry" in name:
+        return UnknownReason.UNREACHABLE.value
+    return UnknownReason.INSUFFICIENT_EVIDENCE.value
 
 
 class ScanEngine:
@@ -102,6 +121,7 @@ class ScanEngine:
                     name=getattr(cls, "name", cls.__name__),
                     status=STATUS_UNKNOWN,
                     evidence="超出扫描时间预算（--time-budget），本项未执行",
+                    unknown_reason=UnknownReason.BUDGET_EXCEEDED.value,
                 )
             # 执行前限速（单线程和多线程统一走此路径，线程安全）
             self._rate_limit()
@@ -172,6 +192,7 @@ class ScanEngine:
                             "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。"
                             f"原证据：{original.evidence}"
                         )
+                        original.unknown_reason = UnknownReason.NO_SESSION.value
                 # 归属标注同样必须在回调（CLI 逐条打印）之前完成——与 F13 同一条纪律：
                 # 终端与报告口径必须一致。放在 orchestrator 末尾时，终端打出
                 # 「存在 Redis 未授权访问」而报告里标着「宿主级」，读者无从分辨
@@ -186,6 +207,7 @@ class ScanEngine:
                     name=getattr(cls, "name", cls.__name__),
                     status=STATUS_UNKNOWN,
                     evidence=f"执行异常: {e}",
+                    unknown_reason=_exception_unknown_reason(e),
                 )
 
         # 单线程模式：按插件定义顺序串行执行，结果顺序稳定（多线程用 as_completed 无序）

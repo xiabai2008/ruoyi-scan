@@ -1,0 +1,3764 @@
+{
+  "schema": "ruoyi-scan-unknown-fixture",
+  "description": "从 artifacts/blind_v4 的 51 份 report.json 提取的全部 UNKNOWN 结果（不含 URL/CVE/账号），供 CI 复跑 WP-1 归因覆盖率",
+  "source_reports": 51,
+  "unknown_count": 567,
+  "results": [
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___9a4a21c2c0a04f65bf1449a11bd98b56/does-not-exist-9a4a21c2c0a04f65bf1449a11bd98b56.txt 返回 200 / 4026 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___5e928f70b43c4f3da348889bdeea5bcf/does-not-exist-5e928f70b43c4f3da348889bdeea5bcf.txt 返回 200 / 4026 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19341/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19341/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "目标启用了二次验证（动态口令/OTP/MFA），无法自动登录。响应前 200 字节：{\"msg\":\"动态口令不能为空\",\"code\":500}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___78b1a2dd04c940e3a918a16da28f7c91/does-not-exist-78b1a2dd04c940e3a918a16da28f7c91.txt 返回 200 / 4026 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T06:42:55.878+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:42:55.874+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 1 条；基线 /__ruoyi_scan_soft404_probe___d612baf81aec405e81267936d0b79eab/does-not-exist-d612baf81aec405e81267936d0b79eab.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T14:43:15.828+08:00\",\"status\":404,\"error\":\"Not Found\",\"message\":\"No message available\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T14:43:15.820+08:00\",\"status\":404,\"error\":\"Not Found\",\"message\":\"No message available\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 1 条；基线 /__ruoyi_scan_soft404_probe___e689e78d694b4c81963a1ba5d9d115f7/does-not-exist-e689e78d694b4c81963a1ba5d9d115f7.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T14:43:36.260+08:00\",\"status\":405,\"error\":\"Method Not Allowed\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T14:43:36.256+08:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 459 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___cd11ad5eaa834393abc0ad9ddd72d980/does-not-exist-cd11ad5eaa834393abc0ad9ddd72d980.txt 返回 200 / 1271 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T06:45:51.082+00:00\",\"path\":\"/jeecg-boot/sys/login\",\"status\":404,\"error\":\"Not Found\",\"message\":null,\"requestId\":\"918468c6-7409\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:45:51.079+00:00\",\"path\":\"/login\",\"status\":405,\"error\":\"Method Not Allowed\",\"requestId\":\"2d30264f-7407\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 58 条；基线 /__ruoyi_scan_soft404_probe___f2dfaf4b02c047dd9a49767ee4e0e531/does-not-exist-f2dfaf4b02c047dd9a49767ee4e0e531.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "表单端点可达（http://127.0.0.1:19313/device/add），未验证代码执行",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：<!doctype html><html lang=\"zh\"><head><title>HTTP状态 404 - 未找到</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-si",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<!doctype html><html lang=\"zh\"><head><title>HTTP状态 404 - 未找到</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-si",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 696 条；基线 /__ruoyi_scan_soft404_probe___0ec67d731ce349aebb657a2edbd06b37/does-not-exist-0ec67d731ce349aebb657a2edbd06b37.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：<!doctype html><html lang=\"zh\"><head><title>HTTP状态 404 - 未找到</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-si",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<!doctype html><html lang=\"zh\"><head><title>HTTP状态 404 - 未找到</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-si",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 696 条；基线 /__ruoyi_scan_soft404_probe___65330236a4c446fca804131d6bc8bd03/does-not-exist-65330236a4c446fca804131d6bc8bd03.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应无法判定口令状态：{\"USERNAME\":\"ADMIN\",\"PASSWORD\":\"123456\",\"CODE\":\"\",\"CHECKKEY\":\"\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：{\"NAME\": \"RUOYI.SCAN.ENV_PROBE\", \"VALUE\": \"TRUE\"}",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应前 200 字节：{\"USERNAME\":[\"ADMIN\"],\"PASSWORD\":[\"ADMIN123\"],\"REMEMBERME\":[\"FALSE\"],\"VALIDATECODE\":[\"\"]}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 551 条；剔除兜底页 145 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___864dadea226541aebae357d5fb71ccde/does-not-exist-864dadea226541aebae357d5fb71ccde.txt 返回 200 / 51 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>邕江云服务门户</title>\n<style>\nbody{margin:0;background:#eef3f8;fo",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应前 200 字节：<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>邕江云服务门户</title>\n<style>\nbody{margin:0;background:#eef3f8;fo",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>邕江云服务门户</title>\n<style>\nbody{margin:0;background:#eef3f8;fo",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 32 条；剔除兜底页 664 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___3b71b2f0f2564b4aaad2c3f325451a3f/does-not-exist-3b71b2f0f2564b4aaad2c3f325451a3f.txt 返回 200 / 1553 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 501 响应前 200 字节：<!DOCTYPE HTML>\n<html lang=\"en\">\n    <head>\n        <meta charset=\"utf-8\">\n        <title>Error response</title>\n    </head>\n    <body>\n        <h1>Error response</h1>\n        <p>Error code: 501</p>\n ",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 501 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<!DOCTYPE HTML>\n<html lang=\"en\">\n    <head>\n        <meta charset=\"utf-8\">\n        <title>Error response</title>\n    </head>\n    <body>\n        <h1>Error response</h1>\n        <p>Error code: 501</p>\n ",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 2 条；基线 /__ruoyi_scan_soft404_probe___4e371ced74b94ed99626a4b2b62f9504/does-not-exist-4e371ced74b94ed99626a4b2b62f9504.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:50:56.289+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 2 条；基线 /__ruoyi_scan_soft404_probe___72bb10435e4a49c4a903cc2f138cedb0/does-not-exist-72bb10435e4a49c4a903cc2f138cedb0.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T06:51:11.908+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:51:11.902+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；基线 /__ruoyi_scan_soft404_probe___26db28203a19433ba43c99ba02c38f72/does-not-exist-26db28203a19433ba43c99ba02c38f72.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：差分验证成立：基线 tableName=sys_user 无求值结果，注入 tableName=${7*7} 后响应出现独立数字 49（模板已求值）；注入响应前 120 字节：<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<mapper namespace=\"com.ruoyi.system.mapper.sys_user_49Mapper\">\n    <resultMap typ",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T06:51:28.113+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:51:28.109+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；基线 /__ruoyi_scan_soft404_probe___385d384f4908401ba30070c6718f8b03/does-not-exist-385d384f4908401ba30070c6718f8b03.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:51:42.449+00:00\",\"status\":405,\"error\":\"Method Not Allowed\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=None, AjaxResult 形态=False）：",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 5 条；剔除兜底页 691 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___54eb6d060d3f413fb57bf4effd2a8d0e/does-not-exist-54eb6d060d3f413fb57bf4effd2a8d0e.txt 返回 200 / 156 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "表单端点可达（http://127.0.0.1:19321/portal/auth/signin），未验证代码执行",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：差分验证成立：基线 tableName=sys_user 无求值结果，注入 tableName=${7*7} 后响应出现独立数字 49（模板已求值）；注入响应前 120 字节：{\"msg\":\"操作成功\",\"code\":0,\"data\":{\"tableId\":1,\"tableName\":\"sys_user_49\",\"templates\":{},\"message\":\"业务表未导入，仅返回表名模板渲染结果\"}}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：<!DOCTYPE html>\r\n<html lang=\"zh\">\r\n<head>\r\n    <meta charset=\"utf-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0\">\r\n    <title>邕江物流运输管理系统 - 登录</title>",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___c269d5f46a2347b0939c568e8da3f55f/does-not-exist-c269d5f46a2347b0939c568e8da3f55f.txt 返回 200 / 4026 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "登录后上传接口返回 code=500，疑似上传目录不存在/服务端异常：java.io.FileNotFoundException: C:\\Users\\HZR\\AppData\\Local\\Temp\\tomcat.19221.6596536513024377582\\work\\Tomcat\\localhost\\portal\\.\\profile\\upload\\2026\\11\\02\\a3a1f3e6-9d00-48b4-9737-7c39eeeea63c.html (系统找不",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 39 条；基线 /__ruoyi_scan_soft404_probe___c44c5a50b43649a49bf43c3384112e2a/does-not-exist-c44c5a50b43649a49bf43c3384112e2a.txt 返回 404，状态码可信；请求失败 1 条（TooManyRedirects: Exceeded 30 redirects. × 1）",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "表单端点可达（http://127.0.0.1:19321/portal/auth/signin），未验证代码执行",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：差分验证成立：基线 tableName=sys_user 无求值结果，注入 tableName=${7*7} 后响应出现独立数字 49（模板已求值）；注入响应前 120 字节：{\"msg\":\"操作成功\",\"code\":0,\"data\":{\"tableId\":1,\"tableName\":\"sys_user_49\",\"templates\":{},\"message\":\"业务表未导入，仅返回表名模板渲染结果\"}}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：<!DOCTYPE html>\r\n<html lang=\"zh\">\r\n<head>\r\n    <meta charset=\"utf-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0\">\r\n    <title>邕江物流运输管理系统 - 登录</title>",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "表单端点可达（http://127.0.0.1:19321/portal/auth/signin），未验证代码执行",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：差分验证成立：基线 tableName=sys_user 无求值结果，注入 tableName=${7*7} 后响应出现独立数字 49（模板已求值）；注入响应前 120 字节：{\"msg\":\"操作成功\",\"code\":0,\"data\":{\"tableId\":1,\"tableName\":\"sys_user_49\",\"templates\":{},\"message\":\"业务表未导入，仅返回表名模板渲染结果\"}}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：<!DOCTYPE html>\r\n<html lang=\"zh\">\r\n<head>\r\n    <meta charset=\"utf-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0\">\r\n    <title>邕江物流运输管理系统 - 登录</title>",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___4c6530a1f7c34a6d988c90310ab47c4c/does-not-exist-4c6530a1f7c34a6d988c90310ab47c4c.txt 返回 200 / 4242 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___7a9324aae5fe4dfe95bd5a12c9ac7eb0/does-not-exist-7a9324aae5fe4dfe95bd5a12c9ac7eb0.txt 返回 200 / 4242 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19101/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19101/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___cd906dfd8f274898b3f7c89ba465ecf1/does-not-exist-cd906dfd8f274898b3f7c89ba465ecf1.txt 返回 200 / 4242 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"不支持' GET'请求\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 42 条；基线 /__ruoyi_scan_soft404_probe___1a9e633033fd4cf5927e3ea082718d72/does-not-exist-1a9e633033fd4cf5927e3ea082718d72.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"不支持' GET'请求\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 42 条；基线 /__ruoyi_scan_soft404_probe___806a0a82f56d4be5a8b6c6c7222d8690/does-not-exist-806a0a82f56d4be5a8b6c6c7222d8690.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "低权账号 scanner_low 登录成功；业务层在无权限下执行（treeData 返回 2 字节、selectDeptTree 返回 243 字节），但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 响应前 200 字节：<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.26.3</center>\r\n</body>\r\n</html>\r\n",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.26.3</center>\r\n</body>\r\n</html>\r\n",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 696 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___b84b58d9f506426588b9049371de527d/does-not-exist-b84b58d9f506426588b9049371de527d.txt 返回 200 / 3246 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 响应前 200 字节：<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.26.3</center>\r\n</body>\r\n</html>\r\n",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 405 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.26.3</center>\r\n</body>\r\n</html>\r\n",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 696 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___0849ed6be1df44379ac3d32f1e83f1e9/does-not-exist-0849ed6be1df44379ac3d32f1e83f1e9.txt 返回 200 / 3246 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "JeecgBoot jmreport SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot jmreport 文件上传",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot queryUserByDepId SQL注入",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 字典越权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 报表未授权",
+      "status": "UNKNOWN",
+      "evidence": "SAFE 缺少判定证据（插件未说明为何确认不存在），已降级为无法判定",
+      "extra": {
+        "no_evidence": true
+      }
+    },
+    {
+      "name": "JeecgBoot 默认口令",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应无法判定口令状态：{\"timestamp\":\"2026-11-02T06:40:15.763+00:00\",\"status\":404,\"error\":\"Not Found\",\"message\":\"No static resource jeecg-boot/sys/login.\",\"path\":\"/jeecg-boot/sys/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：{\"timestamp\":\"2026-11-02T06:40:15.756+00:00\",\"status\":404,\"error\":\"Not Found\",\"message\":\"No static resource login.\",\"path\":\"/login\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "探测路径不存在（框架资源不存在包装页，HTTP 404）：{\"timestamp\":\"2026-11-02T06:39:54.112+00:00\",\"status\":404,\"error\":\"Not Found\",\"message\":\"No static resource monitor/job/edit.\",\"path\":\"/monitor/job/edit\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；基线 /__ruoyi_scan_soft404_probe___4424693fe0764325b8229be3edc06f53/does-not-exist-4424693fe0764325b8229be3edc06f53.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___c02789b79be6424793a51e823b1e38a3/does-not-exist-c02789b79be6424793a51e823b1e38a3.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___80c2f00371934c87a72ba0530abc6277/does-not-exist-80c2f00371934c87a72ba0530abc6277.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19112/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19112/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：所有候选路径均无求值结果 49",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：已尝试 Linux(/etc/passwd) 与 Windows(win.ini) 载荷，响应均未含真实系统文件特征：Linux（/etc/passwd）: 未见文件特征；Windows（win.ini）: 未见文件特征 | 响应被拒绝（403，无法判定是否存在）；原证据：HTTP 403 路径被拦截或端点不存在",
+      "extra": {
+        "auth_wall": true,
+        "denied": true
+      }
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 4 条；剔除兜底页 664 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___dc9ddce727a449cb9d30e347cdb939de/does-not-exist-dc9ddce727a449cb9d30e347cdb939de.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"不支持' GET'请求\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "已尝试 Linux(/etc/passwd) 与 Windows(win.ini) 载荷，响应均未含真实系统文件特征：Linux（/etc/passwd）: 未见文件特征；Windows（win.ini）: 未见文件特征 | 响应被拒绝（403，无法判定是否存在）；原证据：HTTP 403 路径被拦截或端点不存在",
+      "extra": {
+        "denied": true
+      }
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 44 条；基线 /__ruoyi_scan_soft404_probe___c981434a076743bb97c25ed5c649c18e/does-not-exist-c981434a076743bb97c25ed5c649c18e.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___e4577be59d2149d7a13d79cff7fdfda7/does-not-exist-e4577be59d2149d7a13d79cff7fdfda7.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___f45bc8b1b3924c9fa5c9d220920efa0a/does-not-exist-f45bc8b1b3924c9fa5c9d220920efa0a.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19113/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19113/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：所有候选路径均无求值结果 49",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：已尝试 Linux(/etc/passwd) 与 Windows(win.ini) 载荷，响应均未含真实系统文件特征：Linux（/etc/passwd）: 未见文件特征；Windows（win.ini）: 未见文件特征 | 响应被拒绝（403，无法判定是否存在）；原证据：HTTP 403 路径被拦截或端点不存在",
+      "extra": {
+        "auth_wall": true,
+        "denied": true
+      }
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 4 条；剔除兜底页 664 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___b235f39664834d6d96c5fbfc6991f76a/does-not-exist-b235f39664834d6d96c5fbfc6991f76a.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___dd213be4c7244c64bf91d7bd242de3be/does-not-exist-dd213be4c7244c64bf91d7bd242de3be.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___bf73a495f1804cdf85b043b5267d3f44/does-not-exist-bf73a495f1804cdf85b043b5267d3f44.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19102/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19102/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "任意文件读取",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定文件读取是否存在 | 请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定路径穿越是否存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___91880066b9e74ab29f37b8d241a697a2/does-not-exist-91880066b9e74ab29f37b8d241a697a2.txt 返回 200 / 4305 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"不支持' GET'请求\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 40 条；基线 /__ruoyi_scan_soft404_probe___53b52d27dc4042f69b0dc1135b2d5c16/does-not-exist-53b52d27dc4042f69b0dc1135b2d5c16.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"不支持' GET'请求\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 40 条；基线 /__ruoyi_scan_soft404_probe___5f9a3840a9ae4d91b9f8f1339b4f998b/does-not-exist-5f9a3840a9ae4d91b9f8f1339b4f998b.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "低权账号 scanner_low 登录成功；业务层在无权限下执行（treeData 返回 2 字节、selectDeptTree 返回 243 字节），但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___f415b8d954e44fa19d8eaa090bb0fdca/does-not-exist-f415b8d954e44fa19d8eaa090bb0fdca.txt 返回 200 / 4179 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___1ffed5752e664a46a30ba77eed7d29a5/does-not-exist-1ffed5752e664a46a30ba77eed7d29a5.txt 返回 200 / 4179 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19103/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19103/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___85551b3d35d044f3b073f509a77fd7d8/does-not-exist-85551b3d35d044f3b073f509a77fd7d8.txt 返回 200 / 4179 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 2 条；基线 /__ruoyi_scan_soft404_probe___bdefdca6a08b4bfeb04981e0dccae4d0/does-not-exist-bdefdca6a08b4bfeb04981e0dccae4d0.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 2 条；基线 /__ruoyi_scan_soft404_probe___2193b99730fa47e6a9c33ed4369f29ee/does-not-exist-2193b99730fa47e6a9c33ed4369f29ee.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___d6704485503e405d8cd06ab345312f51/does-not-exist-d6704485503e405d8cd06ab345312f51.txt 返回 200 / 4194 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___cbbf94d1188d42ca837344fe64047b33/does-not-exist-cbbf94d1188d42ca837344fe64047b33.txt 返回 200 / 4194 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19104/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19104/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 668 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___b8495b05b6fa4faea10f993fb83e57c9/does-not-exist-b8495b05b6fa4faea10f993fb83e57c9.txt 返回 200 / 4194 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 40 条；基线 /__ruoyi_scan_soft404_probe___fb83211f0c7a48ceaac807cdc41d96b6/does-not-exist-fb83211f0c7a48ceaac807cdc41d96b6.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 40 条；基线 /__ruoyi_scan_soft404_probe___4f468babc7d44bb2bb3f91c0df09f0f8/does-not-exist-4f468babc7d44bb2bb3f91c0df09f0f8.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "低权账号 scanner_low 登录成功；业务层在无权限下执行（treeData 返回 2 字节、selectDeptTree 返回 119 字节），但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定",
+      "extra": {}
+    },
+    {
+      "name": ".env 配置文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200 但未命中环境变量关键字",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": ".git 源码泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200, 未检测到 .git 泄露特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成模块响应形态无法定性（HTTP 200），需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Cloud Nacos 配置泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：状态码=200，响应未含 Nacos 配置列表特征（pageItems/configs）或明文配置关键字；已知 dataId 兜底探测未命中",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "CORS 跨域配置不当",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未反射 Origin, ACAO=(无)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "IDE/SCM 残留文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现 IDE/SCM 残留文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___2a0334b67f2b454f89c246daf9f00447/does-not-exist-2a0334b67f2b454f89c246daf9f00447.txt 返回 200 / 4198 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi Swagger 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Swagger/Doc 路径未公开",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Swagger API 文档泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现公开的 Swagger/OpenAPI/Knife4j 文档端点（Druid 由未授权访问插件单独判定）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "备份文件泄露",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现可访问的备份/交换文件；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___68c3ec4da06f4002b833959f0796e4ab/does-not-exist-68c3ec4da06f4002b833959f0796e4ab.txt 返回 200 / 4198 字节），已启用内容比对",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Druid 弱口令爆破",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：全部组合未命中 success",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "HTTP 方法探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：OPTIONS 无 Allow 头，TRACE 未回显请求报文",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "MinIO 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：探测了 S3 根路径与 /minio/（最后 http://127.0.0.1:19105/minio/ 返回 HTTP 200），未出现匿名 bucket 列表特征",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Nacos 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：200 但响应非 JSON；服务列表接口：响应非 JSON",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RocketMQ Dashboard 未授权",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：4 个 dashboard 路径均未命中 RocketMQ 控制台特征（最后探测 http://127.0.0.1:19105/rocketmq-console-ng/）",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "Shiro 框架指纹（rememberMe）",
+      "status": "UNKNOWN",
+      "evidence": "检测到 Shiro 框架特征（rememberMe=deleteMe）。这是指纹而非漏洞判定：rememberMe 反序列化是否可利用取决于密钥，需按复现步骤人工验证",
+      "extra": {}
+    },
+    {
+      "name": "Thymeleaf/SpEL 模板注入",
+      "status": "UNKNOWN",
+      "evidence": "候选路径请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定模板注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "任意文件上传",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定上传接口是否可写",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：Spring Actuator env:SAFE(已鉴权拦截); Druid 监控:SAFE(已鉴权拦截); Swagger UI:SAFE(已鉴权拦截); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 0 条；剔除兜底页 672 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___6f6f792ce1264977b1030deb7fc095db/does-not-exist-6f6f792ce1264977b1030deb7fc095db.txt 返回 200 / 4198 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "目录遍历探测",
+      "status": "UNKNOWN",
+      "evidence": "目标存在登录墙（返回 200 登录页（会话未认证）），需登录后才能判定；原证据：未发现开启目录列表的路径",
+      "extra": {
+        "auth_wall": true
+      }
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' is not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 10 条；剔除兜底页 662 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___13e81258b8584fba8afd05d8d2ae3e90/does-not-exist-13e81258b8584fba8afd05d8d2ae3e90.txt 返回 200 / 283 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"Request method 'GET' is not supported\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "请求被登录墙拦截（返回 200 登录页（会话未认证）），无法判定接口是否未鉴权",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 10 条；剔除兜底页 662 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___df293147997840ac818821f05ac5561a/does-not-exist-df293147997840ac818821f05ac5561a.txt 返回 200 / 283 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': '请求访问：/tool/gen/edit，认证失败，无法访问系统资源', 'code': 401}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 26 条；剔除兜底页 670 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___29b24757f4f1475ab665d5b3c38c70f9/does-not-exist-29b24757f4f1475ab665d5b3c38c70f9.txt 返回 200 / 192 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"请求参数类型不匹配，参数[tableId]要求类型为：'java.lang.Long'，但输入值为：'edit'\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 26 条；剔除兜底页 670 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___94c9185ca6034913865697e8599ac127/does-not-exist-94c9185ca6034913865697e8599ac127.txt 返回 200 / 283 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': '请求访问：/tool/gen/edit，认证失败，无法访问系统资源', 'code': 401}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 94 条；剔除兜底页 341 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___2a7dcdef01374648a924c4789140b5a2/does-not-exist-2a7dcdef01374648a924c4789140b5a2.txt 返回 200 / 192 字节），已启用内容比对；请求失败 3 条（RetryError: HTTPConnectionPool(host='127.0.0.1', port=19107): Max retries exceeded with url:<x> (Caused by ResponseError('too many 503 error responses')) × 3）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': \"请求参数类型不匹配，参数[tableId]要求类型为：'java.lang.Long'，但输入值为：'edit'\", 'code': 500}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 98 条；基线 /__ruoyi_scan_soft404_probe___cbb2d83236ad41a6a16ea02262ac29c1/does-not-exist-cbb2d83236ad41a6a16ea02262ac29c1.txt 返回 404，状态码可信；请求失败 3 条（RetryError: HTTPConnectionPool(host='127.0.0.1', port=19107): Max retries exceeded with url:<x> (Caused by ResponseError('too many 503 error responses')) × 3）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'msg': '请求访问：/tool/gen/edit，认证失败，无法访问系统资源', 'code': 401}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'code': 500, 'msg': '404 NOT_FOUND \"No static resource tool/gen/edit for request \\'http://127.0.0.1:19108/tool/gen/edit），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "基线请求被拒绝（业务码 401/403/429（认证失败）），无法判定注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "基线请求被拒绝（业务码 401/403/429（认证失败）），无法判定注入是否存在",
+      "extra": {}
+    },
+    {
+      "name": "Redis 未授权访问",
+      "status": "UNKNOWN",
+      "evidence": "连接 127.0.0.1:16379 失败: [WinError 10061] 由于目标计算机积极拒绝，无法连接。（Redis 端口可用 --redis-port 或 RUOYI_SCAN_REDIS_PORT 指定）",
+      "extra": {}
+    },
+    {
+      "name": "Spring Boot Actuator env 配置覆盖 RCE",
+      "status": "UNKNOWN",
+      "evidence": "POST 返回 200 但响应体无 Actuator env 配置特征，无法确认可写入，前 200 字节：{\"code\":500,\"msg\":\"405 METHOD_NOT_ALLOWED \\\"Request method 'POST' is not supported.\\\"\"}",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应前 200 字节：{\"code\":401,\"msg\":\"令牌不能为空\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "探测路径不存在（框架资源不存在包装页，HTTP 200）：{\"code\":500,\"msg\":\"404 NOT_FOUND \\\"No static resource monitor/job/edit for request 'http://127.0.0.1:19108/monitor/job/edit'.\\\"\"}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 71 条；剔除兜底页 617 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___f649710b40a7402bac95b1645adf1732/does-not-exist-f649710b40a7402bac95b1645adf1732.txt 返回 200 / 323 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：代码生成模块不可达或需鉴权，状态码=404",
+      "extra": {}
+    },
+    {
+      "name": "CVE-2022-22965 Spring4Shell 远程代码执行",
+      "status": "UNKNOWN",
+      "evidence": "根路径 HTTP 404 且未发现可提交表单，无法判定（测不到 ≠ 安全）",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 响应前 200 字节：<!doctype html><html lang=\"en\"><head><title>HTTP Status 404 – Not Found</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} ",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 404 未渲染出编辑页表单字段，无未授权证据，响应前 200 字节：<!doctype html><html lang=\"en\"><head><title>HTTP Status 404 – Not Found</title><style type=\"text/css\">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} ",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 686 条；基线 /__ruoyi_scan_soft404_probe___9946f562745c45b08080c1b760c6fbfb/does-not-exist-9946f562745c45b08080c1b760c6fbfb.txt 返回 404，状态码可信",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'code': 401, 'msg': '认证失败，无法访问系统资源', 'data': None}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Plus 定时任务未授权",
+      "status": "UNKNOWN",
+      "evidence": "业务码 code=404（请求地址不存在）：该站点无 /monitor/job/** 端点（Plus 5.6+ 定时任务改用 SnailJob），本项无从判定，不构成「不存在漏洞」",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应前 200 字节：{\"code\":404,\"msg\":\"请求地址不存在\",\"data\":null}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=404, AjaxResult 形态=True）：请求地址不存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "响应被拒绝（401，无法判定是否存在）；原证据：Spring Actuator env:SAFE(HTTP 401 鉴权拦截); Druid 监控:SAFE(无特征关键字 HTTP 200); Swagger UI:SAFE(无特征关键字 HTTP 200); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "denied": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 35 条；剔除兜底页 485 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___82c8c1da5c3247da913a1c7dd74cc2ab/does-not-exist-82c8c1da5c3247da913a1c7dd74cc2ab.txt 返回 200 / 54 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'code': 401, 'msg': '认证失败，无法访问系统资源', 'data': None}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Plus 定时任务未授权",
+      "status": "UNKNOWN",
+      "evidence": "业务码 code=404（请求地址不存在）：该站点无 /monitor/job/** 端点（Plus 5.6+ 定时任务改用 SnailJob），本项无从判定，不构成「不存在漏洞」",
+      "extra": {}
+    },
+    {
+      "name": "后台默认口令（admin/admin123）",
+      "status": "UNKNOWN",
+      "evidence": "HTTP 200 响应前 200 字节：{\"code\":404,\"msg\":\"请求地址不存在\",\"data\":null}",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=404, AjaxResult 形态=True）：请求地址不存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "响应被拒绝（401，无法判定是否存在）；原证据：Spring Actuator env:SAFE(HTTP 401 鉴权拦截); Druid 监控:SAFE(无特征关键字 HTTP 200); Swagger UI:SAFE(无特征关键字 HTTP 200); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "denied": true
+      }
+    },
+    {
+      "name": "目录扫描",
+      "status": "UNKNOWN",
+      "evidence": "扫描 696 条，命中 35 条；剔除兜底页 485 条（与基线响应等价，非独立路径）；站点存在兜底路由（基线 /__ruoyi_scan_soft404_probe___c55dea99b1c54d529043758d7eff4221/does-not-exist-c55dea99b1c54d529043758d7eff4221.txt 返回 200 / 54 字节），已启用内容比对",
+      "extra": {}
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi 代码生成模块 SSTI",
+      "status": "UNKNOWN",
+      "evidence": "代码生成编辑器可达（HTTP 200，业务 JSON={'code': 401, 'msg': '认证失败，无法访问系统资源', 'data': None}），但未执行模板求值探针，SSTI 未能证实，需人工复核",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（dept）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "POST型报错注入（role）",
+      "status": "UNKNOWN",
+      "evidence": "未取得高权会话（主扫描未认证），需登录的结论已在打印前降级为 UNKNOWN。原证据：注入后未出现 MySQL 求值报错特征，且基线与注入响应一致",
+      "extra": {}
+    },
+    {
+      "name": "RuoYi-Plus 定时任务未授权",
+      "status": "UNKNOWN",
+      "evidence": "业务码 code=404（请求地址不存在）：该站点无 /monitor/job/** 端点（Plus 5.6+ 定时任务改用 SnailJob），本项无从判定，不构成「不存在漏洞」",
+      "extra": {}
+    },
+    {
+      "name": "定时任务 RCE（未授权访问）",
+      "status": "UNKNOWN",
+      "evidence": "JSON 响应不满足 CONFIRMED 条件（code=404, AjaxResult 形态=True）：请求地址不存在",
+      "extra": {}
+    },
+    {
+      "name": "定时任务调用目标未校验",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个具备 monitor:job:edit 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "未授权访问（批量）",
+      "status": "UNKNOWN",
+      "evidence": "响应被拒绝（401，无法判定是否存在）；原证据：Spring Actuator env:SAFE(HTTP 401 鉴权拦截); Druid 监控:SAFE(无特征关键字 HTTP 200); Swagger UI:SAFE(无特征关键字 HTTP 200); 后台用户列表:SAFE(已鉴权拦截)",
+      "extra": {
+        "denied": true
+      }
+    },
+    {
+      "name": "部门树越权访问",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个没有 system:dept:list 权限的普通账号）",
+      "extra": {}
+    },
+    {
+      "name": "重置密码页数据权限绕过",
+      "status": "UNKNOWN",
+      "evidence": "缺少低权账号，需 --surface-account user:pass 提供，无法判定越权（该验证需要一个持有 system:user:resetPwd 权限、但数据范围不含目标用户的普通账号）",
+      "extra": {}
+    }
+  ]
+}

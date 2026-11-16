@@ -149,6 +149,8 @@ def _build_results(results: List[Any], rules: Dict[str, Dict[str, Any]]) -> List
                 "cve": getattr(r, "cve", "") or "",
                 "cvss_score": cvss,
                 "status": r.status,
+                # v1.7 WP-1：SARIF 消费者可通过该字段做 UNKNOWN 归因统计
+                "unknown_reason": getattr(r, "unknown_reason", "") or "",
             },
         }
 
