@@ -101,7 +101,18 @@ def build_parser():
         help="显示版本号并退出",
     )
     group.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
-    group.add_argument("--rate", type=int, default=settings.RATE, help="每秒请求数（0 不限速）")
+    group.add_argument(
+        "--rate",
+        type=int,
+        default=settings.RATE,
+        help="每秒请求数（默认 --rate-scope request）；plugin 模式下为每秒插件数",
+    )
+    group.add_argument(
+        "--rate-scope",
+        choices=["request", "plugin"],
+        default=settings.RATE_SCOPE,
+        help="限速作用域：request=逐 HTTP 请求（真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）",
+    )
     group.add_argument("--report", default=None, help="报告输出目录")
     group.add_argument("--debug", action="store_true", default=False, help="调试模式")
     group.add_argument(

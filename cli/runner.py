@@ -206,6 +206,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         cms=getattr(args, "cms", "") or "",
         threads=args.threads,
         rate=args.rate,
+        rate_scope=getattr(args, "rate_scope", "request"),
         proxy=getattr(args, "proxy", "") or "",
         timeout=args.timeout,
         time_budget=getattr(args, "time_budget", 0.0) or 0.0,

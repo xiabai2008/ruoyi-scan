@@ -259,6 +259,8 @@ class ScanRequest:
     cms: str = ""  # 手动指定 CMS（空=自动指纹识别）
     threads: int = 1  # 并发线程数
     rate: int = 0  # 限速（每秒请求数，0=不限）
+    # 限速作用域：request=逐 HTTP 请求（默认，真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）
+    rate_scope: str = "request"
     proxy: str = ""  # 代理地址
     timeout: int = 10  # 超时秒数
     debug: bool = False  # 调试模式
@@ -600,6 +602,14 @@ class ScanOrchestrator:
 
             self._raise_if_cancelled(task.task_id)
 
+            # 一次扫描共用一个桶：主会话 + recon 临时会话都挂同一个 limiter，
+            # 否则两个会话各自建桶 → 实际 QPS 翻倍。
+            from lib.rate_limit import TokenBucket
+
+            limiter: Optional[TokenBucket] = (
+                TokenBucket(req.rate) if (req.rate > 0 and req.rate_scope == "request") else None
+            )
+
             # 1. 端口扫描（可选）
             if req.portscan:
                 from core.portscan import DEFAULT_PORTS, PortScanner
@@ -621,7 +631,7 @@ class ScanOrchestrator:
 
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
             if req.crawl or req.subdomain or req.js_extract:
-                recon_info = self._run_recon(req, target, _emit, task.task_id)
+                recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter)
                 if recon_info.get("subdomains"):
                     _emit(
                         "recon",
@@ -664,13 +674,17 @@ class ScanOrchestrator:
                 debug=req.debug,
                 timeout=req.timeout,
                 pool_size=req.threads,
+                rate=req.rate,
+                rate_scope=req.rate_scope,
+                limiter=limiter,
             )
             # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
             session.exploit = req.exploit
             self._raise_if_cancelled(task.task_id)
             engine = ScanEngine(
                 threads=req.threads,
-                rate=req.rate,
+                # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
+                rate=0 if req.rate_scope == "request" else req.rate,
                 deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
             )
 
@@ -1351,8 +1365,19 @@ class ScanOrchestrator:
 
         return None
 
-    def _run_recon(self, req: ScanRequest, target: str, _emit: Callable[..., None], task_id: str) -> Dict[str, Any]:
+    def _run_recon(
+        self,
+        req: ScanRequest,
+        target: str,
+        _emit: Callable[..., None],
+        task_id: str,
+        limiter: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         """D14：执行主动信息收集（爬虫 + 子域名 + JS 提取）
+
+        Args:
+            limiter: 本次扫描共享的请求限速桶（request 作用域下由 orchestrator 创建）。
+                临时会话挂同一个桶，保证侦察流量与主扫描合计不超过 --rate。
 
         Returns:
             {
@@ -1409,6 +1434,9 @@ class ScanOrchestrator:
                     debug=req.debug,
                     timeout=req.timeout,
                     pool_size=req.threads,
+                    rate=req.rate,
+                    rate_scope=req.rate_scope,
+                    limiter=limiter,
                 )
 
                 _emit(
