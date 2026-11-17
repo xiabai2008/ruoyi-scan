@@ -252,3 +252,42 @@ def test_engine_rate_zero_in_request_scope(monkeypatch):
     captured.clear()
     orch.run_sync(orch_mod.ScanRequest(target="http://example.com/", rate=9, rate_scope="plugin"))
     assert captured.get("rate") == 9
+
+
+def test_isolated_auth_session_shares_parent_limiter(monkeypatch):
+    """扫描中创建的隔离登录会话必须复用父会话的同一个令牌桶
+
+    回归点：isolated_auth_session 曾直接 SessionManager(timeout=...)，没传
+    rate/rate_scope/limiter，插件在扫描中登录及其后的取证请求完全绕过请求级
+    限速（同 anonymous() 此前的缺口）。不传 parent 时保持不限速的兼容行为。
+    """
+    import core.auth_chain as auth_chain
+
+    # 登录链打桩为成功：本用例不发起任何真实网络请求
+    monkeypatch.setattr(
+        auth_chain.RuoYiAuthChain,
+        "login",
+        lambda self, *a, **k: (True, auth_chain.LOGIN_OK),
+    )
+
+    fake = FakeClock()
+    bucket = TokenBucket(3, clock=fake.tick, sleeper=fake.sleep)
+    parent = SessionManager(rate=3, rate_scope="request", limiter=bucket)
+    try:
+        with auth_chain.isolated_auth_session("http://example.com", "u", "p", parent=parent) as (iso, ok, _reason):
+            assert ok is True
+            assert iso._limiter is parent._limiter
+            assert iso._limiter is bucket
+            assert iso.rate == parent.rate == 3
+            assert iso.rate_scope == parent.rate_scope == "request"
+
+        # 不传 parent：保持向后兼容，不建桶
+        with auth_chain.isolated_auth_session("http://example.com", "u", "p") as (
+            detached,
+            ok_detached,
+            _reason,
+        ):
+            assert ok_detached is True
+            assert detached._limiter is None
+    finally:
+        parent.close()

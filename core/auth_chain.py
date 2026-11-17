@@ -61,6 +61,7 @@ def isolated_auth_session(
     username: str,
     password: str,
     timeout: Optional[float] = None,
+    parent: Any = None,
 ) -> Iterator[Tuple[Any, bool, str]]:
     """在**独立会话**中登录，yield (session, ok, reason)；退出时关闭该会话。
 
@@ -87,10 +88,19 @@ def isolated_auth_session(
         target: 目标站点根 URL
         username / password: 登录凭据
         timeout: 请求超时（None 用 SessionManager 默认）
+        parent: 可选，传入扫描的共享会话；隔离会话会继承它的请求级限速
+            （rate / rate_scope / 同一个令牌桶），使登录与后续取证请求仍受
+            --rate 约束。不传则不限速——保持向后兼容，既有测试与外部调用方
+            行为不变。
     """
     from core.session import SessionManager
 
-    own = SessionManager(timeout=int(timeout) if timeout is not None else None)
+    own = SessionManager(
+        timeout=int(timeout) if timeout is not None else None,
+        rate=getattr(parent, "rate", 0),
+        rate_scope=getattr(parent, "rate_scope", "request"),
+        limiter=getattr(parent, "_limiter", None),
+    )
     try:
         chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
         ok, reason = chain.login(max_attempts=8)

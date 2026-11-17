@@ -135,6 +135,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
             low_user,
             low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
+            parent=session,
         ) as (isolated, ok_login, reason):
             return self._verify_authed(target, isolated, ok_login, reason, low_user)
 

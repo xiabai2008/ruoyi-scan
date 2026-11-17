@@ -155,6 +155,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             low_user,
             low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
+            parent=session,
         ) as (sess, ok_login, reason):
             if not ok_login:
                 hint = "（该验证需要低权限账号，不是 admin）" if reason != "captcha" else ""

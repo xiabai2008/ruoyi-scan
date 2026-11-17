@@ -183,7 +183,11 @@ class DefaultPasswordPlugin(PluginBase):
         # 公共登录器成功即确认默认口令，失败再退回原有表单/JSON/Cloud 判定。
         # F3：整个登录流程（含回退分支）都在 isolated_auth_session 的独立会话里，
         # 不触碰调用方传入的共享会话，避免认证状态污染后续插件。
-        with isolated_auth_session(target, self.USERNAME, self.PASSWORD) as (iso, ok_chain, chain_reason):
+        with isolated_auth_session(target, self.USERNAME, self.PASSWORD, parent=session) as (
+            iso,
+            ok_chain,
+            chain_reason,
+        ):
             if ok_chain:
                 # F6-2 双保险：登录链说成功还不够，必须用同一会话取到受保护接口的
                 # 业务数据（rows/total/data）。C2-2 这类 /login 404 的站点旧逻辑会

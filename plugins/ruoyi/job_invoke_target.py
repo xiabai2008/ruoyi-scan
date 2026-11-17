@@ -155,6 +155,7 @@ class JobInvokeTargetPlugin(PluginBase):
             low_user,
             low_pass,
             timeout=settings.RuoYiAuth.TIMEOUT,
+            parent=session,
         ) as (sess, ok_login, reason):
             if not ok_login:
                 hint = "（该验证需要具备 monitor:job:edit 权限的账号）" if reason != LOGIN_CAPTCHA else ""
