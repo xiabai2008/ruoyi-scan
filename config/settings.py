@@ -41,6 +41,9 @@ THREADS = 1
 # 限速（每秒请求数，0 表示不限速）
 RATE = 0
 
+# 限速作用域默认值：request=逐 HTTP 请求（真实 QPS）；plugin=逐插件启动（兼容旧行为）
+RATE_SCOPE = "request"
+
 # 代理（如 http://127.0.0.1:8080，None 表示不使用）
 PROXY = None
 
