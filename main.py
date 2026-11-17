@@ -125,6 +125,12 @@ def build_parser():
         metavar="SECONDS",
         help="单目标扫描时间预算；超出后剩余插件标记为 UNKNOWN（默认 0 = 不限制）",
     )
+    group.add_argument(
+        "--time-based",
+        action="store_true",
+        default=False,
+        help="启用时序盲注检测（每端点约 20-25 秒，默认关闭）",
+    )
     # 类别从已安装的插件包派生，新增框架时无需改这里（v1.6 WP-R）。
     # 曾经写死 ["ruoyi", "spring"]，导致 --cms jeecgboot 被 argparse 直接拒绝。
     group.add_argument("--cms", default=None, choices=_known_categories(), help="手动指定 CMS（默认自动识别）")
@@ -429,6 +435,7 @@ def print_help():
         ("--report <dir>", "报告输出目录（生成 HTML/JSON/CSV）"),
         ("--debug", "调试模式（请求日志输出到 stderr）"),
         ("--timeout <n>", "请求超时秒数（默认 10s）"),
+        ("--time-based", "启用时序盲注检测（每端点约 20-25 秒，默认关闭）"),
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
         ("--no-cta", "关闭扫描结尾的仓库引导提示"),

@@ -312,6 +312,8 @@ class ScanRequest:
     adversarial_transport: bool = False
     # F8：Spring4Shell 真实利用（--exploit；默认关闭，仅回环/内网目标允许）
     exploit: bool = False
+    # 时序盲注开关：默认关闭。一轮约 20-25s，只有显式开启才执行 SqlBlindTimePlugin
+    time_based: bool = False
 
     def __post_init__(self) -> None:
         """API/嵌入式调用可能直接传 auth 但不设 auth_status：有凭据即视为 ok。"""
@@ -704,6 +706,9 @@ class ScanOrchestrator:
                 rate=0 if req.rate_scope == "request" else req.rate,
                 deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
             )
+            # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
+            # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
+            session.deadline = engine.deadline
 
             # D26：认证扫描增强（将 auth 配置注入 session）
             if req.auth:
@@ -1042,6 +1047,13 @@ class ScanOrchestrator:
                             "task_id": task.task_id,
                         },
                     )
+
+            # 时序盲注默认不执行：一轮 20-25s，只有 --time-based 显式开启才保留。
+            # 按模块路径过滤（name 是中文文案，改一个字就失效）。
+            if not req.time_based:
+                all_plugins = [
+                    cls for cls in all_plugins if not getattr(cls, "__module__", "").endswith("sql_blind_time")
+                ]
 
             # 按 category 分组（对应 MODE_CATEGORIES）
             mode_categories = {
