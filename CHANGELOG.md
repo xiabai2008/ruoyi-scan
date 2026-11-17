@@ -6,7 +6,7 @@
 
 ## [Unreleased]
 
-> 本节内容计划作为 **v1.8.0** 发布（2026-11-17 集成分支 `feat/v1.8-integration`）。
+## [1.8.0] - 2026-11-17
 
 ### Added
 - **请求级限速（`--rate-scope`）**：`--rate` 默认改为「每秒 HTTP 请求数」，令牌桶挂在
@@ -53,8 +53,9 @@
   版本矩阵/插件计数类用例随新增插件同步 +1。
 
 ### 已知限制
-- 时间盲注默认不进靶场基线（`--time-based` 关闭时被 orchestrator 按模块路径过滤），
-  因此暂无自动化靶场覆盖；需人工在真实/仿真站点上验证正负样本。
+- 时间盲注默认不进 CI / nightly 靶场基线（`--time-based` 关闭时被 orchestrator 按模块路径
+  过滤）；由 `scripts/run_all_acceptance.py` 的三类人工验收（正样本 / 负样本 / chaos 慢站）
+  作为发布前卡点。
 - `--rate` 与 `--time-based` 同时开启时，限速等待会计入 `measure` 的计时窗口；单线程
   下因差分抵消不致命，多线程 + 限速叠加时建议改用 `--rate-scope plugin` 或降低并发。
 
