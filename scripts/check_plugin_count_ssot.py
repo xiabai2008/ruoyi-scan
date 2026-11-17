@@ -80,7 +80,7 @@ ALLOW_CONTEXT = (
     "旧版",
     "文件总数",
     "实际执行数",
-    "口径",
+    "其他口径",
     "release",
     "CHANGELOG",
     "已经过去",
@@ -89,6 +89,10 @@ ALLOW_CONTEXT = (
 
 # 形如 29/54、46/54、48/54 的历史表：仅允许分母 54，且必须带历史上下文
 RATIO_PATTERN = re.compile(r"(\d+)\s*/\s*(\d+)\s*(?:plugins|插件)", re.IGNORECASE)
+
+# 中文引号内的「历史表述」不判错。只剥离引号**内部**，不整行豁免：
+# README 的「口径声明」一行既有引号内的旧说法，又有引号外的旧总数（曾因此漏检 56）。
+TITLE_QUOTE_PATTERN = re.compile(r"「[^」]*」")
 
 
 def _package_counts(plugins: List[dict]) -> dict:
@@ -104,17 +108,16 @@ def _check_line(
     errors: List[str] = []
     if any(ctx in line for ctx in ALLOW_CONTEXT):
         return errors
-    # 中文引号里的「历史表述」不判错
-    if "「" in line or "」" in line:
-        return errors
+    # 中文引号里的「历史表述」不判错：只剥离引号内部，保留引号外的数字参与检查
+    scanned = TITLE_QUOTE_PATTERN.sub("", line)
 
     # 分项行（若依 20 / Spring 14 / 通用 12 / Jeecg 8 / 芋道 2）允许出现包级数字
     pkg_hint = ("ruoyi", "spring", "common", "jeecg", "yudao", "若依", "通用", "芋道", "plus")
-    has_pkg_hint = any(h in line.lower() for h in pkg_hint)
+    has_pkg_hint = any(h in scanned.lower() for h in pkg_hint)
 
     seen = set()
     for pattern in TOTAL_PATTERNS:
-        for m in pattern.finditer(line):
+        for m in pattern.finditer(scanned):
             value = int(m.group(1))
             if value in seen:
                 continue
@@ -127,7 +130,7 @@ def _check_line(
                 f"{path}:{lineno}: 插件数量写作 {value}，运行时为 {runtime}；"
                 f"请改为 {runtime} 或注明历史/其他口径"
             )
-    for m in RATIO_PATTERN.finditer(line):
+    for m in RATIO_PATTERN.finditer(scanned):
         numerator, denominator = int(m.group(1)), int(m.group(2))
         if denominator != runtime:
             errors.append(

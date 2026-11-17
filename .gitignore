@@ -118,3 +118,19 @@ desktop/dist_prev_*/
 /output/
 desktop/dist-old-*/
 tools/cli_build/build-old-local/
+
+# 内部执行方案 / 编码代理工单（过程文档，不入库；历史已提交的 _plan_* 不受影响）
+docs/_plan_*.md
+docs/_opencode_*.md
+docs/_prompts_*.md
+docs/_task_*.md
+
+# 毕设汇报素材：桌面端截图与拍摄脚本（本地保留，不入库；README 引用的仍是 desktop-0X-*.png）
+docs/images/desktop-overview.png
+docs/images/desktop-newsan.png
+docs/images/desktop-settings.png
+docs/images/desktop-vulndb.png
+scripts/doc_shots.py
+
+# IDE 本地配置
+.vscode/
