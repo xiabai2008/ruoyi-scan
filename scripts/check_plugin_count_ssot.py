@@ -4,7 +4,7 @@
 唯一事实源
 ==========
 `scripts/export_plugin_list.py::collect()` 的 `len()`（与运行时 `--plugin-list`
-完全一致）。当前为 56：ruoyi 20 / spring 14 / common 12 / jeecgboot 8 / yudao 2。
+完全一致）。当前为 58：ruoyi 21 / spring 14 / common 13 / jeecgboot 8 / yudao 2。
 
 检查范围
 ========
