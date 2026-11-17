@@ -19,6 +19,7 @@ from plugins.ruoyi.plus_job_unauth import PlusJobUnauthPlugin
 from plugins.ruoyi.ruoyi_cloud_nacos import RuoyiCloudNacosPlugin
 from plugins.ruoyi.ruoyi_gen_rce import RuoyiGenRcePlugin
 from plugins.ruoyi.ruoyi_swagger_unauth import RuoyiSwaggerUnauthPlugin
+from plugins.ruoyi.sql_blind_time import SqlBlindTimePlugin
 from plugins.ruoyi.sql_inject_dept import SqlInjectDeptPlugin
 from plugins.ruoyi.sql_inject_role import SqlInjectRolePlugin
 from plugins.ruoyi.thymeleaf_ssti import ThymeleafSstiPlugin
@@ -32,6 +33,7 @@ plugin_list = [
     JobInvokeTargetPlugin,  # 定时任务 invokeTarget 白名单缺失（high，<4.7）
     SqlInjectRolePlugin,  # POST 型报错注入（role）
     SqlInjectDeptPlugin,  # POST 型报错注入（dept）
+    SqlBlindTimePlugin,  # 时间盲注（dept，需 --time-based 显式开启）
     # vuln：Step 5 新增专项 POC（按危险度从高到低排序）
     FileUploadPlugin,  # 任意文件上传
     JobRcePlugin,  # 定时任务 RCE 未授权访问

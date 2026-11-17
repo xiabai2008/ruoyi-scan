@@ -99,7 +99,7 @@ pip install ruoyi-scan
 
 ## 桌面端 · 单个 exe，双击即用
 
-> 引擎、56 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+> 引擎、58 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
@@ -118,10 +118,10 @@ pip install ruoyi-scan
 <br />
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-03-vulndb.png" alt="漏洞库：56 个 POC 插件与 CVE / CNVD 映射" width="900" />
+  <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-03-vulndb.png" alt="漏洞库：58 个 POC 插件与 CVE / CNVD 映射" width="900" />
 </p>
 
-**漏洞库** —— 56 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
+**漏洞库** —— 58 个 POC 插件一览，含严重度、CVE / CNVD 编号、影响版本区间、WAF 绕过支持标记。
 
 <br />
 
@@ -166,7 +166,7 @@ pip install ruoyi-scan
 | 合规映射 | — | — | 等保 2.0 / OWASP **报告级章节** |
 | 安服交付物 | — | 部分 | 7 种格式 + **docx 模板引擎 + 整改复测** |
 | nuclei 模板 | 原生 | 不支持 | **兼容执行**（http 协议子集 + 安全白名单） |
-| **模板存量** | **数千个社区模板** | 内置规则库 | **56 个专项 POC**（数量级劣势） |
+| **模板存量** | **数千个社区模板** | 内置规则库 | **58 个专项 POC**（数量级劣势） |
 | **跨框架广度** | **数十种框架** | 通用 Web | **若依 / Spring Boot / JeecgBoot / 芋道 yudao**（仅 Java 生态） |
 | **社区规模** | **数千贡献者** | 活跃社区 | **单人维护**（响应与迭代速度受限） |
 
@@ -240,7 +240,7 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 | [用户指南](docs/usage.md) | 安装配置、扫描模式、CLI 参数详解 |
 | [使用指导](docs/promo/ruoyi-scan-usage-guide.txt) | 什么时候该用、六个场景怎么打、20 条技巧、合规边界（纯文本） |
 | [操作命令手册](docs/promo/ruoyi-scan-command-manual.txt) | 一页纸命令速查：四模式 / 报告 / 批量 / 认证 / 分布式 / FAQ |
-| [插件清单](docs/promo/ruoyi-scan-plugins.txt) | 56 个 POC 的名称、严重度、影响版本与 CVE 索引 |
+| [插件清单](docs/promo/ruoyi-scan-plugins.txt) | 58 个 POC 的名称、严重度、影响版本与 CVE 索引 |
 | [插件开发教程](docs/plugin_dev.md) | PluginBase、三态判定、entry_points 注册 |
 | [API 文档](docs/api.md) | REST 端点、WebSocket 事件、OpenAPI 规范 |
 | [桌面端](docs/desktop.md) | 单 exe 免安装双击即用（引擎内嵌） |
@@ -264,9 +264,9 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 
 | 模块 | 说明 |
 |------|------|
-| `plugins/ruoyi/` | 若依 20 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic） |
+| `plugins/ruoyi/` | 若依 21 个插件（含 2 个 RuoYi-Plus 变体专属；文件读取、SQL 注入、RCE、SSTI、未授权等）+ 5 变体识别（Vue3/App/Plus/Cloud-Plus/Magic） |
 | `plugins/spring/` | Spring Boot 14 个 POC（Actuator、Gateway、Jolokia、Spring4Shell 等） |
-| `plugins/common/` | 通用漏洞包 12 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权、Shiro 指纹等） |
+| `plugins/common/` | 通用漏洞包 13 个插件（.git/.env 泄露、备份文件、CORS、Swagger、中间件未授权、Shiro 指纹等） |
 | `plugins/jeecgboot/` | JeecgBoot 拓展框架插件包（8 个插件，首个非若依框架拓展实证） |
 | `plugins/yudao/` | 芋道 yudao 插件包（2 个插件：租户列表未授权、Druid 监控未授权；真实 Y1 站验证） |
 | 指纹识别 | favicon hash + 特征路径 + 关键字，多 CMS 数据驱动 + 若依变体细分 |
@@ -761,10 +761,10 @@ Ruoyi-Scan/
 │   └── logger.py            # 日志配置
 ├── plugins/                 # 插件系统
 │   ├── base.py              # PluginBase 抽象基类
-│   ├── ruoyi/               # 若依 20 个插件（含 2 个 Plus 变体专属）
+│   ├── ruoyi/               # 若依 21 个插件（含 2 个 Plus 变体专属）
 │   ├── spring/              # Spring 14 个 POC
 │   ├── jeecgboot/           # JeecgBoot 8 个插件
-│   ├── common/              # 通用 12 个插件
+│   ├── common/              # 通用 13 个插件
 │   └── chain/               # 3 条利用链
 ├── lib/                     # 工具库（41 个模块）
 ├── api/                     # Web API（FastAPI + WebSocket）

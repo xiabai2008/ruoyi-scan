@@ -206,9 +206,11 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         cms=getattr(args, "cms", "") or "",
         threads=args.threads,
         rate=args.rate,
+        rate_scope=getattr(args, "rate_scope", "request"),
         proxy=getattr(args, "proxy", "") or "",
         timeout=args.timeout,
         time_budget=getattr(args, "time_budget", 0.0) or 0.0,
+        time_based=getattr(args, "time_based", False),
         debug=getattr(args, "debug", False),
         report_dir="",  # CLI 自行处理报告（含基线/差异/通知等后处理）
         report_format=getattr(args, "report_format", "all") or "all",

@@ -11,6 +11,7 @@ from plugins.common.redis_unauth import RedisUnauthPlugin
 from plugins.common.rocketmq_unauth import RocketmqUnauthPlugin
 from plugins.common.shiro_rememberme import ShiroRemembermePlugin
 from plugins.common.source_leak import SourceLeakPlugin
+from plugins.common.surface_sweep import SurfaceSweepPlugin
 from plugins.common.swagger_leak import SwaggerLeakPlugin
 from plugins.common.trace_method import TraceMethodPlugin
 
@@ -30,4 +31,5 @@ plugin_list = [
     # recon：信息收集
     DirListingPlugin,  # 目录遍历探测
     TraceMethodPlugin,  # HTTP 方法探测（OPTIONS/TRACE）
+    SurfaceSweepPlugin,  # 爬取攻击面盘点（D14 回流）
 ]

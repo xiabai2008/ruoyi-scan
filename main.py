@@ -101,7 +101,18 @@ def build_parser():
         help="显示版本号并退出",
     )
     group.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
-    group.add_argument("--rate", type=int, default=settings.RATE, help="每秒请求数（0 不限速）")
+    group.add_argument(
+        "--rate",
+        type=int,
+        default=settings.RATE,
+        help="每秒请求数（默认 --rate-scope request）；plugin 模式下为每秒插件数",
+    )
+    group.add_argument(
+        "--rate-scope",
+        choices=["request", "plugin"],
+        default=settings.RATE_SCOPE,
+        help="限速作用域：request=逐 HTTP 请求（真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）",
+    )
     group.add_argument("--report", default=None, help="报告输出目录")
     group.add_argument("--debug", action="store_true", default=False, help="调试模式")
     group.add_argument(
@@ -113,6 +124,12 @@ def build_parser():
         default=0.0,
         metavar="SECONDS",
         help="单目标扫描时间预算；超出后剩余插件标记为 UNKNOWN（默认 0 = 不限制）",
+    )
+    group.add_argument(
+        "--time-based",
+        action="store_true",
+        default=False,
+        help="启用时序盲注检测（每端点约 20-25 秒，默认关闭）",
     )
     # 类别从已安装的插件包派生，新增框架时无需改这里（v1.6 WP-R）。
     # 曾经写死 ["ruoyi", "spring"]，导致 --cms jeecgboot 被 argparse 直接拒绝。
@@ -414,10 +431,12 @@ def print_help():
         ("--proxy-file <f>", "代理池文件（每行一个代理 URL）"),
         ("--proxy-rotate <s>", "代理轮换策略 round-robin/random/least-fail"),
         ("--threads <n>", "并发线程数（默认 1 同步顺序执行）"),
-        ("--rate <n>", "每秒请求数（0 不限速）"),
+        ("--rate <n>", "每秒请求数；plugin 作用域下为每秒插件数（0 不限速）"),
+        ("--rate-scope <s>", "限速作用域：request=逐 HTTP 请求（默认）；plugin=逐插件启动（旧行为）"),
         ("--report <dir>", "报告输出目录（生成 HTML/JSON/CSV）"),
         ("--debug", "调试模式（请求日志输出到 stderr）"),
         ("--timeout <n>", "请求超时秒数（默认 10s）"),
+        ("--time-based", "启用时序盲注检测（每端点约 20-25 秒，默认关闭）"),
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
         ("--no-cta", "关闭扫描结尾的仓库引导提示"),

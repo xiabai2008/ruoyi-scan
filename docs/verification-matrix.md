@@ -3,7 +3,7 @@
 > 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。
 > 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。
 
-**总计 59 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 35 个，none 3 个
+**总计 61 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 37 个，none 3 个
 
 | 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |
 |------|------|-----|--------|---------|---------|------|
@@ -21,6 +21,7 @@
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
 | L1 | Shiro 框架指纹（rememberMe） | N/A | low | 是 | — | `plugins/common/shiro_rememberme.py` |
 | L1 | IDE/SCM 残留文件泄露 | N/A | medium | 是 | — | `plugins/common/source_leak.py` |
+| L1 | 爬取攻击面盘点 | N/A | low | 是 | — | `plugins/common/surface_sweep.py` |
 | L1 | Swagger API 文档泄露 | N/A | medium | 是 | — | `plugins/common/swagger_leak.py` |
 | L1 | HTTP 方法探测 | N/A | low | 是 | — | `plugins/common/trace_method.py` |
 | L1 | JeecgBoot 默认口令 | N/A | medium | 是 | — | `plugins/jeecgboot/default_password.py` |
@@ -40,6 +41,7 @@
 | L1 | RuoYi-Cloud Nacos 配置泄露 | CVE-2021-29441 | high | 是 | — | `plugins/ruoyi/ruoyi_cloud_nacos.py` |
 | L1 | RuoYi 代码生成模块 SSTI | N/A | high | 是 | — | `plugins/ruoyi/ruoyi_gen_rce.py` |
 | L1 | RuoYi Swagger 未授权访问 | N/A | medium | 是 | — | `plugins/ruoyi/ruoyi_swagger_unauth.py` |
+| L1 | 时间盲注（dept） | CNVD-2021-01931 | high | 是 | — | `plugins/ruoyi/sql_blind_time.py` |
 | L1 | Spring Boot Admin 未授权访问 | N/A | medium | 是 | — | `plugins/spring/spring_boot_admin.py` |
 | L1 | Spring Cloud Config 配置未授权读取 | N/A | high | 是 | — | `plugins/spring/spring_cloud_config.py` |
 | L1 | Spring Data REST 信息泄露 | N/A | low | 是 | — | `plugins/spring/spring_data_rest.py` |

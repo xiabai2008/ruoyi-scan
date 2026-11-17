@@ -6,6 +6,58 @@
 
 ## [Unreleased]
 
+> 本节内容计划作为 **v1.8.0** 发布（2026-11-17 集成分支 `feat/v1.8-integration`）。
+
+### Added
+- **请求级限速（`--rate-scope`）**：`--rate` 默认改为「每秒 HTTP 请求数」，令牌桶挂在
+  `SessionManager._send` 统一请求出口；引擎与会话共用 `lib/rate_limit.TokenBucket`，
+  避免同一算法两份实现漂移。一次扫描的**主会话 + recon 临时会话 + 匿名探测会话**
+  共享同一个桶，`--rate-scope plugin` 可退回 v1.7.1 的「每秒插件启动数」旧行为。
+- **攻击面回流（D14）**：新增 `lib/surface.SurfaceInventory`（去重、归一化、200 条上限与
+  `truncated` 标记）；`_run_recon` 的爬虫页面与 JS 端点写入 `session.surface`；新增
+  `plugins/common/surface_sweep`（`category="recon"`，只做盘点、恒定 UNKNOWN，绝不输出
+  CONFIRMED）。`PluginBase.consumes_surface` 与引擎侧「空清单强制
+  UNKNOWN(insufficient_evidence)」同批落地（避免重演 v1.6「只声明留 TODO」的回归）。
+- **时间盲注（`--time-based`）**：新增 `lib/timing`（`measure` / `median` / `classify`：
+  三次采样中位数 + 双向差分 + 0.7 系数，慢站/抖动/超时分别归到 SAFE/UNKNOWN）；
+  新增 `plugins/ruoyi/sql_blind_time`（`/system/dept/list` 的 `params[dataScope]`，
+  `if(1=1,sleep(3),0)` 与 `if(1=2,sleep(3),0)` 请求形状完全一致，只差恒真假条件）。
+  默认关闭（一轮最坏约 25 秒），仅 `--time-based` 或显式调用时执行；
+  `session.deadline` 使插件在预算不足时零请求退出。
+
+### Changed
+- **`--rate` 语义变更（可见行为变化）**：v1.7.1 下 `--rate` 实际限制的是「插件启动速率」，
+  与 `--help` 宣称的「每秒请求数」不符；v1.8 起默认按 HTTP 请求限速，扫描会比旧版慢但更
+  接近配置预期。需要旧行为请显式加 `--rate-scope plugin`。
+- `--help` 手写帮助表补登 `--rate-scope`，并修正 `--rate` 文案。
+- `plugins/spring/cloud_function_rce` 的计时改走 `lib.timing.measure`（阈值与结论不变；
+  单次采样场景不复用 `classify`，避免「至少 2 次成立」把既有 CONFIRMED 降级）。
+
+### Fixed
+- `SessionManager.anonymous()` 未继承 `rate` / `rate_scope` / `limiter`，导致匿名探测路径
+  （如攻击面盘点最多 200 条端点）完全绕过请求级限速；现与父会话共享同一令牌桶。
+- `core.auth_chain.isolated_auth_session` 同样直接建会话、不带限速参数，四个需鉴权插件
+  （`job_invoke_target` / `cve_2025_70986_select_dept_tree` / `default_password` /
+  `cve_2025_46174_resetpwd_scope`）在扫描中的登录与后续取证请求会绕过 `--rate`。现新增
+  可选 `parent` 参数继承父会话的 `rate` / `rate_scope` / 同一令牌桶，调用点补传
+  `parent=session`；不传 `parent` 时行为不变（不限速），保持向后兼容。
+  `login_with_password` 属扫描前 CLI 登录，不在扫描流量内，未纳入。
+- `sql_blind_time` 预算检查按最坏一轮（前置 1 + 对照 3 + 探测 3 + 补采样 2 = 8 次请求）
+  估算约 25 秒，避免超出 `--time-budget` 最多 10 秒。
+- 合并引入的 `SessionManager.deadline` 重复声明已去除。
+
+### Tests
+- 新增 `tests/test_rate_limit_request.py`（假时钟令牌桶、窗口边界、多线程、共享桶、
+  匿名会话继承）、`tests/test_surface.py`、`tests/test_timing.py`（含「慢站不得
+  CONFIRMED」负样本）；`tests/test_plugin_unknown_contract.py` 增加空清单契约用例；
+  版本矩阵/插件计数类用例随新增插件同步 +1。
+
+### 已知限制
+- 时间盲注默认不进靶场基线（`--time-based` 关闭时被 orchestrator 按模块路径过滤），
+  因此暂无自动化靶场覆盖；需人工在真实/仿真站点上验证正负样本。
+- `--rate` 与 `--time-based` 同时开启时，限速等待会计入 `measure` 的计时窗口；单线程
+  下因差分抵消不致命，多线程 + 限速叠加时建议改用 `--rate-scope plugin` 或降低并发。
+
 ## [1.7.1] - 2026-11-16
 
 ### Fixed

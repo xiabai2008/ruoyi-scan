@@ -13,6 +13,7 @@ from urllib3.util.retry import Retry
 from common.logger import get_logger
 from config import settings
 from core.http import host_of
+from lib.rate_limit import TokenBucket
 
 logger = get_logger(__name__)
 
@@ -116,6 +117,11 @@ class SessionManager:
 
     password_dict: Optional[str] = None
 
+    # 攻击面清单（D14 爬虫/JS 回流）：由 orchestrator 在侦察后写入，默认 None
+    surface: Optional[Any] = None
+    # 单目标时间预算截止点（monotonic 口径）；由 orchestrator 在引擎构造后写入，默认 None
+    deadline: Optional[float] = None
+
     # F8：真实利用开关（默认 False；只有显式 --exploit 才允许写目标文件）
     exploit: bool = False
 
@@ -130,6 +136,9 @@ class SessionManager:
         max_retries: int = 2,
         verify: Optional[bool] = None,
         breaker_threshold: Optional[int] = None,
+        rate: int = 0,
+        rate_scope: str = "request",
+        limiter: Optional[Any] = None,
     ) -> None:
         """初始化统一的 requests 会话
 
@@ -143,6 +152,11 @@ class SessionManager:
             max_retries: 网络抖动重试次数（仅 502/503/504 与连接错误触发）
             verify: 是否校验 TLS 证书（缺省用 settings.VERIFY_TLS）
             breaker_threshold: 连续超时熔断阈值（缺省用 settings.TIMEOUT_BREAKER_THRESHOLD）
+            rate: 每秒 HTTP 请求数上限（0=不限速；仅 rate_scope="request" 生效）
+            rate_scope: "request"=逐 HTTP 请求限速（默认）；"plugin"=交给引擎按插件限速，
+                会话层不限速（v1.7.1 旧行为）
+            limiter: 外部共享的 TokenBucket（一次扫描主会话 + recon 临时会话共用一个桶，
+                否则两个会话各建桶会让实际 QPS 翻倍）
         """
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": ua or settings.DEFAULT_UA})
@@ -189,6 +203,19 @@ class SessionManager:
         self.request_count = 0
         # 调试模式：打印每个请求的方法/URL/状态/响应大小到 stderr（不影响正常输出）
         self.debug = bool(debug)
+
+        # 请求级限速（v1.7.2）：默认 --rate 表示每秒 HTTP 请求数，令牌桶挂在统一请求
+        # 出口 _send 上，单个插件内部连发的多个请求同样受约束（这正是现场触发 WAF
+        # 的直接原因）。plugin 作用域退回 v1.7.1 行为：会话层不限速，交给引擎按插件
+        # 启动节奏限速——两层永不叠加。
+        self.rate = max(0, int(rate))
+        self.rate_scope = rate_scope if rate_scope in ("request", "plugin") else "request"
+        # request 作用域才在会话层限速；plugin 作用域交给引擎
+        self._limiter: Optional[TokenBucket] = (
+            limiter
+            if limiter is not None
+            else (TokenBucket(self.rate) if (self.rate > 0 and self.rate_scope == "request") else None)
+        )
 
         # 超时熔断：目标「接受连接但永不响应」时，逐请求等满超时会把扫描拖成数分钟
         # 无效重试。状态按 host 存放在模块级（见 _HostBreaker 说明），因为一次扫描会
@@ -249,8 +276,12 @@ class SessionManager:
                 )
 
     def _send(self, method: str, url: str, **kwargs: Any) -> requests.Response:
-        """统一请求出口：熔断检查 → 代理轮换 → 发起请求 → 记录结果"""
+        """统一请求出口：熔断检查 → 限速 → 代理轮换 → 发起请求 → 记录结果"""
         self._check_breaker(url)
+        # 请求级限速：放在熔断之后（已熔断的目标不该再消耗令牌/睡眠）、真正发请求之前。
+        # _limiter 为 None（--rate 0 或 plugin 作用域）时零开销。
+        if self._limiter is not None:
+            self._limiter.acquire()
         kwargs.setdefault("timeout", self.timeout)
         # D13：代理池轮换——每请求取一个代理，并把请求结果回写池健康度。
         # 固定代理（self.session.proxies）在 __init__ 已设置，此处只处理代理池路径。
@@ -349,6 +380,10 @@ class SessionManager:
         Returns:
             新的 SessionManager 实例，配置（代理/超时/UA/TLS 策略）与当前一致，
             但 cookie 为空。调用方负责 close()。
+
+        限速：必须显式把 rate/rate_scope/limiter 传给 clone，且 limiter 用父会话的
+        同一个令牌桶。否则匿名探测会话会各自新建（或不建）桶，攻击面盘点等未授权
+        探测路径的请求完全绕过 --rate 上限，一次扫描的实际 QPS 随之翻倍。
         """
         clone = SessionManager(
             proxy=self.proxy,
@@ -358,6 +393,9 @@ class SessionManager:
             proxy_pool=self.proxy_pool,
             verify=self.verify,
             breaker_threshold=self._breaker_threshold,
+            rate=self.rate,
+            rate_scope=self.rate_scope,
+            limiter=self._limiter,
         )
         return clone
 

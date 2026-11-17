@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/ruoyi-scan)](https://pypi.org/project/ruoyi-scan/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> A **RuoYi-specific** vulnerability scanner for authorized security testing. 56 POC plugins,
+> A **RuoYi-specific** vulnerability scanner for authorized security testing. 58 POC plugins,
 > 5 RuoYi variant fingerprints, 20 Java component CVE checks — and only three verdicts:
 > **CONFIRMED / SAFE / UNKNOWN**.
 >
@@ -89,7 +89,7 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
 
 ## Capabilities
 
-- **Detection** — 56 POCs: RuoYi 20 (incl. 2 Plus-variant only) / Spring Boot 14 / generic 12 / JeecgBoot 8 / Yudao 2;
+- **Detection** — 58 POCs: RuoYi 21 (incl. 2 Plus-variant only) / Spring Boot 14 / generic 13 / JeecgBoot 8 / Yudao 2;
   5 variant fingerprints (Vue3 / App / Plus / Cloud-Plus / Magic); 20 Java component→CVE checks;
   11 WAF bypass strategies + optional stealth transport; nuclei YAML compatible (`--nuclei`)
 - **Delivery** — 7 report formats (HTML/JSON/CSV/PDF/Word/Excel/SARIF), MLPS 2.0 / OWASP mapping sections,
@@ -105,7 +105,7 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
 | Form | How | Notes |
 |---|---|---|
 | pip | `pip install -U ruoyi-scan` | Recommended; optional extras: `ruoyi-scan[report,serve]` |
-| Desktop | `ruoyi-scan-desktop.exe` from [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | ~49 MB, engine + 56 POCs embedded, no install |
+| Desktop | `ruoyi-scan-desktop.exe` from [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | ~49 MB, engine + 58 POCs embedded, no install |
 | Docker | `docker build -t ruoyi-scan .` or `docker compose up -d` | Multi-stage, non-root; compose ships two signature labs |
 
 ## Desktop app
@@ -114,7 +114,7 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-app.png" alt="Desktop app: task list, scan config, live results and reports" width="900" />
 </p>
 
-> Single-file Windows exe (Tauri + WebView2): engine and 56 POCs embedded; new scan, live results and report
+> Single-file Windows exe (Tauri + WebView2): engine and 58 POCs embedded; new scan, live results and report
 > archiving in one window. The engine subprocess is bound to a JobObject, so killing the app leaves no orphans.
 
 ## Documentation

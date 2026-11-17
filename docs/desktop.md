@@ -1,6 +1,6 @@
 # 桌面端（单 exe）
 
-> **一个 exe 双击即用**：无需安装 Python、无需命令行。引擎（FastAPI + 56 POC + 字典 +
+> **一个 exe 双击即用**：无需安装 Python、无需命令行。引擎（FastAPI + 58 POC + 字典 +
 > Web 控制台）经 PyInstaller 冻结后在编译期整块嵌入壳程序，首次运行自动释放并拉起。
 
 ## 下载

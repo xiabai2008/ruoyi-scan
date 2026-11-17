@@ -47,7 +47,8 @@ def test_baseline_covers_all_applicable_ruoyi_plugins():
     有了这条断言，漏登记在单测阶段就暴露，不必等 nightly 跑完。
 
     变体限定插件（variant 非空，如 ruoyi-plus）由 router 按 variant 过滤，不参与标准靶场
-    路由，故豁免。
+    路由，故豁免。默认关闭的显式开关插件（如 --time-based 的时间盲注）在基线里永不执行，
+    同理豁免。
     """
     from core.loader import load_plugins
 
@@ -59,6 +60,9 @@ def test_baseline_covers_all_applicable_ruoyi_plugins():
     unregistered = []
     for cls in load_plugins("plugins.ruoyi"):
         if getattr(cls, "variant", ""):
+            continue
+        # 默认关闭的显式开关插件（orchestrator 按模块路径过滤，需 --time-based 才执行）
+        if getattr(cls, "__module__", "").endswith("sql_blind_time"):
             continue
         name = getattr(cls, "name", "")
         if name and name not in registered:

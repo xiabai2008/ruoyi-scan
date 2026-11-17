@@ -259,6 +259,8 @@ class ScanRequest:
     cms: str = ""  # 手动指定 CMS（空=自动指纹识别）
     threads: int = 1  # 并发线程数
     rate: int = 0  # 限速（每秒请求数，0=不限）
+    # 限速作用域：request=逐 HTTP 请求（默认，真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）
+    rate_scope: str = "request"
     proxy: str = ""  # 代理地址
     timeout: int = 10  # 超时秒数
     debug: bool = False  # 调试模式
@@ -310,6 +312,8 @@ class ScanRequest:
     adversarial_transport: bool = False
     # F8：Spring4Shell 真实利用（--exploit；默认关闭，仅回环/内网目标允许）
     exploit: bool = False
+    # 时序盲注开关：默认关闭。一轮约 20-25s，只有显式开启才执行 SqlBlindTimePlugin
+    time_based: bool = False
 
     def __post_init__(self) -> None:
         """API/嵌入式调用可能直接传 auth 但不设 auth_status：有凭据即视为 ok。"""
@@ -600,6 +604,14 @@ class ScanOrchestrator:
 
             self._raise_if_cancelled(task.task_id)
 
+            # 一次扫描共用一个桶：主会话 + recon 临时会话都挂同一个 limiter，
+            # 否则两个会话各自建桶 → 实际 QPS 翻倍。
+            from lib.rate_limit import TokenBucket
+
+            limiter: Optional[TokenBucket] = (
+                TokenBucket(req.rate) if (req.rate > 0 and req.rate_scope == "request") else None
+            )
+
             # 1. 端口扫描（可选）
             if req.portscan:
                 from core.portscan import DEFAULT_PORTS, PortScanner
@@ -620,8 +632,9 @@ class ScanOrchestrator:
                 )
 
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
+            recon_info: Dict[str, Any] = {}
             if req.crawl or req.subdomain or req.js_extract:
-                recon_info = self._run_recon(req, target, _emit, task.task_id)
+                recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter)
                 if recon_info.get("subdomains"):
                     _emit(
                         "recon",
@@ -664,15 +677,38 @@ class ScanOrchestrator:
                 debug=req.debug,
                 timeout=req.timeout,
                 pool_size=req.threads,
+                rate=req.rate,
+                rate_scope=req.rate_scope,
+                limiter=limiter,
             )
             # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
             session.exploit = req.exploit
+            # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
+            # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
+            # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
+            inv = recon_info.get("surface") if recon_info else None
+            if inv is not None and inv.endpoints:
+                session.surface = inv
+                _emit(
+                    "surface",
+                    {
+                        "endpoints": len(inv.endpoints),
+                        "pages": len(inv.pages),
+                        "js_endpoints": len(inv.js_endpoints),
+                        "truncated": inv.truncated,
+                        "task_id": task.task_id,
+                    },
+                )
             self._raise_if_cancelled(task.task_id)
             engine = ScanEngine(
                 threads=req.threads,
-                rate=req.rate,
+                # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
+                rate=0 if req.rate_scope == "request" else req.rate,
                 deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
             )
+            # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
+            # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
+            session.deadline = engine.deadline
 
             # D26：认证扫描增强（将 auth 配置注入 session）
             if req.auth:
@@ -1011,6 +1047,13 @@ class ScanOrchestrator:
                             "task_id": task.task_id,
                         },
                     )
+
+            # 时序盲注默认不执行：一轮 20-25s，只有 --time-based 显式开启才保留。
+            # 按模块路径过滤（name 是中文文案，改一个字就失效）。
+            if not req.time_based:
+                all_plugins = [
+                    cls for cls in all_plugins if not getattr(cls, "__module__", "").endswith("sql_blind_time")
+                ]
 
             # 按 category 分组（对应 MODE_CATEGORIES）
             mode_categories = {
@@ -1351,8 +1394,19 @@ class ScanOrchestrator:
 
         return None
 
-    def _run_recon(self, req: ScanRequest, target: str, _emit: Callable[..., None], task_id: str) -> Dict[str, Any]:
+    def _run_recon(
+        self,
+        req: ScanRequest,
+        target: str,
+        _emit: Callable[..., None],
+        task_id: str,
+        limiter: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         """D14：执行主动信息收集（爬虫 + 子域名 + JS 提取）
+
+        Args:
+            limiter: 本次扫描共享的请求限速桶（request 作用域下由 orchestrator 创建）。
+                临时会话挂同一个桶，保证侦察流量与主扫描合计不超过 --rate。
 
         Returns:
             {
@@ -1365,6 +1419,7 @@ class ScanOrchestrator:
             "crawled_urls": [],
             "subdomains": [],
             "js_endpoints": [],
+            "surface": None,  # 攻击面清单（SurfaceInventory），仅在爬虫/JS 分支成功后填充
         }
 
         # 子域名枚举（独立于爬虫，仅依赖域名）
@@ -1409,6 +1464,9 @@ class ScanOrchestrator:
                     debug=req.debug,
                     timeout=req.timeout,
                     pool_size=req.threads,
+                    rate=req.rate,
+                    rate_scope=req.rate_scope,
+                    limiter=limiter,
                 )
 
                 _emit(
@@ -1453,6 +1511,17 @@ class ScanOrchestrator:
                             seen.add(ep.url)
                             endpoint_urls.append(ep.url)
                     result["js_endpoints"] = endpoint_urls
+
+                # D14 回流：把爬到的页面与 JS 端点固化为扫描级清单。
+                # 必须放在 result["js_endpoints"] 赋值之后，否则清单会缺 JS 端点。
+                from lib.surface import SurfaceInventory
+
+                inv = SurfaceInventory(pages=crawl_result["pages"])
+                for u in crawl_result["pages"]:
+                    inv.add(u, "crawl")
+                for u in result["js_endpoints"]:
+                    inv.add(u, "js")
+                result["surface"] = inv
 
             except Exception as e:
                 _emit(

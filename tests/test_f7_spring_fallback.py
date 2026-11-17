@@ -53,7 +53,9 @@ def _run_empty_cms_scan(monkeypatch, captured_plugins):
         events.append((event_type, payload))
 
     ScanOrchestrator().run_sync(
-        ScanRequest(target="http://f7-empty-cms.test/", mode="u"),
+        # time_based=True：本用例断言「回退覆盖整个 plugin_list」，而时间盲注（dept）是
+        # 默认关闭的显式开关插件（--time-based），不打开就会被 orchestrator 按模块路径过滤掉
+        ScanRequest(target="http://f7-empty-cms.test/", mode="u", time_based=True),
         on_event=on_event,
     )
     return events
