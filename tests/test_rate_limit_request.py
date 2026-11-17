@@ -184,6 +184,49 @@ def test_session_shares_limiter():
     assert fake.now >= 3.0
 
 
+def test_anonymous_session_shares_parent_limiter():
+    """匿名探测会话必须复用父会话的同一个令牌桶，rate=0 时不建桶
+
+    回归点：anonymous() 曾只复制代理/超时/UA 等配置，未传 rate/rate_scope/limiter，
+    导致攻击面盘点等未授权探测路径的请求完全绕过请求级限速（一次扫描内实际 QPS
+    不再受 --rate 约束）。
+    """
+    fake = FakeClock()
+    bucket = TokenBucket(3, clock=fake.tick, sleeper=fake.sleep)
+    parent = SessionManager(rate=3, rate_scope="request", limiter=bucket)
+    anon = parent.anonymous()
+    assert anon._limiter is bucket
+    assert anon._limiter is parent._limiter
+    assert anon.rate == parent.rate == 3
+    assert anon.rate_scope == parent.rate_scope == "request"
+
+    try:
+        # 匿名会话的请求与父会话共用一个桶：合计受同一速率约束
+        parent.session.request = lambda *a, **k: _FakeResponse()
+        anon.session.request = lambda *a, **k: _FakeResponse()
+        for i in range(3):
+            parent.get(f"http://example.com/p{i}")
+        for i in range(3):
+            anon.get(f"http://example.com/a{i}")
+    finally:
+        anon.close()
+        parent.close()
+
+    granted = fake.grants()
+    assert len(granted) == 6
+    assert _max_in_any_window(granted) <= 3
+
+    # 不限速时匿名会话同样不建桶
+    unlimited = SessionManager(rate=0, rate_scope="request")
+    unlimited_anon = unlimited.anonymous()
+    try:
+        assert unlimited._limiter is None
+        assert unlimited_anon._limiter is None
+    finally:
+        unlimited_anon.close()
+        unlimited.close()
+
+
 def test_engine_rate_zero_in_request_scope(monkeypatch):
     """request 模式下 orchestrator 传给引擎的 rate 必须为 0（否则双重限速）"""
     import core.orchestrator as orch_mod

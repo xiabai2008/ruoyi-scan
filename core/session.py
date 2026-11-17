@@ -375,6 +375,10 @@ class SessionManager:
         Returns:
             新的 SessionManager 实例，配置（代理/超时/UA/TLS 策略）与当前一致，
             但 cookie 为空。调用方负责 close()。
+
+        限速：必须显式把 rate/rate_scope/limiter 传给 clone，且 limiter 用父会话的
+        同一个令牌桶。否则匿名探测会话会各自新建（或不建）桶，攻击面盘点等未授权
+        探测路径的请求完全绕过 --rate 上限，一次扫描的实际 QPS 随之翻倍。
         """
         clone = SessionManager(
             proxy=self.proxy,
@@ -384,6 +388,9 @@ class SessionManager:
             proxy_pool=self.proxy_pool,
             verify=self.verify,
             breaker_threshold=self._breaker_threshold,
+            rate=self.rate,
+            rate_scope=self.rate_scope,
+            limiter=self._limiter,
         )
         return clone
 
