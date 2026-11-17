@@ -36,6 +36,12 @@
 ### Fixed
 - `SessionManager.anonymous()` 未继承 `rate` / `rate_scope` / `limiter`，导致匿名探测路径
   （如攻击面盘点最多 200 条端点）完全绕过请求级限速；现与父会话共享同一令牌桶。
+- `core.auth_chain.isolated_auth_session` 同样直接建会话、不带限速参数，四个需鉴权插件
+  （`job_invoke_target` / `cve_2025_70986_select_dept_tree` / `default_password` /
+  `cve_2025_46174_resetpwd_scope`）在扫描中的登录与后续取证请求会绕过 `--rate`。现新增
+  可选 `parent` 参数继承父会话的 `rate` / `rate_scope` / 同一令牌桶，调用点补传
+  `parent=session`；不传 `parent` 时行为不变（不限速），保持向后兼容。
+  `login_with_password` 属扫描前 CLI 登录，不在扫描流量内，未纳入。
 - `sql_blind_time` 预算检查按最坏一轮（前置 1 + 对照 3 + 探测 3 + 补采样 2 = 8 次请求）
   估算约 25 秒，避免超出 `--time-budget` 最多 10 秒。
 - 合并引入的 `SessionManager.deadline` 重复声明已去除。
