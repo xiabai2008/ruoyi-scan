@@ -794,6 +794,8 @@ class TestOrchestratorD14Integration:
             "crawled_urls": [],
             "subdomains": [],
             "js_endpoints": [],
+            # D14 回流：侦察结果固定带 surface 键（未启用时为 None）
+            "surface": None,
         }
 
     def test_run_recon_subdomain_only(self):

@@ -194,6 +194,17 @@ class ScanEngine:
                             f"原证据：{original.evidence}"
                         )
                         original.unknown_reason = UnknownReason.NO_SESSION.value
+                # 声明依赖攻击面清单但清单缺失：测不了 ≠ 不存在。
+                # 与 requires_auth 降级相邻，且必须在 extra 归属标注之前完成，
+                # 保证终端打印与报告口径一致（同 F13 纪律）。
+                if getattr(cls, "consumes_surface", False) and getattr(session, "surface", None) is None:
+                    if original.status in (STATUS_CONFIRMED, STATUS_SAFE):
+                        original.status = STATUS_UNKNOWN
+                        original.unknown_reason = UnknownReason.INSUFFICIENT_EVIDENCE.value
+                        original.evidence = (
+                            "未获得攻击面清单（未启用 --crawl/--js-extract 或指定目录为空），"
+                            f"本项未执行，已降级为 UNKNOWN。原证据：{original.evidence}"
+                        )
                 # 归属标注同样必须在回调（CLI 逐条打印）之前完成——与 F13 同一条纪律：
                 # 终端与报告口径必须一致。放在 orchestrator 末尾时，终端打出
                 # 「存在 Redis 未授权访问」而报告里标着「宿主级」，读者无从分辨

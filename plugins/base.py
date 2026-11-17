@@ -207,6 +207,11 @@ class PluginBase(ABC):
     # 否则会拼成 /prod-api/prod-api/... 的双前缀，请求落到登录墙 → 假阴性。
     # 空元组 = 路径里不含前缀（绝大多数插件）。
     self_prefixes: Tuple[str, ...] = ()
+    # 是否依赖攻击面清单（session.surface）。为 True 时，引擎在清单缺失的情况下
+    # 会把 CONFIRMED/SAFE 强制降级为 UNKNOWN(insufficient_evidence)——「没拿到清单」
+    # 不等于「确认不存在」。声明必须与引擎实现同批落地，不得只写声明留 TODO
+    # （anonymous_probe 曾因「只声明不实现」造成假 CONFIRMED，见上方注释）。
+    consumes_surface = False
     description = ""  # 漏洞描述
     fix = ""  # 修复建议（一句话概要）
     # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤）

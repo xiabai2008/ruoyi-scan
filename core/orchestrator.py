@@ -630,6 +630,7 @@ class ScanOrchestrator:
                 )
 
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
+            recon_info: Dict[str, Any] = {}
             if req.crawl or req.subdomain or req.js_extract:
                 recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter)
                 if recon_info.get("subdomains"):
@@ -680,6 +681,22 @@ class ScanOrchestrator:
             )
             # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
             session.exploit = req.exploit
+            # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
+            # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
+            # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
+            inv = recon_info.get("surface") if recon_info else None
+            if inv is not None and inv.endpoints:
+                session.surface = inv
+                _emit(
+                    "surface",
+                    {
+                        "endpoints": len(inv.endpoints),
+                        "pages": len(inv.pages),
+                        "js_endpoints": len(inv.js_endpoints),
+                        "truncated": inv.truncated,
+                        "task_id": task.task_id,
+                    },
+                )
             self._raise_if_cancelled(task.task_id)
             engine = ScanEngine(
                 threads=req.threads,
@@ -1390,6 +1407,7 @@ class ScanOrchestrator:
             "crawled_urls": [],
             "subdomains": [],
             "js_endpoints": [],
+            "surface": None,  # 攻击面清单（SurfaceInventory），仅在爬虫/JS 分支成功后填充
         }
 
         # 子域名枚举（独立于爬虫，仅依赖域名）
@@ -1481,6 +1499,17 @@ class ScanOrchestrator:
                             seen.add(ep.url)
                             endpoint_urls.append(ep.url)
                     result["js_endpoints"] = endpoint_urls
+
+                # D14 回流：把爬到的页面与 JS 端点固化为扫描级清单。
+                # 必须放在 result["js_endpoints"] 赋值之后，否则清单会缺 JS 端点。
+                from lib.surface import SurfaceInventory
+
+                inv = SurfaceInventory(pages=crawl_result["pages"])
+                for u in crawl_result["pages"]:
+                    inv.add(u, "crawl")
+                for u in result["js_endpoints"]:
+                    inv.add(u, "js")
+                result["surface"] = inv
 
             except Exception as e:
                 _emit(
