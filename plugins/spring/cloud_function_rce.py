@@ -2,13 +2,12 @@
 # 漏洞原因：Spring Cloud Function 将 HTTP 头 `spring.cloud.function.routing-expression`
 #   的值注入 SpEL Expression 求值，攻击者可执行任意命令（影响 3.1.x / 3.2.x）。
 # 本插件仅做存在性验证：POST /functionRouter 带 SpEL 探针头，检测响应特征判定接口可达。
-import time
-
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_cloud_function_spel
 from lib.reporter import emit
+from lib.timing import measure
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）
@@ -107,8 +106,14 @@ class SpringCloudFunctionRcePlugin(PluginBase):
         # 函数 → RoutingFunction 断言失败返回 500（默认不暴露 message）；修复版
         # （3.2.3+）用受限上下文直接拒绝，同样 500。状态码/正文都无法区分，因此用
         # T(Thread).sleep(4000) 的响应延迟做时序差分（2026-11-02 C2-3 实测建议）。
-        baseline = self._timed_post(session, url, headers=None)
-        probe_elapsed = self._timed_post(session, url, headers={"spring.cloud.function.routing-expression": SLEEP_SPEL})
+        # 计时统一走 lib.timing.measure（公共层），阈值与结论保持原实现不变：
+        # 原实现是单次采样 + `probe >= MIN_DELAY` 且 `probe - baseline >= MIN_DELAY*0.8`。
+        # 不复用 lib.timing.classify：它的「至少 2 次成立」规则对单元素列表必然
+        # 落到 unknown，会把本条已实测成立的 CONFIRMED 降级（结论变化，见任务指令 §9.1）。
+        baseline = measure(session, "POST", url, data="probe")
+        probe_elapsed = measure(
+            session, "POST", url, data="probe", headers={"spring.cloud.function.routing-expression": SLEEP_SPEL}
+        )
         if (
             baseline is not None
             and probe_elapsed is not None
@@ -136,16 +141,3 @@ class SpringCloudFunctionRcePlugin(PluginBase):
             url=url,
             evidence="响应未含 Cloud Function RCE 特征（可能未部署或已修复）",
         )
-
-    @staticmethod
-    def _timed_post(session, url: str, headers=None):
-        """POST /functionRouter 并返回耗时秒数；请求异常返回 None。"""
-        start = time.monotonic()
-        try:
-            if headers:
-                session.post(url, data="probe", headers=headers)
-            else:
-                session.post(url, data="probe")
-        except Exception:
-            return None
-        return time.monotonic() - start
