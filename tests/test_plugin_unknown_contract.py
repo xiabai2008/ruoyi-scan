@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from common.models import STATUS_SAFE, STATUS_UNKNOWN
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from core.engine import ScanEngine
 
 # 契约要求：网络不可达（请求抛异常）→ 必须返回 UNKNOWN，绝不冒充 SAFE/CONFIRMED
 CANDIDATES = [
@@ -148,3 +149,168 @@ def test_backup_scan_survives_request_errors():
 
     result = BackupScanPlugin().verify("http://x/", _RaisingSession())
     assert result.status in (STATUS_SAFE, STATUS_UNKNOWN)
+
+
+# === D14 攻击面回流：consumes_surface 契约 ===
+
+
+class _RecordingSurfaceSession:
+    """记录 get / anonymous 调用次数：用于断言「无清单时零请求」"""
+
+    def __init__(self, surface=None):
+        self.surface = surface
+        self.get_calls = 0
+        self.anonymous_calls = 0
+
+    def get(self, *args, **kwargs):
+        self.get_calls += 1
+        raise AssertionError("无攻击面清单时不应发出任何请求")
+
+    def anonymous(self):
+        self.anonymous_calls += 1
+        return self
+
+
+def test_surface_sweep_empty_inventory_unknown():
+    from lib.surface import SurfaceInventory
+    from plugins.common.surface_sweep import SurfaceSweepPlugin
+
+    # (a) surface 为 None：未启用 --crawl/--js-extract
+    none_session = _RecordingSurfaceSession(surface=None)
+    result = SurfaceSweepPlugin().verify("http://target/", none_session)
+    assert result.status == STATUS_UNKNOWN
+    assert result.unknown_reason == "insufficient_evidence"
+    assert none_session.get_calls == 0
+    assert none_session.anonymous_calls == 0
+
+    # (b) 空清单：启用了 crawl 但什么也没发现，同样不得探测
+    empty_session = _RecordingSurfaceSession(surface=SurfaceInventory())
+    result = SurfaceSweepPlugin().verify("http://target/", empty_session)
+    assert result.status == STATUS_UNKNOWN
+    assert result.unknown_reason == "insufficient_evidence"
+    assert empty_session.get_calls == 0
+
+
+def _confirm_plugin(consumes_surface):
+    """构造一个恒返回 CONFIRMED 的最小插件（非 PluginBase，模拟引擎契约）"""
+
+    class _ConfirmPlugin:
+        name = "消费攻击面"
+        consumes_surface = False
+
+        def verify(self, target, session):
+            return ScanResult(kind="info", name=self.name, status=STATUS_CONFIRMED, evidence="ok")
+
+    _ConfirmPlugin.consumes_surface = consumes_surface
+    return _ConfirmPlugin
+
+
+def test_engine_forces_unknown_for_consumer():
+    # session 传哑对象：引擎必须用 getattr 读取 surface，不能直接属性访问
+    results = ScanEngine(threads=1).run([_confirm_plugin(True)], "http://target/", object())
+    assert results[0].status == STATUS_UNKNOWN
+    assert results[0].unknown_reason == "insufficient_evidence"
+
+
+def test_engine_leaves_non_consumer_alone():
+    results = ScanEngine(threads=1).run([_confirm_plugin(False)], "http://target/", object())
+    assert results[0].status == STATUS_CONFIRMED
+    assert results[0].unknown_reason == ""
+
+
+class _SurfaceResp:
+    def __init__(self, text, status=200):
+        self.status_code = status
+        self.text = text
+        self.content = text.encode()
+        self.headers = {"Content-Type": "application/json"}
+        self.url = "http://target/"
+
+
+class _SurfaceSession:
+    """probe 走兜底页，入口返回业务 JSON（长度/摘要与基线不同）"""
+
+    def __init__(self, surface):
+        self.surface = surface
+        self.calls = []
+
+    def get(self, url, *args, **kwargs):
+        self.calls.append(url)
+        if "soft404_probe" in url:
+            return _SurfaceResp("not found")
+        return _SurfaceResp('{"code":200,"rows":[{"id":1,"name":"admin"}]}')
+
+
+def test_surface_sweep_no_confirm():
+    """清单非空且全部命中：只做资产盘点，结果必须是 recon/UNKNOWN，不得出现 CONFIRMED"""
+    from lib.surface import SurfaceInventory
+    from plugins.common.surface_sweep import SurfaceSweepPlugin
+
+    inv = SurfaceInventory()
+    assert inv.add("http://target/system/user/list", "crawl") is True
+    session = _SurfaceSession(inv)
+
+    result = SurfaceSweepPlugin().verify("http://target/", session)
+    assert result.kind == "recon"
+    assert result.status == STATUS_UNKNOWN
+    assert result.status != STATUS_CONFIRMED
+    hits = result.extra["hits"]
+    assert len(hits) == 1
+    assert hits[0]["auth"] == "anon_ok"
+    assert hits[0]["json_rows"] == 1
+    assert all(h.get("status") != STATUS_CONFIRMED for h in hits)
+
+
+class _RecordingProbeSession:
+    """记录收到的请求与关闭动作（模拟 anonymous() 返回的会话）"""
+
+    def __init__(self):
+        self.get_calls = []
+        self.closed = False
+
+    def get(self, url, *args, **kwargs):
+        self.get_calls.append(url)
+        if "soft404_probe" in url:
+            return _SurfaceResp("not found")
+        return _SurfaceResp('{"code":200,"rows":[{"id":1}]}')
+
+    def close(self):
+        self.closed = True
+
+
+class _AnonymousDispatchSession:
+    """共享会话：自身不应收到请求，基线/探测都必须经 anonymous() 下发的会话"""
+
+    def __init__(self, surface):
+        self.surface = surface
+        self.shared_get_calls = []
+        self.anonymous_calls = 0
+        self.anon = _RecordingProbeSession()
+
+    def get(self, url, *args, **kwargs):
+        self.shared_get_calls.append(url)
+        raise AssertionError("基线探测与端点探测都必须走匿名会话")
+
+    def anonymous(self):
+        self.anonymous_calls += 1
+        return self.anon
+
+
+def test_surface_sweep_baseline_uses_anonymous_session():
+    """软 404 基线必须与端点探测同用匿名会话（共享会话可能已登录、形态不一致）"""
+    from lib.surface import SurfaceInventory
+    from plugins.common.surface_sweep import SurfaceSweepPlugin
+
+    inv = SurfaceInventory()
+    assert inv.add("http://target/system/user/list", "crawl") is True
+    shared = _AnonymousDispatchSession(inv)
+
+    result = SurfaceSweepPlugin().verify("http://target/", shared)
+
+    assert shared.anonymous_calls == 1
+    assert shared.shared_get_calls == [], "共享会话不应收到任何请求"
+    probe_urls = [u for u in shared.anon.get_calls if "soft404_probe" in u]
+    assert len(probe_urls) == 1, "基线探测必须发生在匿名会话上"
+    assert len(result.extra["hits"]) == 1
+    assert shared.anon.closed is True, "自建的匿名会话必须被关闭"
+

@@ -116,6 +116,11 @@ class SessionManager:
 
     password_dict: Optional[str] = None
 
+    # 攻击面清单（D14 爬虫/JS 回流）：由 orchestrator 在侦察后写入，默认 None
+    surface: Optional[Any] = None
+    # 单目标时间预算截止点（monotonic 口径）；由 orchestrator 在引擎构造后写入，默认 None
+    deadline: Optional[float] = None
+
     # F8：真实利用开关（默认 False；只有显式 --exploit 才允许写目标文件）
     exploit: bool = False
 
