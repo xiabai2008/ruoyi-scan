@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""输出规范门禁：库代码不得直接 print，必须走 lib/reporter.emit()。
+"""输出规范门禁：库代码不得直接 print，必须走 lib/output.emit()。
 
 存在意义
 ========
@@ -82,14 +82,14 @@ def _find_print_calls(path: pathlib.Path) -> list[int]:
 
 @pytest.mark.parametrize("path", _guarded_files(), ids=lambda p: str(p.relative_to(ROOT)))
 def test_library_code_does_not_call_print_directly(path):
-    """库代码（plugins / lib / core）不得直接调用 print()，必须走 lib/reporter.emit()"""
+    """库代码（plugins / lib / core）不得直接调用 print()，必须走 lib/output.emit()"""
     rel = str(path.relative_to(ROOT)).replace("\\", "/")
     if rel in ALLOWED_DIRECT_PRINT:
         pytest.skip(f"已在白名单登记：{ALLOWED_DIRECT_PRINT[rel]}")
     lines = _find_print_calls(path)
     assert not lines, (
         f"{rel} 存在直接 print() 调用，行号 {lines}。\n"
-        f"库代码必须使用 lib/reporter.emit()，否则会污染 API 服务日志与测试输出。"
+        f"库代码必须使用 lib/output.emit()，否则会污染 API 服务日志与测试输出。"
     )
 
 

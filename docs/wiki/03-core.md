@@ -46,7 +46,7 @@
 | [portscan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/portscan.py) | 端口扫描 + Banner 识别（纯 socket，无 nmap 依赖） | `PortScanner` `PortResult` |
 | [proxy_server.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/proxy_server.py) | HTTP/HTTPS 代理（被动扫描模式） | — |
 | [captcha_solver.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/captcha_solver.py) | 验证码识别（D3） | — |
-| [auth_chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/login_chain.py) | 若依登录链编排（D1） | — |
+| [login_chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/login_chain.py) | 若依登录链编排（D1） | — |
 
 ### 2.3 识别与路由
 
@@ -57,7 +57,7 @@
 | [waf_features.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/waf_features.py) | WAF 指纹特征库 | `get_waf_names` `is_waf_blocked` |
 | [ruoyi_versions.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/ruoyi_versions.py) | 若依版本指纹库与区间判定 | `extract_version` `detect_version` `version_in_range` `build_version_matrix` `get_variant_api_prefixes` |
 | [router.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/router.py) | 指纹 → 插件包路由 | `Router.candidates/resolve/resolve_by_name` |
-| [cache.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/fingerprint_cache.py) | 指纹识别请求级缓存 | `FingerprintCache` |
+| [fingerprint_cache.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/fingerprint_cache.py) | 指纹识别请求级缓存 | `FingerprintCache` |
 
 ### 2.4 结果处理
 

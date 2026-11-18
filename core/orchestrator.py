@@ -662,10 +662,7 @@ class ScanOrchestrator:
             block_info, auth_wall = self._stage_reachability(session, target, _emit, task.task_id)
 
             # 4. 指纹识别（routes: 是否按 cms/variant/version 过滤插件）
-            router, fp_result, fp_cache, all_plugins = self._stage_fingerprint(
-                req, target, session, _emit, task.task_id
-            )
-            task.fingerprint = fp_result
+            router, fp_result, fp_cache, all_plugins = self._stage_fingerprint(req, target, session, _emit, task)
 
             # 5. 环境能力：WAF / 组件检测 / 绕过协调器 / API 前缀
             (
@@ -673,8 +670,7 @@ class ScanOrchestrator:
                 component_results,
                 waf_bypass_coordinator,
                 plugin_target,
-            ) = self._stage_capabilities(req, target, session, fp_result, fp_cache, _emit, task.task_id)
-            task.waf_info = waf_result
+            ) = self._stage_capabilities(req, target, session, fp_result, fp_cache, _emit, task)
 
             # 6. 插件加载 + 过滤 + 分组
             all_plugins, plugins_by_cat, categories = self._stage_load_plugins(
@@ -917,78 +913,85 @@ class ScanOrchestrator:
             rate_scope=req.rate_scope,
             limiter=limiter,
         )
-        # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
-        session.exploit = req.exploit
-        # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
-        # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
-        # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
-        inv = recon_info.get("surface") if recon_info else None
-        if inv is not None and inv.endpoints:
-            session.surface = inv
-            emit(
-                "surface",
-                {
-                    "endpoints": len(inv.endpoints),
-                    "pages": len(inv.pages),
-                    "js_endpoints": len(inv.js_endpoints),
-                    "truncated": inv.truncated,
-                    "task_id": task_id,
-                },
+        try:
+            # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
+            session.exploit = req.exploit
+            # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
+            # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
+            # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
+            inv = recon_info.get("surface") if recon_info else None
+            if inv is not None and inv.endpoints:
+                session.surface = inv
+                emit(
+                    "surface",
+                    {
+                        "endpoints": len(inv.endpoints),
+                        "pages": len(inv.pages),
+                        "js_endpoints": len(inv.js_endpoints),
+                        "truncated": inv.truncated,
+                        "task_id": task_id,
+                    },
+                )
+            self._raise_if_cancelled(task_id)
+            engine = ScanEngine(
+                threads=req.threads,
+                # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
+                rate=0 if req.rate_scope == "request" else req.rate,
+                deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
             )
-        self._raise_if_cancelled(task_id)
-        engine = ScanEngine(
-            threads=req.threads,
-            # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
-            rate=0 if req.rate_scope == "request" else req.rate,
-            deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
-        )
-        # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
-        # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
-        session.deadline = engine.deadline
+            # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
+            # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
+            session.deadline = engine.deadline
 
-        # D26：认证扫描增强（将 auth 配置注入 session）
-        if req.auth:
-            from lib.auth_inject import apply_auth_to_session
+            # D26：认证扫描增强（将 auth 配置注入 session）
+            if req.auth:
+                from lib.auth_inject import apply_auth_to_session
 
-            apply_auth_to_session(session, req.auth)
-            auth_summary = []
-            if req.auth.get("cookies"):
-                auth_summary.append(f"{len(req.auth['cookies'])} 个 Cookie")
-            if req.auth.get("headers"):
-                auth_summary.append(f"{len(req.auth['headers'])} 个自定义头")
-            emit(
-                "auth",
-                {
-                    "summary": " + ".join(auth_summary),
-                    "cookies": len(req.auth.get("cookies", {})),
-                    "headers": len(req.auth.get("headers", {})),
-                    "task_id": task_id,
-                },
-            )
+                apply_auth_to_session(session, req.auth)
+                auth_summary = []
+                if req.auth.get("cookies"):
+                    auth_summary.append(f"{len(req.auth['cookies'])} 个 Cookie")
+                if req.auth.get("headers"):
+                    auth_summary.append(f"{len(req.auth['headers'])} 个自定义头")
+                emit(
+                    "auth",
+                    {
+                        "summary": " + ".join(auth_summary),
+                        "cookies": len(req.auth.get("cookies", {})),
+                        "headers": len(req.auth.get("headers", {})),
+                        "task_id": task_id,
+                    },
+                )
 
-        # 本次扫描是否真正拿到了高权会话：供 file_upload 的「登录后上传」维度判断。
-        session.authenticated = req.auth_status == "ok"
+            # 本次扫描是否真正拿到了高权会话：供 file_upload 的「登录后上传」维度判断。
+            session.authenticated = req.auth_status == "ok"
 
-        # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
-        # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
-        # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
-        selected_password_dict = settings.PASSWORD_DICT
-        if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
-            selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
-        session.password_dict = selected_password_dict
+            # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
+            # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
+            # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
+            selected_password_dict = settings.PASSWORD_DICT
+            if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
+                selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
+            session.password_dict = selected_password_dict
 
-        # 3.1 显式低权账号：只挂在本次扫描的会话上（不写进程级 settings），
-        # 供越权对照插件读取；未提供时插件必须返回 UNKNOWN。
-        if req.surface_account:
-            from core.lowpriv import parse_account
+            # 3.1 显式低权账号：只挂在本次扫描的会话上（不写进程级 settings），
+            # 供越权对照插件读取；未提供时插件必须返回 UNKNOWN。
+            if req.surface_account:
+                from core.lowpriv import parse_account
 
-            for item in req.surface_account:
-                parsed = parse_account(item)
-                if parsed:
-                    session.surface_account = parsed
-                    break
+                for item in req.surface_account:
+                    parsed = parse_account(item)
+                    if parsed:
+                        session.surface_account = parsed
+                        break
 
-        return session, engine
+            return session, engine
+        except BaseException:
+            try:
+                session.close()
+            except Exception:
+                logger.debug("会话初始化失败后关闭失败", exc_info=True)
+            raise
 
     def _stage_reachability(
         self, session: SessionManager, target: str, emit: Callable[..., None], task_id: str
@@ -1018,7 +1021,7 @@ class ScanOrchestrator:
         return block_info, auth_wall
 
     def _stage_fingerprint(
-        self, req: ScanRequest, target: str, session: SessionManager, emit: Callable[..., None], task_id: str
+        self, req: ScanRequest, target: str, session: SessionManager, emit: Callable[..., None], task: ScanTask
     ) -> Tuple[Any, Any, Optional[Any], List[type]]:
         """步骤 4：指纹识别（手动 --cms 优先），返回路由器与候选插件。"""
         # 4. 指纹识别
@@ -1035,6 +1038,7 @@ class ScanOrchestrator:
             fp_result = detect_cms(target, session, cache=fp_cache)
             all_plugins = router.resolve(fp_result)
 
+        task.fingerprint = fp_result
         emit(
             "fingerprint",
             {
@@ -1043,7 +1047,7 @@ class ScanOrchestrator:
                 "variant": getattr(fp_result, "variant", ""),
                 "confidence": fp_result.confidence,
                 "matched": fp_result.matched,
-                "task_id": task_id,
+                "task_id": task.task_id,
             },
         )
 
@@ -1057,19 +1061,20 @@ class ScanOrchestrator:
         fp_result: Any,
         fp_cache: Optional[Any],
         emit: Callable[..., None],
-        task_id: str,
+        task: ScanTask,
     ) -> Tuple[Dict[str, Any], List[Any], Optional[Any], str]:
         """步骤 5-5.5：WAF/组件/绕过协调器/API 前缀，返回探测结果与插件基准 target。"""
         # 5. WAF 探测 + 绕过协调器
         # 传入 fp_cache 复用 detect_cms 已缓存的根响应（未命中才发请求，向后兼容）
         waf_result = detect_waf(target, session, cache=fp_cache)
+        task.waf_info = waf_result
         emit(
             "waf",
             {
                 "waf": waf_result.get("waf", ""),
                 "display": waf_result.get("display", ""),
                 "bypass_hint": waf_result.get("bypass_hint", ""),
-                "task_id": task_id,
+                "task_id": task.task_id,
             },
         )
 
@@ -1090,12 +1095,12 @@ class ScanOrchestrator:
                             "cve": cr.cve,
                             "detected_version": cr.detected_version,
                             "evidence": cr.evidence,
-                            "task_id": task_id,
+                            "task_id": task.task_id,
                         },
                     )
             except Exception as e:
                 logger.debug("组件检测失败", exc_info=True)
-                emit("component", {"error": str(e), "task_id": task_id})
+                emit("component", {"error": str(e), "task_id": task.task_id})
 
         waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
 
@@ -1108,7 +1113,7 @@ class ScanOrchestrator:
                     "mode": bypass_mode,
                     "enabled": True,
                     "origin_ip": getattr(waf_bypass_coordinator, "origin_ip", ""),
-                    "task_id": task_id,
+                    "task_id": task.task_id,
                 },
             )
 
@@ -1136,7 +1141,7 @@ class ScanOrchestrator:
             plugin_target = plugin_target_for(target, api_base)
             emit(
                 "basepath",
-                {"base": api_base, "plugin_target": plugin_target, "task_id": task_id},
+                {"base": api_base, "plugin_target": plugin_target, "task_id": task.task_id},
             )
 
         return waf_result, component_results, waf_bypass_coordinator, plugin_target

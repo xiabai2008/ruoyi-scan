@@ -34,6 +34,9 @@
 - **`lib/distributed.StandaloneDistributor` / `run_distributed_standalone_mode`**：
   CLI 的 standalone 模式明确"刻意不复用"（会吞异常），该实现只剩测试在跑；已删除，
   单机分发集中在 `cli/distributed_runner._run_standalone`。
+- 上述删除同步移除了约 51 个只覆盖已删功能的测试（缓存 / Web UI / i18n /
+  StandaloneDistributor 等）；替代实现 `_run_standalone` 已补 3 个失败语义用例
+  （全成功 / 部分失败 / 全失败），不再以"删了实现也删了测试"收尾。
 
 ### Added
 - `tests/test_cli_flag_consumers.py`：AST 门禁——每个 `add_argument` 必须有 `args.<dest>`
@@ -64,6 +67,8 @@
 - **CLI 收口**：删除 `--plugin-new`（只保留 `--plugin-init`）；`--category` 更名为
   `--framework`（旧名保留为兼容别名，dest 为 `framework`）。
 - **帮助文本改由 `build_parser()` 自动生成**，删除 108 行手写参数表，消除双事实源。
+  **输出格式变化**：`-h/--help` 从手工平铺改为按参数组分组；参数集合不变，但解析
+  帮助文本的脚本需要适配。
 - **测试文件按行为命名**：38 个 `test_d*/f*` 工单号文件改为行为名（如
   `test_d7_engine` → `test_engine_contract`），CI 引用同步更新。
 - 新增接手文档：[CONCEPTS.md](docs/CONCEPTS.md)、[READING_PATH.md](docs/READING_PATH.md)、
@@ -86,6 +91,15 @@
   新增函数 ≤150 行（存量巨函数白名单，只减不增）、`--help` 必须覆盖全部长选项。
 
 ### Fixed
+- **`--ai` 的框架选择静默失效**：`lib/ai_generator.py` 仍读旧 dest `args.category`，
+  `--ai x --framework jeecgboot` 会回退到 ruoyi；已改读 `args.framework`，并加
+  `getattr(args, ...)` 字面量与 parser dest 的一致性门禁。
+- **隔离登录会话绕过代理**：`core/login_chain.isolated_auth_session` 现在继承父会话的
+  `proxy` / `proxy_pool`，`--proxy` 下的登录与取证请求不再直连。
+- **会话初始化异常泄漏连接池**：`_stage_session` 在建会话后、返回前若抛异常会先
+  `close()` 再抛出；补回归用例。
+- **fingerprint / waf 事件快照时序**：`task.fingerprint` / `task.waf_info` 在事件发出前
+  赋值，API 的 `update_task_dict` 不会再写入空指纹/空 WAF。
 - 过期注释与文档引用：`core/models.py`（文件早已迁至 `common/models.py`）、
   `_log`"历史遗留"注释、`ScanRequest.auth`"重复声明"注释。
 - README / usage / wiki / 命令手册中关于 Web 控制台、`--lang`、结果缓存、Web UI、

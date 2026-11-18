@@ -125,7 +125,7 @@ jobs:
           --cov=core --cov=common --cov=lib --cov=api --cov=plugins --cov=chains
           --cov-report=xml:coverage.xml --cov-report=term-missing
       - name: 覆盖率棘轮（按目录，阈值取当前值下浮 3 个点，只许升不许降）
-        # 各目录当前实测值：core 81% / common 87% / lib 75% / api 88% / plugins 78% / chains 100%。
+        # 各目录当前实测值：core 81% / common 87% / lib 75% / api 88% / plugins 78% / chains 94%。
         # 覆盖率的绝对值不代表质量，但「不得下降」是可靠的质量约束——新增代码若无测试
         # 覆盖会直接失败，逼着补测试或明确下调阈值（下调需改这一行，是有意识的决定）。
         run: |
@@ -134,7 +134,9 @@ jobs:
           coverage report --include="*/lib/*"     --fail-under=72
           coverage report --include="*/api/*"     --fail-under=85
           coverage report --include="*/plugins/*" --fail-under=75
-          coverage report --include="*/chains/*"  --fail-under=95
+          # chains/ 现在包含从 core/chain.py 移入的 engine.py（323 条语句），
+          # 阈值按新体量重定；旧 95% 只适用于 39 条语句的 registry。
+          coverage report --include="*/chains/*"  --fail-under=90
       - name: Regression ruoyi
         run: python tests/regression_ruoyi.py
       - name: Regression spring

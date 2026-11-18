@@ -174,7 +174,7 @@ def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:
     """--ai-triage 模式入口：对本次扫描的 UNKNOWN 结果归类
 
     Args:
-        args: CLI 参数（ai_api_key/ai_model/ai_base_url，--report 输出目录）
+        args: CLI 参数（ai_api_key/ai_model，--report 输出目录；base_url 走环境变量）
         builder: ReportBuilder（None 时无法取结果，提示先扫描）
 
     Returns:
@@ -189,7 +189,7 @@ def run_ai_triage_mode(args, builder: Any = None) -> Optional[str]:
     results = builder._effective_results()
     llm_fn = None
     api_key = getattr(args, "ai_api_key", "") or os.environ.get("RUOYI_AI_API_KEY", "")
-    base_url = getattr(args, "ai_base_url", "") or os.environ.get("RUOYI_AI_BASE_URL", "https://api.openai.com/v1")
+    base_url = os.environ.get("RUOYI_AI_BASE_URL", "https://api.openai.com/v1")
     model = getattr(args, "ai_model", "") or os.environ.get("RUOYI_AI_MODEL", "gpt-4o-mini")
     if api_key or base_url != "https://api.openai.com/v1":
         from lib.ai_generator import _llm_complete

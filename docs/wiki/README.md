@@ -134,6 +134,5 @@ Ruoyi-Scan/
 
 | 位置 | 情况 |
 |------|------|
-| `api/ws/events.py` 的 `ALL_EVENTS` | 看似"全部事件"清单（10 类），但 `ScanOrchestrator` 实际还会发 `recon`/`component`/`auth`/`template`/`plugins_loaded`/`waf_bypass` 等事件，并非穷举 |
 
 > 本文档中所有模块数、插件数均以 `plugin_list` 与目录实际文件为准。

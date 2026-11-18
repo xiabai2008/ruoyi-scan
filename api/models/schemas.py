@@ -158,7 +158,7 @@ class FingerprintDTO(BaseModel):
 # === WebSocket 事件模型 ===
 
 
-# 事件 type 取值与 api/ws/events.py 的常量保持一致，新增事件需同步两处
+# 事件 type 由 core/orchestrator.py 的 _emit 与 core/engine.py 发出；新增事件请同步 docs/wiki/06-api-web.md
 class WSEvent(BaseModel):
     """WebSocket 事件"""
 

@@ -96,6 +96,8 @@ def isolated_auth_session(
     from core.session import SessionManager
 
     own = SessionManager(
+        proxy=getattr(parent, "proxy", None),
+        proxy_pool=getattr(parent, "proxy_pool", None),
         timeout=int(timeout) if timeout is not None else None,
         rate=getattr(parent, "rate", 0),
         rate_scope=getattr(parent, "rate_scope", "request"),

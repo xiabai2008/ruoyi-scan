@@ -13,9 +13,9 @@
 | 函数 | 位置 | 职责 |
 | --- | --- | --- |
 | `print_banner()` | [main.py#L15-L29](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L15-L29) | 打印 ASCII Art banner（绿色）+ 版本/作者/GitHub 信息（黄色） |
-| `build_parser()` | [main.py#L32-L294](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L32-L294) | 构建 argparse 解析器，约 150 个参数按功能分成 **23 个参数组** |
-| `print_help()` | [main.py#L297-L418](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L297-L418) | 自建帮助输出，对齐原脚本的 `-h` 排版（不用 argparse 默认格式） |
-| `main(argv=None)` | [main.py#L422-L521](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L422-L521) | 主入口：编码兜底 → 日志 → TLS 策略 → banner → YAML 回填 → 模板 → 校验 → 分发 |
+| `build_parser()` | [main.py#L75-L417](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L75-L417) | 构建 argparse 解析器；参数按功能分组，长选项从 `known_categories()` 派生 |
+| `print_help()` | [main.py#L460-L473](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L460-L473) | 帮助输出：**从 `build_parser()` 自动生成分组表**，不再维护第二份手写参数表 |
+| `main(argv=None)` | [main.py#L475-L594](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/main.py#L475-L594) | 主入口：编码兜底 → 日志 → TLS 策略 → banner → YAML 回填 → 模板 → 校验 → 分发 |
 
 ### 1.1 为什么禁用 argparse 内置 `-h`
 
@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(add_help=False)
 group.add_argument("-h", dest="help", nargs="?", const="flag", default=None, help="帮助")
 ```
 
-`-h` 被重定义为 `nargs="?"`——这样既能作为裸开关（`-h`）也能带值，同时把帮助输出交给 `print_help()` 控制排版。这是向前兼容老用户习惯的取舍：老脚本的 `-h` 输出是手工排版的，换成 argparse 默认格式会破坏既有肌肉记忆。
+`-h/--help` 注册为 `action="store_true"`（`dest="help"`），把帮助输出交给 `print_help()` 控制排版；同时避免 argparse 默认 `-h` 与自定义帮助重复。
 
 ### 1.2 `const="__flag__"` 的技巧
 
@@ -109,22 +109,23 @@ from cli.dispatcher import dispatch;  dispatch(args)
 | D34 异步引擎 | `--async` `--async-workers` | D34 |
 | D36 分布式扫描 | `--distributed` `--redis-url` `--distributed-rate` | D36 |
 
-> 参数数量是这个项目「能力密度」的直接体现：CLI 层几乎是一个功能矩阵的入口清单。但它也带来了维护成本——`print_help()` 里有一张 100+ 行的手工参数表，与 `build_parser()` 存在漂移风险（参数口径一律以 `python main.py -h` 的输出为准）。
+> 参数数量是这个项目「能力密度」的直接体现：CLI 层几乎是一个功能矩阵的入口清单。v1.8 起帮助文本由 `build_parser()` 自动生成（`_print_grouped_options()`），参数口径只以 parser 为唯一事实源，不再有第二份手写表；`test_architecture.py` 会校验每个 action 都出现在 `--help` 中。
 
 ---
 
-## 4. `cli/` 控制层：8 个模块
+## 4. `cli/` 控制层：9 个模块
 
 `cli/` 是 **CLI 专属的编排层**，与 `core/` 的区别在于：`core/` 只管"怎么扫"，`cli/` 管"扫完之后怎么落盘、怎么打印、怎么退出"。
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
 | [dispatcher.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py) | 模式分发总闸：按 args 决定走哪条路 | `dispatch(args)` |
-| [runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/runner.py) | 核心扫描：`run_mode` / `run_mode_batch` + 报告后处理；并**重导出**其余模式函数 | `run_mode()` `run_mode_batch()` `final_prompt()` |
+| [runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/runner.py) | 核心扫描：`run_mode` / `run_mode_batch`（报告后处理见 `reporting.py`） | `run_mode()` `run_mode_batch()` `final_prompt()` |
+| [reporting.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/reporting.py) | CLI 报告生成与后处理（模板/整改/降噪/基线/差异/通知/AI 解读） | `run_cli_report()` |
 | [preflight.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/preflight.py) | 目标可达性预检（单目标/批量/链 三种入口共用） | `preflight_target()` `EXIT_UNREACHABLE` |
 | [chain_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/chain_runner.py) | 漏洞利用链执行 | `run_chain_mode()` |
 | [passive_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/passive_runner.py) | 被动代理模式 | `run_passive_mode()` |
-| [plugin_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/plugin_runner.py) | 插件管理（init/new/check/list/export/manifest/update） | `run_plugin_*_mode()` |
+| [plugin_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/plugin_runner.py) | 插件管理（init/check/list/export/manifest/update） | `run_plugin_*_mode()` |
 | [serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py) | 启动 Web API 服务（uvicorn） | `run_serve_mode()` |
 | [tool_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/tool_runner.py) | 纯工具模式（diff/wiki/ci-init/template-list…） | `run_diff_only_mode()` 等 |
 

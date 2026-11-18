@@ -45,7 +45,7 @@ cli/serve_runner.run_serve_mode(args)
    # 不挂静态页面：人机界面在 desktop/，服务侧只提供 /docs 与 /redoc
 ```
 
-**第 1 步是必要的**：服务的实时进度已经通过 WebSocket 推给前端，插件再往 stdout 打一份就是纯噪音。`set_quiet(True)` 让 `lib/reporter.emit()` 改走 logging。
+**第 1 步是必要的**：服务的实时进度已经通过 WebSocket 推给前端，插件再往 stdout 打一份就是纯噪音。`set_quiet(True)` 让 `lib/output.emit()` 改走 logging。
 
 ### 2.2 CORS 默认策略
 
@@ -225,7 +225,7 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 {"type": "<事件类型>", "data": { ... }, "task_id": "<id>"}
 ```
 
-事件类型常量在 [api/ws/events.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/ws/events.py)：
+事件类型由发出点定义（[core/orchestrator.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/orchestrator.py) 的 `_emit` 与 [core/engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/engine.py)），项目没有单独的常量表：
 
 | 事件 | 触发 |
 | --- | --- |
@@ -239,10 +239,12 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 | `progress` | 进度更新（done/total/percent） |
 | `report` | 报告生成完成 |
 | `error` | 任务异常 |
+| `recon` / `surface` / `component` / `auth` | 侦察、攻击面、组件、认证注入 |
+| `template` / `plugins_loaded` / `plugin_fallback` / `nuclei_error` | 插件装载与模板 |
+| `blocked` / `auth_wall` / `waf_bypass` | 拦截、登录墙、绕过 |
+| `denied_downgrade` / `evidence_downgrade` / `auth_wall_downgrade` / `blocked_downgrade` / `auth_downgrade` / `attribution` | 三态降级与归属 |
 
-`ALL_EVENTS` 集合用于校验与文档——新增事件需同步登记。
-
-> 注：orchestrator 的 `_emit` 还发了一些未列入 `ALL_EVENTS` 的事件（`recon` / `component` / `auth` / `template` / `plugins_loaded` / `waf_bypass` 等）。`ALL_EVENTS` 是**核心事件集合**，不是穷举。这是与文档口径的另一处差异。
+上表是主要事件，不是穷举；新增事件时同步补在这里。
 
 ---
 

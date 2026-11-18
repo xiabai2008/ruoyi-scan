@@ -60,9 +60,9 @@
 | 层 | 允许依赖 | 硬性约束 |
 |----|---------|---------|
 | `common/` | 标准库 | 不依赖任何项目内部包——它是所有人的地板 |
-| `core/` | `common/` + `core/` 内 | 可选能力通过**函数内延迟导入** `lib/` |
+| `core/` | `common/` + `core/` 内 + `lib/` 无环模块 | 可选能力优先用**函数内延迟导入**，模块级只允许 `lib` 的常量/纯工具 |
 | `lib/` | `common/` + `core.http` 等无环模块 | 不依赖 `cli/`、`api/` |
-| `plugins/` | `common.models`、`core.http`、`lib.{colors,matcher,reporter}` | 不直接依赖 `core.orchestrator`（避免反向耦合） |
+| `plugins/` | `common.models`、`core.http`、`lib.{colors,matcher,output}` | 不直接依赖 `core.orchestrator`（避免反向耦合） |
 | `chains/` | `chains.engine` + `plugins.chain.*` | 只负责声明 DAG，不实现探测逻辑 |
 | `cli/` | `common/`、`core/`、`lib/` | 不做扫描逻辑，只做参数 → 请求的翻译 |
 | `api/` | `common/`、`core/`、`lib.output` | 不做扫描逻辑 |

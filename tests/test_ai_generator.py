@@ -195,3 +195,20 @@ if __name__ == "__main__":
     test_write_source_rejects_category_traversal()
     test_llm_complete_rejects_non_http_base_url()
     print("ALL_E7_TESTS_PASS")
+
+def test_run_ai_generate_mode_uses_framework_dest(monkeypatch):
+    """--framework 改名后，--ai 不能再静默回退到 ruoyi（参数 dest 回归）。"""
+    from lib import ai_generator
+    from main import build_parser
+
+    captured = {}
+
+    def fake_generate(description, name, category="ruoyi", **kwargs):
+        captured["category"] = category
+        return ("/tmp/x.py", True, [])
+
+    monkeypatch.setattr(ai_generator, "generate_ai_plugin", fake_generate)
+    ns = build_parser().parse_args(["--ai", "demo", "--framework", "jeecgboot"])
+    ai_generator.run_ai_generate_mode(ns)
+
+    assert captured["category"] == "jeecgboot"

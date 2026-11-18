@@ -121,7 +121,7 @@ class Cve202546174ResetPwdScopePlugin(PluginBase):
         保留给后续插件（Shiro 把认证存在服务端 session，cookie 快照无法撤销）。
         而其余插件的判定普遍以「未认证基线」为前提，会被污染成误报
         （2026-09-17 实测：v4.8.3 因此多出 6 个假 CONFIRMED）。
-        详见 core/auth_chain.isolated_auth_session 的说明。
+        详见 core/login_chain.isolated_auth_session 的说明。
 
         低权账号只能来自显式来源（--surface-account / API surface_account）；
         未提供时返回 UNKNOWN，不能拿内置默认账号偷偷登录。

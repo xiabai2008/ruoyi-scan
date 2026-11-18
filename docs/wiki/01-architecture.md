@@ -47,7 +47,7 @@
 
 | 层 | 目录 | 职责 | 关键约束 |
 |----|------|------|----------|
-| 接入层 | `main.py`、`web/`、`desktop/` | 参数解析、UI 呈现 | `main.py` **只做参数解析 + 分发**，业务编排全部下沉（P0 重构） |
+| 接入层 | `main.py`、`desktop/` | 参数解析、UI 呈现 | `main.py` **只做参数解析 + 分发**，业务编排全部下沉（P0 重构） |
 | 控制层 | `cli/`、`api/` | 把用户输入翻译成 `ScanRequest`，消费事件与结果 | 不直接调用插件；事件输出与业务编排解耦 |
 | 编排层 | `core/orchestrator.py` | 串起「预检 → 识别 → 加载 → 执行 → 报告」 | CLI 与 API **共用同一实现**，避免双份逻辑漂移 |
 | 引擎层 | `core/engine.py`、`chains/engine.py` | 并发调度、限速、结果收集、链式拓扑执行 | 引擎不关心插件语义，只负责「跑起来 + 兜异常」 |
@@ -135,7 +135,7 @@ submit(req) → TaskRegistry.register()        ← API 入口
 | CLI | `on_event` 回调 | `cli/runner.py:_cli_event_handler()` 把事件渲染成彩色终端输出 |
 | API | `registry.notify()` | 推送到 WebSocket 订阅队列，并落 SQLite 历史 |
 
-事件类型（[api/ws/events.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/ws/events.py)）：`status`、`complete`、`fingerprint`、`waf`、`portscan`、`category_start`、`result`、`progress`、`report`、`error`。
+事件类型由编排层 `_emit` 与引擎定义（没有单独常量表）：`status`、`complete`、`fingerprint`、`waf`、`portscan`、`category_start`、`result`、`progress`、`report`、`error`，以及 `recon`/`component`/`auth`/`template`/`plugins_loaded`/各类降级事件。
 编排层额外发出：`recon`、`recon_start`、`recon_error`、`auth`、`template`、`component`、`waf_bypass`、`plugin_fallback`、`plugins_loaded`、`nuclei_error`。
 
 > **注意**：`submit()` 调用 `_run(task, None)` 时 `on_event` 传 `None`。原因是事件推送已统一走 `_emit` 内的 `registry.notify`，若再传回调会导致每个事件被推送两次（代码中有明确注释）。

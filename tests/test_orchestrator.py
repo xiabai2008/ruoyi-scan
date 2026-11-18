@@ -440,3 +440,44 @@ if __name__ == "__main__":
     test_build_waf_bypass_force_on()
     test_shutdown_closes_pool()
     print("All D9.1 orchestrator tests passed!")
+
+def test_stage_session_closes_when_engine_init_fails():
+    """会话已创建但后续初始化失败时，必须关闭会话（连接池泄漏回归）。"""
+    orch = ScanOrchestrator(registry=None)
+    req = ScanRequest(target="http://example.com/")
+    fake_session = MagicMock()
+    try:
+        with patch("core.orchestrator.SessionManager", return_value=fake_session), patch(
+            "core.orchestrator.ScanEngine", side_effect=RuntimeError("engine boom")
+        ):
+            with pytest.raises(RuntimeError):
+                orch._stage_session(req, "t-cleanup", lambda *a: None, None, None, {})
+        fake_session.close.assert_called_once()
+    finally:
+        orch.shutdown()
+
+def test_fingerprint_and_waf_snapshots_are_populated_before_registry_update():
+    """fingerprint/waf 事件触发 registry 快照时，task 字段必须已赋值。"""
+    class Reg:
+        def __init__(self):
+            self.dicts = []
+
+        def update_task_dict(self, task_id, d):
+            self.dicts.append(d)
+
+        def notify(self, *args, **kwargs):
+            pass
+
+    reg = Reg()
+    orch = ScanOrchestrator(registry=reg)
+    req = ScanRequest(target="http://example.com/", mode="p")
+    with patch("core.orchestrator.detect_cms") as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
+        "core.orchestrator.load_plugins"
+    ) as mock_load:
+        mock_cms.return_value = MagicMock(cms="ruoyi", version="", confidence=0.9, matched=["test"])
+        mock_waf.return_value = {"waf": "waf", "display": "WAF", "bypass_hint": ""}
+        mock_load.return_value = []
+        orch.run_sync(req)
+
+    assert any(d.get("fingerprint") for d in reg.dicts), "fingerprint 事件快照缺少指纹"
+    assert any(d.get("waf") for d in reg.dicts), "waf 事件快照缺少 WAF 信息"

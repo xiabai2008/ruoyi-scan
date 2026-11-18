@@ -74,7 +74,7 @@ def _is_auth_failure_json(body: str) -> bool:
 class FeatureBasedFingerprint(Fingerprint):
     """基于特征库的通用多特征交叉判定
 
-    适用于任一在 lib.fingerprint_features.CMS_FEATURES 中注册的 CMS。
+    适用于任一在 core.fingerprint_features.CMS_FEATURES 中注册的 CMS。
     强特征 +weight_strong/个，弱特征 +weight_weak/个，置信度上限 1.0。
     至少命中一个强特征 → 高置信；仅弱特征 → 低置信（供人工复核）；无特征 → 未识别。
     """

@@ -1,4 +1,4 @@
-# Ruoyi-Scan CLI 控制层 — 核心扫描模式 + 子模块重导出
+# Ruoyi-Scan CLI 控制层 — 核心扫描与批处理
 """CLI 控制层：扫描主流程（run_mode）与批处理；命令实现见 cli/*_runner.py。
 
 层：控制层（cli）｜上游：dispatcher｜下游：orchestrator/report

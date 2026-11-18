@@ -3,7 +3,7 @@
 #
 # 产物：tools/cli_build/dist/ruoyi-scan.exe
 #   - 内嵌 Python + requests + 报告依赖(reportlab/python-docx/openpyxl) + serve 依赖(fastapi/uvicorn)
-#   - plugins/ chains/ data/(仅字典与 CVE 库) web/ assets/ 随包分发
+#   - plugins/ chains/ data/(仅字典与 CVE 库) assets/ 随包分发
 #
 # 与桌面端引擎 spec 的差别：
 #   1. 入口是 tools/cli_build/entry.py（转调 main.py 的 CLI），不是 FastAPI sidecar；
@@ -101,7 +101,6 @@ hiddenimports = [
     "lib.nuclei_loader",
     "lib.scheduler",
     "lib.logic_scan",
-    "lib.web_ui",
     "lib.cve_sync",
     "lib.oast",
     "lib.ai_generator",
@@ -134,8 +133,6 @@ a = Analysis(
         (os.path.join(REPO, "plugins"), "plugins"),
         # 利用链：chains/registry.py 动态 import
         (os.path.join(REPO, "chains"), "chains"),
-        # Web 控制台静态资源（--serve 时挂载 web/）
-        (os.path.join(REPO, "web"), "web"),
         (os.path.join(REPO, "assets"), "assets"),
     ]
     + [(os.path.join(REPO, "data", name), "data") for name in DATA_FILES],

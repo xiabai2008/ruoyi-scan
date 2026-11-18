@@ -124,17 +124,19 @@ class TestYourPlugin(unittest.TestCase):
 ```
 Ruoyi-Scan/
 ├── main.py              # CLI 入口（参数解析）
-├── core/                # 核心引擎（runner / session / report / models）
-├── lib/                 # 功能库（WAF 绕过 / 认证 / 逻辑扫描 / 异步引擎...）
-├── plugins/             # POC 插件
+├── core/                # 核心引擎（orchestrator / engine / session / report）
+├── lib/                 # 可复用能力（WAF 绕过 / 认证 / 指纹 / 输出...）
+├── plugins/             # POC 插件（共 58 个）
 │   ├── base.py          # 插件基类
-│   ├── ruoyi/           # 若依专项 16 个 POC
+│   ├── ruoyi/           # 若依专项 21 个 POC
 │   ├── spring/          # Spring Boot 14 个 POC
-│   └── common/          # 通用漏洞 8 个 POC
-├── chains/              # 漏洞利用链
+│   ├── common/          # 通用漏洞 13 个 POC
+│   ├── jeecgboot/       # JeecgBoot 8 个 POC
+│   └── yudao/           # 芋道 2 个 POC
+├── chains/              # 漏洞利用链（engine + 链定义）
 ├── api/                 # FastAPI Web API + Prometheus 指标
-├── config/              # 指纹库 / 字典 / 模板
-├── tests/               # 测试套件（887+ 测试）
+├── config/              # settings.py（运行配置）；字典/指纹数据在 data/
+├── tests/               # 测试套件（1700+ 用例）
 ├── lab/                 # 签名靶场（Flask）
 ├── scripts/             # 辅助脚本
 └── monitoring/          # Prometheus + Grafana 配置

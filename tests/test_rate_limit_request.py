@@ -272,7 +272,9 @@ def test_isolated_auth_session_shares_parent_limiter(monkeypatch):
 
     fake = FakeClock()
     bucket = TokenBucket(3, clock=fake.tick, sleeper=fake.sleep)
-    parent = SessionManager(rate=3, rate_scope="request", limiter=bucket)
+    parent = SessionManager(
+        rate=3, rate_scope="request", limiter=bucket, proxy="http://127.0.0.1:9"
+    )
     try:
         with auth_chain.isolated_auth_session("http://example.com", "u", "p", parent=parent) as (iso, ok, _reason):
             assert ok is True
@@ -280,6 +282,9 @@ def test_isolated_auth_session_shares_parent_limiter(monkeypatch):
             assert iso._limiter is bucket
             assert iso.rate == parent.rate == 3
             assert iso.rate_scope == parent.rate_scope == "request"
+            # 隔离会话也必须继承代理，否则 --proxy 下的登录/取证会直连
+            assert iso.proxy == parent.proxy
+            assert iso.proxy_pool is parent.proxy_pool
 
         # 不传 parent：保持向后兼容，不建桶
         with auth_chain.isolated_auth_session("http://example.com", "u", "p") as (

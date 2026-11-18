@@ -320,13 +320,13 @@ def run_ai_generate_mode(args) -> None:
     """--ai 模式入口：生成插件 + 自验证 + 提示
 
     Args:
-        args: argparse Namespace（含 ai/ai_name/ai_api_key/ai_model/ai_category 等）
+        args: argparse Namespace（含 ai/ai_name/ai_api_key/ai_model/framework 等）
     """
     from lib.colors import GREEN, RED, RESET, YELLOW
 
     description = args.ai
     name = getattr(args, "ai_name", "") or description
-    category = getattr(args, "category", "ruoyi")
+    category = getattr(args, "framework", "ruoyi")
     api_key = getattr(args, "ai_api_key", "") or AI_API_KEY
 
     if not api_key:

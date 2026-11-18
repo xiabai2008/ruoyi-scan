@@ -6,7 +6,7 @@
 - app / client（替代 4 文件重复 TestClient 创建）
 - storage / registry / mock_registry（替代重复实例化）
 - make_scan_request / sample_scan_request（替代 22 处 ScanRequest 构造）
-- tmp_report_dir / cache_db_path（统一临时目录风格）
+- tmp_report_dir（统一临时目录风格）
 
 注意：现有测试文件中的 sys.path.insert 和 fixture 定义不会立即删除，
 新 fixture 供后续测试迁移使用，保证渐进式重构安全。
@@ -330,9 +330,3 @@ def tmp_report_dir(tmp_path):
     report_dir = tmp_path / "reports"
     report_dir.mkdir(exist_ok=True)
     return report_dir
-
-
-@pytest.fixture
-def cache_db_path(tmp_path):
-    """缓存数据库路径（供 CacheStorage / ScanCache 测试）"""
-    return str(tmp_path / "cache.db")
