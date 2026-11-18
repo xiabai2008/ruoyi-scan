@@ -153,3 +153,43 @@ class TestSessionManagerIntegration:
         pool = ProxyPool(["http://pool:8080"])
         session = SessionManager(proxy="http://fixed:8080", proxy_pool=pool, timeout=5)
         assert session._get_proxy_for_request() == "http://pool:8080"
+
+# ── v1.8 起：--proxy-file 必须真正构造代理池（此前只用于跳过预检）──
+
+
+def test_build_proxy_pool_from_file(tmp_path):
+    """代理文件（含注释/空行）→ 池中只保留有效代理。"""
+    from core.orchestrator import ScanRequest, build_proxy_pool
+
+    f = tmp_path / "proxies.txt"
+    f.write_text("# 注释\n\nhttp://1.1.1.1:8080\nhttp://2.2.2.2:8080\n", encoding="utf-8")
+    pool = build_proxy_pool(ScanRequest(target="http://t/", proxy_file=str(f), proxy_strategy="random"))
+    assert pool is not None
+    assert pool.total_count() == 2
+    assert pool._strategy == "random"
+
+
+def test_build_proxy_pool_none_when_unset_or_empty(tmp_path):
+    from core.orchestrator import ScanRequest, build_proxy_pool
+
+    assert build_proxy_pool(ScanRequest(target="http://t/")) is None
+    empty = tmp_path / "empty.txt"
+    empty.write_text("# only comments\n", encoding="utf-8")
+    assert build_proxy_pool(ScanRequest(target="http://t/", proxy_file=str(empty))) is None
+    assert build_proxy_pool(ScanRequest(target="http://t/", proxy_file=str(tmp_path / "missing.txt"))) is None
+
+
+def test_proxy_pool_reaches_session_manager(tmp_path):
+    """Ctrl 级接线：SessionManager 收到池后，请求路径会走池取代理。"""
+    from core.orchestrator import ScanRequest, build_proxy_pool
+    from core.session import SessionManager
+
+    f = tmp_path / "proxies.txt"
+    f.write_text("http://127.0.0.1:9\n", encoding="utf-8")
+    pool = build_proxy_pool(ScanRequest(target="http://t/", proxy_file=str(f)))
+    session = SessionManager(proxy_pool=pool, timeout=1)
+    try:
+        assert session.proxy_pool is pool
+        assert session._get_proxy_for_request() == "http://127.0.0.1:9"
+    finally:
+        session.close()

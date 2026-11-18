@@ -28,7 +28,7 @@
 - [认证扫描](#认证扫描)
 - [分布式扫描](#分布式扫描)
 - [CI/CD 集成](#cicd-集成)
-- [缓存与性能优化](#缓存与性能优化)
+- [性能优化](#性能优化)
 - [参数速查](#参数速查按功能分组)
 
 ---
@@ -54,9 +54,8 @@ pip install -e ".[dev,all]"
 
 # 4. 按需安装特定功能组（推荐生产环境，减小依赖体积）
 pip install -e ".[report]"          # PDF / Word / Excel 报告增强
-pip install -e ".[serve]"           # FastAPI Web API + WebSocket + Web 控制台
+pip install -e ".[serve]"           # FastAPI Web API + WebSocket（交互文档 /docs）
 pip install -e ".[distributed]"     # Redis 分布式扫描（master/worker）
-pip install -e ".[async]"           # aiohttp 异步 HTTP 引擎
 pip install -e ".[yaml]"            # --config YAML 配置文件支持
 pip install -e ".[lab]"             # 内置 Flask 靶场环境
 pip install -e ".[adversarial]"     # 对抗型传输层（Scrapling，约 150MB+ 浏览器二进制）
@@ -81,9 +80,8 @@ python tests/regression_spring.py
 |--------|-----------|-----------------|---------|
 | （核心） | 漏洞检测、指纹识别、三态判定、HTML/JSON/CSV/SARIF 报告、CLI、插件 SDK | `requests`、`requests-mock` | 所有场景必装 |
 | `report` | PDF / Word / Excel 报告 | `reportlab`、`python-docx`、`openpyxl` | 需要交付正式报告 |
-| `serve` | Web API 服务、Web 控制台、WebSocket 实时推送 | `fastapi`、`uvicorn[standard]` | 团队共享、远程调用 |
+| `serve` | Web API 服务、WebSocket 实时推送、OpenAPI 文档 | `fastapi`、`uvicorn[standard]` | 团队共享、远程调用 |
 | `distributed` | Redis Master-Worker 分布式扫描 | `redis` | 大规模批量扫描 |
-| `async` | 异步 HTTP 引擎（高并发场景） | `aiohttp` | 千级目标批量扫描 |
 | `yaml` | `--config` YAML 配置文件 | `pyyaml` | 复杂参数固化 |
 | `lab` | 内置 Flask 靶场（用于测试） | `flask` | 本地验证、POC 开发 |
 | `adversarial` | 对抗型传输层（Scrapling 指纹伪装 / 隐身浏览器，绕过 CF/JS 挑战） | `scrapling[fetchers]`（含 playwright / patchright / curl_cffi，需另装浏览器二进制） | 目标启用 Cloudflare Turnstile / JS 挑战 |
@@ -148,7 +146,7 @@ docker compose down
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | scanner | - | 扫描器 CLI（通过 `docker compose run` 调用） |
-| api | 8000 | FastAPI Web API + WebSocket + Web 控制台 |
+| api | 8000 | FastAPI Web API + WebSocket（交互文档 `/docs`） |
 | lab-ruoyi | 8080 | 若依签名靶场（vuln 模式） |
 | lab-spring | 8091 | Spring Boot 签名靶场（vuln 模式） |
 | prometheus | 9090 | 指标采集（需 `--profile monitor`） |
@@ -169,9 +167,8 @@ docker compose down
 | 功能 | 需要的依赖组 | 关键参数 |
 |------|------------|---------|
 | PDF / Word / Excel 报告 | `report` | `--report-format pdf/docx/xlsx` |
-| Web API + Web 控制台 | `serve` | `--serve` |
+| Web API | `serve` | `--serve` |
 | 分布式 Master-Worker | `distributed` | `--distributed master/worker` |
-| 异步扫描引擎 | `async` | `--async` |
 | YAML 配置文件 | `yaml` | `--config config.yaml` |
 | 内置靶场 | `lab` | 源码仓库内：`LAB_MODE=vuln python lab/server.py`（`lab/README.md` 有全部档位） |
 | 对抗型传输层 | `adversarial` | `--adversarial-transport` |
@@ -220,8 +217,8 @@ ruoyi-scan -p http://target:8080/ --bypass-waf auto
 # 7. 生成全格式报告
 ruoyi-scan -p http://target:8080/ --report ./reports --report-format all
 
-# 8. 启用 OAST 带外检测（盲漏洞）
-ruoyi-scan -p http://target:8080/ --oast
+# 8. 启动 OAST 回调服务器（带外盲漏洞验证用，独立进程）
+ruoyi-scan --oast-server
 
 # 9. 启用业务逻辑检测（IDOR / 越权 / 参数篡改 / 竞争条件）
 ruoyi-scan -p http://target:8080/ --logic-scan
@@ -286,7 +283,7 @@ ruoyi-scan -u http://target:8080/ --logic-scan \
   --logic-endpoints endpoints.txt --logic-concurrency 20
 
 # 5. 综合扫描 + 全格式报告
-ruoyi-scan -u http://target:8080/ --report ./reports --report-format all --lang zh
+ruoyi-scan -u http://target:8080/ --report ./reports --report-format all
 
 # 6. 使用 deep 模板（深度扫描）
 ruoyi-scan -u http://target:8080/ --template deep
@@ -946,13 +943,7 @@ ruoyi-scan -p http://target:8080/ --report ./reports --report-format sarif
 # 2. 生成全部格式报告（推荐）
 ruoyi-scan -p http://target:8080/ --report ./reports --report-format all
 
-# 3. 生成中文报告（默认）
-ruoyi-scan -p http://target:8080/ --report ./reports --report-format all --lang zh
-
-# 4. 生成英文报告
-ruoyi-scan -p http://target:8080/ --report ./reports --report-format all --lang en
-
-# 5. 关闭结果去重（保留原始记录）
+# 3. 关闭结果去重（保留原始记录）
 ruoyi-scan -p http://target:8080/ --report ./reports --no-dedup
 ```
 
@@ -1000,19 +991,6 @@ reports/
 
 > 提示：生成 PDF / Word / Excel 需要安装 `report` 可选依赖：`pip install "ruoyi-scan[report]"`
 
-### --lang zh|en 中英文切换
-
-```bash
-# 中文报告（默认）
-ruoyi-scan -p http://target:8080/ --report ./reports --report-format html --lang zh
-
-# 英文报告
-ruoyi-scan -p http://target:8080/ --report ./reports --report-format html --lang en
-```
-
-- `zh`：中文，适合国内客户交付、等保测评
-- `en`：英文，适合国际客户、跨国团队协作
-
 ### --diff 增量对比
 
 将本次扫描结果与历史扫描报告对比，突出新增与已修复的漏洞，适合跟踪整改进度。
@@ -1044,7 +1022,7 @@ ruoyi-scan --diff-only old_report.json new_report.json
 
 ## Web API 服务
 
-通过 `--serve` 启动 FastAPI Web API 服务，支持 REST 接口、WebSocket 实时事件推送与 Web 控制台，适合团队共享扫描能力或集成到现有安全平台。
+通过 `--serve` 启动 FastAPI Web API 服务，支持 REST 接口、WebSocket 实时事件推送与 OpenAPI 交互文档，适合团队共享扫描能力或集成到现有安全平台。图形界面请使用桌面端。
 
 ### 启用前提
 
@@ -1081,7 +1059,6 @@ docker run --rm -p 8000:8000 ruoyi-scan \
 
 | 路径 | 说明 |
 |------|------|
-| `http://localhost:8000/` | Web 控制台（单页应用） |
 | `http://localhost:8000/docs` | OpenAPI 3.0 交互式文档（Swagger UI） |
 | `http://localhost:8000/redoc` | ReDoc 文档 |
 | `http://localhost:8000/api/v1/...` | REST API 端点 |
@@ -1155,16 +1132,9 @@ async def listen():
 asyncio.run(listen())
 ```
 
-### Web 控制台
+### 图形界面
 
-访问 `http://localhost:8000/` 即可使用内置 Web 控制台（单页应用），功能包括：
-
-- **任务管理**：创建、查看、取消扫描任务
-- **实时监控**：WebSocket 推送的扫描进度与漏洞发现
-- **漏洞浏览**：按严重度、CMS、类型筛选漏洞
-- **报告下载**：在线预览与下载各格式报告
-- **链执行**：可视化选择并执行漏洞利用链
-- **配置管理**：在线编辑扫描模板与配置
+服务侧只提供 REST + WebSocket，**不内置浏览器控制台**：人机界面统一走桌面端（Tauri + React），服务侧自测与集成用 `/docs` 的 Swagger UI。
 
 ### 链接到 API 文档
 
@@ -1620,62 +1590,9 @@ pipeline {
 
 ---
 
-## 缓存与性能优化
+## 性能优化
 
-Ruoyi-Scan 提供多层性能优化机制，包括 SQLite 结果缓存、并发线程池、令牌桶限速与异步引擎，可针对不同规模目标灵活调优。
-
-### --cache SQLite 缓存
-
-扫描结果缓存到 SQLite 数据库，避免对相同目标重复扫描，大幅提升批量扫描与增量扫描效率。
-
-**启用前提**：无需额外依赖，SQLite 为 Python 内置模块。
-
-```bash
-# 1. 启用缓存（默认 TTL 3600 秒 = 1 小时）
-ruoyi-scan -p http://target:8080/ --cache
-
-# 2. 自定义 TTL（如 24 小时）
-ruoyi-scan -p http://target:8080/ --cache --cache-ttl 86400
-
-# 3. 自定义缓存数据库路径
-ruoyi-scan -p http://target:8080/ --cache --cache-db ./cache/scan_cache.db
-
-# 4. 查看缓存统计（命中率、条目数、占用空间）
-ruoyi-scan --cache-stats --cache-db ./cache/scan_cache.db
-
-# 5. 清除过期缓存
-ruoyi-scan --cache-clear --cache-db ./cache/scan_cache.db
-
-# 6. 清除全部缓存
-ruoyi-scan --cache-clear-all --cache-db ./cache/scan_cache.db
-
-# 7. 批量扫描 + 缓存（强烈推荐）
-ruoyi-scan -f targets.txt -p --cache --cache-ttl 86400
-```
-
-**缓存机制说明**：
-
-| 维度 | 说明 |
-|------|------|
-| 缓存键 | 目标 URL + POC 名称 + 请求参数的 SHA256 哈希 |
-| 存储内容 | POC 执行结果（三态判定）、请求/响应证据、时间戳 |
-| TTL | 默认 3600 秒，可通过 `--cache-ttl` 自定义 |
-| 持久化 | SQLite 数据库，跨进程共享，重启不丢失 |
-| 失效策略 | TTL 过期自动失效；目标变更需手动清除 |
-
-**缓存统计输出示例**：
-
-```
-缓存统计：
-  数据库路径: ./cache/scan_cache.db
-  总条目数:   1,234
-  有效条目:   1,100
-  过期条目:   134
-  命中率:     87.5%
-  占用空间:   2.3 MB
-  最旧条目:   2026-07-15 10:30:00
-  最新条目:   2026-07-21 14:20:00
-```
+Ruoyi-Scan 提供并发线程池、令牌桶限速与异步引擎，可针对不同规模目标灵活调优。
 
 ### --threads 并发
 
@@ -1733,46 +1650,19 @@ ruoyi-scan -f targets.txt -p --threads 20 --rate 100
 - 支持突发流量（桶容量 = rate）
 - 精确到毫秒级的速率控制
 
-### --async 异步引擎
+### --async 批量并发
 
-基于 aiohttp 的异步 HTTP 引擎，适合千级以上目标的批量扫描：
-
-**启用前提**：需要安装 `async` 可选依赖：
+线程池并发**仅对批量模式（-f）生效**，无额外依赖；单目标下会自动提示并按同步执行。
 
 ```bash
-pip install "ruoyi-scan[async]"
-# 或
-pip install aiohttp
-```
+# 1. 自定义并发数
+ruoyi-scan -f targets.txt -p --async --async-workers 50
 
-```bash
-# 1. 启用异步引擎（默认 10 workers）
-ruoyi-scan -p http://target:8080/ --async
-
-# 2. 自定义异步并发数
-ruoyi-scan -p http://target:8080/ --async --async-workers 50
-
-# 3. 异步引擎 + 批量扫描（千级目标推荐）
-ruoyi-scan -f targets.txt -p --async --async-workers 100
-
-# 4. 异步引擎 + 限速
+# 2. 批量 + 限速
 ruoyi-scan -f targets.txt -p --async --async-workers 100 --rate 500
-
-# 5. 异步引擎 + 缓存（万级目标最优组合）
-ruoyi-scan -f targets.txt -p \
-  --async --async-workers 100 \
-  --rate 1000 \
-  --cache --cache-ttl 86400
 ```
 
-**同步 vs 异步性能对比**：
-
-| 场景 | 同步（ThreadPoolExecutor） | 异步（aiohttp） | 推荐 |
-|------|---------------------------|----------------|------|
-| 单目标 | 优秀 | 一般 | 同步 |
-| 10 ~ 100 目标 | 优秀 | 优秀 | 均可 |
-| 100 ~ 1000 目标 | 良好 | 优秀 | 异步 |
-| 1000+ 目标 | 一般（线程开销大） | 优秀 | 异步或分布式 |
+> 单目标提速用 `--threads`；千级目标建议 `--distributed`（见下）。
 
 ### 性能优化组合推荐
 
@@ -1786,10 +1676,10 @@ ruoyi-scan -p http://target:8080/ --threads 10 --rate 20
 ruoyi-scan -u http://target:8080/ --template deep --threads 20 --rate 50
 
 # 3. 小批量扫描（<100 目标）
-ruoyi-scan -f targets.txt -p --threads 20 --rate 100 --cache
+ruoyi-scan -f targets.txt -p --threads 20 --rate 100
 
 # 4. 中批量扫描（100~1000 目标）
-ruoyi-scan -f targets.txt -p --async --async-workers 50 --rate 200 --cache
+ruoyi-scan -f targets.txt -p --async --async-workers 50 --rate 200
 
 # 5. 大批量扫描（1000+ 目标，分布式）
 # Master 节点
@@ -1931,7 +1821,6 @@ python -m venv .venv
 | `--report <dir>` | 报告输出目录 |
 | `--report-format <f>` | 报告格式 html/json/csv/pdf/docx/xlsx/sarif |
 | `--no-dedup` | 关闭结果去重聚合 |
-| `--lang <zh\|en>` | 报告语言（默认 zh） |
 | `--diff <old.json>` | 与历史扫描报告对比 |
 | `--diff-only <old> <new>` | 仅对比两个 JSON 报告 |
 | `--save-baseline` | 保存本次扫描结果为基线 |
@@ -1953,7 +1842,6 @@ python -m venv .venv
 | 参数 | 说明 |
 |------|------|
 | `--components` | 组件版本检测（20 个 Java 组件 → CVE 比对） |
-| `--no-components` | 关闭组件版本检测 |
 | `--nuclei <dir\|file>` | 加载 nuclei YAML 模板（可多次指定） |
 | `--nuclei-tags <a,b>` | 仅加载含指定 tag 的模板 |
 | `--nuclei-severity <s>` | 仅加载指定严重度模板（high/medium/low） |
@@ -1972,7 +1860,7 @@ python -m venv .venv
 
 | 参数 | 说明 |
 |------|------|
-| `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
+| `--serve` | 启动 Web API 服务（FastAPI + WebSocket；交互文档 `/docs`） |
 | `--host <addr>` | API 服务监听地址（默认 127.0.0.1，仅本机可访问） |
 | `--port <n>` | API 服务监听端口（默认 8000） |
 | `--api-key <key>` | API Key 鉴权 |
@@ -1984,11 +1872,10 @@ python -m venv .venv
 > 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](api.md)。
 > OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
 
-### OAST 带外检测（D30）
+### OAST 回调服务器（D30）
 
 | 参数 | 说明 |
 |------|------|
-| `--oast` | 启用 OAST 带外检测 |
 | `--oast-server` | 启动 OAST 回调服务器 |
 | `--oast-host <addr>` | OAST 服务器监听地址 |
 | `--oast-port <n>` | OAST 服务器监听端口 |
@@ -2044,16 +1931,8 @@ python -m venv .venv
 
 | 参数 | 说明 |
 |------|------|
-| `--async` | 启用异步扫描引擎（ThreadPoolExecutor） |
+| `--async` | 批量模式并发（仅 `-f` 生效） |
 | `--async-workers <n>` | 异步并发线程数（默认 10） |
-
-### Web UI 控制台（D35）
-
-| 参数 | 说明 |
-|------|------|
-| `--web-ui` | 生成 Web UI 控制台（单页 HTML） |
-| `--web-ui-output <path>` | Web UI 输出路径 |
-| `--web-ui-api <url>` | Web UI 连接的 API 地址 |
 
 ### 分布式扫描（D36）
 
@@ -2064,17 +1943,6 @@ python -m venv .venv
 | `--distributed-rate <n>` | 分布式全局限速（每秒请求数，0 不限速） |
 | `--worker-max-tasks <n>` | Worker 最大任务数（0 不限） |
 | `--distributed-timeout <n>` | 分布式超时秒数（默认 600） |
-
-### 结果缓存（D37）
-
-| 参数 | 说明 |
-|------|------|
-| `--cache` | 启用扫描结果缓存（SQLite） |
-| `--cache-ttl <n>` | 缓存有效期秒数（默认 3600） |
-| `--cache-db <path>` | 缓存数据库路径 |
-| `--cache-stats` | 查看缓存统计 |
-| `--cache-clear` | 清除过期缓存 |
-| `--cache-clear-all` | 清除全部缓存 |
 
 ### 通知（D21）
 

@@ -1,6 +1,6 @@
 # 05 · lib 工具库
 
-> 这一章回答：`lib/` 的 41 个模块分别解决什么问题？几个关键机制（WAF 绕过、OAST、nuclei 兼容、插件仓库签名、分布式）是怎么实现的？
+> 这一章回答：`lib/` 的各模块分别解决什么问题？几个关键机制（WAF 绕过、OAST、nuclei 兼容、插件仓库签名、分布式）是怎么实现的？
 >
 > 相关源码：[lib/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/lib)
 
@@ -23,15 +23,14 @@
 
 ---
 
-## 2. 41 个模块按功能分组
+## 2. 模块按功能分组
 
-### 2.1 基础与输出（4）
+### 2.1 基础与输出（3）
 
 | 模块 | 作用 |
 | --- | --- |
 | [colors.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/colors.py) | ANSI 颜色常量（`GREEN`/`RED`/`YELLOW`/`RESET`/`SEPARATOR`）+ `ok()` / `no()` 语义函数 |
 | [reporter.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/reporter.py) | 扫描进度输出桥：`set_quiet()` / `is_quiet()` / `strip_ansi()` / `emit()` |
-| [i18n.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/i18n.py) | D23 中英文报告：`get_text` / `localize_report_dict` / `get_csv_header` |
 | [star_cta.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/star_cta.py) | 扫描结束的仓库引导（`print_star_cta` / `cta_enabled`） |
 
 **`reporter.emit()` 的意义**：CLI 下走 stdout（带颜色），库/服务模式下 `set_quiet(True)` 后改走 logging。这就是 [api/app.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/app.py) 在 `create_app()` 第一行调 `set_quiet(True)` 的原因——**服务进程的 stdout 不该被插件的进度输出污染**，实时进度已经由 WebSocket 推送。
@@ -132,11 +131,9 @@
 | --- | --- |
 | [async_engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/async_engine.py) | D34 异步扫描引擎：`AsyncScanEngine` / `scan_batch_targets` / `scan_plugins_concurrent` / `benchmark_sync_vs_async` |
 | [distributed.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/distributed.py) | D36 分布式任务队列（见 §11） |
-| [cache.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/cache.py) | D37 结果缓存：`generate_cache_key` / `CacheStorage` / `ScanCache` / `cached_scan` 装饰器 |
 | [ci_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/ci_runner.py) | D28 CI/CD 集成：`should_fail_ci` / `get_ci_exit_code` / `generate_ci_config`（github/gitlab/jenkins） |
 | [scheduler.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/scheduler.py) | E9 定时扫描：`parse_schedule_expr` / `ScanScheduler` |
 | [config_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/config_loader.py) | D27 YAML 配置：`load_yaml_config` / `normalize_config_keys` / `apply_config_to_args` |
-| [web_ui.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/web_ui.py) | D35 Web UI 生成：`generate_web_ui`（单文件控制台） |
 
 ---
 
@@ -197,7 +194,7 @@
 | `check_dns_callback` | DNS 回调检查 |
 | `generate_batch_payloads` | 批量构造 |
 
-带外检测的价值：**无回显漏洞（blind RCE / SSRF / Log4j JNDI）唯一可靠的确认手段**。Log4j 组件检测（`detect_log4j`）就接入了 OAST client。
+带外检测的价值：**无回显漏洞（blind RCE / SSRF / Log4j JNDI）唯一可靠的确认手段**。目前只保留独立回调服务器模式；`OASTClient` 已实现但尚未接入扫描编排，`detect_log4j` 未收到 `oast_client` 时按三态纪律返回 UNKNOWN。
 
 **用标准库而非第三方 OAST 平台**的取舍：不需要外部网络与账号，内网可用；代价是需要目标能访问到扫描器的监听地址（因此有 `--oast-host` 参数）。
 
@@ -221,7 +218,7 @@ to_scan_result(ComponentVersionResult)   # 转成标准 ScanResult（category='c
 2. **CVE 映射走数据文件**：`_load_cve_map()` 读 `data/component_cve_map.json`，`match_cve(component, version)` 做区间匹配。新增 CVE 只改 JSON。
 3. **探测失败给 `fallback_note`**：无法识别版本时返回说明性文字而非空字符串，让报告能解释"为什么这项是 UNKNOWN"。
 
-`detect_log4j` 接受可选 `oast_client`——只有带外回调才能确证 JNDI 注入。
+`detect_log4j` 接受可选 `oast_client`——只有带外回调才能确证 JNDI 注入；当前 CLI 未接线，故该项默认 UNKNOWN（不冒充 SAFE）。
 
 **规格驱动扩展**：`_detect_by_spec` / `_make_spec_detector` 表明后来者可以用声明式规格（dict）定义新组件的探测方式，不必再写一个 `detect_*` 函数。
 
@@ -429,9 +426,8 @@ triage_unknowns(...)            # 每组分流
 | `DistributedRateLimiter` | **全局**限速（跨 worker 共享） |
 | `MasterNode` | 分发任务、汇总结果 |
 | `WorkerNode` | 拉任务、执行、回传 |
-| `StandaloneDistributor` | 单机多进程模式 |
 
-对应的 CLI 入口：`run_distributed_master_mode` / `run_distributed_worker_mode` / `run_distributed_standalone_mode`。
+对应的 CLI 入口：`run_distributed_master_mode` / `run_distributed_worker_mode`；单机 standalone 由 `cli/distributed_runner._run_standalone` 自实现（失败目标显式记录，不静默吞异常）。
 
 ### 11.1 `DistributedRateLimiter` 的价值
 
@@ -448,26 +444,9 @@ triage_unknowns(...)            # 每组分流
 
 ---
 
-## 12. 缓存与 CI
+## 12. CI 集成
 
-### 12.1 结果缓存（D37）
-
-```python
-generate_cache_key(target, plugin_config, scan_mode)          # 扫描级 key
-generate_plugin_cache_key(target, plugin_name, plugin_config) # 插件级 key
-```
-
-两个 key 生成函数分开，是因为缓存可以按**扫描粒度**或**插件粒度**命中。
-
-| 组件 | 作用 |
-| --- | --- |
-| `CacheStorage` | SQLite 存储（`--cache-db`，默认 `data/scan_cache.db`） |
-| `ScanCache` | 缓存门面（TTL 管理、统计、清理） |
-| `cached_scan(cache, target_arg, plugin_name, ttl)` | **装饰器**，可直接包裹扫描函数 |
-
-CLI 入口：`--cache-stats` / `--cache-clear` / `--cache-clear-all`，分别对应 `run_cache_stats_mode` / `run_cache_clear_mode`。
-
-### 12.2 CI 集成（D28）
+### 12.1 CI 集成（D28）
 
 ```python
 should_fail_ci(results, severity_threshold)              # 是否有超阈值漏洞
@@ -515,4 +494,4 @@ create_example_config(filepath)          # 生成示例配置
 - `ai_generator` + `ai_validate` 构成了「生成 → 靶场三态验证 → 失败重试」的闭环，把 AI 代码质量变成可客观验收的指标。
 - 分布式限速（`DistributedRateLimiter`）与单机限速（`core/engine.py`）解决的是不同问题，不要混用。
 
-→ 下一章：[06 · Web API 与控制台](06-api-web.md)
+→ 下一章：[06 · Web API 服务](06-api-web.md)

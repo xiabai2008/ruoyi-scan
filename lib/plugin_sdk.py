@@ -39,7 +39,7 @@ PLUGIN_TEMPLATE = '''# {description}
 # CVSS: {cvss_vector}
 # 合规: {compliance}
 from plugins.base import PluginBase
-from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, UnknownReason
 from lib.colors import ok, no
 from lib.reporter import emit
 from core.http import join_url
@@ -88,8 +88,10 @@ class {class_name}(PluginBase):
         try:
             resp = session.get(url)
         except Exception as e:
+            # 三态纪律：网络/执行异常只能 UNKNOWN，且必须带原因码（v1.7 WP-1）
             return ScanResult(kind='vuln', name=self.name, status=STATUS_UNKNOWN,
-                              url=url, evidence=str(e))
+                              url=url, evidence=str(e),
+                              unknown_reason=UnknownReason.UNREACHABLE.value)
 
         text = resp.text or ''
         # TODO: 实现检测逻辑
@@ -186,6 +188,16 @@ def init_plugin_file(name: str, category: str = "common", output_dir: str = None
     Returns:
         生成的文件路径
     """
+    # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架被拒绝；
+    # 放在函数内导入，便于测试 monkeypatch core.loader.known_categories。
+    from core.loader import known_categories
+
+    if category not in known_categories():
+        raise ValueError(f"unsupported category: {category}")
+    # 路径安全：名称不可含目录分隔符或 ..（与名称归一化前的原始输入校验）
+    if not name or "/" in name or "\\" in name or ".." in name:
+        raise ValueError(f"unsupported plugin name: {name!r}")
+
     if output_dir is None:
         # 找到项目根目录
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -468,85 +480,3 @@ def generate_plugin_docs(output_path: str) -> str:
         f.write(content)
 
     return output_path
-
-
-def generate_plugin_template(name, category="ruoyi"):
-    """生成简易插件模板文件（直接写入 plugins/<category>/ 目录）
-
-    .. deprecated::
-        历史遗留的第二套模板生成器：与 generate_plugin/PLUGIN_TEMPLATE 约定不一致
-        （category 默认值、类名归一化、输出目录基准不同），新代码请统一使用
-        generate_plugin + init_plugin_file，避免两套模板继续漂移。
-
-    Args:
-        name: 插件名称（下划线命名，用于文件名与类名）
-        category: 插件类别（ruoyi/spring/common）
-
-    Returns:
-        生成的插件文件路径
-
-    Raises:
-        ValueError: 不支持的类别
-        FileExistsError: 目标文件已存在
-    """
-    # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
-    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
-    from core.loader import known_categories
-
-    if category not in known_categories():
-        raise ValueError(f"unsupported category: {category}")
-    # 路径安全：名称不可含目录分隔符或 ..，防止写出 plugins/<category>/
-    if not name or "/" in name or "\\" in name or ".." in name:
-        raise ValueError(f"unsupported plugin name: {name!r}")
-    target_dir = os.path.join("plugins", category)
-    os.makedirs(target_dir, exist_ok=True)
-    filename = f"{name}.py"
-    filepath = os.path.join(target_dir, filename)
-    if os.path.exists(filepath):
-        raise FileExistsError(f"plugin file exists: {filepath}")
-    class_name = "".join(w.capitalize() for w in name.split("_")) + "Plugin"
-
-    lines = []
-    lines.append(f"# {name} - RuoYi plugin")
-    lines.append("from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason")
-    lines.append("from core.http import join_url")
-    lines.append("from plugins.base import PluginBase")
-    lines.append("")
-    lines.append("")
-    lines.append(f"class {class_name}(PluginBase):")
-    lines.append(f'    name = "{name}"')
-    lines.append('    cve = "N/A"')
-    lines.append('    severity = "high"')
-    lines.append('    category = "vuln"')
-    lines.append('    description = "TODO: describe the vulnerability"')
-    lines.append('    fix = "TODO: provide fix suggestion"')
-    lines.append('    fix_detail = "TODO: detailed fix steps (upgrade, config, code fix, WAF rule)"')
-    lines.append('    reproduce = "TODO: reproduction steps (curl/Python PoC)"')
-    lines.append('    affected_versions = ""')
-    lines.append('    cvss_vector = "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"')
-    lines.append('    compliance = "Dengbao2.0:8.1.3;OWASP:A03:2021"')
-    lines.append('    vuln_type = "rce"')
-    lines.append("    supports_waf_bypass = False")
-    lines.append("")
-    lines.append("    def verify(self, target, session) -> ScanResult:")
-    lines.append('        url = join_url(target, "/vulnerable/path")')
-    lines.append("        try:")
-    lines.append("            resp = session.get(url)")
-    lines.append("            # TODO: multi-condition check")
-    lines.append("            return ScanResult(")
-    lines.append("                kind=self.category, name=self.name,")
-    lines.append("                severity=self.severity, status=STATUS_UNKNOWN,")
-    lines.append('                url=url, evidence="plugin not implemented",')
-    lines.append("                unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,")
-    lines.append("            )")
-    lines.append("        except Exception as e:")
-    lines.append("            return ScanResult(")
-    lines.append('                kind="error", name=self.name,')
-    lines.append("                status=STATUS_UNKNOWN,")
-    lines.append('                evidence=f"exception: {e}",')
-    lines.append("                unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,")
-    lines.append("            )")
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(chr(10).join(lines) + chr(10))
-    return filepath

@@ -11,7 +11,7 @@
 #   - checksums-desktop.txt               （SHA256 供应链校验，覆盖上述三个 exe）
 #
 # 零配置体验说明：
-#   引擎（Python 运行时 + 56 POC + 字典 + Web 控制台）经 PyInstaller 冻结为
+#   引擎（Python 运行时 + 58 POC + 字典）经 PyInstaller 冻结为
 #   ruoyi-scan-engine.exe，编译期整块嵌入壳二进制（build.rs → include_bytes!）。
 #   首次运行自解压到 %LOCALAPPDATA%\Ruoyi-Scan\engine\ 并拉起 127.0.0.1:8123。
 #   用户：下载 → 双击 → 扫描。无需 Python / Node / Rust，安装器只是可选加分项。
@@ -136,10 +136,10 @@ jobs:
       # ---------- 阶段 1.5：终端版单文件 exe（console，与 pip 版同一 CLI）----------
       # 与桌面引擎的区别：入口是 main.py 的 CLI，--report/--serve/--distributed 全保留，
       # 产物不嵌进任何壳，直接作为 Release 资产分发。
-      # 可选依赖固定版本：redis(--distributed) / aiohttp(--async) / cryptography(插件验签)
+      # 可选依赖固定版本：redis(--distributed) / cryptography(插件验签)
       - name: Build CLI exe (PyInstaller)
         run: |
-          pip install redis==8.1.0 aiohttp==3.14.5 cryptography==50.0.2
+          pip install redis==8.1.0 cryptography==50.0.2
           pyinstaller tools/cli_build/ruoyi-scan.spec --noconfirm --distpath tools/cli_build/dist --workpath tools/cli_build/build
 
       # 隔离目录 + 真扫靶场：证明 exe 自包含（不读工作区的 plugins/data）且 7 格式依赖齐全

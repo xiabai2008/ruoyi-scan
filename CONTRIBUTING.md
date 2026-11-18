@@ -67,7 +67,7 @@ ruff format --check core/ lib/ api/ plugins/ chains/ main.py
 
 ```python
 from plugins.base import PluginBase, cvss_score, parse_compliance
-from core.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
+from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN
 
 
 class YourPlugin(PluginBase):

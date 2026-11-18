@@ -29,7 +29,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | 目录 | 模块数 | 说明 |
 |------|--------|------|
 | `core/` | 24 | 核心引擎层（引擎、编排、指纹、路由、会话、报告） |
-| `lib/` | 41 | 工具库层（信息收集、AI、WAF、合规、缓存等） |
+| `lib/` | 46 | 工具库层（信息收集、AI、WAF、合规、报告等） |
 | `api/` | 12 | FastAPI + WebSocket 服务层 |
 | `cli/` | 8 | CLI 控制层（分发 + 各模式执行器） |
 | `common/` | 3 | 共享基础层（模型、日志、控制台） |
@@ -51,7 +51,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | **快速跑起来** | 本页 → [02 入口与 CLI](02-entrypoint-cli.md) 的「运行方式」 → 回 `README.md` |
 | **理解整体设计** | [01 整体架构](01-architecture.md) → [03 核心引擎层](03-core.md) |
 | **写一个新 POC** | [04 插件体系](04-plugins-chains.md)（PluginBase 契约 + 发现机制） |
-| **改 Web API** | [06 API 与 Web 控制台](06-api-web.md) |
+| **改 Web API** | [06 API 服务](06-api-web.md) |
 | **改桌面端** | [07 桌面端与部署](07-desktop-deploy.md) |
 | **做架构评审 / 加新框架** | [01 架构](01-architecture.md) → [04 插件体系](04-plugins-chains.md) → [08 依赖关系](08-dependencies.md) |
 
@@ -65,8 +65,8 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | [02 入口与 CLI](02-entrypoint-cli.md) | `main.py`、`cli/` 分发层、参数全景、预检、环境变量、运行方式 | 命令行怎么进来的？各模式怎么执行？ |
 | [03 核心引擎层](03-core.md) | `core/` 24 个模块逐模块说明（关键类/函数/依赖/设计要点） | 引擎、会话、指纹、路由、报告各自做什么？ |
 | [04 插件体系与利用链](04-plugins-chains.md) | `PluginBase` 契约、5 条插件发现路径、58 个插件清单、3 条链、`data/` 字典 | 插件怎么写、怎么被发现、怎么被路由？ |
-| [05 工具库层](05-lib.md) | `lib/` 41 个模块按功能分组说明 | WAF 绕过、OAST、nuclei 兼容、AI 闭环怎么做？ |
-| [06 API 与 Web 控制台](06-api-web.md) | FastAPI 应用工厂、鉴权分级、全部 REST 端点、WebSocket 事件、定时扫描 | 服务端接口契约是什么？ |
+| [05 工具库层](05-lib.md) | `lib/` 模块按功能分组说明 | WAF 绕过、OAST、nuclei 兼容、AI 闭环怎么做？ |
+| [06 API 服务](06-api-web.md) | FastAPI 应用工厂、鉴权分级、全部 REST 端点、WebSocket 事件、定时扫描 | 服务端接口契约是什么？ |
 | [07 桌面端与部署](07-desktop-deploy.md) | Tauri 桌面端、靶场、Docker、监控、CI/Release、测试 | 怎么打包、部署、验收？ |
 | [08 依赖关系](08-dependencies.md) | 内部依赖分层规则、依赖矩阵、第三方依赖、打包分发 | 谁依赖谁？改一处会影响什么？ |
 
@@ -81,7 +81,7 @@ Ruoyi-Scan/
 ├── common/                    # 共享基础层：models / logger / console
 ├── cli/                       # CLI 控制层：dispatcher + runner + 各模式执行器
 ├── core/                      # 核心引擎层：编排、引擎、会话、指纹、路由、报告
-├── lib/                       # 工具库层：41 个独立能力模块
+├── lib/                       # 工具库层：独立能力模块（按能力分组）
 ├── plugins/                   # 插件系统
 │   ├── base.py                #   PluginBase 抽象基类 + CVSS 计算
 │   ├── ruoyi/                 #   20 个若依插件
@@ -91,7 +91,6 @@ Ruoyi-Scan/
 │   └── chain/                 #   利用链专用步骤插件（不参与主路由）
 ├── chains/                    # 3 条漏洞利用链定义 + registry
 ├── api/                       # FastAPI 应用（app/auth/deps/metrics + routes/ws/models）
-├── web/index.html             # 单文件 Web 控制台
 ├── data/                      # 字典 + CVE 映射 + 基线 + SQLite（cache/tasks）
 ├── desktop/                   # Tauri 桌面端（React 前端 + Rust 壳 + Python 引擎）
 ├── lab/                       # 签名靶场（vuln/safe 双模式）

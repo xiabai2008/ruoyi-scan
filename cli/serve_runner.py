@@ -13,11 +13,11 @@ logger = get_logger(__name__)
 
 
 def run_serve_mode(args: Namespace) -> None:
-    """Web API 服务模式（D9 + D11）：启动 FastAPI + WebSocket + Web 控制台"""
+    """Web API 服务模式（D9 + D11）：启动 FastAPI + WebSocket（交互文档见 /docs）"""
     print(f"{YELLOW}[*]启动 Web API 服务模式（D9 + D11）{RESET}")
     print(f"{YELLOW}[*]监听地址: {args.host}:{args.port}{RESET}")
     print(f"{YELLOW}[*]API 文档: http://{args.host}:{args.port}/docs{RESET}")
-    print(f"{YELLOW}[*]Web 控制台: http://{args.host}:{args.port}/{RESET}")
+    print(f"{YELLOW}[*]API 文档: http://{args.host}:{args.port}/docs{RESET}")
 
     # API Key 成链回退：命令行 --api-key 优先，环境变量兜底；均缺失则降级为仅本机可访问
     api_key = getattr(args, "api_key", None) or ""

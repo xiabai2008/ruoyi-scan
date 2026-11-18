@@ -99,7 +99,7 @@ pip install ruoyi-scan
 
 ## 桌面端 · 单个 exe，双击即用
 
-> 引擎、58 个 POC、Web 控制台全部在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
+> 引擎、58 个 POC 与全部报告模板都在**编译期嵌入同一个文件**。无需 Python、无需 Docker、无需任何环境配置 —— 对没有开发环境的机器，这是最省事的用法。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/desktop-01-overview.png" alt="桌面端 · 总览：三态判定分布、扫描趋势与最新发现" width="900" />
@@ -281,7 +281,7 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 | AI 报告解读 | `--ai-report zh\|en` 自动生成漏洞分析与修复优先级 |
 | 批量扫描 | `-f targets.txt` 多目标 + 批量汇总报告 |
 | 报告输出 | HTML（SVG 图表）/ JSON / CSV / PDF / Word / Excel / SARIF + 版本对照表 + docx 模板引擎 + 整改复测（`--remediation`） |
-| Web API | FastAPI REST + WebSocket 实时推送 + Web 控制台 + 权限分级（read/scan/admin）+ 定时扫描 |
+| Web API | FastAPI REST + WebSocket 实时推送 + OpenAPI 交互文档（`/docs`）+ 权限分级（read/scan/admin）+ 定时扫描 |
 | 并发限速 | ThreadPoolExecutor + 令牌桶（锁外 sleep，无并发退化） |
 | 验证码处理 | 自动探测 / OCR 识别 / 跳过 三模式 |
 | 多版本适配 | RuoYi 4.2 / 4.7 / v5 / v3.9.x 版本感知 POC 过滤 |
@@ -292,12 +292,11 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 | 认证后深度扫描 | `--auth-surface` 登录态接口资产盘点 + 越权矩阵（匿名重放判未授权 / 低权重放判垂直越权） |
 | CVE 同步 | NVD + GHSA 双源回退 + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
 | SIEM 集成 | ECS / CEF / LEEF / JSON 4 格式导出 + Syslog 转发 |
-| 异步引擎 | ThreadPoolExecutor 并发扫描 + aiohttp 可选异步 HTTP |
+| 异步引擎 | ThreadPoolExecutor 批量并发扫描（`--async`，仅批量模式） |
 | 分布式扫描 | Redis Master-Worker 队列 + Standalone 降级模式 |
-| 结果缓存 | SQLite 持久化 + SHA256 键 + TTL + 命中率统计 |
+| 代理池 | `--proxy-file` 每行一个代理 + round-robin/random/least-fail 轮换 |
 | 扫描模板 | quick / deep / compliance / dengbao 4 种预设策略 |
 | 认证扫描 | Cookie / Token / Bearer / 自动登录 4 种认证注入 |
-| 国际化 | 中英文报告切换（`--lang zh|en`） |
 | 插件 SDK | 模板生成 + 验证 + 枚举（`--plugin-init` / `--plugin-check`） |
 | CI/CD 集成 | 严重度阈值退出 + GitHub Code Scanning（SARIF）+ GitLab/Jenkins 模板 |
 | 漏洞知识库 | 离线 HTML Wiki + JSON API |
@@ -315,7 +314,6 @@ pip install ruoyi-scan
 # 可选功能依赖（按需安装）
 pip install pyyaml          # --config YAML 配置文件
 pip install redis           # --distributed Redis 分布式扫描
-pip install aiohttp         # --async 异步 HTTP 客户端
 pip install "ruoyi-scan[adversarial]"  # --adversarial-transport 对抗型传输层（Scrapling）
 
 # 运行扫描
@@ -390,9 +388,8 @@ python main.py --plugin-export ./ruoyi-scan-templates
 python main.py --plugin-manifest ./ruoyi-scan-templates  # 生成/校验 manifest（Ed25519 签名）
 python main.py --plugin-update  # 从官方仓库更新插件
 
-# Web API 服务
+# Web API 服务（人机界面用桌面端；服务侧交互文档在 /docs）
 python main.py --serve
-# 访问 http://localhost:8000/ (Web 控制台)
 # 访问 http://localhost:8000/docs (OpenAPI 文档)
 
 # 端口扫描 + 漏洞检测
@@ -458,7 +455,7 @@ docker compose down
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | scanner | - | 扫描器 CLI（通过 `docker compose run` 调用） |
-| api | 8000 | FastAPI Web API + WebSocket + Web 控制台 |
+| api | 8000 | FastAPI Web API + WebSocket（交互文档 `/docs`） |
 | lab-ruoyi | 8080 | 若依签名靶场（vuln 模式） |
 | lab-spring | 8091 | Spring Boot 签名靶场（vuln 模式） |
 | prometheus | 9090 | 指标采集（`--profile monitor`） |
@@ -526,7 +523,6 @@ docker compose down
 | `--report <dir>` | 报告输出目录 |
 | `--report-format <f>` | 报告格式 html/json/csv/pdf/docx/xlsx/sarif |
 | `--no-dedup` | 关闭结果去重聚合 |
-| `--lang <zh\|en>` | 报告语言（默认 zh） |
 | `--diff <old.json>` | 与历史扫描报告对比 |
 | `--diff-only <old> <new>` | 仅对比两个 JSON 报告 |
 | `--save-baseline` | 保存本次扫描结果为基线 |
@@ -548,7 +544,6 @@ docker compose down
 | 参数 | 说明 |
 |------|------|
 | `--components` | 组件版本检测（20 个 Java 组件 → CVE 比对） |
-| `--no-components` | 关闭组件版本检测 |
 | `--nuclei <dir\|file>` | 加载 nuclei YAML 模板（可多次指定） |
 | `--nuclei-tags <a,b>` | 仅加载含指定 tag 的模板 |
 | `--nuclei-severity <s>` | 仅加载指定严重度模板（high/medium/low） |
@@ -567,7 +562,7 @@ docker compose down
 
 | 参数 | 说明 |
 |------|------|
-| `--serve` | 启动 Web API 服务（FastAPI + WebSocket + Web 控制台） |
+| `--serve` | 启动 Web API 服务（FastAPI + WebSocket；交互文档 `/docs`） |
 | `--host <addr>` | API 服务监听地址（默认 127.0.0.1，仅本机可访问；对外监听需显式指定 0.0.0.0） |
 | `--port <n>` | API 服务监听端口（默认 8000） |
 | `--api-key <key>` | API Key 鉴权 |
@@ -583,7 +578,6 @@ docker compose down
 
 | 参数 | 说明 |
 |------|------|
-| `--oast` | 启用 OAST 带外检测 |
 | `--oast-server` | 启动 OAST 回调服务器 |
 | `--oast-host <addr>` | OAST 服务器监听地址 |
 | `--oast-port <n>` | OAST 服务器监听端口 |
@@ -639,16 +633,8 @@ docker compose down
 
 | 参数 | 说明 |
 |------|------|
-| `--async` | 启用异步扫描引擎（ThreadPoolExecutor） |
+| `--async` | 批量模式并发（仅 `-f` 生效，单目标自动忽略并提示） |
 | `--async-workers <n>` | 异步并发线程数（默认 10） |
-
-#### Web UI 控制台（D35）
-
-| 参数 | 说明 |
-|------|------|
-| `--web-ui` | 生成 Web UI 控制台（单页 HTML） |
-| `--web-ui-output <path>` | Web UI 输出路径 |
-| `--web-ui-api <url>` | Web UI 连接的 API 地址 |
 
 #### 分布式扫描（D36）
 
@@ -659,17 +645,6 @@ docker compose down
 | `--distributed-rate <n>` | 分布式全局限速（每秒请求数，0 不限速） |
 | `--worker-max-tasks <n>` | Worker 最大任务数（0 不限） |
 | `--distributed-timeout <n>` | 分布式超时秒数（默认 600） |
-
-#### 结果缓存（D37）
-
-| 参数 | 说明 |
-|------|------|
-| `--cache` | 启用扫描结果缓存（SQLite） |
-| `--cache-ttl <n>` | 缓存有效期秒数（默认 3600） |
-| `--cache-db <path>` | 缓存数据库路径 |
-| `--cache-stats` | 查看缓存统计 |
-| `--cache-clear` | 清除过期缓存 |
-| `--cache-clear-all` | 清除全部缓存 |
 
 #### 通知（D21）
 
@@ -766,12 +741,11 @@ Ruoyi-Scan/
 │   ├── jeecgboot/           # JeecgBoot 8 个插件
 │   ├── common/              # 通用 13 个插件
 │   └── chain/               # 3 条利用链
-├── lib/                     # 工具库（41 个模块）
+├── lib/                     # 工具库（按能力分组）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
 ├── tests/                   # 67 个测试文件 / 1300+ 条用例
 ├── lab/                     # 内置签名靶场（CI 用）；完整仿真靶场见 ruoyi-lab 仓库
-├── web/                     # Web 控制台前端
 ├── monitoring/              # Grafana + Prometheus
 ├── desktop/                 # Tauri 桌面端（React 前端 + Rust 壳 + 内嵌引擎）
 ├── scripts/                 # 构建 / 验收 / OpenAPI 导出脚本

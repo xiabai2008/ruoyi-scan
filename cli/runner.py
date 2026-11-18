@@ -208,6 +208,8 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         rate=args.rate,
         rate_scope=getattr(args, "rate_scope", "request"),
         proxy=getattr(args, "proxy", "") or "",
+        proxy_file=getattr(args, "proxy_file", "") or "",
+        proxy_strategy=getattr(args, "proxy_rotate", "round-robin") or "round-robin",
         timeout=args.timeout,
         time_budget=getattr(args, "time_budget", 0.0) or 0.0,
         time_based=getattr(args, "time_based", False),
@@ -469,6 +471,10 @@ def run_mode(
     label, color = MODE_LABELS[mode]
     print(f"{YELLOW}[*]当前扫描模式:[{color}{label}{YELLOW}]{RESET}")
 
+    # --async 只接在批量分支（_run_batch_async）；单目标下静默无效会让人误以为提速了
+    if getattr(args, "async_mode", False):
+        print(f"{YELLOW}[*]--async 仅对批量模式（-f）生效；本次单目标按同步并发执行{RESET}")
+
     # 口令字典分级：不在 CLI 修改 settings.PASSWORD_DICT 全局——--async 批量并发时
     # 各目标的 set/restore 会互相污染，改由 orchestrator 按 req.pass_level 统一处理
     if args.pass_level != "full" and args.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
@@ -723,7 +729,10 @@ def run_mode(
                 endpoints = parse_endpoints_from_urls(urls)
         logic_session = SessionManager(proxy=args.proxy, debug=args.debug, timeout=args.timeout)
         try:
-            scanner = LogicScanner(session=logic_session)
+            scanner = LogicScanner(
+                session=logic_session,
+                concurrency=max(1, int(getattr(args, "logic_concurrency", 10) or 10)),
+            )
             logic_vulns = scanner.scan(target_normalized, endpoints)
             # 逻辑链已验证的漏洞直接标记 CONFIRMED 并入结果集，统一参与报告与去重
             for lv in logic_vulns:

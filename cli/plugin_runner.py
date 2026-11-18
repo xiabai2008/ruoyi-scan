@@ -99,17 +99,17 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
 
 
 def run_plugin_new_mode(args: Namespace) -> None:
-    """P3: 创建新插件脚手架"""
-    from lib.plugin_sdk import generate_plugin_template
+    """P3: 创建新插件脚手架（与 --plugin-init 同一生成器，避免两套模板漂移）"""
+    from lib.plugin_sdk import init_plugin_file
 
     name = args.plugin_new
-    category = getattr(args, "category", "ruoyi")
+    category = getattr(args, "category", "common")
     print(f"{YELLOW}[*]创建新插件脚手架{RESET}")
     print(f"    名称: {name}")
     print(f"    类别: {category}")
     # FileExistsError 单独捕获：同名插件已存在属预期情况；其余异常统一归为创建失败
     try:
-        filepath = generate_plugin_template(name, category=category)
+        filepath = init_plugin_file(name, category=category)
         print(f"{GREEN}[+]插件已创建: {filepath}{RESET}")
         print(f"{YELLOW}[*]下一步:{RESET}")
         print("    1. 编辑插件文件实现 verify() 方法")

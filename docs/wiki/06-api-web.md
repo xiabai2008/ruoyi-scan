@@ -1,8 +1,8 @@
-# 06 · Web API 与控制台
+# 06 · API 服务
 
-> 这一章回答：`--serve` 起来的服务里有什么？鉴权怎么分级？实时进度是怎么推到浏览器的？
+> 这一章回答：`--serve` 起来的服务里有什么？鉴权怎么分级？实时进度是怎么推给客户端的？
 >
-> 相关源码：[api/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/api) · [web/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/web) · [cli/serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py)
+> 相关源码：[api/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/api) · [cli/serve_runner.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/serve_runner.py) · [desktop/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/desktop)
 
 ---
 
@@ -42,7 +42,7 @@ cli/serve_runner.run_serve_mode(args)
 8. ScanScheduler(orchestrator, storage)  # 加载失败 → None（降级为无调度）
 9. app.state 挂载：registry / orchestrator / storage / api_key / scheduler
 10. 挂载 6 个路由（全部 prefix="/api"）+ WebSocket /ws/scan/{task_id}
-11. StaticFiles(web_dir, html=True) 挂载 "/" —— 仅当 web/ 存在
+   # 不挂静态页面：人机界面在 desktop/，服务侧只提供 /docs 与 /redoc
 ```
 
 **第 1 步是必要的**：服务的实时进度已经通过 WebSocket 推给前端，插件再往 stdout 打一份就是纯噪音。`set_quiet(True)` 让 `lib/reporter.emit()` 改走 logging。
@@ -354,19 +354,11 @@ stats["unknown"] += max(0, total - confirmed)
 
 ---
 
-## 7. Web 控制台
+## 7. 图形界面与 API 文档
 
-[web/index.html](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/web/index.html) 是一个 **27 KB 的单文件控制台**，由 `StaticFiles(html=True)` 挂载到 `/`。
+服务端**不内置浏览器控制台**：人机界面统一走 [desktop/](https://github.com/xiabai2008/Ruoyi-Scan/tree/main/desktop)（Tauri + React，离线运行、支持本地引擎）；服务侧自测与第三方集成用 FastAPI 自动生成的 `/docs`（Swagger UI）与 `/redoc`。
 
-**单文件、零构建、零 npm** 的选择理由：
-
-| 约束 | 收益 |
-| --- | --- |
-| 无构建步骤 | `git clone` 后 `--serve` 即可用，不需要 `npm install` |
-| 无外部 CDN | 内网环境可用（安服现场常无外网） |
-| 单文件 | 便于审计（一次读完），也便于通过邮件/微信分发 |
-
-它通过 REST 提交任务 + WebSocket 订阅事件流，与服务端保持"零 API 版本耦合"——因为 WS 事件结构就是协议。
+历史上的 `web/index.html` 单文件控制台已移除：它无法在启用 `--api-key` 后完成 WebSocket 鉴权，且未随 wheel 分发，长期处于"源码可用、安装即消失"的半可用状态。
 
 Prometheus 抓取配置在 [monitoring/prometheus.yml](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/monitoring/prometheus.yml)，配合 Docker 的 `--profile monitor` 使用（见 [07 章](07-desktop-deploy.md#4-容器部署)）。
 
@@ -418,6 +410,6 @@ if _SCOPE_LEVEL.get(scope, 0) < _SCOPE_LEVEL.get(required, 1):
 - 鉴权是三层：路径分类（admin/scan/read）→ 多 Key 解析 → 常量时间比较。三道安全细节（不提前返回、禁止 URL 传参、WS 单独鉴权）都是针对具体攻击面写的。
 - WebSocket 的关键设计是**历史补播**与**心跳保活**；关闭路径有两条（`complete`/`error` 与终态 `status`），为兼容事件顺序差异。
 - 事件流是**唯一事实来源**：`GET /results` 从事件重建，而非维护第二份结果表。
-- `web/index.html` 单文件控制台的选择，服务于"内网可用、无需构建、便于审计"三个约束。
+- 图形界面只有桌面端一个入口；服务侧以 `/docs` 暴露契约，避免维护第二套 UI 与第二套鉴权行为。
 
 → 下一章：[07 · 桌面端、靶场与部署](07-desktop-deploy.md)

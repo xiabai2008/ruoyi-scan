@@ -9,7 +9,6 @@
 #   pip install "ruoyi-scan[report]"       # + PDF / Word / Excel 报告
 #   pip install "ruoyi-scan[serve]"        # + Web API 服务
 #   pip install "ruoyi-scan[distributed]"  # + Redis 分布式
-#   pip install "ruoyi-scan[async]"        # + aiohttp 异步
 #   pip install "ruoyi-scan[yaml]"         # + YAML 配置
 #   pip install "ruoyi-scan[all]"          # 全部（不含 adversarial，见下）
 #   pip install "ruoyi-scan[adversarial]"  # + Scrapling 对抗型传输层（见下）
@@ -35,7 +34,7 @@ requests>=2.34.2
 #     Excel 报告（openpyxl 可读+写，原生图表+条件格式）
 #
 # pip install "ruoyi-scan[serve]"        → fastapi / uvicorn[standard]
-#     FastAPI + uvicorn 提供 REST API + WebSocket + Web 控制台
+#     FastAPI + uvicorn 提供 REST API + WebSocket（交互文档 /docs）
 #
 # pip install "ruoyi-scan[schedule]"     → apscheduler>=3.10
 #     cron 5 段式定时扫描。不装时 cron 会降级为每 5 分钟间隔，
@@ -44,8 +43,7 @@ requests>=2.34.2
 # pip install "ruoyi-scan[distributed]"  → redis>=8.1.0
 #     --distributed Redis 分布式扫描（Master-Worker 队列）
 #
-# pip install "ruoyi-scan[async]"        → aiohttp>=3.14.5
-#     --async 异步 HTTP 客户端
+#     --async 批量并发（线程池，无额外依赖）
 #
 # pip install "ruoyi-scan[yaml]"         → pyyaml>=6.0
 #     --config YAML 配置文件

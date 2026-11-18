@@ -10,7 +10,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  接入层   main.py（参数解析）· web/index.html · desktop/（Tauri+React）│
+│  接入层   main.py（参数解析）· desktop/（Tauri+React）· api/（HTTP）   │
 └───────────────────────────┬──────────────────────────────────────────┘
                             │  Namespace / HTTP
 ┌───────────────────────────▼──────────────────────────────────────────┐
@@ -34,7 +34,7 @@
                             │  基础能力调用
 ┌───────────────────────────▼──────────────────────────────────────────┐
 │  能力层   core/session.py（网络）· core/fingerprint.py（识别）         │
-│           lib/*（41 个独立工具模块）                                  │
+│           lib/*（独立工具模块，按能力分组）                           │
 └───────────────────────────┬──────────────────────────────────────────┘
                             │
 ┌───────────────────────────▼──────────────────────────────────────────┐
@@ -232,7 +232,7 @@ build_version_matrix()  → 用「未过滤候选集」生成对照表，展示�
 | `--chain <name>` | `cli.chain_runner.run_chain_mode` → `core.chain.ChainEngine.run` |
 | `--passive` | `cli.passive_runner.run_passive_mode` → `core.proxy_server` |
 | `--plugin-*` / `--wiki` / `--ci-init` / `--diff-only` / `--template-list` | `cli.plugin_runner` / `cli.tool_runner`（纯工具模式，不扫描） |
-| `--ai` / `--ai-validate` / `--cve-sync` / `--oast-server` / `--web-ui` / `--cache-*` | `lib/*` 对应的 `run_*_mode()` |
+| `--ai` / `--ai-validate` / `--cve-sync` / `--oast-server` | `lib/*` 对应的 `run_*_mode()` |
 
 ---
 

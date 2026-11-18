@@ -9,7 +9,7 @@
 # 架构约束（红线）：
 #   - core/engine.py 零修改（通过 on_result 回调）
 #   - core/router.py 零修改
-#   - core/models.py 零修改
+#   - common/models.py / plugins/base.py 零修改（新增能力走回调与组合）
 #   - ThreadPoolExecutor 使用 daemon 线程（避免测试/进程退出时后台线程阻塞）
 from __future__ import annotations
 
@@ -261,7 +261,11 @@ class ScanRequest:
     rate: int = 0  # 限速（每秒请求数，0=不限）
     # 限速作用域：request=逐 HTTP 请求（默认，真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）
     rate_scope: str = "request"
-    proxy: str = ""  # 代理地址
+    proxy: str = ""  # 代理地址（单代理）
+    # D13：代理池。非空时优先于 proxy，由 SessionManager 逐请求轮换；
+    # 文件格式：每行一个代理 URL，# 开头为注释（与 lib/proxy_pool.ProxyPool.from_file 一致）
+    proxy_file: str = ""
+    proxy_strategy: str = "round-robin"  # round-robin / random / least-fail
     timeout: int = 10  # 超时秒数
     debug: bool = False  # 调试模式
     report_dir: str = ""  # 报告输出目录（空=不生成报告）
@@ -279,8 +283,6 @@ class ScanRequest:
     crawl_max_pages: int = 50  # 爬虫最大页面数
     subdomain: bool = False  # 是否启用子域名枚举
     js_extract: bool = False  # 是否启用 JS 端点提取
-    # 注：auth 字段在扫描请求参数区已声明过（历史遗留重复声明），功能不受影响，
-    # dataclass 重复字段以最后一次声明为准，此处仅为 D26 语义补充说明
     # D26：认证扫描增强（CLI args.auth / args.auth_file / args.auth_login 解析后传入）
     auth: Optional[Dict[str, Any]] = None  # {"cookies": {...}, "headers": {...}, "type": "..."}
     # 显式低权账号（--surface-account user:pass，可多次；越权对照的唯一来源）
@@ -320,6 +322,24 @@ class ScanRequest:
         if self.auth_status == "not_attempted" and self.auth:
             if self.auth.get("cookies") or self.auth.get("headers"):
                 self.auth_status = "ok"
+
+
+def build_proxy_pool(req: "ScanRequest") -> Optional[Any]:
+    """按 `--proxy-file` 构造代理池；未配置/文件为空时返回 None（回退固定代理）。
+
+    单列出来是为了可测：代理池曾在 D13 只实现了库、从未被主流程构造，
+    CLI 的 --proxy-file 因此只起"跳过预检"的作用（v1.8 修）。
+    """
+    if not getattr(req, "proxy_file", ""):
+        return None
+    from lib.proxy_pool import ProxyPool
+
+    pool = ProxyPool.from_file(req.proxy_file, strategy=getattr(req, "proxy_strategy", "") or "round-robin")
+    if pool.total_count() == 0:
+        logger.warning("代理池文件为空或不可读，回退固定代理: %s", req.proxy_file)
+        return None
+    logger.debug("代理池已启用: %d 个代理, 策略=%s", pool.total_count(), req.proxy_strategy)
+    return pool
 
 
 @dataclass
@@ -611,6 +631,17 @@ class ScanOrchestrator:
             limiter: Optional[TokenBucket] = (
                 TokenBucket(req.rate) if (req.rate > 0 and req.rate_scope == "request") else None
             )
+            # D13：--proxy-file 配置了代理池时逐请求轮换；未配置则沿用固定代理。
+            # 在侦察之前构造，主会话与 recon 临时会话共享同一个池（健康度统计不分裂）。
+            proxy_pool = build_proxy_pool(req)
+            if proxy_pool is not None:
+                _emit(
+                    "status",
+                    {
+                        "message": f"代理池已启用：{proxy_pool.total_count()} 个代理（{req.proxy_strategy}）",
+                        "task_id": task.task_id,
+                    },
+                )
 
             # 1. 端口扫描（可选）
             if req.portscan:
@@ -634,7 +665,7 @@ class ScanOrchestrator:
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
             recon_info: Dict[str, Any] = {}
             if req.crawl or req.subdomain or req.js_extract:
-                recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter)
+                recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter, proxy_pool=proxy_pool)
                 if recon_info.get("subdomains"):
                     _emit(
                         "recon",
@@ -674,6 +705,7 @@ class ScanOrchestrator:
             # 复用率崩掉。这里显式把 pool_size 设为线程数，使池与并发匹配。
             session = SessionManager(
                 proxy=req.proxy or None,
+                proxy_pool=proxy_pool,
                 debug=req.debug,
                 timeout=req.timeout,
                 pool_size=req.threads,
@@ -1401,6 +1433,7 @@ class ScanOrchestrator:
         _emit: Callable[..., None],
         task_id: str,
         limiter: Optional[Any] = None,
+        proxy_pool: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """D14：执行主动信息收集（爬虫 + 子域名 + JS 提取）
 
@@ -1461,6 +1494,7 @@ class ScanOrchestrator:
                 # 同样显式传 pool_size 与线程数匹配（#4）：爬虫/JS 提取的并发也依赖连接池复用。
                 recon_session = SessionManager(
                     proxy=req.proxy or None,
+                    proxy_pool=proxy_pool,
                     debug=req.debug,
                     timeout=req.timeout,
                     pool_size=req.threads,

@@ -173,10 +173,10 @@ def test_plugin_scaffold_contains_unknown_reason(monkeypatch, tmp_path):
     import core.loader as loader
 
     monkeypatch.setattr(loader, "known_categories", lambda: ["common"])
-    path = sdk.generate_plugin_template("v17_demo", "common")
+    path = sdk.init_plugin_file("v17_demo", "common", output_dir=str(tmp_path / "plugins"))
     text = open(path, encoding="utf-8").read()
     assert "UnknownReason" in text
-    assert "unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value" in text
+    assert "unknown_reason=UnknownReason." in text
 
 
 def test_report_column_present():

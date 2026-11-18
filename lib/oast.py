@@ -7,12 +7,11 @@
 #   1. 自建回调服务器（--oast-server 127.0.0.1:5555）：本地监听 HTTP/DNS 回调
 #   2. 第三方服务（Interactsh）：通过 API 生成唯一交互域并查询回调记录
 #
-# 使用方式：
-#   # 自建模式
-#   python main.py -u http://target/ --oast --oast-server 127.0.0.1:5555
+# 使用方式（当前仅暴露服务器模式）：
+#   python main.py --oast-server 127.0.0.1:5555
 #
-#   # Interactsh 模式
-#   python main.py -u http://target/ --oast --oast-provider interactsh
+# 注意：扫描侧的 OAST 客户端（OASTClient）尚未接入扫描编排，CLI 不再暴露 --oast。
+# 服务器模式供外部工具或自研插件回调使用；插件若要集成，自行构造 OASTClient。
 #
 # 插件集成：
 #   在插件 verify() 中调用 oast.get_payload() 获取唯一回调 URL，

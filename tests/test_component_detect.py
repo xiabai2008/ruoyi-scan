@@ -175,7 +175,7 @@ def test_detect_log4j_requires_oast():
     sess = FakeSession({})
     res = detect_log4j("http://target/", sess)
     assert res.status == STATUS_UNKNOWN, res.status
-    assert "--oast" in res.evidence
+    assert "OAST" in res.evidence
     print("PASS test_detect_log4j_requires_oast")
 
 

@@ -130,10 +130,8 @@ if TYPE_CHECKING:
 [cli/dispatcher.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py) 中每个工具模式都是函数内导入：
 
 ```python
-if args.oast:        from lib.oast import run_oast_mode
+if args.oast_server: from lib.oast import run_oast_mode
 if args.cve_sync:    from lib.cve_sync import run_cve_sync_mode
-if args.web_ui:      from lib.web_ui import run_web_ui_mode
-if args.cache_stats: from lib.cache import run_cache_stats_mode
 if args.ai_validate: from lib.ai_validate import run_ai_validate_mode
 if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 ```
@@ -151,7 +149,7 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 | `requests` | `>=2.28` | 唯一的 HTTP 客户端（同步） |
 | `requests-mock` | `>=1.11` | 测试 mock 用，同时列在核心与 dev 中 |
 
-`requests-mock` 出现在核心依赖里略显特别——它在运行时只有一个用途：让 `--oast` 之类模式在离线时可被替换。真正需要 mock 的是测试。
+`requests-mock` 出现在核心依赖里略显特别——它在运行时只为测试替身服务（离线时可替换真实请求）。真正需要 mock 的是测试。
 
 ### 3.2 可选依赖分组（`pip install ".[group]"`）
 
@@ -160,7 +158,6 @@ if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 | `report` | `reportlab>=4.0`、`python-docx>=1.1`、`openpyxl>=3.1` | PDF / Word / Excel 报告 | 降级为 HTML/JSON/CSV |
 | `serve` | `fastapi>=0.100`、`uvicorn[standard]>=0.23` | `--serve` Web API + WS + 控制台 | `serve_runner` 捕获 `ImportError` 给出安装提示 |
 | `distributed` | `redis>=4.5` | `--distributed` Master-Worker 队列 | 不可用 |
-| `async` | `aiohttp>=3.8` | `--async` 异步 HTTP 客户端 | 回退同步引擎 |
 | `yaml` | `pyyaml>=6.0` | `--config` YAML 配置文件 | 见下（nuclei 模板有自研降级） |
 | `lab` | `flask>=2.3` | 启动 `lab/` 靶场 | 靶场不可用（不影响扫描器） |
 | `all` | 以上全部 | — | — |

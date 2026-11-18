@@ -62,7 +62,7 @@
 - ~~**CI Windows matrix**~~ **已落地（G2）**：unit 作业矩阵已含 `windows-latest`（pytest-timeout Windows 侧切 thread 方法）
 - **Python 基线评估提升至 3.10**：3.8 已 EOL 两年，mypy 2.x 已弃支持；以 PyPI
   安装量数据决策，`pyproject.toml` classifiers 同步
-- **引擎统一**：ThreadPool + aiohttp 双轨收敛为统一异步内核，保留同步插件 API
+- ~~**引擎统一**~~ **已收口（v1.8 清理）**：删除未接线的 aiohttp 异步 HTTP 客户端，只保留 ThreadPool 单轨（批量 `--async`），不再维护第二套 HTTP 栈
   兼容层，插件作者无感迁移
 - **大规模批量基线**：基于现有 pytest-benchmark 建立 10k 目标吞吐 / 内存基线；
   批量报告聚合分页

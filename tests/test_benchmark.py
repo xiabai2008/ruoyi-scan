@@ -71,50 +71,6 @@ class TestSessionManagerBenchmark:
 # ── CacheStorage WAL 并发性能基准 ──────────────────────
 
 
-class TestCacheBenchmark:
-    """CacheStorage WAL 模式性能基准"""
-
-    @pytest.fixture
-    def cache(self, tmp_path):
-        from lib.cache import CacheStorage
-
-        db_path = str(tmp_path / "bench_cache.db")
-        c = CacheStorage(db_path)
-        yield c
-        c.close()
-
-    def test_cache_set(self, benchmark, cache):
-        """基准：缓存写入（WAL 模式）"""
-
-        data = {"name": "SQL注入测试", "status": "CONFIRMED", "severity": "high"}
-
-        def cache_set():
-            cache.set("bench_key_001", "http://target.com/", data, ttl=3600, plugin_name="SQL注入-角色列表")
-
-        benchmark(cache_set)
-
-    def test_cache_get(self, benchmark, cache):
-        """基准：缓存读取（WAL 模式，含命中计数）"""
-        data = {"name": "SQL注入测试", "status": "CONFIRMED", "severity": "high"}
-        cache.set("bench_get_key", "http://target.com/", data, ttl=3600)
-
-        def cache_get():
-            return cache.get("bench_get_key")
-
-        result = benchmark(cache_get)
-        assert result is not None
-        assert result["status"] == "CONFIRMED"
-
-    def test_cache_miss(self, benchmark, cache):
-        """基准：缓存未命中（空查询）"""
-
-        def cache_miss():
-            return cache.get("nonexistent_key_12345")
-
-        result = benchmark(cache_miss)
-        assert result is None
-
-
 # ── AsyncScanEngine 批量扫描基准 ────────────────────────
 
 

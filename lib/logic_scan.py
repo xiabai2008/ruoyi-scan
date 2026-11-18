@@ -694,19 +694,20 @@ class RaceConditionDetector:
 class LogicScanner:
     """业务逻辑漏洞扫描器（聚合所有检测器）"""
 
-    def __init__(self, session=None, auth_info: Optional[Dict] = None):
+    def __init__(self, session=None, auth_info: Optional[Dict] = None, concurrency: int = 10):
         """初始化聚合扫描器（组合各业务逻辑检测器）
 
         Args:
             session: SessionManager 实例（已认证）
             auth_info: 认证信息（用户身份/角色等）
+            concurrency: 竞争条件检测的并发请求数（CLI --logic-concurrency）
         """
         self.session = session
         self.auth_info = auth_info or {}
         self.idor_detector = IDORDetector(session, auth_info)
         self.priv_detector = PrivilegeEscalationDetector(session, auth_info)
         self.tamper_detector = ParameterTamperingDetector(session, auth_info)
-        self.race_detector = RaceConditionDetector(session, auth_info)
+        self.race_detector = RaceConditionDetector(session, auth_info, concurrency=concurrency)
 
     def scan(self, base_url: str, endpoints: List[EndpointInfo] = None) -> List[LogicVuln]:
         """执行业务逻辑扫描

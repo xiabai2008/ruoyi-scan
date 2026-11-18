@@ -39,7 +39,9 @@ from typing import List, NamedTuple, Optional
 
 # 本项目会放进 site-packages 的顶层包名（与 pyproject packages.find.include 一致）
 # main 是 py-modules，同样会被暴露
-PROJECT_TOP_LEVEL = ("common", "cli", "core", "lib", "api", "plugins", "config", "chains", "main")
+# 与 pyproject.toml [tool.setuptools.packages.find] 的 include 保持一致：
+# data 也是随包分发的顶层名（此前漏登记，用户项目的 data/ 会静默劫持 data.__init__）。
+PROJECT_TOP_LEVEL = ("common", "cli", "core", "lib", "api", "plugins", "config", "chains", "data", "main")
 
 # 用户生态里最常见、最容易与本项目撞名的前缀
 # 这些名字在真实项目里出现频率极高，是冲突的主要来源

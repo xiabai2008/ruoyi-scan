@@ -15,16 +15,10 @@ def load_plugins(package_name: str = "plugins.ruoyi") -> List[type]:
     """
     package = importlib.import_module(package_name)
     result = []
-    plugin_list = getattr(package, "plugin_list", [])
-    for item in plugin_list:
-        if isinstance(item, str):
-            cls = getattr(package, item, None)
-        else:
-            # 直接是类对象（推荐写法）
-            cls = item
-        if cls is not None:
-            _validate_capability_flags(cls)
-            result.append(cls)
+    for cls in getattr(package, "plugin_list", []):
+        # 契约：plugin_list 必须是类对象（字符串形式已无使用者，v1.8 起不再兼容）
+        _validate_capability_flags(cls)
+        result.append(cls)
     return result
 
 
@@ -206,7 +200,9 @@ def discover_plugin_packages() -> List[str]:
     # 兜底：PyInstaller onefile 若因数据目录缺失导致磁盘扫描为空，
     # 但插件包已作为 hiddenimports 打进 PYZ，仍可按已知包名加载。
     if not packages and getattr(sys, "frozen", False):
-        for pkg_name in ("plugins.ruoyi", "plugins.spring", "plugins.common", "plugins.jeecgboot"):
+        # 必须与 plugins/ 下的框架包保持同步（v1.6 加 yudao 时此处漏改，
+        # 冻结环境会静默少一个包；新增框架时同步本元组并跑 check_framework_registration.py）
+        for pkg_name in ("plugins.ruoyi", "plugins.spring", "plugins.common", "plugins.jeecgboot", "plugins.yudao"):
             try:
                 if importlib.util.find_spec(pkg_name) is not None:
                     packages.append(pkg_name)

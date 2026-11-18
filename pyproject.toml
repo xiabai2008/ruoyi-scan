@@ -4,7 +4,6 @@
 #   pip install ".[report]"          # 核心 + 报告增强
 #   pip install ".[serve]"           # 核心 + Web API
 #   pip install ".[distributed]"     # 核心 + Redis 分布式
-#   pip install ".[async]"           # 核心 + aiohttp 异步
 #   pip install ".[yaml]"            # 核心 + YAML 配置
 #   pip install ".[all]"             # 全部可选依赖
 #   pip install ".[dev]"             # 开发/测试依赖
@@ -64,10 +63,6 @@ schedule = [
 distributed = [
     "redis>=8.1.0",
 ]
-# 异步引擎：aiohttp 异步 HTTP 客户端
-async = [
-    "aiohttp>=3.14.5",
-]
 # YAML 配置文件
 yaml = [
     "pyyaml>=6.0",
@@ -93,7 +88,6 @@ all = [
     "uvicorn[standard]>=0.23",
     "apscheduler>=3.10,<4",
     "redis>=8.1.0",
-    "aiohttp>=3.14.5",
     "pyyaml>=6.0",
     "flask>=3.1.3",
 ]

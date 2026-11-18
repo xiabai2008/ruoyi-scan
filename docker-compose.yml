@@ -1,7 +1,7 @@
 # Ruoyi-Scan 一键部署（阶段七 + D16 监控栈）
 # 包含：
 #   - scanner：扫描器 CLI（main.py 入口，参数通过 CMD 追加）
-#   - api：Web API 服务（FastAPI + WebSocket + Web 控制台）
+#   - api：Web API 服务（FastAPI + WebSocket，交互文档 /docs）
 #   - lab-ruoyi / lab-spring：2 个 CMS 签名靶场（vuln 模式，供端到端验证）
 #   - prometheus：指标采集（可选，profile=monitor 启用）
 #   - grafana：监控面板（可选，profile=monitor 启用）
@@ -25,7 +25,7 @@ services:
       - lab-ruoyi
       - lab-spring
 
-  # D16 Web API 服务（FastAPI + WebSocket + Web 控制台）
+  # D16 Web API 服务（FastAPI + WebSocket，交互文档 /docs）
   api:
     build: .
     command: --serve --host 0.0.0.0 --port 8000

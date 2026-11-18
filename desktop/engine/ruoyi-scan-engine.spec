@@ -3,7 +3,7 @@
 #
 # 产物：desktop/engine/dist/ruoyi-scan-engine.exe
 #   - 内嵌 Python 3.11 + fastapi/uvicorn + 全部 4 个插件包（ruoyi/spring/common/jeecgboot）
-#   - data/（爆破字典）与 web/（Web 控制台）随包分发
+#   - data/（爆破字典）随包分发
 #
 # 关键设计：
 #   1. plugins/ 用 datas 拷为源码目录而非 PYZ：
@@ -30,8 +30,6 @@ a = Analysis(
         (os.path.join(REPO, "chains"), "chains"),
         # 爆破字典等数据文件（settings.BASE_DIR/data）
         (os.path.join(REPO, "data"), "data"),
-        # Web 控制台静态资源（api/app.py 挂载 web/）
-        (os.path.join(REPO, "web"), "web"),
         # assets（若被 lib/ 或报告模板引用则一并带上，缺失不致命）
         (os.path.join(REPO, "assets"), "assets"),
     ],

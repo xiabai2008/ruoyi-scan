@@ -1,12 +1,12 @@
 # D34：异步扫描引擎
 #
-# 在不破坏现有同步插件（38 个 POC）的前提下，通过 asyncio + ThreadPoolExecutor
+# 在不破坏现有同步插件的前提下，通过 asyncio + ThreadPoolExecutor
 # 实现并发扫描，提升大规模扫描场景的吞吐量。
 #
 # 设计原则：
 #   1. 现有 SessionManager 和插件零改动（同步代码）
 #   2. 异步引擎通过 ThreadPoolExecutor 调度同步插件
-#   3. 提供原生 asyncio HTTP 客户端（aiohttp）供新插件使用（可选）
+#   3. 不引入第二套 HTTP 客户端：插件仍用同步 SessionManager（避免双栈漂移）
 #   4. 向后兼容：--async 关闭时走原同步路径
 #
 # 使用方式：
@@ -315,101 +315,6 @@ def scan_plugins_concurrent(
                 logger.debug("单目标多插件扫描获取结果失败", exc_info=True)
 
         return results
-
-
-# ============================================================
-# 异步 HTTP 客户端（可选，供新插件使用）
-# ============================================================
-
-
-def _ssl_context(verify_ssl: bool = True):
-    """构造 aiohttp 用 SSL 上下文
-
-    默认开启证书校验；仅当显式 verify_ssl=False（自签名证书靶场）时关闭
-    check_hostname / 证书校验。
-    """
-    import ssl
-
-    ssl_ctx = ssl.create_default_context()
-    if not verify_ssl:
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-    return ssl_ctx
-
-
-async def async_http_get(
-    url: str, headers: Dict = None, timeout: float = 10.0, verify_ssl: bool = True
-) -> Dict[str, Any]:
-    """异步 HTTP GET 请求（使用 aiohttp）
-
-    注意：需要安装 aiohttp（pip install aiohttp）。未安装时抛出 ImportError。
-
-    Args:
-        url: 请求 URL
-        headers: 请求头
-        timeout: 超时秒数
-        verify_ssl: 是否验证 SSL 证书（默认 True 安全校验；自签名靶场显式传 False 关闭）
-
-    Returns:
-        {'status_code': int, 'text': str, 'headers': dict, 'url': str}
-    """
-    try:
-        import aiohttp
-    except ImportError:
-        raise ImportError("异步 HTTP 需要安装 aiohttp：pip install aiohttp")
-
-    connector = aiohttp.TCPConnector(ssl=_ssl_context(verify_ssl))
-    timeout_cfg = aiohttp.ClientTimeout(total=timeout)
-
-    async with aiohttp.ClientSession(connector=connector, timeout=timeout_cfg) as http_session:
-        async with http_session.get(url, headers=headers or {}) as resp:
-            text = await resp.text()
-            return {
-                "status_code": resp.status,
-                "text": text,
-                "headers": dict(resp.headers),
-                "url": str(resp.url),
-            }
-
-
-async def async_http_post(
-    url: str,
-    data: Dict = None,
-    json_data: Dict = None,
-    headers: Dict = None,
-    timeout: float = 10.0,
-    verify_ssl: bool = True,
-) -> Dict[str, Any]:
-    """异步 HTTP POST 请求
-
-    Args:
-        verify_ssl: 是否验证 SSL 证书（默认 True 安全校验；自签名靶场显式传 False 关闭）
-    """
-    try:
-        import aiohttp
-    except ImportError:
-        raise ImportError("异步 HTTP 需要安装 aiohttp：pip install aiohttp")
-
-    connector = aiohttp.TCPConnector(ssl=_ssl_context(verify_ssl))
-    timeout_cfg = aiohttp.ClientTimeout(total=timeout)
-
-    async with aiohttp.ClientSession(connector=connector, timeout=timeout_cfg) as http_session:
-        kwargs = {}
-        if data:
-            kwargs["data"] = data
-        if json_data:
-            kwargs["json"] = json_data
-        if headers:
-            kwargs["headers"] = headers
-
-        async with http_session.post(url, **kwargs) as resp:
-            text = await resp.text()
-            return {
-                "status_code": resp.status,
-                "text": text,
-                "headers": dict(resp.headers),
-                "url": str(resp.url),
-            }
 
 
 # ============================================================

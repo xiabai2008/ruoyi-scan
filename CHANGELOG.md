@@ -6,6 +6,60 @@
 
 ## [Unreleased]
 
+### Removed
+- **Web 控制台**（`web/index.html`、`--serve` 的静态挂载、桌面引擎打包条目）：它无法在
+  `--api-key` 下完成 WebSocket 鉴权，且被 `pyproject.toml` 排除出 wheel——"源码可用、
+  安装即消失"。人机界面统一为桌面端，服务侧保留 REST/WS 与 `/docs` 交互文档。
+  **破坏性变更**：`http://host:port/` 不再返回控制台页面，请改用桌面端或 `/docs`。
+- **`--lang` 与 `lib/i18n.py`（D23）**：自 2026-07 引入起从未接线（全仓无 `args.lang`），
+  报告模板固定 `zh-CN`，文档却宣称支持中英切换。
+- **`--cache` / `--cache-ttl` / `--cache-db` / `--cache-stats` / `--cache-clear` /
+  `--cache-clear-all` 与 `lib/cache.py`（D37）**：主扫描链路从不读写缓存，
+  `data/scan_cache.db` 恒为空，统计/清理命令作用于一个永远不会被写入的库。
+- **`--web-ui` / `--web-ui-output` / `--web-ui-api` 与 `lib/web_ui.py`（D35）**：生成页
+  连接 `/ws/scan`（现行路由为 `/ws/scan/{task_id}`）、停止任务走 `POST /api/scan/{id}/stop`
+  （现行为 `DELETE /api/scan/{id}`），产物无托管方。
+- **`--no-components`**：与 `--components` 默认关闭的语义矛盾，且无任何消费方。
+- **`--oast`**：扫描侧 OAST 客户端从未接入编排；保留独立的 `--oast-server` 回调服务器。
+- **`[async]` extra 与 `async_http_get/post`**：aiohttp 仅被这两个零调用函数引用；
+  `--async` 实际是批量模式的 ThreadPool 并发，单目标下现在会显式提示"仅 -f 生效"。
+- **`generate_plugin_template`**：与 `init_plugin_file` 并存的第二套模板生成器
+  （`--plugin-new` 与 `--plugin-init` 生成的骨架不一致），统一为新生成器。
+- **死配置**：`JOB_JSESSIONID`（D1 登录链后 0 引用）、`WafBypass` 配置类（6 个常量全仓 0 引用）、
+  `RuoYiAuth.REMEMBER_ME/CAPTCHA_MODE`、`config/settings.py` 中重复的 `REDIS_PORT` 赋值。
+- **桌面端 `desktop/img/` 11 张重复头像**：与 `desktop/src/assets/avatars/` SHA256 逐字节相同，
+  代码只引用后者（3.4 MB）。
+- **`api/ws/events.py`**：事件常量表无任何生产导入，且只登记 10 类（编排层实际发 17+ 类），
+  作为"合法事件清单"反而误导；唯一测试只断言自身长度。已连同测试删除。
+- **`lib/distributed.StandaloneDistributor` / `run_distributed_standalone_mode`**：
+  CLI 的 standalone 模式明确"刻意不复用"（会吞异常），该实现只剩测试在跑；已删除，
+  单机分发集中在 `cli/distributed_runner._run_standalone`。
+
+### Added
+- `tests/test_cli_flag_consumers.py`：AST 门禁——每个 `add_argument` 必须有 `args.<dest>`
+  消费方（模式开关与 argparse 内建动作白名单），防止"开关在、功能无"的债复发。
+- 框架注册门禁新增 `--category` 派生检查（v1.6 WP-R 的漏网处，此前 `--plugin-init
+  --category jeecgboot` 会被 argparse 拒绝）。
+
+### Changed
+- `--category` 的 choices 改为 `_known_categories()` 派生，所有已安装框架均可用于
+  `--plugin-init` / `--plugin-new`。
+- **`--proxy-file` / `--proxy-rotate` 真正接线**：`ScanRequest` 新增 `proxy_file` /
+  `proxy_strategy`，orchestrator 构造 `ProxyPool` 并注入主会话与 recon 临时会话；
+  文件为空/不可读时回退固定代理。此前 `--proxy-file` 只用于"跳过预检"。
+- `--logic-concurrency` 接线到 `RaceConditionDetector`（此前参数无消费方）。
+- `--remediation` 单独调用（无扫描目标）时显式报错并退出 2，不再打 banner 后静默 exit 0。
+- `--help` 手写表补登 `--time-budget`，并同步移除上述已删开关。
+- 插件发现：`plugin_list` 不再兼容字符串形式（5 个插件包均已使用类对象）；
+  PyInstaller 冻结回退清单补上 `plugins.yudao`（此前漏项会在冻结环境静默少一个包）。
+- 插件脚手架模板补充 `unknown_reason` 示例，与 v1.7 三态契约一致。
+
+### Fixed
+- 过期注释与文档引用：`core/models.py`（文件早已迁至 `common/models.py`）、
+  `_log`"历史遗留"注释、`ScanRequest.auth`"重复声明"注释。
+- README / usage / wiki / 命令手册中关于 Web 控制台、`--lang`、结果缓存、Web UI、
+  `[async]` 的过期描述；`lib/` 模块数量改为不写死（避免再次漂移）。
+
 ## [1.8.0] - 2026-11-17
 
 ### Added

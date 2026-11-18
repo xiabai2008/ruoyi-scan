@@ -18,6 +18,9 @@ edit_uri: edit/main/docs/
 exclude_docs: |
   promo/宣传视频脚本_v1.5.2.md
   promo/*.txt
+  # 内部计划/任务/设计草稿（_plan_* / _task_* / _design_* / _opencode_*）：
+  # 保留在仓库供追溯，但不是对外文档，不进站点构建。
+  _*.md
 
 copyright: Copyright &copy; 2024-2026 XIABAI · MIT License
 
@@ -142,7 +145,7 @@ nav:
       - 03 核心引擎层: wiki/03-core.md
       - 04 插件体系与利用链: wiki/04-plugins-chains.md
       - 05 工具库层: wiki/05-lib.md
-      - 06 API 与 Web 控制台: wiki/06-api-web.md
+      - 06 API 服务: wiki/06-api-web.md
       - 07 桌面端、靶场与部署: wiki/07-desktop-deploy.md
       - 08 依赖关系: wiki/08-dependencies.md
   - 社区:

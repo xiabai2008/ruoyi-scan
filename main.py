@@ -179,7 +179,6 @@ def build_parser():
     group.add_argument(
         "--components", action="store_true", default=False, help="组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）"
     )
-    group.add_argument("--no-components", action="store_true", default=False, help="关闭组件版本检测")
     # E4：nuclei YAML 模板兼容层
     group.add_argument(
         "--nuclei", action="append", default=None, metavar="DIR/FILE", help="加载 nuclei YAML 模板（可多次指定）"
@@ -277,9 +276,6 @@ def build_parser():
     group.add_argument("--auth-file", default=None, metavar="PATH", help="从文件加载认证")
     group.add_argument("--auth-login", default=None, metavar="USER:PASS", help="自动登录")
 
-    group = parser.add_argument_group("D23 国际化")
-    group.add_argument("--lang", default="zh", choices=["zh", "en"], help="报告语言")
-
     group = parser.add_argument_group("D25 插件 SDK")
     group.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
     group.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
@@ -292,7 +288,8 @@ def build_parser():
         metavar="DIR/FILE",
         help="加载外部插件（目录或 .py 文件，可多次指定）",
     )
-    group.add_argument("--category", default="common", choices=["ruoyi", "spring", "common"], help="插件类别")
+    # v1.6 起插件类别由 plugins/ 目录派生；写死三元组会拒绝 jeecgboot/yudao。
+    group.add_argument("--category", default="common", choices=_known_categories(), help="插件类别（从 plugins/ 派生）")
 
     group = parser.add_argument_group("E5 插件模板仓库")
     group.add_argument("--plugin-export", default=None, metavar="DIR", help="导出插件源码与元信息到目录（模板仓库）")
@@ -343,8 +340,8 @@ def build_parser():
     group.add_argument("--wiki", action="store_true", default=False, help="生成漏洞知识库")
     group.add_argument("--wiki-output", default=None, metavar="PATH", help="知识库输出路径")
 
-    group = parser.add_argument_group("D30 OAST 带外检测")
-    group.add_argument("--oast", action="store_true", default=False, help="OAST 带外检测")
+    # OAST 只保留独立回调服务器：扫描侧的 OAST 客户端尚未接线，故不暴露 --oast。
+    group = parser.add_argument_group("D30 OAST 回调服务器")
     group.add_argument("--oast-server", action="store_true", default=False, help="OAST 回调服务器")
     group.add_argument("--oast-host", default="127.0.0.1", help="OAST 监听地址")
     group.add_argument("--oast-port", type=int, default=5555, help="OAST 监听端口")
@@ -388,13 +385,8 @@ def build_parser():
     group.add_argument("--siem-protocol", default="udp", choices=["udp", "tcp"], help="Syslog 协议")
 
     group = parser.add_argument_group("D34 异步引擎")
-    group.add_argument("--async", dest="async_mode", action="store_true", default=False, help="异步引擎")
+    group.add_argument("--async", dest="async_mode", action="store_true", default=False, help="批量并发（仅 -f 生效）")
     group.add_argument("--async-workers", type=int, default=10, help="异步线程数")
-
-    group = parser.add_argument_group("D35 Web UI")
-    group.add_argument("--web-ui", action="store_true", default=False, help="生成 Web UI")
-    group.add_argument("--web-ui-output", default=None, metavar="PATH", help="Web UI 输出路径")
-    group.add_argument("--web-ui-api", default=None, metavar="URL", help="Web UI API 地址")
 
     group = parser.add_argument_group("D36 分布式扫描")
     group.add_argument(
@@ -405,13 +397,6 @@ def build_parser():
     group.add_argument("--worker-max-tasks", type=int, default=0, help="Worker 最大任务数")
     group.add_argument("--distributed-timeout", type=int, default=600, help="分布式超时")
 
-    group = parser.add_argument_group("D37 结果缓存")
-    group.add_argument("--cache", action="store_true", default=False, help="启用缓存")
-    group.add_argument("--cache-ttl", type=int, default=3600, help="缓存 TTL")
-    group.add_argument("--cache-db", default="data/scan_cache.db", help="缓存数据库路径")
-    group.add_argument("--cache-stats", action="store_true", default=False, help="缓存统计")
-    group.add_argument("--cache-clear", action="store_true", default=False, help="清除过期缓存")
-    group.add_argument("--cache-clear-all", action="store_true", default=False, help="清除全部缓存")
     return parser
 
 
@@ -436,6 +421,7 @@ def print_help():
         ("--report <dir>", "报告输出目录（生成 HTML/JSON/CSV）"),
         ("--debug", "调试模式（请求日志输出到 stderr）"),
         ("--timeout <n>", "请求超时秒数（默认 10s）"),
+        ("--time-budget <s>", "单目标时间预算（秒，0 不限制）"),
         ("--time-based", "启用时序盲注检测（每端点约 20-25 秒，默认关闭）"),
         ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
         ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
@@ -451,7 +437,6 @@ def print_help():
         ("--passive-host", "代理监听地址（默认 127.0.0.1）"),
         ("--passive-port", "代理监听端口（默认 8080）"),
         ("--components", "组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）"),
-        ("--no-components", "关闭组件版本检测"),
         ("--nuclei <dir|file>", "加载 nuclei YAML 模板（可多次指定）"),
         ("--nuclei-tags <a,b>", "仅加载含指定 tag 的模板"),
         ("--nuclei-severity <s>", "仅加载指定严重度模板（high/medium/low）"),
@@ -459,7 +444,7 @@ def print_help():
         ("--nuclei-validate <path>", "校验 nuclei 模板（不扫描）"),
         ("--report-format <f>", "报告格式 html/json/csv/pdf/docx/xlsx/sarif"),
         ("--report-template <path>", "docx 合规报告模板（占位符注入，G5）"),
-        ("--remediation <baseline.json>", "整改复测：与基线对比出整改验证报告（G5）"),
+        ("--remediation <baseline.json>", "整改复测：需配合 -u/-p 扫描，与基线对比出整改验证报告（G5）"),
         ("--no-dedup", "关闭结果去重聚合"),
         ("--chain <name>", "执行漏洞利用链"),
         ("--chain-list", "列出所有可用的漏洞利用链"),
@@ -470,7 +455,7 @@ def print_help():
         ),
         ("--bypass-waf <m>", "WAF 绕过策略：auto/on/off（默认 auto）"),
         ("--adversarial-transport", "启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战"),
-        ("--serve", "启动 Web API 服务（FastAPI + WebSocket + Web 控制台）"),
+        ("--serve", "启动 Web API 服务（FastAPI + WebSocket + OpenAPI 文档）"),
         ("--host <addr>", "API 服务监听地址（默认 127.0.0.1，仅本机；对外需显式指定 0.0.0.0）"),
         ("--port <n>", "API 服务监听端口（默认 8000）"),
         ("--api-key <key>", "API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）"),
@@ -493,11 +478,10 @@ def print_help():
         ("--auth <type=value>", "认证注入"),
         ("--auth-file <path>", "从文件加载认证信息"),
         ("--auth-login <user:pass>", "自动登录获取认证"),
-        ("--lang <zh|en>", "报告语言（默认 zh）"),
         ("--plugin-init <name>", "生成插件模板"),
-        ("--plugin-new <name>", "创建新插件脚手架（P3）"),
+        ("--plugin-new <name>", "创建新插件脚手架（与 --plugin-init 同源）"),
         ("--plugin-path <dir>", "加载第三方插件目录"),
-        ("--category <c>", "插件类别（ruoyi/spring/common）"),
+        ("--category <c>", "插件类别（从 plugins/ 派生）"),
         ("--plugin-check <path>", "验证插件文件完整性"),
         ("--plugin-list", "列出所有已加载插件"),
         ("--plugin-export <dir>", "导出插件源码与元信息到目录（模板仓库）"),
@@ -516,7 +500,6 @@ def print_help():
         ("--ci-init <platform>", "生成 CI 配置（github/gitlab/jenkins）"),
         ("--wiki", "生成漏洞知识库"),
         ("--wiki-output <path>", "知识库输出路径"),
-        ("--oast", "启用 OAST 带外检测"),
         ("--oast-server", "启动 OAST 回调服务器"),
         ("--oast-host <addr>", "OAST 服务器监听地址"),
         ("--oast-port <n>", "OAST 服务器监听端口"),
@@ -534,22 +517,13 @@ def print_help():
         ("--siem-output <path>", "SIEM 导出路径"),
         ("--siem-syslog <host:port>", "发送到 Syslog 服务器"),
         ("--siem-protocol <p>", "Syslog 协议 udp/tcp"),
-        ("--async", "启用异步扫描引擎"),
+        ("--async", "批量模式并发（仅 -f 生效）"),
         ("--async-workers <n>", "异步并发线程数"),
-        ("--web-ui", "生成 Web UI 控制台"),
-        ("--web-ui-output <path>", "Web UI 输出路径"),
-        ("--web-ui-api <url>", "Web UI 连接的 API 地址"),
         ("--distributed <mode>", "分布式模式（master/worker/standalone）"),
         ("--redis-url <url>", "Redis 连接 URL"),
         ("--distributed-rate <n>", "分布式全局限速（每秒请求数，0 不限速）"),
         ("--distributed-timeout <n>", "分布式任务超时秒数"),
         ("--worker-max-tasks <n>", "Worker 最大任务数"),
-        ("--cache", "启用扫描结果缓存"),
-        ("--cache-ttl <n>", "缓存有效期秒数"),
-        ("--cache-db <path>", "缓存数据库路径"),
-        ("--cache-stats", "查看缓存统计"),
-        ("--cache-clear", "清除过期缓存"),
-        ("--cache-clear-all", "清除全部缓存"),
     ]
     for param, desc in long_params:
         print(f"  {param:<28} {desc}")
@@ -660,11 +634,7 @@ def main(argv=None):
             args.cve_id,
             args.cve_offline is not None,
             args.remediation,
-            args.web_ui,
             args.distributed,
-            args.cache_stats,
-            args.cache_clear,
-            args.cache_clear_all,
             args.nuclei_validate,
         ]
     )

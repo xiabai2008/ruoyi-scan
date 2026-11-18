@@ -95,22 +95,19 @@ from cli.dispatcher import dispatch;  dispatch(args)
 | D20 差异对比 | `--diff` `--diff-only` `--save-baseline` | D20 |
 | D21 通知 | `--notify TYPE=TARGET` | D21 |
 | D26 认证扫描 | `--auth` `--auth-file` `--auth-login` | D26 |
-| D23 国际化 | `--lang zh\|en` | D23 |
 | D25 插件 SDK | `--plugin-init/check/new/list/path` `--category` | D25 |
 | E5 插件模板仓库 | `--plugin-export` `--plugin-manifest` `--plugin-update` | E5 |
 | E7 AI 插件生成 | `--ai` `--ai-triage` `--ai-validate` `--ai-*` | E7 / G3 |
 | E8 AI 报告解读 | `--ai-report [zh\|en]` | E8 |
 | D28 CI/CD 集成 | `--ci` `--severity-threshold` `--ci-init` | D28 |
 | D29 漏洞知识库 | `--wiki` `--wiki-output` | D29 |
-| D30 OAST 带外检测 | `--oast` `--oast-server` `--oast-host` `--oast-port` | D30 |
+| D30 OAST 回调服务器 | `--oast-server` `--oast-host` `--oast-port` | D30 |
 | D31 业务逻辑检测 | `--logic-scan` `--logic-endpoints` `--logic-concurrency` | D31 |
 | G1 认证后深度扫描 | `--auth-surface` `--surface-account` `--surface-output` | G1 |
 | D32 CVE 同步 | `--cve-sync` `--cve-id` `--cve-offline` `--nvd-api-key` | D32 |
 | D33 SIEM 集成 | `--siem-export` `--siem-output` `--siem-syslog` | D33 |
 | D34 异步引擎 | `--async` `--async-workers` | D34 |
-| D35 Web UI | `--web-ui` `--web-ui-output` `--web-ui-api` | D35 |
 | D36 分布式扫描 | `--distributed` `--redis-url` `--distributed-rate` | D36 |
-| D37 结果缓存 | `--cache` `--cache-ttl` `--cache-stats` … | D37 |
 
 > 参数数量是这个项目「能力密度」的直接体现：CLI 层几乎是一个功能矩阵的入口清单。但它也带来了维护成本——`print_help()` 里有一张 100+ 行的手工参数表，与 `build_parser()` 存在漂移风险（参数口径一律以 `python main.py -h` 的输出为准）。
 
@@ -180,8 +177,7 @@ dispatch(args)
 ├─【第一段：纯工具模式（不扫描，立即 return）】
 │   --diff-only → --template-list → --plugin-new → --plugin-init → --plugin-check
 │   → --plugin-list → --ci-init → --wiki → --oast-server → --cve-sync/--cve-id/--cve-offline
-│   → --web-ui → --cache-stats → --cache-clear → --nuclei-validate
-│   → --plugin-export → --plugin-manifest → --plugin-update
+│   → --nuclei-validate → --plugin-export → --plugin-manifest → --plugin-update
 │   → --ai-validate <path>（sys.exit(返回码)）
 │   → --ai-triage 守卫（无扫描模式则报错返回）
 │   → --ai
@@ -199,7 +195,7 @@ dispatch(args)
 
 ### 5.1 顺序背后的三条规则
 
-1. **工具 > 服务 > 扫描**。纯工具模式（生成配置、查缓存、验证模板）不算扫描，先处理并 `return`，避免被后续扫描分支误捕获。
+1. **工具 > 服务 > 扫描**。纯工具模式（生成配置、生成 CI 模板、验证模板）不算扫描，先处理并 `return`，避免被后续扫描分支误捕获。
 2. **`--ai-triage` 是「修饰符」而非「模式」**。它单独出现无意义——[dispatcher.py#L111-L115](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/cli/dispatcher.py#L111-L115) 显式拦截并给出提示，要求配合扫描模式使用。这是**防止参数误用**的显式守卫，而不是静默忽略。
 3. **单目标优先级 `u > m > p > l` 隐含在元组顺序里**。同时给多个目标时只有第一个会被执行，且不警告。这是继承自原脚本的行为。
 

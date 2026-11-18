@@ -4,7 +4,7 @@
 #       条件分支、失败策略（abort/continue/fallback）、上下文共享（facts/secrets）。
 #
 # 架构红线：
-#   - 零改 core/engine.py / core/router.py / core/models.py / plugins/base.py 主逻辑
+#   - 零改 core/engine.py / core/router.py / common/models.py / plugins/base.py 主逻辑
 #   - 链引擎独立模块，通过 PluginBase.verify(target, session) 接口调用现有插件
 #   - UNKNOWN 绝不升级为 CONFIRMED（三态判定兼容）
 #
@@ -32,7 +32,7 @@ from common.models import (
     ScanResult,
 )
 
-# 模块级 logger（供 _evaluate_condition 记录被吞的异常；run() 内的 _log 是历史遗留）
+# 模块级 logger（供 _evaluate_condition 记录被吞的异常；_log 用于 run() 内部节点级日志）
 logger = get_logger(__name__)
 
 # === 失败策略常量 ===

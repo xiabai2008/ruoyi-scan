@@ -1,4 +1,4 @@
-﻿===============================================================================
+===============================================================================
  Ruoyi-Scan 操作命令手册
  版本：v1.5.2
  适用：Windows / Linux / macOS，Python 3.8+
@@ -41,7 +41,7 @@
     需要 PDF / Word / Excel 报告时：
     pip install -U "ruoyi-scan[report]"
 
-    需要 Web 控制台 / API 时：
+    需要 Web API / 定时扫描时：
     pip install -U "ruoyi-scan[serve]"
 
     一次装齐常用能力：
@@ -79,7 +79,7 @@
     .\ruoyi-scan.exe -p http://127.0.0.1:8080/ --report .\reports\demo
     .\ruoyi-scan.exe -u http://127.0.0.1:8080/ --report .\reports\full
 
-    已内置的能力：58 个 POC、字典、组件 CVE 库、7 种报告格式、--serve Web 控制台、
+    已内置的能力：58 个 POC、字典、组件 CVE 库、7 种报告格式、--serve Web API、
     --distributed（redis 客户端已带，需自备 Redis 服务）。
 
     注意：
@@ -296,7 +296,6 @@
     --cms ruoyi           手动指定 CMS，跳过指纹识别
     --cms spring
     --components          组件版本检测并比对 20 个组件的 CVE
-    --no-components       关闭组件检测
 
 5.4 WAF
 -------------------------------------------------------------------------------
@@ -412,7 +411,7 @@
 
 
 ===============================================================================
- 9. Web 控制台 / API / 定时扫描
+ 9. Web API / 定时扫描
 ===============================================================================
 
 9.1 启动
@@ -511,13 +510,12 @@
     ruoyi-scan --chain ruoyi_defaultpw_to_webshell -u http://target:8080/
     ruoyi-scan --chain ruoyi_nacos_to_dbcreds -u http://target:8080/
 
-12.2 OAST 带外检测
+12.2 OAST 回调服务器
 -------------------------------------------------------------------------------
-    先起回调服务器：
     ruoyi-scan --oast-server --oast-host 0.0.0.0 --oast-port 5555
 
-    再扫描：
-    ruoyi-scan -p http://target:8080/ --oast
+    说明：扫描侧的 OAST 客户端尚未接线（--oast 已移除）；该服务器供
+    外部工具 / 自研插件回调使用，组件 Log4j 检测在无回调时按 UNKNOWN 处理。
 
 12.3 被动代理模式（浏览器走代理，边浏览边记录）
 -------------------------------------------------------------------------------
@@ -568,13 +566,7 @@
 
     注意：--async 与 --threads 是两套并发模型，大规模目标才用；不确定就保持默认。
 
-12.7 结果缓存
--------------------------------------------------------------------------------
-    ruoyi-scan -p http://target:8080/ --cache --cache-ttl 3600
-    ruoyi-scan --cache-stats
-    ruoyi-scan --cache-clear
-
-12.8 AI 辅助（可选）
+12.7 AI 辅助（可选）
 -------------------------------------------------------------------------------
     ruoyi-scan --ai "若依后台某接口存在SQL注入" --ai-validate
     ruoyi-scan -u http://target:8080/ --ai-triage
@@ -582,7 +574,7 @@
 
     API Key 走环境变量 RUOYI_AI_API_KEY，无 Key 时降级为规则模板。
 
-12.9 漏洞知识库 / SIEM
+12.8 漏洞知识库 / SIEM
 -------------------------------------------------------------------------------
     ruoyi-scan --wiki
     ruoyi-scan -u http://target:8080/ --siem-export json --siem-output .\siem.json
@@ -789,7 +781,6 @@ Q13 启动时提示「检测到顶层包名冲突」
     --plugin-check <p>  校验插件
     --plugin-path <dir> 加载外部插件
     --chain-list        利用链清单
-    --lang zh|en        报告语言
     -V                  版本
     -h / --help         帮助
 
@@ -813,7 +804,7 @@ Q13 启动时提示「检测到顶层包名冲突」
     第 5 条（批量 + 模板，展示工程能力）：
     ruoyi-scan -f targets.txt -p --template quick --report .\reports\batch
 
-    第 6 条（Web 控制台）：
+    第 6 条（Web API）：
     ruoyi-scan --serve --host 127.0.0.1 --port 8123
 
 

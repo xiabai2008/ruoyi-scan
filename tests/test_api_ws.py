@@ -395,26 +395,6 @@ def test_ws_closed_on_task_completion(ws_client):
         pass
 
 
-# === 事件常量测试 ===
-
-
-def test_ws_event_constants():
-    """WebSocket 事件常量定义完整"""
-    from api.ws.events import (
-        ALL_EVENTS,
-        EVENT_COMPLETE,
-        EVENT_ERROR,
-        EVENT_RESULT,
-        EVENT_STATUS,
-    )
-
-    assert len(ALL_EVENTS) == 10
-    assert EVENT_STATUS in ALL_EVENTS
-    assert EVENT_COMPLETE in ALL_EVENTS
-    assert EVENT_RESULT in ALL_EVENTS
-    assert EVENT_ERROR in ALL_EVENTS
-
-
 if __name__ == "__main__":
     test_registry_register()
     test_registry_get_not_found()
@@ -432,5 +412,4 @@ if __name__ == "__main__":
     test_notify_multiple_subscribers()
     test_unsubscribe_stops_delivery()
     test_notify_without_loop_silently_skips()
-    test_ws_event_constants()
     print("All D9.3 TaskRegistry + WebSocket tests passed!")

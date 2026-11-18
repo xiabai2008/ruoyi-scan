@@ -111,11 +111,12 @@ reports/
 └── ...            # pdf/docx/xlsx 需 pip install "ruoyi-scan[report]"
 ```
 
-## 5. Web 控制台（可选）
+## 5. Web API（可选）
 
 ```bash
 ruoyi-scan --serve --host 127.0.0.1 --port 8123
-# 浏览器打开 http://127.0.0.1:8123 —— 实时任务流 / WebSocket 推送 / 报告下载
+# 交互文档（OpenAPI）：http://127.0.0.1:8123/docs
+# 图形界面请用桌面端；服务侧只有 REST + WebSocket
 ```
 
 完整 REST 端点与 WebSocket 事件协议见 [API 文档](api.md)。

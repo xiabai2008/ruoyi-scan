@@ -1,14 +1,12 @@
 # D9 FastAPI 应用工厂
 #
-# 创建 FastAPI 应用，注册路由、WebSocket、静态资源，
+# 创建 FastAPI 应用，注册路由与 WebSocket（人机界面是 desktop/，API 文档走 /docs）
 # 绑定 TaskRegistry 和 ScanOrchestrator 到 app.state。
 # D11：新增 API Key 鉴权中间件 + CORS 收紧 + SQLite 持久化
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from api import metrics
 from api.auth import ApiKeyMiddleware, get_api_key_from_env
@@ -135,10 +133,5 @@ def create_app(
 
     # 注册 WebSocket 路由
     app.add_api_websocket_route("/ws/scan/{task_id}", scan_ws, name="scan_ws")
-
-    # 静态资源（Web 控制台）— 仅当 web/ 目录存在时挂载
-    web_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
-    if os.path.isdir(web_dir):
-        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
 
     return app

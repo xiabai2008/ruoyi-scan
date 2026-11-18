@@ -395,7 +395,7 @@ def detect_log4j(target: str, session, oast_client=None) -> ComponentVersionResu
         return ComponentVersionResult(
             component="log4j",
             status=STATUS_UNKNOWN,
-            evidence="需 --oast 启用带外检测（JNDI 回调），当前未探测",
+            evidence="需带外回调（OAST）才能确认 JNDI 注入；当前未接线，按 UNKNOWN 处理",
         )
     try:
         payload_url = oast_client.get_payload("log4j")

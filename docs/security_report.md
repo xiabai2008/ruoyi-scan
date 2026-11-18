@@ -132,14 +132,14 @@ docker-compose.yml 中 Grafana（3000）、Prometheus（9090）宿主端口均�
 
 | 风险 | 等级 | 说明与建议 |
 |------|------|-----------|
-| Web 控制台（web/index.html）未接入密钥输入 | 中 | REST/WS 均不携带 Key，仅在无 Key 模式下可用；建议增加登录/密钥输入 UI |
-| `lib/web_ui.py` 独立 HTML 模板连接 `/ws/scan`（无 task_id） | 低 | 与现有路由 `/ws/scan/{task_id}` 不符，属历史失效代码；建议清理或对齐 |
+| ~~Web 控制台（web/index.html）未接入密钥输入~~ | ~~中~~ | **已修复（v1.8 清理）**：控制台已移除，人机界面统一走桌面端；服务侧只保留 REST/WS 与 `/docs` |
+| ~~`lib/web_ui.py` 独立 HTML 模板连接 `/ws/scan`（无 task_id）~~ | ~~低~~ | **已修复（v1.8 清理）**：`lib/web_ui.py` 与 `--web-ui*` 一并移除 |
 | `/api/system/metrics` 对 Prometheus 开放 | 低 | 已靠 Docker 网络层隔离；如脱离 Docker 部署需在防火墙侧限制 |
 | 多 Key 密钥含 `:` 会与 scope 解析冲突 | 低 | 现有格式约束；如需要可在解析层转义 |
 | API Key 存于环境变量/命令行 | 低 | 生产建议接入密钥管理系统（如 KMS / Secrets Manager）轮换与审计 |
 
 ### 后续可选收口方向
 
-1. Web 控制台增加 API Key 登录界面，打通有 Key 模式全链路
+1. ~~Web 控制台增加 API Key 登录界面~~（控制台已移除，不再适用）
 2. API Key 支持 HMAC 签名请求（防重放）或短期 Token 替代静态密钥
 3. 为 API 增加速率限制与审计日志，配合监控栈形成可观测闭环

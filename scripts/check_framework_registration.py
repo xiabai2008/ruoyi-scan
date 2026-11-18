@@ -60,6 +60,27 @@ def check_cms_choices(cats: list) -> list:
     return [f"main.py: _known_categories() 少了 {missing}"] if missing else []
 
 
+def check_category_parser(_cats: list) -> list:
+    """main.py 的 --category 必须从 known_categories() 派生（v1.6 WP-R 漏网处）"""
+    src = io.open(os.path.join(_PROJECT_ROOT, "main.py"), encoding="utf-8").read()
+    if 'group.add_argument("--category", default="common", choices=_known_categories()' in src:
+        return []
+    if 'choices=["ruoyi", "spring", "common"]' in src:
+        return ["main.py: --category 的 choices 仍写死三元组，--plugin-new/--plugin-init 会拒绝新框架"]
+    return ["main.py: --category 的 choices 未从 _known_categories() 派生"]
+
+
+def check_pyz_fallback(cats: list) -> list:
+    """PyInstaller 冻结回退清单必须覆盖所有框架包（v1.6 加 yudao 时漏改过）"""
+    src = io.open(os.path.join(_PROJECT_ROOT, "core/loader.py"), encoding="utf-8").read()
+    marker = 'if not packages and getattr(sys, "frozen", False):'
+    if marker not in src:
+        return ["core/loader.py: 未找到冻结回退分支（清单变更需同步本门禁）"]
+    tail = src.split(marker, 1)[1].split("return packages", 1)[0]
+    missing = [c for c in cats if f'"plugins.{c}"' not in tail]
+    return [f"core/loader.py: 冻结回退清单缺少 {missing}（冻结环境会静默少包）"] if missing else []
+
+
 def check_category_whitelists(cats: list) -> list:
     """三处 category 白名单不得再写死三元组"""
     problems = []
@@ -129,6 +150,8 @@ def main() -> int:
     problems = []
     for fn in (
         check_cms_choices,
+        check_category_parser,
+        check_pyz_fallback,
         check_category_whitelists,
         check_export_plugins,
         check_api_cms,

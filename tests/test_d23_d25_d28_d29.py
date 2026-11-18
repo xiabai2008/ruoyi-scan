@@ -16,116 +16,6 @@ from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, ScanResu
 # ============================================================
 
 
-class TestI18n:
-    """国际化模块测试"""
-
-    def test_get_text_zh(self):
-        from lib.i18n import get_text
-
-        assert get_text("report_title", "zh") == "扫描报告"
-        assert get_text("target", "zh") == "目标"
-
-    def test_get_text_en(self):
-        from lib.i18n import get_text
-
-        assert get_text("report_title", "en") == "Scan Report"
-        assert get_text("target", "en") == "Target"
-
-    def test_get_text_default_lang(self):
-        """默认语言为中文"""
-        from lib.i18n import DEFAULT_LANG, get_text
-
-        assert DEFAULT_LANG == "zh"
-        assert get_text("target") == "目标"
-
-    def test_get_text_unknown_key(self):
-        """未知 key 返回 key 本身"""
-        from lib.i18n import get_text
-
-        assert get_text("nonexistent_key", "zh") == "nonexistent_key"
-
-    def test_get_text_unsupported_lang(self):
-        """不支持的语言回退到中文"""
-        from lib.i18n import get_text
-
-        assert get_text("target", "fr") == "目标"  # 回退到中文
-
-    def test_get_status_cn(self):
-        from lib.i18n import get_status_cn
-
-        assert get_status_cn("CONFIRMED", "zh") == "确认存在"
-        assert get_status_cn("CONFIRMED", "en") == "Confirmed"
-        assert get_status_cn("SAFE", "en") == "Safe"
-        assert get_status_cn("UNKNOWN", "en") == "Unknown"
-
-    def test_get_severity_cn(self):
-        from lib.i18n import get_severity_cn
-
-        assert get_severity_cn("high", "zh") == "高"
-        assert get_severity_cn("high", "en") == "High"
-        assert get_severity_cn("medium", "en") == "Medium"
-
-    def test_get_csv_header_zh(self):
-        from lib.i18n import get_csv_header
-
-        header = get_csv_header("zh")
-        assert "漏洞名称" in header
-        assert "修复详情" in header
-
-    def test_get_csv_header_en(self):
-        from lib.i18n import get_csv_header
-
-        header = get_csv_header("en")
-        assert "Vulnerability" in header
-        assert "Fix Details" in header
-
-    def test_get_html_title_zh(self):
-        from lib.i18n import get_html_title
-
-        assert "扫描报告" in get_html_title("", "zh")
-
-    def test_get_html_title_en(self):
-        from lib.i18n import get_html_title
-
-        assert "Scan Report" in get_html_title("", "en")
-
-    def test_get_html_title_with_cms(self):
-        from lib.i18n import get_html_title
-
-        title = get_html_title("ruoyi", "en")
-        assert "Ruoyi" in title
-        assert "Scan Report" in title
-
-    def test_localize_report_dict_zh(self):
-        """中文报告不转换"""
-        from lib.i18n import localize_report_dict
-
-        report = {"target": "http://x/", "risk_distribution": {"high": 1, "medium": 0, "low": 0, "total": 1}}
-        result = localize_report_dict(report, "zh")
-        assert result == report  # 中文不转换
-
-    def test_localize_report_dict_en(self):
-        """英文报告翻译风险分布 key"""
-        from lib.i18n import localize_report_dict
-
-        report = {
-            "target": "http://x/",
-            "risk_distribution": {"high": 1, "medium": 0, "low": 0, "total": 1},
-            "results": [{"name": "SQL", "status": "CONFIRMED", "severity": "high"}],
-        }
-        result = localize_report_dict(report, "en")
-        assert "High" in result["risk_distribution"]
-        assert result["risk_distribution"]["High"] == 1
-        assert result["results"][0]["status_cn"] == "Confirmed"
-
-    def test_is_supported(self):
-        from lib.i18n import is_supported
-
-        assert is_supported("zh") is True
-        assert is_supported("en") is True
-        assert is_supported("fr") is False
-
-
 # ============================================================
 # D25：插件 SDK
 # ============================================================
@@ -590,16 +480,6 @@ class TestD23D25D28D29Integration:
             ok2, errors2, warnings2 = check_plugin_by_import(filepath)
             assert ok2 is True
 
-    def test_ci_with_i18n(self):
-        """CI 模式 + 国际化"""
-        from lib.ci_runner import format_ci_summary
-
-        # CI 摘要始终用英文（适合国际日志）
-        results = [
-            ScanResult(kind="vuln", name="Test", severity=SEVERITY_HIGH, status=STATUS_CONFIRMED, url="http://x/")
-        ]
-        summary = format_ci_summary(results, "http://x/", 1.0)
-        assert "Ruoyi-Scan CI Summary" in summary  # 英文
 
     def test_wiki_with_ci_exit_code(self):
         """知识库生成不影响 CI 退出码"""

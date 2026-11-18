@@ -852,52 +852,6 @@ class WorkerNode:
 # ============================================================
 
 
-class StandaloneDistributor:
-    """独立模式：本机多线程分发任务（无需 Redis）
-
-    适用于单机多核场景，使用线程池替代 Redis 队列。
-    """
-
-    def __init__(self, max_workers: int = 10):
-        self.max_workers = max_workers
-
-    def distribute_and_collect(
-        self, targets: List[str], scan_fn: Callable[[str], List[Dict]], progress_callback: Optional[Callable] = None
-    ) -> List[Dict]:
-        """分发任务并收集结果
-
-        Args:
-            targets: 目标列表
-            scan_fn: 扫描函数 fn(target) → results
-            progress_callback: 进度回调
-
-        Returns:
-            所有结果（扁平化）
-        """
-        import concurrent.futures
-
-        all_results = []
-        total = len(targets)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_target = {executor.submit(scan_fn, t): t for t in targets}
-
-            completed = 0
-            for future in concurrent.futures.as_completed(future_to_target):
-                target = future_to_target[future]
-                try:
-                    results = future.result()
-                    if results:
-                        all_results.extend(results)
-                except Exception:
-                    logger.debug("分布式扫描获取任务结果失败", exc_info=True)
-                completed += 1
-                if progress_callback:
-                    progress_callback(completed, total, target)
-
-        return all_results
-
-
 # ============================================================
 # 模式入口
 # ============================================================
@@ -996,24 +950,3 @@ def run_distributed_worker_mode(args, scan_fn: Callable[[ScanTask], List[Dict]])
         worker.stop()
 
     return 0
-
-
-def run_distributed_standalone_mode(
-    targets: List[str],
-    scan_fn: Callable[[str], List[Dict]],
-    max_workers: int = 10,
-    progress_callback: Optional[Callable] = None,
-) -> List[Dict]:
-    """独立模式入口（本机多线程，无需 Redis）
-
-    Args:
-        targets: 目标列表
-        scan_fn: 扫描函数
-        max_workers: 最大并发数
-        progress_callback: 进度回调
-
-    Returns:
-        所有扫描结果
-    """
-    distributor = StandaloneDistributor(max_workers=max_workers)
-    return distributor.distribute_and_collect(targets, scan_fn, progress_callback)

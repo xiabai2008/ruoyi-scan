@@ -81,21 +81,6 @@ def dispatch(args: Namespace) -> None:
 
         run_cve_sync_mode(args)
         return
-    if args.web_ui:
-        from lib.web_ui import run_web_ui_mode
-
-        run_web_ui_mode(args)
-        return
-    if args.cache_stats:
-        from lib.cache import run_cache_stats_mode
-
-        run_cache_stats_mode(args)
-        return
-    if args.cache_clear or args.cache_clear_all:
-        from lib.cache import run_cache_clear_mode
-
-        run_cache_clear_mode(args)
-        return
     # E4：nuclei 模板校验（不扫描）
     if args.nuclei_validate:
         run_nuclei_validate_mode(args.nuclei_validate)
@@ -122,6 +107,14 @@ def dispatch(args: Namespace) -> None:
 
         print(f"{RED}[!]--ai-triage 需配合扫描模式使用（如 -u <url> --ai-triage）{RESET}")
         return
+    # G5：--remediation 是扫描后的报告后处理，没有目标时此前会一路落到 banner 后 exit 0，
+    # 用户以为复测跑过了。这里显式报错（与 argparse 参数错误同码）。
+    if getattr(args, "remediation", None) and not _has_scan_target(args) and not args.file:
+        from lib.colors import RED, RESET, YELLOW
+
+        print(f"{RED}[!]--remediation 需配合扫描目标使用（如 -p <url> --remediation baseline.json）{RESET}")
+        print(f"{YELLOW}[*]该参数只对本次扫描结果做基线对比，单独调用不会产生报告{RESET}")
+        sys.exit(2)
     # E7：AI POC 生成器（--ai）
     if args.ai:
         from lib.ai_generator import run_ai_generate_mode

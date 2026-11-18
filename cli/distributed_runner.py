@@ -141,8 +141,8 @@ def _merged_config(defaults: Dict[str, Any], overrides: Optional[Dict[str, Any]]
 def _run_standalone(args: Namespace, targets: List[str], config: Dict[str, Any], task_mode: str = "full") -> int:
     """本机多线程分发（无 Redis）。
 
-    刻意不复用 lib 的 StandaloneDistributor：它把单个目标的异常吞进 debug 日志，
-    失败目标会从结果里凭空消失——违反"异常绝不静默"的纪律。
+    本机分发在这里自实现（不走 lib/distributed）：失败目标必须显式进入 failed 列表，
+    异常绝不能静默消失。
     """
     workers = max(1, min(len(targets), STANDALONE_WORKERS))
     emit(f"[*]独立模式：{len(targets)} 个目标，本机并发 {workers}")

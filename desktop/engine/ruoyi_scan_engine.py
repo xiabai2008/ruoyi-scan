@@ -10,7 +10,7 @@
      通过环境变量（REPORT_DIR）+ 显式 --db-path 注入实现，不改业务代码。
   2. 参数注入：Tauri 壳（lib.rs）以 `engine.exe --serve --host 127.0.0.1 --port 8123 ...`
      方式调用；本入口补齐缺省参数后转交 cli.serve_runner.run_serve_mode。
-  3. PyInstaller onefile 模式下 data/（字典）与 web/（控制台）解压到 _MEIPASS，
+  3. PyInstaller onefile 模式下 data/（字典）解压到 _MEIPASS，
      config/settings.py 的 BASE_DIR 相对 __file__ 求值 → 自动指向解压目录，无需特判。
 
 注意：console=True（spec）保留控制台 —— 无头 CI 冒烟与用户故障排查都依赖引擎日志。
