@@ -7,7 +7,7 @@ from argparse import Namespace
 
 from common.logger import get_logger
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
-from lib.reporter import set_quiet
+from lib.output import set_quiet
 
 logger = get_logger(__name__)
 

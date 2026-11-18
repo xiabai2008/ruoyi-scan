@@ -6,7 +6,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import match_cloud_function_spel
-from lib.reporter import emit
+from lib.output import emit
 from lib.timing import measure
 from plugins.base import PluginBase
 

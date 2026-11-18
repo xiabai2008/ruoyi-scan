@@ -89,7 +89,7 @@ sys.path.insert(0, ROOT)
 
 from core.engine import ScanEngine  # noqa: E402
 from core.session import SessionManager  # noqa: E402
-from lib.auth_scan import apply_auth_to_session  # noqa: E402
+from lib.auth_inject import apply_auth_to_session  # noqa: E402
 from plugins.ruoyi.sql_blind_time import SqlBlindTimePlugin  # noqa: E402
 
 target = sys.argv[1]

@@ -9,7 +9,7 @@
 #   - 步骤 2 失败 → continue（仅验证，不影响登录成功的结论）
 #
 # 安全约束：本链仅验证可利用性，不实际上传真实 webshell。
-from core.chain import ChainDef, ChainStep
+from chains.engine import ChainDef, ChainStep
 from plugins.chain.defaultpw_to_webshell_steps import DefaultPasswordLoginPlugin, FileUploadVerifyPlugin
 
 # 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载

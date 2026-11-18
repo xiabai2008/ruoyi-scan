@@ -261,7 +261,7 @@ def test_isolated_auth_session_shares_parent_limiter(monkeypatch):
     rate/rate_scope/limiter，插件在扫描中登录及其后的取证请求完全绕过请求级
     限速（同 anonymous() 此前的缺口）。不传 parent 时保持不限速的兼容行为。
     """
-    import core.auth_chain as auth_chain
+    import core.login_chain as auth_chain
 
     # 登录链打桩为成功：本用例不发起任何真实网络请求
     monkeypatch.setattr(

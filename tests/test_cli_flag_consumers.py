@@ -70,8 +70,11 @@ def test_every_cli_flag_has_a_consumer():
     assert not missing, "以下 CLI 开关没有任何消费方（用户传了也不会生效）：%s" % missing
 
 
-def test_category_choices_are_derived_from_plugin_packages():
-    """--category 必须接受所有已发现的插件包（v1.6 曾因写死三元组拒绝 jeecgboot）。"""
+def test_framework_choices_are_derived_from_plugin_packages():
+    """--framework（兼容别名 --category）必须接受所有已发现的插件包。
+
+    v1.6 曾因写死三元组拒绝 jeecgboot；v1.8 清理后规范名为 --framework。
+    """
     from core.loader import known_categories
     from main import build_parser
 
@@ -79,5 +82,7 @@ def test_category_choices_are_derived_from_plugin_packages():
     assert cats, "未发现任何插件包"
     parser = build_parser()
     for cat in cats:
-        ns = parser.parse_args(["--plugin-init", "demo", "--category", cat])
-        assert ns.category == cat
+        ns = parser.parse_args(["--plugin-init", "demo", "--framework", cat])
+        assert ns.framework == cat
+        # 旧别名仍可用
+        assert parser.parse_args(["--plugin-init", "demo", "--category", cat]).framework == cat

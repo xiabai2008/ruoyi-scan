@@ -23,8 +23,8 @@
 - **`--oast`**：扫描侧 OAST 客户端从未接入编排；保留独立的 `--oast-server` 回调服务器。
 - **`[async]` extra 与 `async_http_get/post`**：aiohttp 仅被这两个零调用函数引用；
   `--async` 实际是批量模式的 ThreadPool 并发，单目标下现在会显式提示"仅 -f 生效"。
-- **`generate_plugin_template`**：与 `init_plugin_file` 并存的第二套模板生成器
-  （`--plugin-new` 与 `--plugin-init` 生成的骨架不一致），统一为新生成器。
+- **`generate_plugin_template` 与 `--plugin-new`**：与 `init_plugin_file` /
+  `--plugin-init` 并存的第二套生成器与入口（骨架不一致）；保留 `--plugin-init` 单入口。
 - **死配置**：`JOB_JSESSIONID`（D1 登录链后 0 引用）、`WafBypass` 配置类（6 个常量全仓 0 引用）、
   `RuoYiAuth.REMEMBER_ME/CAPTCHA_MODE`、`config/settings.py` 中重复的 `REDIS_PORT` 赋值。
 - **桌面端 `desktop/img/` 11 张重复头像**：与 `desktop/src/assets/avatars/` SHA256 逐字节相同，
@@ -42,8 +42,8 @@
   --category jeecgboot` 会被 argparse 拒绝）。
 
 ### Changed
-- `--category` 的 choices 改为 `_known_categories()` 派生，所有已安装框架均可用于
-  `--plugin-init` / `--plugin-new`。
+- **`--category` 更名为 `--framework`**（旧名保留为兼容别名）：它一直只服务于插件脚手架，
+  与插件自身的 `category`（vuln/recon/brute）同名不同义。choices 从 `known_categories()` 派生。
 - **`--proxy-file` / `--proxy-rotate` 真正接线**：`ScanRequest` 新增 `proxy_file` /
   `proxy_strategy`，orchestrator 构造 `ProxyPool` 并注入主会话与 recon 临时会话；
   文件为空/不可读时回退固定代理。此前 `--proxy-file` 只用于"跳过预检"。
@@ -53,6 +53,22 @@
 - 插件发现：`plugin_list` 不再兼容字符串形式（5 个插件包均已使用类对象）；
   PyInstaller 冻结回退清单补上 `plugins.yudao`（此前漏项会在冻结环境静默少一个包）。
 - 插件脚手架模板补充 `unknown_reason` 示例，与 v1.7 三态契约一致。
+
+### Changed（可读性重构 · 第一批）
+- **模块重命名**（消除四组同词异义）：`lib/reporter` → `lib/output`、
+  `core/cache` → `core/fingerprint_cache`、`core/auth_chain` → `core/login_chain`、
+  `core/chain` → `chains/engine`、`lib/auth_scan` → `lib/auth_inject`、
+  `lib/surface` → `lib/surface_inventory`、`lib/scan_templates` → `lib/scan_profiles`、
+  `lib/report_template` → `lib/report_docx_template`。**破坏性变更**：第三方代码若直接
+  import 旧模块名需同步修改。
+- **CLI 收口**：删除 `--plugin-new`（只保留 `--plugin-init`）；`--category` 更名为
+  `--framework`（旧名保留为兼容别名，dest 为 `framework`）。
+- **帮助文本改由 `build_parser()` 自动生成**，删除 108 行手写参数表，消除双事实源。
+- **测试文件按行为命名**：38 个 `test_d*/f*` 工单号文件改为行为名（如
+  `test_d7_engine` → `test_engine_contract`），CI 引用同步更新。
+- 新增接手文档：[docs/CONCEPTS.md](../docs/CONCEPTS.md)、[docs/READING_PATH.md](../docs/READING_PATH.md)、
+  [docs/NAMING.md](../docs/NAMING.md)，并接入文档站导航。
+- 关键模块补统一文件头（职责 / 层 / 上下游 / 先读链接）。
 
 ### Fixed
 - 过期注释与文档引用：`core/models.py`（文件早已迁至 `common/models.py`）、
@@ -90,7 +106,7 @@
 ### Fixed
 - `SessionManager.anonymous()` 未继承 `rate` / `rate_scope` / `limiter`，导致匿名探测路径
   （如攻击面盘点最多 200 条端点）完全绕过请求级限速；现与父会话共享同一令牌桶。
-- `core.auth_chain.isolated_auth_session` 同样直接建会话、不带限速参数，四个需鉴权插件
+- `core.login_chain.isolated_auth_session` 同样直接建会话、不带限速参数，四个需鉴权插件
   （`job_invoke_target` / `cve_2025_70986_select_dept_tree` / `default_password` /
   `cve_2025_46174_resetpwd_scope`）在扫描中的登录与后续取证请求会绕过 `--rate`。现新增
   可选 `parent` 参数继承父会话的 `rate` / `rate_scope` / 同一令牌桶，调用点补传
@@ -171,7 +187,7 @@
   于是**任何**往 `sys.argv` 塞参数的东西都会被当成用户指定。实测触发：`pytest tests/test_d19_d27_template_config.py --timeout=30`
   → `timeout` 被判为显式指定 → 配置文件里的 `timeout: 12` 不再生效 → 2 个用例稳定失败（无参时全绿）。
   改为在 `main()` 的 `parse_args` 处解析一次显式键集合（`explicit_keys_from_argv`），作为参数传给下游，
-  彻底解除对全局状态的依赖。同时合并了 `lib/config_loader.py` 与 `lib/scan_templates.py` 中两份重复实现。
+  彻底解除对全局状态的依赖。同时合并了 `lib/config_loader.py` 与 `lib/scan_profiles.py` 中两份重复实现。
   - 注：`pytest` 的 `addopts` **不会**进入 `sys.argv`（已实测），所以 CI 此前未受影响；但命令行手写该参数即会踩中
   - 语义未变：CLI 显式传参仍优先于配置文件，配置文件仍优先于默认值（已做端到端验证）
 
@@ -460,8 +476,8 @@
 - **多版本矩阵工具**（`lab/version_matrix/`）：多 RuoYi 版本编译构建 + 逐插件检出对拍的本地靶场工具链
 
 ### Changed
-- **插件输出通道重构**（58 文件）：插件与 core 模块的进度输出从直接 `print()` 改为 `lib.reporter.emit` 单一出口。CLI 模式观感与迁移前完全一致；API / 桌面端 / 测试模式自动静默（原先插件输出直接写进程 stdout 污染服务日志——实测误报基线测试向 stdout 倾倒约 2 MB 文本；静默模式下转 DEBUG 日志，`--debug` 或 `RUOYI_SCAN_DEBUG=1` 可见）。**对以 stdout 解析扫描结果的外部脚本是行为变更**：以库/API 方式调用时插件不再写 stdout
-- **CI 门禁收紧**：`tests/` 与 `scripts/` 纳入 ruff lint（原先 1212 个测试完全不受 lint 约束，实测累积 16 处未用导入/顺序漂移）；覆盖率由全仓统一 70% 改为按目录棘轮（core 78 / common 84 / lib 72 / api 85 / plugins 75 / chains 95，取实测值下浮 3 点，防止低覆盖模块躲在平均值后）；`lib/reporter.py`、`lib/soft404.py` 纳入 mypy strict；全部 GitHub Actions 固定到 commit SHA（仅 `dtolnay/rust-toolchain@stable` 与 `pypa/gh-action-pypi-publish@release/v1` 保留浮动并注明理由）；main 分支启用保护（必过状态检查 + 禁强推/删除，管理员直推不受限）
+- **插件输出通道重构**（58 文件）：插件与 core 模块的进度输出从直接 `print()` 改为 `lib.output.emit` 单一出口。CLI 模式观感与迁移前完全一致；API / 桌面端 / 测试模式自动静默（原先插件输出直接写进程 stdout 污染服务日志——实测误报基线测试向 stdout 倾倒约 2 MB 文本；静默模式下转 DEBUG 日志，`--debug` 或 `RUOYI_SCAN_DEBUG=1` 可见）。**对以 stdout 解析扫描结果的外部脚本是行为变更**：以库/API 方式调用时插件不再写 stdout
+- **CI 门禁收紧**：`tests/` 与 `scripts/` 纳入 ruff lint（原先 1212 个测试完全不受 lint 约束，实测累积 16 处未用导入/顺序漂移）；覆盖率由全仓统一 70% 改为按目录棘轮（core 78 / common 84 / lib 72 / api 85 / plugins 75 / chains 95，取实测值下浮 3 点，防止低覆盖模块躲在平均值后）；`lib/output.py`、`lib/soft404.py` 纳入 mypy strict；全部 GitHub Actions 固定到 commit SHA（仅 `dtolnay/rust-toolchain@stable` 与 `pypa/gh-action-pypi-publish@release/v1` 保留浮动并注明理由）；main 分支启用保护（必过状态检查 + 禁强推/删除，管理员直推不受限）
 - **目录扫描输出降噪**：目标不可用时同一失败原因只提示一次（原先 696 条路径刷出 541 行），失败原因与数量写入结果 evidence
 
 ### Notes
@@ -492,7 +508,7 @@
 ### Added
 - **G1 CNVD 源 + 离线 CVE 库**: `lib/cve_sync.py` 查询链扩展为 NVD → GHSA → **CNVD（无官方 API，网页抓取 best-effort，反爬静默降级）→ 离线库（内网兜底）**；新增 `data/cve_offline.json` 随包分发（20 条精选组件 CVE，scripts/build_offline_cve.py 从 component_cve_map 自动生成，--merge 保留手工 CNVD 别名）；新增 `--cve-offline <component>` 内网排查命令；**修复 package-data 只分发 *.txt 导致 component_cve_map.json 未随 wheel 发布的 bug**（安装版组件检测 CVE 比对此前空转）
 - **G1 深扫爬虫增强**: `lib/auth_surface.py` 爬虫分支升级为 `crawl_with_js_urls` + `JSExtractor`——RuoYi-Vue/Plus 为 SPA，管理 API 路径多藏于 JS 包，纯 HTML 爬取覆盖不足，现从 JS 包提取 API 路径（来源标记 js）并入盘点
-- **G5 合规报告模板引擎**: 新增 `lib/report_template.py`——安服公司用自己的 docx 报告模板（公司抬头/Logo/整改声明），扫描后一键出交付物；占位符 `{{target}}/{{scan_date}}/{{total}}/{{high}}` 等标量注入 + `{{vuln_table}}`（定点插入漏洞明细表，低层 XML）+ `{{vuln_details}}`（逐漏洞详述）；`--report-template <path>` 一键启用，`fail_on_unresolved` 模板校验模式
+- **G5 合规报告模板引擎**: 新增 `lib/report_docx_template.py`——安服公司用自己的 docx 报告模板（公司抬头/Logo/整改声明），扫描后一键出交付物；占位符 `{{target}}/{{scan_date}}/{{total}}/{{high}}` 等标量注入 + `{{vuln_table}}`（定点插入漏洞明细表，低层 XML）+ `{{vuln_details}}`（逐漏洞详述）；`--report-template <path>` 一键启用，`fail_on_unresolved` 模板校验模式
 - **G3 AI 闭环 v2**:
   - **生成即验证（差异化核心）**: 新增 `lib/ai_validate.py`——AI 生成插件先在签名靶场跑三态：vuln 模式 CONFIRMED 且 safe 模式不误报才允许入库（pass）；safe 模式误报触发红线直接拒绝入库并删除（fail）；靶场未覆盖该签名的转入 `plugins/_quarantine/` 隔离目录待人工复核（unverified）。`--ai-validate`（无参=生成后自动验证；带路径=对已有插件独立验证）
   - **UNKNOWN 智能降噪**: 新增 `lib/ai_triage.py`——`--ai-triage` 对无法判定结果按插件聚类分流（suspected_waf / network_error / captcha_or_auth / needs_manual_review 固定标签），LLM 可选（无 Key 规则降级）；**三态纪律红线：AI 只能输出分流标签，输出三态判定一律拒绝并降级**，输出必带免责声明

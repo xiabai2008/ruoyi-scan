@@ -18,7 +18,7 @@ class Fingerprint:
     def detect(self, target: str, session: SessionManager, cache: Any = None) -> FingerprintResult:
         """识别目标 CMS，返回 FingerprintResult（cms 空串表示未识别）
 
-        cache（可选）：core.cache.FingerprintCache 实例，用于多 CMS 遍历时
+        cache（可选）：core.fingerprint_cache.FingerprintCache 实例，用于多 CMS 遍历时
         共享根响应/favicon 响应，避免重复请求（阶段五指纹去重）。
         """
         raise NotImplementedError
@@ -467,7 +467,7 @@ def detect_cms(target: str, session: SessionManager, cache: Any = None) -> Finge
     D2 阶段：识别出 CMS 后，对若依额外探测版本号（/login 页面 HTML 中的 X.Y.Z），
     版本号存入 FingerprintResult.version，供 Router 按 affected_versions 过滤 POC。
     """
-    from core.cache import FingerprintCache
+    from core.fingerprint_cache import FingerprintCache
 
     if cache is None:
         cache = FingerprintCache(session)

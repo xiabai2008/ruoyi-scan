@@ -98,7 +98,7 @@ v4.8.3 的库比前三个版本多一张表（32 vs 31），且 JDK/Spring Boot 
 ## 四、登录链打通（2026-09-17）
 
 登录链是让矩阵具备「区分版本」能力的前提（4.8.x 的两个 CVE 都在认证后）。
-本项目已有 `core/auth_chain.py` + `core/captcha_solver.py`，但实测卡在验证码环节。
+本项目已有 `core/login_chain.py` + `core/captcha_solver.py`，但实测卡在验证码环节。
 本轮把它跑通了，过程中挖出三个真实缺陷与一个假阴性。
 
 ### 4.1 缺陷一：验证码请求缺 `type` 参数 → 永远拿到空图片
@@ -378,7 +378,7 @@ v4.6.2（4.7.0 白名单生效前的最后版本）已加入矩阵：源码核�
 
 新增 `tests/test_session_isolation_gate.py`：AST 静态检查 `plugins/**`
 1. 不得出现 `RuoYiAuthChain(...)` 直接实例化（含 import）；
-2. 引用了 `core.auth_chain` 的插件必须使用 `isolated_auth_session`。
+2. 引用了 `core.login_chain` 的插件必须使用 `isolated_auth_session`。
 
 范围说明：`lib/auth_surface.py` 的 `--auth-surface` 模式自建并持有自己的会话，
 属合法直连用法，不在门禁范围。该文件此前确实直连，排查时确认其会话非共享会话后放行。

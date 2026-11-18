@@ -553,7 +553,7 @@ def _login(target: str, session, username: str, password: str) -> Tuple[bool, st
         logger.debug("token 型登录端点不可达，回退标准链路", exc_info=True)
 
     # 2. 标准登录链（/login）
-    from core.auth_chain import RuoYiAuthChain
+    from core.login_chain import RuoYiAuthChain
 
     return RuoYiAuthChain(target, session, username=username, password=password).login()
 

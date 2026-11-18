@@ -475,10 +475,8 @@
 
 11.1 生成模板
 -------------------------------------------------------------------------------
-    ruoyi-scan --plugin-new my_check --category ruoyi
-
-    或旧写法：
-    ruoyi-scan --plugin-init my_check --category common
+    ruoyi-scan --plugin-init my_check --framework ruoyi
+    # --category 仍可作为 --framework 的兼容别名
 
     生成后按 PluginBase 三态契约实现 verify()。
 
@@ -777,7 +775,6 @@ Q13 启动时提示「检测到顶层包名冲突」
 
     其他
     --plugin-list       插件清单
-    --plugin-new <n>    新建插件脚手架
     --plugin-check <p>  校验插件
     --plugin-path <dir> 加载外部插件
     --chain-list        利用链清单

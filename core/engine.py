@@ -1,3 +1,9 @@
+"""扫描引擎：并发调度 + 令牌桶限速 + 时间预算截止。
+
+层：引擎层（core）｜上游：orchestrator｜下游：插件 verify / session
+先读：docs/CONCEPTS.md#11-限速预算熔断
+"""
+
 # 扫描引擎：并发编排 + 令牌桶限速
 from __future__ import annotations
 

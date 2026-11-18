@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 from lib.colors import GREEN, RED, RESET, YELLOW
-from lib.reporter import emit
+from lib.output import emit
 
 # ScanTask.mode 是 full/vuln/dir/brute 这套旧词汇，ScanRequest.mode 是 u/m/p/l；
 # 两边都必须显式映射——直接把 "full" 丢给 ScanRequest 会命中

@@ -183,7 +183,7 @@ v1.6.0 单版 164 次下载里：desktop.exe 62（38%）、CLI exe 37（23%）�
 | SIEM（ECS/CEF/LEEF/Syslog） | `lib/siem_export.py` 579 行 | 零靶场用例、零接入记录 |
 | OAST 带外检测 | `lib/oast.py` | `:338` 自注「DNS check 仅用于测试模拟」；未测 |
 | AI POC 生成 | `lib/ai_generator.py` | `:181-182` 规则模板输出 `# TODO: 实现检测逻辑`；四轮盲测「AI 未测」 |
-| 利用链 DAG / 3 条内置链 | `core/chain.py` 693 行 | 盲测明确 `--chain 未测`，3 个链步骤类 2 个验证级别为 `none` |
+| 利用链 DAG / 3 条内置链 | `chains/engine.py` 693 行 | 盲测明确 `--chain 未测`，3 个链步骤类 2 个验证级别为 `none` |
 | `--serve` / `--passive` / `--crawl` / `--async` / `--nuclei` | 有 | `docs/blind_test_report_20261031.md:23`、`_v2.md:17` 均记「未测」 |
 | nuclei 模板兼容 | 3 个自建模板 | `contrib/nuclei-templates/README.md:53` 自认「未经实网批量验证」；v2 盲测只在 C1-1 命中且自身误报 1 条 |
 | 组件 CVE 比对 | `data/cve_offline.json` | 更新于 2026-09-09、20 条、**aliases 全为空** |
@@ -223,7 +223,7 @@ v1.6.0 单版 164 次下载里：desktop.exe 62（38%）、CLI exe 37（23%）�
 | # | 问题 | 硬证据 |
 |---|---|---|
 | 1 | **编排层 god-function + 13 模块循环依赖** | `core/orchestrator.py:474 _run()` **752 行 / cc≈100**；`cli/runner.py:448 run_mode()` 325 行 / cc≈65；`cli/dispatcher.py:43 dispatch()` cc≈53。三者与 `main`、`api/app`、`lib/scheduler`、`lib/config_loader`、`lib/scan_templates` 靠**函数内延迟导入**构成 13 模块 SCC。无运行时死锁，但改一个扫描参数无法静态界定影响面 |
-| 2 | **分层倒置** | `plugins → core` **65 条 import / 57 文件**（其中 56 条只是 `from core.http import join_url`）；`lib/config_loader.py:342`、`lib/scan_templates.py:277` 反向 `import main`。改 `core/http.py` 签名要连带核对 56 个插件；`lib/` 脱离 CLI 无法独立复用 |
+| 2 | **分层倒置** | `plugins → core` **65 条 import / 57 文件**（其中 56 条只是 `from core.http import join_url`）；`lib/config_loader.py:342`、`lib/scan_profiles.py:277` 反向 `import main`。改 `core/http.py` 签名要连带核对 56 个插件；`lib/` 脱离 CLI 无法独立复用 |
 | 3 | **插件数 / 版本号硬编码散落约 30 处** | 实际 56；`pyproject.toml:18` 写 54、`README.md` 写 56、`docs/verification-matrix.md:6` 写 59（源码文件数）。`desktop/src/data/mock.ts:33/90/97` 把 `"54"`、`"23/54 plugins"` 写进 UI mock。`.github/workflows/desktop-release.yml:167` 注释是事故实证：「**写死 54 时，新增芋道 2 个插件后桌面端构建直接失败**」。现有门禁只覆盖 5 个版本文件 + 插件清单，UI mock / docs / release / PyPI 描述不在范围内 |
 | 4 | **用 6 个一致性脚本固化重复，而非消除重复** | `check_framework_registration.py` 检查 5 处框架清单（起因：JeecgBoot 接入时 6 处全漏）；新增第 6 个框架仍要同步 6+ 处，只是失败提前。重复代码实测：`test_report_docx/pdf/xlsx` 两两共享 55 个 5 行窗口，`sql_inject_dept.py` ↔ `sql_inject_role.py` 共享 51 个，会话隔离 3 行样板在 15 个文件逐字复制 |
 | 5 | **类型 / 覆盖门禁与规模错配** | `pyproject.toml:185-187` 把 `lib.*`、`api.*` 设 `ignore_errors = true`，而 `lib/` 恰是最大目录且完全类型化函数只 31.8%；CI 的 `mypy --strict` 实际只跑 `common/`、`core/` 和 2 个 lib 文件。覆盖率 6 个手工阈值（78/84/**72**/85/75/95）硬编码在 `ci.yml:126-131`，无 `.coveragerc` |

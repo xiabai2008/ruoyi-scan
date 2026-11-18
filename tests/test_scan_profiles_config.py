@@ -35,7 +35,7 @@ from lib.config_loader import (
 from lib.config_loader import (
     set_parser_defaults as cl_set_defaults,
 )
-from lib.scan_templates import (
+from lib.scan_profiles import (
     TEMPLATES,
     ScanTemplate,
     apply_template,

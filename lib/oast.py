@@ -24,7 +24,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
-from lib.reporter import emit
+from lib.output import emit
 
 # ============================================================
 # 回调记录存储

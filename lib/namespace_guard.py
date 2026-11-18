@@ -273,12 +273,12 @@ def main() -> int:
     conflicts = check_and_warn()
     if conflicts:
         return 1
-    # 库代码禁裸 print()（test_logging_hygiene 门禁）：统一走 lib.reporter.emit。
+    # 库代码禁裸 print()（test_logging_hygiene 门禁）：统一走 lib.output.emit。
     # 这里必须**延迟导入且容错**——本模块在早期检测时是按文件路径独立加载的
-    # （此时 lib/ 可能已被同名包劫持，from lib.reporter import emit 会失败），
+    # （此时 lib/ 可能已被同名包劫持，from lib.output import emit 会失败），
     # 加载失败不能连带把冲突检测也废掉。
     try:
-        from lib.reporter import emit
+        from lib.output import emit
 
         emit("[+] 未检测到顶层包名冲突")
     except Exception:

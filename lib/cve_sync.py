@@ -31,7 +31,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 

@@ -94,7 +94,7 @@
   - D1：`GET http://127.0.0.1:19321/login` → 404，`GET /portal/auth/signin` → 200；报告同样 CONFIRMED。
   - 对照：两站都没有发生任何真实登录请求。
 - **根因**：
-  - `core/auth_chain.py` `detect_auth_mode()`：`http_code == 404` 直接返回 `AUTH_NONE`（219–222 行）；`login()` 在 `AUTH_NONE` 下直接 `return True, LOGIN_OK`（272–274 行），不验证任何业务接口。
+  - `core/login_chain.py` `detect_auth_mode()`：`http_code == 404` 直接返回 `AUTH_NONE`（219–222 行）；`login()` 在 `AUTH_NONE` 下直接 `return True, LOGIN_OK`（272–274 行），不验证任何业务接口。
   - `plugins/ruoyi/default_password.py` `verify()`：只要 `isolated_auth_session` 的 `ok_chain=True` 就立即 CONFIRMED（135–147 行）。
   - `isolated_auth_session()` 的 `ok` 因此只代表"登录链认为无需登录"，不代表"默认口令可用"。
 - **影响面**：所有自定义登录路径、无 `/login` 的 Spring 站点会被打上高危默认口令；C2-2、D1 两例已复现。任何 /login 404 的站点都可能中招。
@@ -118,7 +118,7 @@
   - `a2-auth` 与 `a2-anon`：C=0 / S=0 / U=29，`auth_status=MISSING`；默认口令 evidence 为"登录墙…原证据：登录失败：code=500 msg=动态口令不能为空"。
   - 报告顶层字段只有 `target/scan_time/duration_sec/request_count/mode/fingerprint/version_matrix/blocked/risk_distribution/vuln_count/results`。
 - **根因**：
-  - `lib/auth_scan.py` `auto_login()` 登录失败返回空 `{"cookies": {}, "headers": {}}`（202、277、285 行），不抛异常；
+  - `lib/auth_inject.py` `auto_login()` 登录失败返回空 `{"cookies": {}, "headers": {}}`（202、277、285 行），不抛异常；
   - `cli/runner.py` 在 `_build_scan_request()` 中只合并 `cookies/headers`，为空时把 `auth_config` 置 `None`（149–151 行），随后按匿名扫描执行；
   - 报告 JSON 没有写入认证状态的字段，CLI 也不因登录失败改退出码。
 - **影响面**：同 P0 级别。用户传了 `--auth-login` 会误认为做了认证后扫描；A2 这类 MFA 站点尤其危险（永远拿不到第二因子，但报告看不出来）。

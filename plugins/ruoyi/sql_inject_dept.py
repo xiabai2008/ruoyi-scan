@@ -4,8 +4,8 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
+from lib.output import emit
 from lib.reachability import login_wall_evidence, login_wall_reason
-from lib.reporter import emit
 from plugins.base import PluginBase
 
 

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 

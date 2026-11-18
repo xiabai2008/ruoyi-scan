@@ -24,7 +24,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import parse_json_body
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 # 芋道的 API 前缀。用双候选：网关部署在 /admin-api 下，单体直连时在根路径。

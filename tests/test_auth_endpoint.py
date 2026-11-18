@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.auth_chain import (  # noqa: E402
+from core.login_chain import (  # noqa: E402
     AUTH_NONE,
     AUTH_UNKNOWN,
     AUTH_V4_SESSION,
@@ -262,7 +262,7 @@ def test_default_password_proof_uses_discovered_base(monkeypatch):
 
 def test_v4_login_response_with_otp_is_mfa(requests_mock):
     """登录响应正文含「动态口令」→ 必须识别为 mfa_required，而不是普通失败/成功"""
-    from core.auth_chain import AUTH_V4_SESSION, LOGIN_MFA
+    from core.login_chain import AUTH_V4_SESSION, LOGIN_MFA
 
     requests_mock.post(
         TARGET + "/login",
@@ -333,7 +333,7 @@ def _patch_orchestrator(monkeypatch):
 
 
 def test_auth_login_failure_exits_partial(monkeypatch):
-    import lib.auth_scan as auth_scan
+    import lib.auth_inject as auth_scan
 
     monkeypatch.setattr(auth_scan, "auto_login", lambda *a, **k: {"cookies": {}, "headers": {}, "type": None})
     _patch_orchestrator(monkeypatch)
@@ -354,7 +354,7 @@ def test_no_auth_args_exits_zero(monkeypatch):
 
 
 def test_mfa_login_sets_meta_auth_status(monkeypatch, tmp_path):
-    import lib.auth_scan as auth_scan
+    import lib.auth_inject as auth_scan
 
     monkeypatch.setattr(
         auth_scan,

@@ -381,7 +381,7 @@ python main.py -p http://target:8080/ --nuclei examples/nuclei/
 python main.py --nuclei-validate examples/nuclei/  # 模板校验（不扫描）
 
 # AI 生成插件（LLM 自验证回灌；无 Key 时降级规则模板）
-python main.py --ai "检测若依任意文件读取漏洞" --category ruoyi
+python main.py --ai "检测若依任意文件读取漏洞" --framework ruoyi
 
 # 插件模板仓库（社区分发）
 python main.py --plugin-export ./ruoyi-scan-templates
@@ -657,11 +657,10 @@ docker compose down
 | 参数 | 说明 |
 |------|------|
 | `--plugin-init <name>` | 生成插件模板 |
-| `--plugin-new <name>` | 创建新插件脚手架 |
 | `--plugin-path <dir>` | 加载第三方插件目录 |
 | `--plugin-check <path>` | 验证插件文件完整性 |
 | `--plugin-list` | 列出所有已加载插件 |
-| `--category <cat>` | 插件类别 ruoyi/spring/common |
+| `--framework <f>` | 插件所属框架（`--category` 为兼容别名） |
 
 #### 插件模板仓库（E5）
 

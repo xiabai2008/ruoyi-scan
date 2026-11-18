@@ -26,7 +26,7 @@
 
 维护约定
 ========
-- 新增插件/库/核心模块需要输出进度时，`from lib.reporter import emit` 后调用 `emit(...)`。
+- 新增插件/库/核心模块需要输出进度时，`from lib.output import emit` 后调用 `emit(...)`。
 - `cli/**` 是 stdout 呈现层（banner、结果表格、帮助），允许并应当直接 print，
   因此不在本门禁的检查范围内。
 """
@@ -44,7 +44,7 @@ GUARDED_DIRS = ("plugins", "lib", "core")
 
 # 允许例外：{相对路径: 原因}。目标状态是仅剩输出桥自身。
 ALLOWED_DIRECT_PRINT: dict[str, str] = {
-    "lib/reporter.py": "输出桥的实现本体：CLI 模式必须真正写 stdout，这是唯一的合法 print",
+    "lib/output.py": "输出桥的实现本体：CLI 模式必须真正写 stdout，这是唯一的合法 print",
 }
 
 
@@ -101,11 +101,11 @@ def test_reporter_does_not_export_ambiguous_report_name():
     `report = master.aggregate_results(...)` 之后的 `report(...)` 会立即抛
     TypeError: 'dict' object is not callable。此护栏防止该命名被重新引入。
     """
-    import lib.reporter as reporter_module
+    import lib.output as reporter_module
 
     assert hasattr(reporter_module, "emit"), "输出桥必须提供 emit()"
     assert not hasattr(reporter_module, "report"), (
-        "lib.reporter 不得导出 report 名称：它会与 lib/ 中大量名为 report 的局部变量冲突，"
+        "lib.output 不得导出 report 名称：它会与 lib/ 中大量名为 report 的局部变量冲突，"
         "导致 'dict' object is not callable 运行时错误。请使用 emit()。"
     )
 
@@ -116,7 +116,7 @@ def test_reporter_does_not_export_ambiguous_report_name():
 @pytest.fixture
 def reporter_mode():
     """保存并恢复 reporter 模式，避免用例之间相互影响"""
-    from lib.reporter import is_quiet, set_quiet
+    from lib.output import is_quiet, set_quiet
 
     saved = is_quiet()
 
@@ -130,7 +130,7 @@ def reporter_mode():
 def test_quiet_mode_writes_nothing_to_stdout(capsys, reporter_mode):
     """静默模式：emit() 不得写 stdout"""
     from lib.colors import ok
-    from lib.reporter import emit
+    from lib.output import emit
 
     reporter_mode(True)
     emit(ok("存在测试漏洞"))
@@ -140,7 +140,7 @@ def test_quiet_mode_writes_nothing_to_stdout(capsys, reporter_mode):
 def test_cli_mode_preserves_stdout_and_colors(capsys, reporter_mode):
     """CLI 模式（默认）：输出形态与迁移前的 print() 完全一致（含 ANSI 与 [*] 前缀）"""
     from lib.colors import ok
-    from lib.reporter import emit
+    from lib.output import emit
 
     reporter_mode(False)
     emit(ok("存在测试漏洞"))
@@ -153,10 +153,10 @@ def test_cli_mode_preserves_stdout_and_colors(capsys, reporter_mode):
 def test_quiet_mode_routes_to_logger_without_ansi(caplog, reporter_mode):
     """静默模式：内容以 DEBUG 级别进日志，且 ANSI 转义必须被剥离"""
     from lib.colors import ok
-    from lib.reporter import emit
+    from lib.output import emit
 
     reporter_mode(True)
-    with caplog.at_level(logging.DEBUG, logger="lib.reporter"):
+    with caplog.at_level(logging.DEBUG, logger="lib.output"):
         emit(ok("存在测试漏洞"))
 
     messages = [r.getMessage() for r in caplog.records]
@@ -166,7 +166,7 @@ def test_quiet_mode_routes_to_logger_without_ansi(caplog, reporter_mode):
 
 def test_emit_is_print_compatible_multiple_args(capsys, reporter_mode):
     """emit() 签名与 print 兼容：支持多参数与 sep"""
-    from lib.reporter import emit
+    from lib.output import emit
 
     reporter_mode(False)
     emit("a", "b", sep="-")
@@ -182,7 +182,7 @@ def test_full_plugin_baseline_produces_no_stdout(capsys, reporter_mode):
     覆盖 AST 门禁无法发现的情况——例如有人直接写 `sys.stdout.write(...)`，
     或第三方库向 stdout 打印。这是「输出单一出口」的最后一道保险。
     """
-    from lib.reporter import emit  # noqa: F401  确保模块已加载
+    from lib.output import emit  # noqa: F401  确保模块已加载
     from tests.test_fp_baseline import BENIGN_CASES, _run_baseline
 
     reporter_mode(True)

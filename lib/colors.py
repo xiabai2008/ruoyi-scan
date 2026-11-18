@@ -19,7 +19,7 @@ class Finding(str):
 
     ok() / no() 返回的是带颜色的整行结论文案（[*]存在xxx / [/]不存在xxx）。
     插件在 verify() 里自行 emit 一次，扫描引擎又会按 ScanResult 统一打印一次，
-    同一结论在终端出现两遍。lib.reporter.emit 依据该类型识别结论行，
+    同一结论在终端出现两遍。lib.output.emit 依据该类型识别结论行，
     在 CLI 已统一打印结论时（见 reporter.set_findings_muted）跳过插件侧输出，
     其它进度类文案不受影响。
 

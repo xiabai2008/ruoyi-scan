@@ -93,7 +93,7 @@ load  →  route  →  verify  →  result
 最快的方式是使用内置脚手架（`lib/plugin_sdk.py`）：
 
 ```bash
-python main.py --plugin-init my_plugin --category ruoyi
+python main.py --plugin-init my_plugin --framework ruoyi
 ```
 
 执行后生成 `plugins/ruoyi/my_plugin.py`：
@@ -109,7 +109,7 @@ python main.py --plugin-init my_plugin --category ruoyi
     3. 运行 python main.py -u http://target/ 扫描
 ```
 
-`--category` 决定输出目录（`plugins/<category>/`），常用值为 `ruoyi` / `spring` / `common`。若目录不存在会自动创建。
+`--framework` 决定输出目录（`plugins/<framework>/`），常用值为 `ruoyi` / `spring` / `common` / `jeecgboot` / `yudao`。若目录不存在会自动创建。旧名 `--category` 仍可用。
 
 ### 2. 最小可运行插件示例
 
@@ -121,7 +121,7 @@ python main.py --plugin-init my_plugin --category ruoyi
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import ok, no
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 
@@ -1125,7 +1125,7 @@ cd lab && python app.py &
 RUN_E2E_TESTS=1 pytest tests/test_my_plugin_e2e.py -v
 ```
 
-测试规范参考 `tests/test_d7_plugins.py`（D7 阶段全量插件 WAF 绕过适配验证），其中演示了如何批量验证插件属性：
+测试规范参考 `tests/test_plugin_contracts.py`（D7 阶段全量插件 WAF 绕过适配验证），其中演示了如何批量验证插件属性：
 
 ```python
 def test_all_bypass_plugins_support_waf_bypass():
@@ -1147,7 +1147,7 @@ def test_all_bypass_plugins_support_waf_bypass():
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import host_of, join_url
 from lib.colors import no, ok
-from lib.reporter import emit
+from lib.output import emit
 from lib.matcher import match_sql_error
 from plugins.base import PluginBase
 

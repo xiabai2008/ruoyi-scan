@@ -1,3 +1,9 @@
+"""判定辅助：正向特征 + 负向排除的共享判据（降误报的核心资产）。
+
+层：能力层（lib）｜上游：plugins/core｜下游：无
+先读：docs/CONCEPTS.md#9-判定辅助matcher--reachability--soft404
+"""
+
 # 降误报判定工具：正向关键字 + 负向排除联合判定（见 agents.md §5）
 import re
 

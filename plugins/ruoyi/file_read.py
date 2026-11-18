@@ -5,8 +5,8 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import is_windows_ini, match_file_read_leak
+from lib.output import emit
 from lib.reachability import login_wall_evidence, login_wall_reason
-from lib.reporter import emit
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)

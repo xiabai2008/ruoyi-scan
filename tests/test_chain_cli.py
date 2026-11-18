@@ -75,7 +75,7 @@ def test_register_chain_dynamic(monkeypatch):
     from unittest.mock import patch
 
     import chains.registry as chain_registry
-    from core.chain import ChainDef
+    from chains.engine import ChainDef
 
     # 注册表是模块级全局：不隔离就会把 test_dynamic 留给同文件后面的
     # test_list_chains_returns_list（pytest-randomly 打乱顺序时必挂）

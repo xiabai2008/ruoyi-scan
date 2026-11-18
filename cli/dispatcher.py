@@ -1,7 +1,7 @@
-"""CLI 分发器 — 从 main.py 提取的模式分发逻辑
+"""CLI 分发器：把解析后的 Namespace 分派到各模式执行器。
 
-P1 重构：将 main() 中的 if-elif 分发链提取为独立函数，
-main.py 保留参数解析 + Banner，调用 dispatch() 执行。
+层：控制层（cli）｜上游：main.py｜下游：cli/*_runner
+先读：docs/READING_PATH.md
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from cli.runner import (
     run_plugin_init_mode,
     run_plugin_list_mode,
     run_plugin_manifest_mode,
-    run_plugin_new_mode,
     run_plugin_update_mode,
     run_serve_mode,
     run_template_list_mode,
@@ -52,9 +51,6 @@ def dispatch(args: Namespace) -> None:
         return
     if args.template_list:
         run_template_list_mode()
-        return
-    if args.plugin_new:
-        run_plugin_new_mode(args)
         return
     if args.plugin_init:
         run_plugin_init_mode(args)

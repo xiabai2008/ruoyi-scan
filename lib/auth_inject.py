@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 
@@ -226,7 +226,7 @@ def auto_login(
         and password_field == "password"
     ):
         try:
-            from core.auth_chain import login_with_password
+            from core.login_chain import login_with_password
 
             ok_chain, reason_chain, chain_config = login_with_password(target, username, password, attempts=8)
         except Exception as exc:  # noqa: BLE001 - 登录能力失败不应中断扫描

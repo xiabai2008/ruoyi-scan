@@ -14,7 +14,7 @@ except ImportError:
     print("缺少依赖 requests_mock，请先执行：pip install requests_mock")
     sys.exit(1)
 
-from core.auth_chain import (
+from core.login_chain import (
     AUTH_NONE,
     AUTH_UNKNOWN,
     AUTH_V4_SESSION,

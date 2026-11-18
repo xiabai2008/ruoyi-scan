@@ -5,8 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
-from core.chain import (
+from chains.engine import (
     CHAIN_BLOCKED,
     CHAIN_CONFIRMED,
     CHAIN_PARTIAL,
@@ -24,6 +23,7 @@ from core.chain import (
     ChainEngine,
     ChainStep,
 )
+from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult
 from plugins.base import PluginBase
 
 # === 测试用 Mock 插件 ===
@@ -485,7 +485,7 @@ def test_chain_step_timeout_configurable():
 
 
 def test_chain_node_timeout_constant():
-    from core.chain import NODE_TIMEOUT
+    from chains.engine import NODE_TIMEOUT
 
     assert NODE_TIMEOUT == "timeout"
 

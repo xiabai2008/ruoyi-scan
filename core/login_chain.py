@@ -125,7 +125,7 @@ def login_with_password(
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """公共登录器：显式凭据 + 验证码求解（含算术验证码运算符轮换）。
 
-    这是 `lib.auth_scan.auto_login` 与 `--auth-surface` 共用的登录能力，抽出来的
+    这是 `lib.auth_inject.auto_login` 与 `--auth-surface` 共用的登录能力，抽出来的
     目的不是「合并认证链」，而是让高权登录也能用上验证码 OCR：
     - 不内置任何默认账号，username/password 必须由调用方显式传入；
     - v4 表单 / v5 JWT 由 RuoYiAuthChain 自动探测；

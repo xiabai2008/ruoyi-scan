@@ -7,7 +7,7 @@
 # 失败策略：
 #   - 步骤 1 失败 → abort（Nacos 不可访问则配置泄露无意义）
 #   - 步骤 2 失败 → continue（即使未提取到凭证，未授权访问本身就是漏洞）
-from core.chain import ChainDef, ChainStep
+from chains.engine import ChainDef, ChainStep
 from plugins.chain.nacos_to_dbcreds_steps import NacosConfigExtractPlugin, NacosUnauthPlugin
 
 # 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载

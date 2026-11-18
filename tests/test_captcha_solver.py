@@ -39,8 +39,8 @@ except ImportError:
 
 import base64
 
-from core.auth_chain import LOGIN_CAPTCHA, LOGIN_OK, RuoYiAuthChain
 from core.captcha_solver import CaptchaSolver
+from core.login_chain import LOGIN_CAPTCHA, LOGIN_OK, RuoYiAuthChain
 from core.session import SessionManager
 
 MOCK_TARGET = "http://ruoyi-captcha.test"

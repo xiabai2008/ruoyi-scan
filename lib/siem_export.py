@@ -28,7 +28,7 @@ from common.logger import get_logger
 
 # 复用现有模型
 from common.models import SEVERITY_HIGH, SEVERITY_LOW, SEVERITY_MEDIUM, STATUS_CONFIRMED
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 

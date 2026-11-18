@@ -1,3 +1,9 @@
+"""插件契约：每漏洞一插件，verify() 返回三态结果。
+
+层：插件层｜上游：engine｜下游：common/models、core/session
+先读：docs/CONCEPTS.md#3-插件契约pluginbase
+"""
+
 # 插件抽象基类（agents.md §5：每漏洞一插件，继承 PluginBase）
 import math
 from abc import ABC, abstractmethod

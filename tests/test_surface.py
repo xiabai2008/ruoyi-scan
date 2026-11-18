@@ -1,7 +1,7 @@
-# D14 攻击面清单（lib/surface.py）单元测试：去重 / 归一化 / 上限 / 非法 URL / 序列化
+# D14 攻击面清单（lib/surface_inventory.py）单元测试：去重 / 归一化 / 上限 / 非法 URL / 序列化
 import json
 
-from lib.surface import SurfaceEndpoint, SurfaceInventory
+from lib.surface_inventory import SurfaceEndpoint, SurfaceInventory
 
 
 def test_add_dedup():

@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import requests
 import requests_mock
 
-from core.cache import FingerprintCache
+from core.fingerprint_cache import FingerprintCache
 from core.fingerprint_features import list_cms
 from core.session import SessionManager
 

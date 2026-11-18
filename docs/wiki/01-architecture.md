@@ -24,7 +24,7 @@
                             │  插件类列表 + SessionManager
 ┌───────────────────────────▼──────────────────────────────────────────┐
 │  引擎层   core/engine.py（并发 + 令牌桶）                             │
-│           core/chain.py（利用链 DAG 引擎）                            │
+│           chains/engine.py（利用链 DAG 引擎）                            │
 └───────────────────────────┬──────────────────────────────────────────┘
                             │  verify(target, session)
 ┌───────────────────────────▼──────────────────────────────────────────┐
@@ -50,7 +50,7 @@
 | 接入层 | `main.py`、`web/`、`desktop/` | 参数解析、UI 呈现 | `main.py` **只做参数解析 + 分发**，业务编排全部下沉（P0 重构） |
 | 控制层 | `cli/`、`api/` | 把用户输入翻译成 `ScanRequest`，消费事件与结果 | 不直接调用插件；事件输出与业务编排解耦 |
 | 编排层 | `core/orchestrator.py` | 串起「预检 → 识别 → 加载 → 执行 → 报告」 | CLI 与 API **共用同一实现**，避免双份逻辑漂移 |
-| 引擎层 | `core/engine.py`、`core/chain.py` | 并发调度、限速、结果收集、链式拓扑执行 | 引擎不关心插件语义，只负责「跑起来 + 兜异常」 |
+| 引擎层 | `core/engine.py`、`chains/engine.py` | 并发调度、限速、结果收集、链式拓扑执行 | 引擎不关心插件语义，只负责「跑起来 + 兜异常」 |
 | 插件层 | `plugins/` | 单漏洞判定逻辑 | 每个插件必须返回三态；异常由引擎兜为 `UNKNOWN` |
 | 能力层 | `core/session.py`、`core/fingerprint.py`、`lib/*` | 可复用的横切能力 | `lib/` 模块之间尽量互不依赖，通过编排层组合 |
 | 基础层 | `common/`、`config/`、`data/` | 数据模型、日志、配置、字典 | `common/` + `core/` 启用 mypy `--strict`（见 [08](08-dependencies.md)） |
@@ -229,7 +229,7 @@ build_version_matrix()  → 用「未过滤候选集」生成对照表，展示�
 | `-f targets.txt -p` | `cli.runner.run_mode_batch` → 逐目标 `preflight` + `run_mode` → `BatchReport` |
 | `-f targets.txt -p --async` | `cli.runner._run_batch_async` → `lib.async_engine.scan_batch_targets` |
 | `--serve` | `cli.serve_runner.run_serve_mode` → `api.app.create_app` → `uvicorn.run` |
-| `--chain <name>` | `cli.chain_runner.run_chain_mode` → `core.chain.ChainEngine.run` |
+| `--chain <name>` | `cli.chain_runner.run_chain_mode` → `chains.engine.ChainEngine.run` |
 | `--passive` | `cli.passive_runner.run_passive_mode` → `core.proxy_server` |
 | `--plugin-*` / `--wiki` / `--ci-init` / `--diff-only` / `--template-list` | `cli.plugin_runner` / `cli.tool_runner`（纯工具模式，不扫描） |
 | `--ai` / `--ai-validate` / `--cve-sync` / `--oast-server` | `lib/*` 对应的 `run_*_mode()` |

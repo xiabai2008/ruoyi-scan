@@ -356,7 +356,7 @@ CHAIN = ChainDef(...)
 
 > ⚠️ `fallback_steps` **不是条件调度**：备用节点会在拓扑序上正常执行，`on_fail=fallback`
 > 只会在"备用节点被无关上游的 abort 误标记为跳过"时解除该标记（救援）。
-> 真正的"仅当声明步骤失败才执行备用节点"语义尚未实现（见 `core/chain.py` 失败策略分支注释）。
+> 真正的"仅当声明步骤失败才执行备用节点"语义尚未实现（见 `chains/engine.py` 失败策略分支注释）。
 
 **(b) `job_rce` 只依赖 `sql_inject`，不依赖 `config_read`**
 
@@ -388,7 +388,7 @@ outputs={"db_password": "secret:db_password",                           # 凭证
 
 ### 6.7 `ChainEngine` 执行机制
 
-[core/chain.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/core/chain.py) 的执行流程：
+[chains/engine.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/chains/engine.py) 的执行流程：
 
 ```
 _topological_sort()       # 拓扑排序（ChainDef.validate() 已在加载期做过环检测）
@@ -462,7 +462,7 @@ _aggregate_status()       # 聚合链状态 → ChainResult
 2. 在包 `__init__.py` 的 `plugin_list` 里按**严重度位置**插入注册。
 3. 用 `--plugin-check <path>` 校验、`--plugin-list` 确认加载。
 
-也可用 `--plugin-new <name>` 生成脚手架，`--plugin-init <name>` 生成模板。
+用 `--plugin-init <name> --framework <框架>` 生成脚手架（`--category` 是 `--framework` 的兼容别名）。
 
 外部插件无需改仓库：`--plugin-path ./my_plugins/` 即可加载（模块名前缀自动隔离）。
 

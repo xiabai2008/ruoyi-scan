@@ -234,14 +234,14 @@
   - R7/R9/R10：`[!]登录可能失败（HTTP 405）`（根 `/login` 被 nginx 拒绝）；
   - R6：唯一成功（根 `/login` 碰巧被便利映射到后端）。
 - **证据**：
-  - `lib/auth_scan.py:auto_login()` 默认 `login_url = urljoin(base, "/login")`，payload 只有 `{username, password}`；
+  - `lib/auth_inject.py:auto_login()` 默认 `login_url = urljoin(base, "/login")`，payload 只有 `{username, password}`；
   - 同文件 `_extract_token` 只认顶层 `token` / `data.token`，不认 Plus 的 `access_token`、Jeecg 的 `result.token`；
   - 登录表单不发送 `validateCode` / `rememberMe`，不调用 `core/captcha_solver.py`；
   - R7/R9/R10 根 `/login` 分别返回 nginx 405；真实入口是 `/prod-api/login`、`/prod-api/auth/login`、`/jeecg-boot/sys/login`。
 - **影响面**：**所有需要登录才能验证的插件**——`sql_inject_role/dept`（dataScope）、`file_upload`、`file_read(_path)`、`default_password`、`druid_brute`、`ruoyi_swagger_unauth`、`unauth_batch`、R10 全部 Jeecg 插件。R1/R4 的两条 FN、R2 的两条 FN、R6/R7/R9/R10 的默认口令 FN 都由此产生。
-- **补充（重要）**：低权 CVE 插件走的 `isolated_auth_session` + `core/auth_chain.RuoYiAuthChain` 是**有效**的——它内置 `CaptchaSolver`，能识别 4.x 算术验证码；R1/R2 的定时任务写入、R3 的部门树数据泄露都是真阳性。失败的只是 `--auth-login` 这条另行实现的 `lib.auth_scan.auto_login`。因此修法不是重写认证，而是**把高权登录合并到已验证可用的那条链上**。
+- **补充（重要）**：低权 CVE 插件走的 `isolated_auth_session` + `core/auth_chain.RuoYiAuthChain` 是**有效**的——它内置 `CaptchaSolver`，能识别 4.x 算术验证码；R1/R2 的定时任务写入、R3 的部门树数据泄露都是真阳性。失败的只是 `--auth-login` 这条另行实现的 `lib.auth_inject.auto_login`。因此修法不是重写认证，而是**把高权登录合并到已验证可用的那条链上**。
 - **修法**：
-  1. 让 `--auth-login` 复用 `core.auth_chain.RuoYiAuthChain`（它已经支持 v4 表单 + 验证码 OCR + v5 JWT），而不是另写一套 `auto_login`；
+  1. 让 `--auth-login` 复用 `core.login_chain.RuoYiAuthChain`（它已经支持 v4 表单 + 验证码 OCR + v5 JWT），而不是另写一套 `auto_login`；
   2. 登录 URL 先用 base-path（`/prod-api`、`/jeecg-boot`）再拼 `/login`；
   3. 增加 Plus 形态：`POST {base}/auth/login`，body 必填 `clientId` + `grantType` + `tenantId`，token 取 `data.access_token`；
   4. 增加 Jeecg 形态：`GET {base}/sys/randomImage/{key}` → OCR → `POST {base}/sys/login`（`captcha`+`checkKey`），token 取 `result.token`，后续头 `X-Access-Token`；
@@ -354,7 +354,7 @@
 
 - **现象**：R11 25 条 SAFE、6 条 UNKNOWN、0 CONFIRMED；日志出现「登录成功但任务列表不可读」，而 R11 根本没有 `/login`（404 JSON）。
 - **证据**：`R11-anon.log` 中的 `无法判定定时任务调用目标未校验: 登录成功但任务列表不可读`；独立探测 `/login` → 404 `No static resource login`。
-- **根因**：未知 CMS 时仍 fallback 加载 `plugins.ruoyi`；`isolated_auth_session` 的登录成功判据把某些 200/JSON 形态误判为成功（需在 Phase 5 具体定位 `core/auth_chain.py` 的成功分支）。
+- **根因**：未知 CMS 时仍 fallback 加载 `plugins.ruoyi`；`isolated_auth_session` 的登录成功判据把某些 200/JSON 形态误判为成功（需在 Phase 5 具体定位 `core/login_chain.py` 的成功分支）。
 - **影响面**：非若依目标的报告噪声与可信度；不会产生 CONFIRMED 误报（0 条），但会让用户误以为「登录成功、只是没权限」。
 - **修法**：CMS 未知且无 RuoYi 弱特征时只跑通用插件（07 §11.4 的建议）；`isolated_auth_session` 增加「目标必须存在登录端点」的前置校验；成功判据要求 token/新 Cookie/明确成功文案三者之一。
 

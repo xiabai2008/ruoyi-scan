@@ -43,12 +43,12 @@ tar -czf /d/HZR_PROJECTS/_backup_20261031_1225/untracked.tar.gz -T /d/HZR_PROJEC
 ```
 cli/runner.py
 config/settings.py
-core/auth_chain.py
+core/login_chain.py
 core/captcha_solver.py
 core/orchestrator.py
 core/report.py
 core/session.py
-lib/auth_scan.py
+lib/auth_inject.py
 lib/auth_surface.py
 plugins/base.py
 plugins/common/swagger_leak.py
@@ -86,7 +86,7 @@ tests/test_basepath.py
 1. 24 个已跟踪文件 + `core/basepath.py` + `tests/test_basepath.py`：
 
 ```
-git restore -- cli/runner.py config/settings.py core/auth_chain.py core/captcha_solver.py core/orchestrator.py core/report.py core/session.py lib/auth_scan.py lib/auth_surface.py plugins/base.py plugins/common/swagger_leak.py plugins/ruoyi/cve_2025_46174_resetpwd_scope.py plugins/ruoyi/cve_2025_70986_select_dept_tree.py plugins/ruoyi/default_password.py plugins/ruoyi/file_upload.py plugins/ruoyi/job_invoke_target.py plugins/ruoyi/ruoyi_gen_rce.py plugins/ruoyi/ruoyi_swagger_unauth.py plugins/ruoyi/sql_inject_dept.py plugins/ruoyi/sql_inject_role.py tests/regression_ruoyi.py tests/test_anon_session_plugins.py tests/test_auth_surface.py tests/test_captcha_solver.py core/basepath.py tests/test_basepath.py
+git restore -- cli/runner.py config/settings.py core/login_chain.py core/captcha_solver.py core/orchestrator.py core/report.py core/session.py lib/auth_inject.py lib/auth_surface.py plugins/base.py plugins/common/swagger_leak.py plugins/ruoyi/cve_2025_46174_resetpwd_scope.py plugins/ruoyi/cve_2025_70986_select_dept_tree.py plugins/ruoyi/default_password.py plugins/ruoyi/file_upload.py plugins/ruoyi/job_invoke_target.py plugins/ruoyi/ruoyi_gen_rce.py plugins/ruoyi/ruoyi_swagger_unauth.py plugins/ruoyi/sql_inject_dept.py plugins/ruoyi/sql_inject_role.py tests/regression_ruoyi.py tests/test_anon_session_plugins.py tests/test_auth_surface.py tests/test_captcha_solver.py core/basepath.py tests/test_basepath.py
 ```
 
 2. 8 个未跟踪文件（内容在分支里，已备份）：

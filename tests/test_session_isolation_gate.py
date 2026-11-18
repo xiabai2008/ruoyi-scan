@@ -12,7 +12,7 @@
 **服务端** session（按 JSESSIONID 索引），把 cookie 还原成同一个 JSESSIONID，
 服务端仍视其为已认证。
 
-唯一正确做法：需鉴权的插件用 `core.auth_chain.isolated_auth_session` 自建独立会话。
+唯一正确做法：需鉴权的插件用 `core.login_chain.isolated_auth_session` 自建独立会话。
 本门禁用 AST 静态检查保证 `plugins/**` 不再出现直接实例化，防止回归。
 
 范围说明：仅限 plugins/**。lib/auth_surface.py 的 `--auth-surface` 模式自建并持有
@@ -30,7 +30,7 @@ PLUGIN_ROOT = pathlib.Path(__file__).resolve().parent.parent / "plugins"
 FORBIDDEN_NAME = "RuoYiAuthChain"
 REQUIRED_HELPER = "isolated_auth_session"
 # 任何登录入口包装层都算触发：引用后必须用 isolated_auth_session，不能绕回共享会话
-AUTH_ENTRY_MODULES = ("core.auth_chain", "core.login")
+AUTH_ENTRY_MODULES = ("core.login_chain", "core.login")
 
 
 def _plugin_files():
@@ -48,19 +48,19 @@ def test_no_plugin_instantiates_auth_chain_directly():
     """plugins/** 不得出现 RuoYiAuthChain(...) 直接实例化（含 import）
 
     违规形态：
-        from core.auth_chain import RuoYiAuthChain
+        from core.login_chain import RuoYiAuthChain
         chain = RuoYiAuthChain(target, session, ...)   # ← session 是共享会话！
 
     正确形态：
-        from core.auth_chain import isolated_auth_session
+        from core.login_chain import isolated_auth_session
         with isolated_auth_session(target, user, pwd) as (sess, ok, reason): ...
     """
     violations = []
     for path in _plugin_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            # import 形态：from core.auth_chain import RuoYiAuthChain
-            if isinstance(node, ast.ImportFrom) and node.module == "core.auth_chain":
+            # import 形态：from core.login_chain import RuoYiAuthChain
+            if isinstance(node, ast.ImportFrom) and node.module == "core.login_chain":
                 for alias in node.names:
                     if alias.name == FORBIDDEN_NAME:
                         violations.append(f"{path.name}:{node.lineno} import {FORBIDDEN_NAME}")
@@ -72,7 +72,7 @@ def test_no_plugin_instantiates_auth_chain_directly():
                     violations.append(f"{path.name}:{node.lineno} call {name}(...)")
     assert not violations, (
         "检测到插件直接实例化 RuoYiAuthChain（会把登录态泄漏给共享会话，"
-        f"在 v4.8.3 上引发跨插件误报）。请改用 core.auth_chain.isolated_auth_session：{violations}"
+        f"在 v4.8.3 上引发跨插件误报）。请改用 core.login_chain.isolated_auth_session：{violations}"
     )
     print("PASS test_no_plugin_instantiates_auth_chain_directly: plugins/ 全部合规")
 
@@ -93,14 +93,14 @@ def test_auth_plugins_use_isolated_session():
             continue
         uses_helper = any(
             isinstance(node, ast.ImportFrom)
-            and node.module == "core.auth_chain"
+            and node.module == "core.login_chain"
             and any(a.name == REQUIRED_HELPER for a in node.names)
             for node in ast.walk(tree)
         )
         if not uses_helper:
             missing.append(path.name)
     assert not missing, (
-        f"以下插件引用了 core.auth_chain 却未使用 {REQUIRED_HELPER}（必须用独立会话，禁止在共享会话上登录）: {missing}"
+        f"以下插件引用了 core.login_chain 却未使用 {REQUIRED_HELPER}（必须用独立会话，禁止在共享会话上登录）: {missing}"
     )
     print("PASS test_auth_plugins_use_isolated_session")
 

@@ -172,7 +172,7 @@ class _RecordingSurfaceSession:
 
 
 def test_surface_sweep_empty_inventory_unknown():
-    from lib.surface import SurfaceInventory
+    from lib.surface_inventory import SurfaceInventory
     from plugins.common.surface_sweep import SurfaceSweepPlugin
 
     # (a) surface 为 None：未启用 --crawl/--js-extract
@@ -243,7 +243,7 @@ class _SurfaceSession:
 
 def test_surface_sweep_no_confirm():
     """清单非空且全部命中：只做资产盘点，结果必须是 recon/UNKNOWN，不得出现 CONFIRMED"""
-    from lib.surface import SurfaceInventory
+    from lib.surface_inventory import SurfaceInventory
     from plugins.common.surface_sweep import SurfaceSweepPlugin
 
     inv = SurfaceInventory()
@@ -298,7 +298,7 @@ class _AnonymousDispatchSession:
 
 def test_surface_sweep_baseline_uses_anonymous_session():
     """软 404 基线必须与端点探测同用匿名会话（共享会话可能已登录、形态不一致）"""
-    from lib.surface import SurfaceInventory
+    from lib.surface_inventory import SurfaceInventory
     from plugins.common.surface_sweep import SurfaceSweepPlugin
 
     inv = SurfaceInventory()

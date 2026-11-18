@@ -30,7 +30,7 @@
 | 模块 | 作用 |
 | --- | --- |
 | [colors.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/colors.py) | ANSI 颜色常量（`GREEN`/`RED`/`YELLOW`/`RESET`/`SEPARATOR`）+ `ok()` / `no()` 语义函数 |
-| [reporter.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/reporter.py) | 扫描进度输出桥：`set_quiet()` / `is_quiet()` / `strip_ansi()` / `emit()` |
+| [reporter.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/output.py) | 扫描进度输出桥：`set_quiet()` / `is_quiet()` / `strip_ansi()` / `emit()` |
 | [star_cta.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/star_cta.py) | 扫描结束的仓库引导（`print_star_cta` / `cta_enabled`） |
 
 **`reporter.emit()` 的意义**：CLI 下走 stdout（带颜色），库/服务模式下 `set_quiet(True)` 后改走 logging。这就是 [api/app.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/api/app.py) 在 `create_app()` 第一行调 `set_quiet(True)` 的原因——**服务进程的 stdout 不该被插件的进度输出污染**，实时进度已经由 WebSocket 推送。
@@ -59,7 +59,7 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| [auth_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/auth_scan.py) | D26 认证注入：`parse_auth_arg` / `load_auth_file` / `auto_login` / `apply_auth_to_session` / `parse_login_arg` |
+| [auth_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/auth_inject.py) | D26 认证注入：`parse_auth_arg` / `load_auth_file` / `auto_login` / `apply_auth_to_session` / `parse_login_arg` |
 | [auth_surface.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/auth_surface.py) | G1 认证后深度扫描：登录态资产盘点 + 越权矩阵（`AuthSurfaceScanner` / `SurfaceAsset` / `_looks_denied`） |
 | [proxy_pool.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/proxy_pool.py) | D13 代理池：`ProxyPool` + `ProxyStats`，轮换 + 健康检查 + 自动剔除 |
 
@@ -95,13 +95,13 @@
 | [nuclei_loader.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/nuclei_loader.py) | E4 nuclei YAML 兼容层（见 §6） |
 | [plugin_sdk.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_sdk.py) | D25 插件 SDK：`generate_plugin` / `init_plugin_file` / `check_plugin` / `list_all_plugins` / `generate_plugin_docs` |
 | [plugin_repo.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/plugin_repo.py) | E5 插件模板仓库：导出 / manifest / Ed25519 签名 / 远程更新（见 §7） |
-| [scan_templates.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/scan_templates.py) | D19 扫描模板：`ScanTemplate` / `apply_template` / `filter_plugins`（quick/deep/compliance/dengbao） |
+| [scan_templates.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/scan_profiles.py) | D19 扫描模板：`ScanTemplate` / `apply_template` / `filter_plugins`（quick/deep/compliance/dengbao） |
 
 ### 2.9 报告与交付（6）
 
 | 模块 | 作用 |
 | --- | --- |
-| [report_template.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/report_template.py) | G5 docx 合规报告模板引擎：占位符替换（`build_scalar_values`）+ 块级填充（`_fill_block_vuln_table` / `_fill_block_vuln_details`） |
+| [report_template.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/report_docx_template.py) | G5 docx 合规报告模板引擎：占位符替换（`build_scalar_values`）+ 块级填充（`_fill_block_vuln_table` / `_fill_block_vuln_details`） |
 | [remediation.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/remediation.py) | G5 整改复测：`build_remediation_report` / `render_remediation_docx` |
 | [diff_scan.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/diff_scan.py) | D20 增量差异：`VulnFingerprint` / `DiffEntry` / `DiffReport` / `load_report` |
 | [notifier.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/notifier.py) | D21 告警通知（见 §8） |

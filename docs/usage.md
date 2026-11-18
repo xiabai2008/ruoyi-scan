@@ -200,15 +200,10 @@ ruoyi-scan -p http://target:8080/
 ruoyi-scan -p http://target:8080/ --cms ruoyi
 ruoyi-scan -p http://target:8080/ --cms spring
 
-# 3. 指定插件类别（缩小检测范围）
-ruoyi-scan -p http://target:8080/ --category ruoyi
-ruoyi-scan -p http://target:8080/ --category spring
-ruoyi-scan -p http://target:8080/ --category common
-
-# 4. 配合并发与限速（生产环境推荐）
+# 3. 配合并发与限速（生产环境推荐）
 ruoyi-scan -p http://target:8080/ --threads 10 --rate 20 --timeout 10
 
-# 5. 通过代理扫描（如 BurpSuite 调试）
+# 4. 通过代理扫描（如 BurpSuite 调试）
 ruoyi-scan -p http://target:8080/ --proxy http://127.0.0.1:8080
 
 # 6. 启用 WAF 自动绕过
@@ -1955,11 +1950,10 @@ python -m venv .venv
 | 参数 | 说明 |
 |------|------|
 | `--plugin-init <name>` | 生成插件模板 |
-| `--plugin-new <name>` | 创建新插件脚手架 |
 | `--plugin-path <dir>` | 加载第三方插件目录 |
 | `--plugin-check <path>` | 验证插件文件完整性 |
 | `--plugin-list` | 列出所有已加载插件 |
-| `--category <cat>` | 插件类别 ruoyi/spring/common |
+| `--framework <f>` | 插件所属框架（`--category` 为兼容别名） |
 
 ### 插件模板仓库（E5）
 

@@ -7,9 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chains.registry import get_chain, list_chains
-from common.models import FingerprintResult
-from core.chain import (
+from chains.engine import (
     CHAIN_BLOCKED,
     CHAIN_CONFIRMED,
     CHAIN_PARTIAL,
@@ -18,6 +16,8 @@ from core.chain import (
     NODE_SUCCESS,
     ChainEngine,
 )
+from chains.registry import get_chain, list_chains
+from common.models import FingerprintResult
 
 # === Mock SessionManager ===
 

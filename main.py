@@ -88,10 +88,14 @@ def build_parser():
     group.add_argument("-f", metavar="file", dest="file", default=None, help="批量扫描：从文件读取目标列表")
 
     group = parser.add_argument_group("通用参数")
-    group.add_argument("--proxy", default=None, help="代理地址（如 http://127.0.0.1:8080）")
-    group.add_argument("--proxy-file", default=None, help="代理池文件")
+    group.add_argument("--proxy", default=None, metavar="URL", help="代理地址（如 http://127.0.0.1:8080）")
+    group.add_argument("--proxy-file", default=None, metavar="FILE", help="代理池文件（每行一个代理 URL）")
     group.add_argument(
-        "--proxy-rotate", choices=["round-robin", "random", "least-fail"], default="round-robin", help="代理轮换策略"
+        "--proxy-rotate",
+        choices=["round-robin", "random", "least-fail"],
+        default="round-robin",
+        metavar="STRATEGY",
+        help="代理轮换策略",
     )
     group.add_argument(
         "-V",
@@ -100,7 +104,7 @@ def build_parser():
         version=f"ruoyi-scan {settings.VERSION}",
         help="显示版本号并退出",
     )
-    group.add_argument("--threads", type=int, default=settings.THREADS, help="并发线程数")
+    group.add_argument("--threads", type=int, default=settings.THREADS, metavar="N", help="并发线程数")
     group.add_argument(
         "--rate",
         type=int,
@@ -113,7 +117,7 @@ def build_parser():
         default=settings.RATE_SCOPE,
         help="限速作用域：request=逐 HTTP 请求（真实 QPS）；plugin=逐插件启动（v1.7.1 旧行为）",
     )
-    group.add_argument("--report", default=None, help="报告输出目录")
+    group.add_argument("--report", default=None, metavar="DIR", help="报告输出目录")
     group.add_argument("--debug", action="store_true", default=False, help="调试模式")
     group.add_argument(
         "--timeout", type=int, default=settings.TIMEOUT, help=f"请求超时秒数（默认 {settings.TIMEOUT}s）"
@@ -133,8 +137,12 @@ def build_parser():
     )
     # 类别从已安装的插件包派生，新增框架时无需改这里（v1.6 WP-R）。
     # 曾经写死 ["ruoyi", "spring"]，导致 --cms jeecgboot 被 argparse 直接拒绝。
-    group.add_argument("--cms", default=None, choices=_known_categories(), help="手动指定 CMS（默认自动识别）")
-    group.add_argument("--pass-level", default="full", choices=["top100", "top1000", "full"], help="口令字典级别")
+    group.add_argument(
+        "--cms", default=None, choices=_known_categories(), metavar="CMS", help="手动指定 CMS（默认自动识别）"
+    )
+    group.add_argument(
+        "--pass-level", default="full", choices=["top100", "top1000", "full"], metavar="LEVEL", help="口令字典级别"
+    )
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
     group.add_argument(
         "--no-pause",
@@ -279,7 +287,6 @@ def build_parser():
     group = parser.add_argument_group("D25 插件 SDK")
     group.add_argument("--plugin-init", default=None, metavar="NAME", help="生成插件模板")
     group.add_argument("--plugin-check", default=None, metavar="PATH", help="验证插件")
-    group.add_argument("--plugin-new", default=None, metavar="NAME", help="P3: 创建新插件脚手架")
     group.add_argument("--plugin-list", action="store_true", default=False, help="列出插件")
     group.add_argument(
         "--plugin-path",
@@ -289,7 +296,16 @@ def build_parser():
         help="加载外部插件（目录或 .py 文件，可多次指定）",
     )
     # v1.6 起插件类别由 plugins/ 目录派生；写死三元组会拒绝 jeecgboot/yudao。
-    group.add_argument("--category", default="common", choices=_known_categories(), help="插件类别（从 plugins/ 派生）")
+    # --category 为兼容别名（旧文档/旧脚本），规范名是 --framework。
+    group.add_argument(
+        "--framework",
+        "--category",
+        dest="framework",
+        default="common",
+        choices=_known_categories(),
+        metavar="FRAMEWORK",
+        help="插件所属框架（从 plugins/ 派生；--category 为兼容别名）",
+    )
 
     group = parser.add_argument_group("E5 插件模板仓库")
     group.add_argument("--plugin-export", default=None, metavar="DIR", help="导出插件源码与元信息到目录（模板仓库）")
@@ -400,6 +416,47 @@ def build_parser():
     return parser
 
 
+def _option_label(action) -> str:
+    """把 argparse action 还原成帮助表里的 --flag <meta> 形式。"""
+    long_opts = [o for o in action.option_strings if o.startswith("--")]
+    if not long_opts:
+        return ""
+    label = long_opts[0]
+    if action.nargs == 0:
+        return label
+    meta = action.metavar or "<%s>" % action.dest.replace("_", "-")
+    return "%s %s" % (label, meta)
+
+
+def _print_grouped_options() -> None:
+    """参数表由 build_parser() 派生（唯一事实源）。
+
+    历史：print_help() 曾维护一张 100+ 行手写参数表，与 build_parser() 靠人工同步
+    （v1.8 清理时发现过 --time-budget 漏登）。现在帮助文本直接取 action.help。
+    """
+    parser = build_parser()
+    rows = []
+    for group in parser._action_groups:
+        items = []
+        for action in group._group_actions:
+            if action.dest in ("help", "version") or not action.help:
+                continue
+            label = _option_label(action)
+            if not label:
+                continue
+            items.append((label, " ".join(str(action.help).split())))
+        if items:
+            rows.append((group.title or "", items))
+
+    width = max((len(label) for _, items in rows for label, _ in items), default=24)
+    width = min(max(width, 24), 34)
+    for title, items in rows:
+        if title:
+            print("[%s]" % title)
+        for label, desc in items:
+            print("  %-*s %s" % (width, label, desc))
+
+
 def print_help():
     """打印帮助（对齐原 -h 输出）"""
     print(SEPARATOR)
@@ -410,123 +467,7 @@ def print_help():
     print("-f : 批量扫描（从文件读取目标列表）")
     print("-V/--version : 显示版本号并退出")
     print(SEPARATOR)
-    print("可选长参数：")
-    long_params = [
-        ("--proxy <url>", "代理（如 http://127.0.0.1:8080）"),
-        ("--proxy-file <f>", "代理池文件（每行一个代理 URL）"),
-        ("--proxy-rotate <s>", "代理轮换策略 round-robin/random/least-fail"),
-        ("--threads <n>", "并发线程数（默认 1 同步顺序执行）"),
-        ("--rate <n>", "每秒请求数；plugin 作用域下为每秒插件数（0 不限速）"),
-        ("--rate-scope <s>", "限速作用域：request=逐 HTTP 请求（默认）；plugin=逐插件启动（旧行为）"),
-        ("--report <dir>", "报告输出目录（生成 HTML/JSON/CSV）"),
-        ("--debug", "调试模式（请求日志输出到 stderr）"),
-        ("--timeout <n>", "请求超时秒数（默认 10s）"),
-        ("--time-budget <s>", "单目标时间预算（秒，0 不限制）"),
-        ("--time-based", "启用时序盲注检测（每端点约 20-25 秒，默认关闭）"),
-        ("--cms <cms>", "手动指定 CMS（跳过指纹识别）"),
-        ("--pass-level <lvl>", "口令字典级别 top100/top1000/full"),
-        ("--no-cta", "关闭扫描结尾的仓库引导提示"),
-        ("--no-pause", "扫描结束不等待回车（CI / 脚本默认不等待）"),
-        ("--skip-preflight", "跳过目标可达性预检（经代理等特殊链路时使用）"),
-        ("--verify-tls", "校验目标 TLS 证书（默认不校验，兼容内网自签名证书）"),
-        ("--portscan", "扫描前执行端口扫描 + 服务识别"),
-        ("--redis-port", "Redis 未授权检测端口（默认 6379）"),
-        ("--base-path", "显式指定 API 前缀（如 /portal，可多次）"),
-        ("--ports <p1,p2>", "自定义端口列表（逗号分隔）"),
-        ("--passive", "启动被动代理模式（监听 HTTP/HTTPS 流量）"),
-        ("--passive-host", "代理监听地址（默认 127.0.0.1）"),
-        ("--passive-port", "代理监听端口（默认 8080）"),
-        ("--components", "组件版本检测（fastjson/SpringBoot/Shiro/Nacos/Log4j）"),
-        ("--nuclei <dir|file>", "加载 nuclei YAML 模板（可多次指定）"),
-        ("--nuclei-tags <a,b>", "仅加载含指定 tag 的模板"),
-        ("--nuclei-severity <s>", "仅加载指定严重度模板（high/medium/low）"),
-        ("--nuclei-exclude-tags <a,b>", "排除含指定 tag 的模板"),
-        ("--nuclei-validate <path>", "校验 nuclei 模板（不扫描）"),
-        ("--report-format <f>", "报告格式 html/json/csv/pdf/docx/xlsx/sarif"),
-        ("--report-template <path>", "docx 合规报告模板（占位符注入，G5）"),
-        ("--remediation <baseline.json>", "整改复测：需配合 -u/-p 扫描，与基线对比出整改验证报告（G5）"),
-        ("--no-dedup", "关闭结果去重聚合"),
-        ("--chain <name>", "执行漏洞利用链"),
-        ("--chain-list", "列出所有可用的漏洞利用链"),
-        (
-            "--exploit",
-            "仅用于已授权目标：对 Spring4Shell 做真实利用验证（会写入一个无害 JSP）。\n"
-            "                             默认关闭；非回环/内网目标自动拒绝。",
-        ),
-        ("--bypass-waf <m>", "WAF 绕过策略：auto/on/off（默认 auto）"),
-        ("--adversarial-transport", "启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战"),
-        ("--serve", "启动 Web API 服务（FastAPI + WebSocket + OpenAPI 文档）"),
-        ("--host <addr>", "API 服务监听地址（默认 127.0.0.1，仅本机；对外需显式指定 0.0.0.0）"),
-        ("--port <n>", "API 服务监听端口（默认 8000）"),
-        ("--api-key <key>", "API Key 鉴权（支持 key1:read,key2:scan,key3:admin 多 Key 分级）"),
-        ("--cors-origins <o>", "允许的 CORS 源（逗号分隔）"),
-        ("--db-path <path>", "SQLite 数据库路径"),
-        ("--schedule <cron>", "定时扫描表达式（cron 5 段式 或 every:<秒>）"),
-        ("--schedule-target <url>", "定时扫描目标 URL"),
-        ("--crawl", "启用主动爬虫"),
-        ("--crawl-depth <n>", "爬虫最大深度（默认 2）"),
-        ("--crawl-max-pages <n>", "爬虫最大页面数（默认 50）"),
-        ("--subdomain", "启用被动子域名枚举"),
-        ("--js-extract", "启用 JS 端点提取"),
-        ("--template <name>", "扫描模板：quick/deep/compliance/dengbao"),
-        ("--template-list", "列出所有可用的扫描模板"),
-        ("--config <path>", "YAML 配置文件"),
-        ("--diff <old.json>", "与历史扫描报告对比"),
-        ("--diff-only <old> <new>", "仅对比两个 JSON 报告"),
-        ("--save-baseline", "保存本次扫描结果为基线"),
-        ("--notify <type=target>", "扫描完成通知"),
-        ("--auth <type=value>", "认证注入"),
-        ("--auth-file <path>", "从文件加载认证信息"),
-        ("--auth-login <user:pass>", "自动登录获取认证"),
-        ("--plugin-init <name>", "生成插件模板"),
-        ("--plugin-new <name>", "创建新插件脚手架（与 --plugin-init 同源）"),
-        ("--plugin-path <dir>", "加载第三方插件目录"),
-        ("--category <c>", "插件类别（从 plugins/ 派生）"),
-        ("--plugin-check <path>", "验证插件文件完整性"),
-        ("--plugin-list", "列出所有已加载插件"),
-        ("--plugin-export <dir>", "导出插件源码与元信息到目录（模板仓库）"),
-        ("--plugin-manifest <dir>", "生成/校验 manifest.json（Ed25519 签名）"),
-        ("--plugin-update [url]", "从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥）"),
-        ("--ai <desc>", "AI 生成插件（LLM 优先，无 Key 降级规则模板）"),
-        ("--ai-validate [path]", "G3 生成即验证（签名靶场三态；无参=生成后自动验证）"),
-        ("--ai-triage", "G3 UNKNOWN 智能降噪（聚类分流，LLM 可选）"),
-        ("--ai-name <name>", "AI 插件名称（默认取描述）"),
-        ("--ai-api-key <key>", "LLM API Key（环境变量 RUOYI_AI_API_KEY）"),
-        ("--ai-model <model>", "LLM 模型名（默认 gpt-4o-mini）"),
-        ("--ai-retries <n>", "AI 自验证最大重试轮数"),
-        ("--ai-report [zh|en]", "AI 生成漏洞分析摘要（报告生成后，无 Key 降级模板）"),
-        ("--ci", "CI 模式"),
-        ("--severity-threshold <level>", "CI 失败阈值（默认 high）"),
-        ("--ci-init <platform>", "生成 CI 配置（github/gitlab/jenkins）"),
-        ("--wiki", "生成漏洞知识库"),
-        ("--wiki-output <path>", "知识库输出路径"),
-        ("--oast-server", "启动 OAST 回调服务器"),
-        ("--oast-host <addr>", "OAST 服务器监听地址"),
-        ("--oast-port <n>", "OAST 服务器监听端口"),
-        ("--logic-scan", "业务逻辑漏洞检测"),
-        ("--logic-endpoints <file>", "业务扫描端点列表文件"),
-        ("--logic-concurrency <n>", "竞争条件检测并发数"),
-        ("--auth-surface", "认证后深度扫描：登录态资产盘点 + 越权矩阵（需 --auth-login）"),
-        ("--surface-account <user:pass>", "低权账号（垂直越权对比，可多次）"),
-        ("--surface-output <path>", "资产清单 JSON 输出路径"),
-        ("--cve-sync", "同步 NVD CVE 信息"),
-        ("--cve-id <CVE-ID>", "查询单个 CVE 信息"),
-        ("--cve-offline <component>", "按组件查离线 CVE 库（内网模式）"),
-        ("--nvd-api-key <key>", "NVD API Key"),
-        ("--siem-export <fmt>", "导出 SIEM 格式"),
-        ("--siem-output <path>", "SIEM 导出路径"),
-        ("--siem-syslog <host:port>", "发送到 Syslog 服务器"),
-        ("--siem-protocol <p>", "Syslog 协议 udp/tcp"),
-        ("--async", "批量模式并发（仅 -f 生效）"),
-        ("--async-workers <n>", "异步并发线程数"),
-        ("--distributed <mode>", "分布式模式（master/worker/standalone）"),
-        ("--redis-url <url>", "Redis 连接 URL"),
-        ("--distributed-rate <n>", "分布式全局限速（每秒请求数，0 不限速）"),
-        ("--distributed-timeout <n>", "分布式任务超时秒数"),
-        ("--worker-max-tasks <n>", "Worker 最大任务数"),
-    ]
-    for param, desc in long_params:
-        print(f"  {param:<28} {desc}")
+    _print_grouped_options()
     print(SEPARATOR)
 
 
@@ -588,7 +529,7 @@ def main(argv=None):
 
     # D19：应用扫描模板
     if getattr(args, "template", None):
-        from lib.scan_templates import apply_template
+        from lib.scan_profiles import apply_template
 
         print(f"{YELLOW}[*]应用扫描模板: {args.template}{RESET}")
         apply_template(args, args.template, verbose=True, explicit_keys=explicit_keys)
@@ -618,7 +559,6 @@ def main(argv=None):
             args.template_list,
             args.diff_only,
             args.plugin_init,
-            args.plugin_new,
             args.plugin_check,
             args.plugin_list,
             args.plugin_export,

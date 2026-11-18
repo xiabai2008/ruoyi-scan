@@ -56,13 +56,13 @@ import re
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
 from config import settings
-from core.auth_chain import isolated_auth_session
 from core.http import join_url
+from core.login_chain import isolated_auth_session
 from core.lowpriv import resolve_surface_account
 from core.session import SessionManager
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 logger = get_logger(__name__)

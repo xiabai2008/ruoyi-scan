@@ -38,7 +38,7 @@ from email.mime.text import MIMEText
 from typing import Any, Dict, List
 from urllib.parse import urlsplit, urlunsplit
 
-from lib.reporter import emit
+from lib.output import emit
 
 
 def parse_notify_arg(notify_args: List[str]) -> List[Dict[str, str]]:

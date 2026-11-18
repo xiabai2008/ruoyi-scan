@@ -14,8 +14,8 @@ from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
 
 def run_chain_mode(chain_name: str, args: Namespace) -> None:
     """漏洞利用链执行模式（D6）：按链定义编排多插件"""
+    from chains.engine import CHAIN_CONFIRMED, CHAIN_UNKNOWN, ChainEngine
     from chains.registry import get_chain, list_chains
-    from core.chain import CHAIN_CONFIRMED, CHAIN_UNKNOWN, ChainEngine
 
     # 链列表模式：--chain list 与 --chain-list 等价，仅列出可用链不执行
     if chain_name == "list" or getattr(args, "chain_list", False):
@@ -96,7 +96,7 @@ def run_chain_mode(chain_name: str, args: Namespace) -> None:
 
     print(f"{SEPARATOR}")
     # 链状态配色与扫描结果一致：CONFIRMED 绿 / UNKNOWN 黄 / 其余状态红
-    # （状态常量取自 core/chain.py，避免硬编码字面量漂移）
+    # （状态常量取自 chains/engine.py，避免硬编码字面量漂移）
     status_color = (
         GREEN if chain_result.status == CHAIN_CONFIRMED else (YELLOW if chain_result.status == CHAIN_UNKNOWN else RED)
     )

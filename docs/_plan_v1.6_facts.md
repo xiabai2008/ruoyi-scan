@@ -163,7 +163,7 @@ ignore_errors = true
 ```
 
 `lib/` 60 个文件 + `api/`，共约 19000 行。抽查 `lib/matcher.py`、`lib/attribution.py`、
-`lib/soft404.py`、`lib/reporter.py` 四个文件 strict 模式**零错误**，说明不是全盘烂，
+`lib/soft404.py`、`lib/output.py` 四个文件 strict 模式**零错误**，说明不是全盘烂，
 而是「按模块逐步收紧」可行——ROADMAP G2 本身就是这个策略。
 
 ### 覆盖率棘轮：已按目录设阈值

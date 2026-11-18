@@ -1,5 +1,9 @@
 # Ruoyi-Scan CLI 控制层 — 核心扫描模式 + 子模块重导出
-"""CLI 控制层：run_mode / run_mode_batch（核心扫描）；其余模式见 cli/ 子模块"""
+"""CLI 控制层：扫描主流程（run_mode）与批处理；命令实现见 cli/*_runner.py。
+
+层：控制层（cli）｜上游：dispatcher｜下游：orchestrator/report
+先读：docs/CONCEPTS.md#12-报告管线
+"""
 
 from __future__ import annotations
 
@@ -23,7 +27,7 @@ from core.report import BatchReport, ReportBuilder
 from core.session import SessionManager
 from lib.attribution import ATTR_KEY, SCOPE_HOST, scope_of
 from lib.colors import GREEN, RED, RESET, SEPARATOR, YELLOW
-from lib.reporter import is_findings_muted, set_findings_muted
+from lib.output import is_findings_muted, set_findings_muted
 from lib.star_cta import print_star_cta
 
 logger = get_logger(__name__)
@@ -148,7 +152,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
     # 仅凭 auth_config 是否为空只能区分 ok/failed，无法区分 MFA。
     auth_status_hint = ""
     if getattr(args, "auth", None) or getattr(args, "auth_file", None) or getattr(args, "auth_login", None):
-        from lib.auth_scan import auto_login, load_auth_file, parse_auth_arg, parse_login_arg
+        from lib.auth_inject import auto_login, load_auth_file, parse_auth_arg, parse_login_arg
 
         # 认证三来源（--auth 参数 / --auth-file 文件 / --auth-login 自动登录）合并进同一结构
         auth_config = {"cookies": {}, "headers": {}, "type": None}
@@ -576,7 +580,7 @@ def run_mode(
         started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         report_label = label
         if req.template:
-            from lib.scan_templates import get_template
+            from lib.scan_profiles import get_template
 
             template_obj = get_template(req.template)
             if template_obj and template_obj.report_label:
@@ -646,7 +650,7 @@ def run_mode(
 
         # G5：合规报告模板渲染（安服交付物定制）
         if getattr(args, "report_template", None):
-            from lib.report_template import render_docx_template
+            from lib.report_docx_template import render_docx_template
 
             tpl_out = os.path.join(args.report, "report_custom.docx")
             tpl_path = render_docx_template(args.report_template, builder, tpl_out)
@@ -1067,7 +1071,6 @@ from cli.plugin_runner import (  # noqa: E402
     run_plugin_check_mode,
     run_plugin_init_mode,
     run_plugin_list_mode,
-    run_plugin_new_mode,
 )
 from cli.serve_runner import run_serve_mode  # noqa: E402
 from cli.tool_runner import run_ci_init_mode, run_diff_only_mode, run_template_list_mode, run_wiki_mode  # noqa: E402
@@ -1186,7 +1189,6 @@ __all__ = [
     "run_chain_mode",
     "run_serve_mode",
     "run_passive_mode",
-    "run_plugin_new_mode",
     "run_plugin_init_mode",
     "run_plugin_check_mode",
     "run_plugin_list_mode",

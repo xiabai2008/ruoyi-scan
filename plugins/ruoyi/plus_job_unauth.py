@@ -7,7 +7,7 @@ import json
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 # 若依 AjaxResult 里表示「路由/端点不存在」的业务码。

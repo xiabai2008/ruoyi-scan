@@ -79,7 +79,7 @@ python main.py -u http://127.0.0.1:19101 --auth-login admin:wrongpass \
 1. `core/captcha_solver.py`：
    - `solve(math_op_index: int = 0)`；
    - `_eval_math_captcha(text, math_op_index)`：OCR 保留算式时直接求值；OCR 把 `7-2=?` 读成 `7247`（运算符丢失）时，取前两位数字，按 `+,-,*,/` 轮换候选答案（Phase 2 盲测验证过的策略），不再 5 次重试都提交同一个错误答案。
-2. `core/auth_chain.py`：
+2. `core/login_chain.py`：
    - `login()` 把重试序号传给 `_login_once` → v4/v5 登录 → `CaptchaSolver.solve(math_op_index=...)`；
    - 新增公共登录器 `login_with_password(target, username, password, timeout=None, attempts=5)`：
      - **不内置任何默认账号**，凭据必须显式传入；
@@ -112,12 +112,12 @@ python main.py -u http://127.0.0.1:19101 --auth-login admin:admin123 \
 **R2：登录器单点验证（4.6.2，dataScope 已修）**
 
 ```python
-from core.auth_chain import login_with_password
+from core.login_chain import login_with_password
 ok, reason, cfg = login_with_password("http://127.0.0.1:19102", "admin", "admin123")
 # ok=True, reason=ok, type=cookie, cookies=1
 ```
 
-`lib.auth_scan.auto_login` 直接调用同样返回 cookie 配置（`type=cookie, cookies=1`），证明接入点在 `auto_login` 而非仅测试专用函数。
+`lib.auth_inject.auto_login` 直接调用同样返回 cookie 配置（`type=cookie, cookies=1`），证明接入点在 `auto_login` 而非仅测试专用函数。
 
 说明登录器不依赖 R1 的特定版本；R2 的 dataScope 已修，因此不应出现 CONFIRMED（未跑全量，避免 R2 靶场 502 时卡在软 404 重试）。
 
@@ -156,8 +156,8 @@ python -m pytest tests/test_session_isolation_gate.py -q
 ## 四、改动文件
 
 - `core/captcha_solver.py`（算术运算符轮换）
-- `core/auth_chain.py`（公共登录器 `login_with_password` + 重试序号）
-- `lib/auth_scan.py`（`auto_login` 接入公共登录器）
+- `core/login_chain.py`（公共登录器 `login_with_password` + 重试序号）
+- `lib/auth_inject.py`（`auto_login` 接入公共登录器）
 - `core/orchestrator.py`（`surface_auth_status` 字段 + 报告 summary 分链）
 - `core/report.py`（`meta.auth_status` 分链 + 按链路的 HTML 横幅）
 - `cli/runner.py`（surface 移到报告前、分链状态、终端措辞）

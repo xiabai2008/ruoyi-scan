@@ -16,7 +16,7 @@ def run_plugin_init_mode(args: Namespace) -> None:
     from lib.plugin_sdk import init_plugin_file
 
     name = args.plugin_init
-    category = args.category
+    category = args.framework
     print(f"{YELLOW}[*]生成插件模板{RESET}")
     print(f"    名称: {name}")
     print(f"    类别: {category}")
@@ -30,7 +30,7 @@ def run_plugin_init_mode(args: Namespace) -> None:
     except FileExistsError as e:
         print(f"{RED}[!]{e}{RESET}")
     except Exception as e:
-        # 与 run_plugin_new_mode 对齐：无效名称/类别、目录/文件权限等错误给友好提示，
+        # 无效名称/类别、目录/文件权限等错误给友好提示，
         # 同时保留 traceback 供排查
         logger.warning("生成插件模板失败: %s", name, exc_info=True)
         print(f"{RED}[!]生成插件模板失败: {e}{RESET}")
@@ -96,28 +96,3 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
             f"{has_fix:<4} {has_reproduce:<4}"
         )
     print(f"{SEPARATOR}")
-
-
-def run_plugin_new_mode(args: Namespace) -> None:
-    """P3: 创建新插件脚手架（与 --plugin-init 同一生成器，避免两套模板漂移）"""
-    from lib.plugin_sdk import init_plugin_file
-
-    name = args.plugin_new
-    category = getattr(args, "category", "common")
-    print(f"{YELLOW}[*]创建新插件脚手架{RESET}")
-    print(f"    名称: {name}")
-    print(f"    类别: {category}")
-    # FileExistsError 单独捕获：同名插件已存在属预期情况；其余异常统一归为创建失败
-    try:
-        filepath = init_plugin_file(name, category=category)
-        print(f"{GREEN}[+]插件已创建: {filepath}{RESET}")
-        print(f"{YELLOW}[*]下一步:{RESET}")
-        print("    1. 编辑插件文件实现 verify() 方法")
-        print(f"    2. 运行 python main.py --plugin-check {filepath} 验证")
-        print("    3. 运行 python main.py -u http://target/ 扫描")
-    except FileExistsError as e:
-        print(f"{RED}[!]{e}{RESET}")
-    except Exception as e:
-        # 保留 traceback 供排查（模块 logger 此前未被使用）；对用户仍给友好提示
-        logger.warning("创建插件失败: %s", name, exc_info=True)
-        print(f"{RED}[!]创建插件失败: {e}{RESET}")

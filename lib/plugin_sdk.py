@@ -4,7 +4,7 @@
 #
 # 使用方式：
 #   # 生成插件模板
-#   python main.py --plugin-init my_plugin --category ruoyi
+#   python main.py --plugin-init my_plugin --framework ruoyi
 #   # → 生成 plugins/ruoyi/my_plugin.py
 #
 #   # 验证插件
@@ -41,7 +41,7 @@ PLUGIN_TEMPLATE = '''# {description}
 from plugins.base import PluginBase
 from common.models import ScanResult, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, UnknownReason
 from lib.colors import ok, no
-from lib.reporter import emit
+from lib.output import emit
 from core.http import join_url
 
 

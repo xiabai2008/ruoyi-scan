@@ -20,7 +20,7 @@ evidence: 默认口令登录成功（含验证码场景；独立会话验证，�
 
 根因（已定位）：
 
-1. `core/auth_chain.py` 约 222 行：
+1. `core/login_chain.py` 约 222 行：
 
 ```python
 # 404 / 无响应 → 无鉴权
@@ -28,7 +28,7 @@ if http_code == 404:
     self.auth_mode = AUTH_NONE
 ```
 
-2. `core/auth_chain.py` 约 272 行：
+2. `core/login_chain.py` 约 272 行：
 
 ```python
 if self.auth_mode == AUTH_NONE:
@@ -45,7 +45,7 @@ if self.auth_mode == AUTH_NONE:
 
 ---
 
-## 一、F6-1 登录入口发现（core/auth_chain.py）
+## 一、F6-1 登录入口发现（core/login_chain.py）
 
 1. 删掉 `404 → AUTH_NONE` 的捷径。
 2. 新增 `AUTH_UNKNOWN` 模式。
@@ -117,7 +117,7 @@ D1/A2 的带凭据运行已经是 `{"admin":"failed"}`；CLI 也会打印 RED �
 ```
 "D:\tools\Python 3.12.9\python.exe" -m pytest tests/test_f6_auth_endpoint.py tests/test_auth_chain.py tests/test_fp_baseline.py tests/test_d7_plugins.py tests/test_session_isolation_gate.py tests/test_logging_hygiene.py -q
 "D:\tools\Python 3.12.9\python.exe" -m ruff check core/ plugins/ tests/
-"D:\tools\Python 3.12.9\python.exe" -m ruff format --check core/auth_chain.py plugins/ruoyi/default_password.py tests/test_f6_auth_endpoint.py
+"D:\tools\Python 3.12.9\python.exe" -m ruff format --check core/login_chain.py plugins/ruoyi/default_password.py tests/test_f6_auth_endpoint.py
 "D:\tools\Python 3.12.9\python.exe" -m mypy core/ --strict --ignore-missing-imports --no-warn-unused-ignores
 "D:\tools\Python 3.12.9\python.exe" tests/regression_ruoyi.py
 ```

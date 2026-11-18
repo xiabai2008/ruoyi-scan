@@ -11,7 +11,7 @@
 2. **不要 `git commit` / `git push` / `git add -A`。** 工作区已有 28 个未提交改动（Phase 5 在制品），
    不许回滚、不许整包提交。动手前先 `git status --short` 留一份基线，结束再比一次。
 3. 只改本工单点名的文件 + 新增测试。别顺手重构无关模块。
-4. 库代码（`core/` `lib/` `plugins/`）**禁裸 `print()`**，走 `from lib.reporter import emit`。
+4. 库代码（`core/` `lib/` `plugins/`）**禁裸 `print()`**，走 `from lib.output import emit`。
 5. 判定只许收紧或补证据，**不许为了让结果好看而放宽**。
 6. Python 一律用 `"D:\tools\Python 3.12.9\python.exe"`（PATH 里那个没装依赖）。
 

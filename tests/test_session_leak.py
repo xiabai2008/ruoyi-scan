@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import core.auth_chain as auth_chain  # noqa: E402
+import core.login_chain as auth_chain  # noqa: E402
 import core.session as core_session  # noqa: E402
 from common.models import STATUS_CONFIRMED  # noqa: E402
 from plugins.ruoyi.default_password import DefaultPasswordPlugin  # noqa: E402

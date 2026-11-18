@@ -10,7 +10,7 @@ from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanRes
 from core.http import join_url
 from lib.colors import no, ok
 from lib.matcher import looks_authenticated
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 

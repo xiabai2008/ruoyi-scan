@@ -63,9 +63,9 @@
 | `core/` | `common/` + `core/` 内 | 可选能力通过**函数内延迟导入** `lib/` |
 | `lib/` | `common/` + `core.http` 等无环模块 | 不依赖 `cli/`、`api/` |
 | `plugins/` | `common.models`、`core.http`、`lib.{colors,matcher,reporter}` | 不直接依赖 `core.orchestrator`（避免反向耦合） |
-| `chains/` | `core.chain` + `plugins.chain.*` | 只负责声明 DAG，不实现探测逻辑 |
+| `chains/` | `chains.engine` + `plugins.chain.*` | 只负责声明 DAG，不实现探测逻辑 |
 | `cli/` | `common/`、`core/`、`lib/` | 不做扫描逻辑，只做参数 → 请求的翻译 |
-| `api/` | `common/`、`core/`、`lib.reporter` | 不做扫描逻辑 |
+| `api/` | `common/`、`core/`、`lib.output` | 不做扫描逻辑 |
 | `main.py` | `common/console`、`common/logger`、`config.settings`、`lib.colors` | 保持极轻——启动就要快 |
 
 `config/`（仅 [settings.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/config/settings.py)）是被所有层读取的全局配置，不算依赖环。
@@ -108,11 +108,11 @@ def _build_waf_bypass(self): ...
     from lib.waf_bypass import BypassStatsTracker, WafBypassCoordinator  # L709
 
 def _run(self): ...
-    from lib.auth_scan import apply_auth_to_session   # L347
+    from lib.auth_inject import apply_auth_to_session   # L347
     from lib.component_detect import ComponentDetector, to_detect_result  # L407
     from lib.plugin_repo import load_user_installed_plugins  # L480
     from lib.nuclei_loader import load_nuclei_templates      # L516
-    from lib.scan_templates import filter_plugins, get_template  # L546
+    from lib.scan_profiles import filter_plugins, get_template  # L546
 ```
 
 **② `TYPE_CHECKING` 导入（只用于类型标注）**

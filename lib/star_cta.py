@@ -16,7 +16,7 @@ import sys
 from typing import IO, Optional
 
 from lib.colors import GREEN, RESET, SEPARATOR, YELLOW
-from lib.reporter import emit, is_quiet
+from lib.output import emit, is_quiet
 
 # 仓库地址（star / issue / 文档 同址，统一出口，便于后续改域名只改一处）
 REPO_URL = "https://github.com/xiabai2008/ruoyi-scan"

@@ -1,3 +1,9 @@
+"""插件发现与加载（内置包 / 外部目录 / 用户目录 / entry_points / nuclei）。
+
+层：能力层（core）｜上游：router/orchestrator/api｜下游：plugins/*
+先读：docs/CONCEPTS.md#4-插件发现五条路径
+"""
+
 # 插件动态发现与加载
 import hashlib
 import importlib
@@ -218,7 +224,7 @@ def known_categories() -> List[str]:
     **新增框架时不需要再改这些地方**——这正是 v1.6 WP-R 要还的债。
 
     背景：JeecgBoot 接入时只改了扫描路径，配套清单全漏了，导致
-    `--cms jeecgboot` 被 argparse 拒绝、`--plugin-new --category jeecgboot` 抛错、
+    `--cms jeecgboot` 被 argparse 拒绝、`--plugin-init --framework jeecgboot` 抛错、
     `export_plugins()` 导不出 jeecg 插件（模板仓库与 Ed25519 签名分发链路里没有它）、
     nightly acceptance 不跑 jeecg。每条都是「新框架接了一半」。
 

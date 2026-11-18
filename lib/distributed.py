@@ -35,7 +35,7 @@ import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 

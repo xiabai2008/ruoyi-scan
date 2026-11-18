@@ -1,3 +1,9 @@
+"""报告渲染：HTML / JSON / CSV + 按需加载 PDF/Word/Excel/SARIF。
+
+层：能力层（core）｜上游：orchestrator/cli/api｜下游：report_* 格式器
+先读：docs/CONCEPTS.md#12-报告管线
+"""
+
 # 报告渲染：HTML / JSON / CSV（标准库 json/csv/string 模板，无第三方依赖）
 import csv
 import datetime

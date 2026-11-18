@@ -1,7 +1,7 @@
 # E7：AI POC 生成器（--ai）
 #
 # 设计目标：把「漏洞描述 → 插件骨架」的时间压缩到分钟级（参照 nuclei -ai）。
-#   --ai "<漏洞描述>" --category ruoyi
+#   --ai "<漏洞描述>" --framework ruoyi
 #     → 调用 LLM（OpenAI 兼容 API，requests 直调，零新依赖）
 #     → plugin_sdk.generate_plugin 规整落盘 plugins/<category>/xxx.py
 #     → 自动 --plugin-check 验证；失败把错误回灌 LLM 重试（最多 3 轮）
@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 
@@ -41,7 +41,7 @@ Python 插件源码。插件规范（必须遵守）：
 7. 使用 from core.http import join_url 拼接 URL
 8. 结果用 self._build_result(status, url, evidence, extra) 构建
 9. 注释使用简体中文
-10. 进度输出使用 from lib.reporter import emit（禁止直接 print——会污染 API 服务日志与测试输出）
+10. 进度输出使用 from lib.output import emit（禁止直接 print——会污染 API 服务日志与测试输出）
 
 只输出 Python 代码本身（不要 markdown 代码块标记，不要额外解释）。"""
 
@@ -295,7 +295,7 @@ def _write_source(
     """
     # category 参与默认输出目录拼接，必须先白名单校验（CLI/调用方传入 ../../ 时拒绝）
     # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
-    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
+    # --plugin-init / AI 生成 / --plugin-check 全部拒绝。
     from core.loader import known_categories
 
     if category not in known_categories():

@@ -7,7 +7,7 @@ JeecgBoot 接入时（F5）只把**扫描路径**做通了（R10 上 8/8 CONFIRM
 但配套清单全漏了。逐条实测确认的后果（2026-11-02）：
 
   - `--cms jeecgboot` → argparse 直接拒绝 `invalid choice`
-  - `--plugin-new --category jeecgboot` → `ValueError: unsupported category`
+  - `--plugin-init --framework jeecgboot` → `ValueError: unsupported category`
   - AI 生成插件同样拒绝该类目
   - `export_plugins()` 只导 3 个包 → 模板仓库 / Ed25519 签名分发里没有 jeecg
   - 桌面端 / Web 端把 jeecg 插件标成 `cms=ruoyi`
@@ -61,13 +61,13 @@ def check_cms_choices(cats: list) -> list:
 
 
 def check_category_parser(_cats: list) -> list:
-    """main.py 的 --category 必须从 known_categories() 派生（v1.6 WP-R 漏网处）"""
+    """main.py 的 --framework（别名 --category）必须从 known_categories() 派生"""
     src = io.open(os.path.join(_PROJECT_ROOT, "main.py"), encoding="utf-8").read()
-    if 'group.add_argument("--category", default="common", choices=_known_categories()' in src:
+    if "dest=\"framework\"" in src and "choices=_known_categories()" in src:
         return []
     if 'choices=["ruoyi", "spring", "common"]' in src:
-        return ["main.py: --category 的 choices 仍写死三元组，--plugin-new/--plugin-init 会拒绝新框架"]
-    return ["main.py: --category 的 choices 未从 _known_categories() 派生"]
+        return ["main.py: --framework/--category 的 choices 仍写死三元组，插件脚手架会拒绝新框架"]
+    return ["main.py: --framework/--category 的 choices 未从 _known_categories() 派生"]
 
 
 def check_pyz_fallback(cats: list) -> list:

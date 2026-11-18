@@ -627,7 +627,7 @@ class TestDefaultPassword(unittest.TestCase):
         """P1-0d + F6-2：公共登录器成功且受保护接口有数据 → CONFIRMED"""
         m.get(mock_url("/system/user/list"), json={"rows": [{"userId": 1}], "total": 1})
         with mock.patch(
-            "core.auth_chain.RuoYiAuthChain.login",
+            "core.login_chain.RuoYiAuthChain.login",
             return_value=(True, "ok"),
         ):
             result = DefaultPasswordPlugin().verify(MOCK_TARGET, SessionManager())

@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 def run_template_list_mode() -> None:
     """列出所有可用的扫描模板（D19）"""
-    from lib.scan_templates import list_templates
+    from lib.scan_profiles import list_templates
 
     print(f"{SEPARATOR}")
     print(f"{YELLOW}[*]可用扫描模板{RESET}")

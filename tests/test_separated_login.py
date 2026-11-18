@@ -12,7 +12,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core import basepath as basepath_mod  # noqa: E402
-from core.auth_chain import AUTH_V5_JWT, RuoYiAuthChain  # noqa: E402
+from core.login_chain import AUTH_V5_JWT, RuoYiAuthChain  # noqa: E402
 
 
 class FakeResp:

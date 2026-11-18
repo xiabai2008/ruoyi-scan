@@ -1,4 +1,4 @@
-# lib/reporter.py — 扫描进度输出桥（CLI 走 stdout，库/服务模式走 logger）
+# lib/output.py — 扫描进度输出桥（CLI 走 stdout，库/服务模式走 logger）
 """插件与 core 模块的统一进度输出通道。
 
 存在意义
@@ -21,12 +21,12 @@
 
 用法
 ====
-    from lib.reporter import emit
+    from lib.output import emit
     emit(ok("存在 Thymeleaf/SpEL 模板注入漏洞"))
 
 服务入口显式切换模式：
 
-    from lib.reporter import set_quiet
+    from lib.output import set_quiet
     set_quiet(True)     # API 服务 / 库调用 / 测试
 
 函数名为什么是 emit 而不是 report
@@ -43,7 +43,7 @@
 - `plugins/**`、`lib/**`、`core/**` **不得直接 `print()`**，必须走 `emit()`。
   该约定由 `tests/test_logging_hygiene.py` 的 AST 门禁强制。
 - `cli/**` 是 stdout 呈现层（banner、扫描结果表格、帮助信息），允许直接 print；
-  `lib/reporter.py` 自身是桥的实现，同样在门禁白名单内。
+  `lib/output.py` 自身是桥的实现，同样在门禁白名单内。
 """
 
 import logging

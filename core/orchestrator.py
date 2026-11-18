@@ -1,3 +1,9 @@
+"""扫描编排：预检 → 侦察 → 指纹 → 能力 → 插件 → 报告。
+
+层：编排层（core）｜上游：cli/api｜下游：engine/session/plugins
+先读：docs/CONCEPTS.md#12-报告管线
+"""
+
 # D9.1 扫描编排器：从 main.py run_mode 抽取，CLI 与 API 共用
 #
 # 设计目标：
@@ -25,9 +31,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult, UnknownReason
 from config import settings
-from core.cache import FingerprintCache
 from core.engine import ScanEngine
 from core.fingerprint import detect_cms, detect_waf
+from core.fingerprint_cache import FingerprintCache
 from core.http import normalize_scan_target, normalize_target, preflight
 from core.loader import load_plugins
 from core.report import ReportBuilder
@@ -744,7 +750,7 @@ class ScanOrchestrator:
 
             # D26：认证扫描增强（将 auth 配置注入 session）
             if req.auth:
-                from lib.auth_scan import apply_auth_to_session
+                from lib.auth_inject import apply_auth_to_session
 
                 apply_auth_to_session(session, req.auth)
                 auth_summary = []
@@ -1063,7 +1069,7 @@ class ScanOrchestrator:
             # D19：扫描模板过滤插件
             template_obj = None
             if req.template:
-                from lib.scan_templates import filter_plugins, get_template
+                from lib.scan_profiles import filter_plugins, get_template
 
                 template_obj = get_template(req.template)
                 if template_obj:
@@ -1548,7 +1554,7 @@ class ScanOrchestrator:
 
                 # D14 回流：把爬到的页面与 JS 端点固化为扫描级清单。
                 # 必须放在 result["js_endpoints"] 赋值之后，否则清单会缺 JS 端点。
-                from lib.surface import SurfaceInventory
+                from lib.surface_inventory import SurfaceInventory
 
                 inv = SurfaceInventory(pages=crawl_result["pages"])
                 for u in crawl_result["pages"]:

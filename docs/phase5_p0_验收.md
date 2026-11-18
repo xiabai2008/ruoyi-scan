@@ -73,7 +73,7 @@ unset RUOYI_SCAN_LOWPRIV_USER RUOYI_SCAN_LOWPRIV_PASS
   - 部门树越权访问（`treeData` 返回 `[]`，无数据泄露）
 - `--auth-surface` 未崩溃：`盘点资产 32 个，越权/未授权发现 13 个`，`R1-withlowpriv-surface.json` 已写出
 - `report.json` 中 `scanner_low` 出现 2 次（显式账号，预期）
-- 主扫描 `meta.auth_status = "failed"`：`--auth-login` 走的是 `lib.auth_scan.auto_login`（不支持验证码），与 `--auth-surface` 的 `RuoYiAuthChain` 是两条独立链路；本次没有合并它们
+- 主扫描 `meta.auth_status = "failed"`：`--auth-login` 走的是 `lib.auth_inject.auto_login`（不支持验证码），与 `--auth-surface` 的 `RuoYiAuthChain` 是两条独立链路；本次没有合并它们
 
 ### 结论：默认值撤掉后，R1 那 3 条 CONFIRMED 还剩几条是真的
 

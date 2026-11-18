@@ -2,7 +2,7 @@
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 # 复用同目录 dict_unauth 的分页列表结构判定（records/rows + total/success + code==200）

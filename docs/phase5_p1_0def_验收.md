@@ -16,7 +16,7 @@
 成功即返回 CONFIRMED；失败后用同一个隔离会话回退原有的表单/JSON/Cloud 判定。
 不再直接使用共享会话登录，满足 `test_session_isolation_gate`。
 
-验证码重试上限由 5 提到 8（`core/auth_chain.py` 的 `login()` 默认值与
+验证码重试上限由 5 提到 8（`core/login_chain.py` 的 `login()` 默认值与
 `login_with_password()` 默认值），降低 OCR 偶发失败导致的演示抖动。
 
 ### R1 验收
@@ -154,8 +154,8 @@ python main.py -u http://127.0.0.1:19101 \
 - `plugins/ruoyi/file_upload.py`（登录后上传维度、`.html` 回读、500 降级、`code:0` 兼容）
 - `plugins/ruoyi/cve_2025_70986_select_dept_tree.py`（空数据 evidence 明确「登录成功」）
 - `core/orchestrator.py`（`session.authenticated`）
-- `core/auth_chain.py`（验证码重试默认 8 次）
-- `lib/auth_scan.py`（公共登录器重试 8 次）
+- `core/login_chain.py`（验证码重试默认 8 次）
+- `lib/auth_inject.py`（公共登录器重试 8 次）
 - `tests/test_anon_session_plugins.py`（登录后上传用例）
 - `tests/regression_ruoyi.py`（默认口令验证码用例 + dept tree 登录成功断言）
 

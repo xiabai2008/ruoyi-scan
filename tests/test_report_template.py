@@ -11,7 +11,7 @@ import pytest
 
 from common.models import SEVERITY_HIGH, SEVERITY_MEDIUM, STATUS_CONFIRMED, ScanResult
 from core.report import ReportBuilder
-from lib.report_template import build_scalar_values, render_docx_template
+from lib.report_docx_template import build_scalar_values, render_docx_template
 
 try:
     from docx import Document

@@ -58,7 +58,7 @@
 
 最终修复：4 个 POC 取消上界（`affected_versions = ">=4.0"`），
 `任意文件读取`/`路径穿越`/`定时任务调用目标` 保持 `<4.7`（真实 4.7.8 实测 SAFE）。
-同步修正 `tests/test_ruoyi_versions.py`、`tests/test_d3_version_matrix.py`。
+同步修正 `tests/test_ruoyi_versions.py`、`tests/test_version_matrix.py`。
 
 效果：`resolve(4.7.8)` 11 → 15 个插件；`resolve(4.8.0)` 11 → 15；`4.8.2 / 4.8.3` 9 → 13。
 

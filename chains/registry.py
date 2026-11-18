@@ -4,8 +4,8 @@
 # 链定义采用惰性导入（用到时才 import），避免无 --chain 时的额外开销。
 from typing import Dict, List, Optional, Tuple
 
+from chains.engine import ChainDef
 from common.logger import get_logger
-from core.chain import ChainDef
 
 logger = get_logger(__name__)
 

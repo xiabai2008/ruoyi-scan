@@ -23,17 +23,17 @@
 
 ```
 cli/runner.py
-core/auth_chain.py
+core/login_chain.py
 core/lowpriv.py
 core/orchestrator.py
 core/report.py
-lib/auth_scan.py
+lib/auth_inject.py
 ```
 
 执行：
 
 ```
-"D:\tools\Python 3.12.9\python.exe" -m ruff format cli/runner.py core/auth_chain.py core/lowpriv.py core/orchestrator.py core/report.py lib/auth_scan.py
+"D:\tools\Python 3.12.9\python.exe" -m ruff format cli/runner.py core/login_chain.py core/lowpriv.py core/orchestrator.py core/report.py lib/auth_inject.py
 ```
 
 要求：
@@ -127,7 +127,7 @@ rows = [r.to_dict() if hasattr(r, "to_dict") else dict(vars(r)) for r in results
 "D:\tools\Python 3.12.9\python.exe" -m ruff check common/ core/ lib/ api/ plugins/ chains/ cli/ tests/ main.py
 "D:\tools\Python 3.12.9\python.exe" -m ruff format --check common/ core/ lib/ api/ plugins/ chains/ cli/ main.py
 "D:\tools\Python 3.12.9\python.exe" -m mypy common/ core/ --strict --ignore-missing-imports --no-warn-unused-ignores
-"D:\tools\Python 3.12.9\python.exe" -m mypy lib/reporter.py lib/soft404.py --strict --ignore-missing-imports --no-warn-unused-ignores
+"D:\tools\Python 3.12.9\python.exe" -m mypy lib/output.py lib/soft404.py --strict --ignore-missing-imports --no-warn-unused-ignores
 "D:\tools\Python 3.12.9\python.exe" -m pytest tests/test_fp_baseline.py tests/test_logging_hygiene.py tests/test_session_isolation_gate.py -q
 "D:\tools\Python 3.12.9\python.exe" scripts/verification_matrix.py --check --max-none 13
 "D:\tools\Python 3.12.9\python.exe" scripts/export_plugin_list.py --check
@@ -141,7 +141,7 @@ rows = [r.to_dict() if hasattr(r, "to_dict") else dict(vars(r)) for r in results
 ## 五、交付
 
 1. 贴 8 条门禁的完整输出（含退出码）。
-2. 贴 `git diff --numstat -- cli/runner.py core/auth_chain.py core/lowpriv.py core/orchestrator.py core/report.py lib/auth_scan.py core/session.py`。
+2. 贴 `git diff --numstat -- cli/runner.py core/login_chain.py core/lowpriv.py core/orchestrator.py core/report.py lib/auth_inject.py core/session.py`。
 3. 贴 `git status --short`，确认只多出 `core/session.py` 一条 M，其余条目与开工前一致。
 4. 一句话结论：这 7 个文件的改动是否只包含「格式化 + 类型注解」。
 5. **停在这里，不要 commit，不要开 C2。**

@@ -1,3 +1,9 @@
+"""框架/变体/版本三层收窄：决定一次扫描加载哪些插件类。
+
+层：能力层（core）｜上游：orchestrator/cli｜下游：loader/fingerprint
+先读：docs/CONCEPTS.md#7-框架--变体--版本三层收窄
+"""
+
 # 指纹→插件包路由（自动同步特征库 cms，新增 CMS 零改动）
 import re
 from typing import List

@@ -1,3 +1,9 @@
+"""会话封装：Cookie / 代理 / 重试 / 连接池 / TLS / 超时熔断 / 令牌桶。
+
+层：能力层（core）｜上游：engine/orchestrator/plugins｜下游：requests
+先读：docs/CONCEPTS.md#11-限速预算熔断
+"""
+
 # 会话封装：Cookie / 代理 / 重试 / keep-alive / 连接池 / TLS 策略 / 超时熔断
 from __future__ import annotations
 
@@ -374,7 +380,7 @@ class SessionManager:
         → 未授权可达性假阳性（实测 2026-10-29：若依 v4.8.3 靶场上「定时任务 RCE
         （未授权访问）」在 5 个站点全部误报）。
 
-        与 core.auth_chain.isolated_auth_session 的区别：那个是**带凭据登录**的
+        与 core.login_chain.isolated_auth_session 的区别：那个是**带凭据登录**的
         隔离会话，用于「低权账号对照」类插件；这里要的是**完全匿名**的会话。
 
         Returns:

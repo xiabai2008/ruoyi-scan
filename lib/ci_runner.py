@@ -26,7 +26,7 @@
 import os
 from typing import List
 
-from lib.reporter import emit
+from lib.output import emit
 
 # CI 模式退出码
 EXIT_SUCCESS = 0  # 无漏洞或漏洞低于阈值

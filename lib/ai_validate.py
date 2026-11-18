@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 
@@ -134,7 +134,7 @@ def _run_plugin_on_lab(plugin_cls: type, target: str) -> Optional[Any]:
         return None
     finally:
         # 旧实现缺陷：成功/异常均不关闭 session，每次验证（vuln+safe 两模式）泄漏 2 个连接。
-        # finally 保证任何路径都释放连接（参考 core/auth_chain.py 的正确写法）。
+        # finally 保证任何路径都释放连接（参考 core/login_chain.py 的正确写法）。
         if session is not None:
             session.close()
 
@@ -222,7 +222,7 @@ def decide_install_path(filepath: str, category: str, verdict: str) -> Optional[
     """
     # category 参与安装目录拼接：非白名单值（如 ../../）一律不落盘
     # 类别从插件包派生（v1.6 WP-R）：写死三元组会让新框架的
-    # --plugin-new / AI 生成 / --plugin-check 全部拒绝。
+    # --plugin-init / AI 生成 / --plugin-check 全部拒绝。
     from core.loader import known_categories
     from lib.plugin_sdk import _to_filename
 

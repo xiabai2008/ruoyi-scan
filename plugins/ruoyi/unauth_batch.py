@@ -13,7 +13,7 @@ from lib.matcher import (
     looks_authenticated,
     match_positive,
 )
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 

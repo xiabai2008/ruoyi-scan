@@ -10,7 +10,7 @@
 #   4. 并发竞争：重复提交、余额双花
 #
 # 依赖：
-#   - D26 认证扫描（lib/auth_scan.py）：提供认证状态
+#   - D26 认证扫描（lib/auth_inject.py）：提供认证状态
 #   - D9 Web API（core/session.py）：发起请求
 #
 # 使用方式：

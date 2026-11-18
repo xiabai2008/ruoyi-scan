@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import settings  # noqa: E402
-from lib import reporter  # noqa: E402
+from lib import output as reporter  # noqa: E402  # 兼容测试内的旧变量名
 from lib.colors import ok  # noqa: E402
 
 

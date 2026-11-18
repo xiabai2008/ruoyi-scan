@@ -30,7 +30,7 @@ import os
 from typing import Any, Dict, Optional, Tuple
 
 from common.logger import get_logger
-from lib.reporter import emit
+from lib.output import emit
 
 logger = get_logger(__name__)
 
@@ -252,7 +252,7 @@ def explicit_keys_from_argv(argv: Optional[list] = None) -> set:
         旧实现让 merge_config_with_args / apply_template 自己去扫全局 sys.argv
         判断「用户是否显式指定」。这很脆弱——**任何**往 sys.argv 里塞参数的
         东西都会被误认成「用户指定」：pytest 的 --timeout=30、以及任何宿主进程
-        的参数都是。实测：`pytest tests/test_d19_d27_template_config.py
+        的参数都是。实测：`pytest tests/test_scan_profiles_config.py
         --timeout=30` 会让 timeout 被误判为显式指定，配置文件的 timeout=12
         不再生效，2 个用例稳定失败（无参时全绿）。
 

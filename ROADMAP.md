@@ -57,7 +57,7 @@
 为规模化铺路，与 G1 并行不阻塞：
 
 - ~~**mypy 债务**~~ **部分落地（G2）**：`common/`、`core/` 已按模块清零并转 CI 硬门禁
-  （strict，`--no-warn-unused-ignores`），`lib/reporter.py`、`lib/soft404.py` 同步纳入；
+  （strict，`--no-warn-unused-ignores`），`lib/output.py`、`lib/soft404.py` 同步纳入；
   `lib/`、`api/` 其余模块仍 `ignore_errors`，继续按模块收紧
 - ~~**CI Windows matrix**~~ **已落地（G2）**：unit 作业矩阵已含 `windows-latest`（pytest-timeout Windows 侧切 thread 方法）
 - **Python 基线评估提升至 3.10**：3.8 已 EOL 两年，mypy 2.x 已弃支持；以 PyPI
@@ -106,7 +106,7 @@
 商业价值最高、竞争最少的差异化方向——7 种报告格式 + 等保模板（`dengbao`）+
 baseline diff 已升级为完整交付闭环：
 
-- ~~**安服报告模板引擎**~~ **已落地（`lib/report_template.py`，`--report-template`）**：docx 模板占位符注入
+- ~~**安服报告模板引擎**~~ **已落地（`lib/report_docx_template.py`，`--report-template`）**：docx 模板占位符注入
   （标量 + `{{vuln_table}}` 定点插表 + `{{vuln_details}}` 详述），安服公司套用自己的模板一键出交付物
 - ~~**整改复测工作流**~~ **已落地（`lib/remediation.py`，`--remediation`）**：复测与基线对比出整改验证报告
   （CLOSED/OPEN/NEW + 完成率 + 结论，JSON + docx 交付物）

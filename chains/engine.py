@@ -1,3 +1,9 @@
+"""利用链引擎：把原子插件按 DAG 组合成端到端验证链。
+
+层：引擎层（chains）｜上游：chain_runner｜下游：plugins/chain 步骤插件
+先读：docs/CONCEPTS.md#1-三态判定confirmed--safe--unknown
+"""
+
 # 漏洞利用链编排器（D6 阶段）
 #
 # 功能：将独立执行的原子 POC 组合为端到端攻击链，支持 DAG 拓扑排序、

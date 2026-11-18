@@ -95,7 +95,7 @@ from cli.dispatcher import dispatch;  dispatch(args)
 | D20 差异对比 | `--diff` `--diff-only` `--save-baseline` | D20 |
 | D21 通知 | `--notify TYPE=TARGET` | D21 |
 | D26 认证扫描 | `--auth` `--auth-file` `--auth-login` | D26 |
-| D25 插件 SDK | `--plugin-init/check/new/list/path` `--category` | D25 |
+| D25 插件 SDK | `--plugin-init/check/list/path` `--framework` | D25 |
 | E5 插件模板仓库 | `--plugin-export` `--plugin-manifest` `--plugin-update` | E5 |
 | E7 AI 插件生成 | `--ai` `--ai-triage` `--ai-validate` `--ai-*` | E7 / G3 |
 | E8 AI 报告解读 | `--ai-report [zh\|en]` | E8 |
@@ -175,7 +175,7 @@ ok, reason = probe_http_responsive(target)    # HTTP 层：端口通但服务不
 dispatch(args)
 │
 ├─【第一段：纯工具模式（不扫描，立即 return）】
-│   --diff-only → --template-list → --plugin-new → --plugin-init → --plugin-check
+│   --diff-only → --template-list → --plugin-init → --plugin-check
 │   → --plugin-list → --ci-init → --wiki → --oast-server → --cve-sync/--cve-id/--cve-offline
 │   → --nuclei-validate → --plugin-export → --plugin-manifest → --plugin-update
 │   → --ai-validate <path>（sys.exit(返回码)）

@@ -600,7 +600,7 @@ class TestParseAuthArg:
     """--auth 参数解析测试"""
 
     def test_parse_cookie(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(["cookie=JSESSIONID=abc123; token=xyz"])
         assert config["type"] == "cookie"
@@ -608,28 +608,28 @@ class TestParseAuthArg:
         assert config["cookies"]["token"] == "xyz"
 
     def test_parse_bearer(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(["bearer=eyJhbGciOiJIUzI1NiJ9"])
         assert config["type"] == "bearer"
         assert config["headers"]["Authorization"] == "Bearer eyJhbGciOiJIUzI1NiJ9"
 
     def test_parse_header(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(["header=X-API-Key: mykey123"])
         assert config["type"] == "header"
         assert config["headers"]["X-API-Key"] == "mykey123"
 
     def test_parse_basic(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(["basic=admin:password"])
         assert config["type"] == "basic"
         assert config["headers"]["Authorization"].startswith("Basic ")
 
     def test_parse_multiple(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(
             [
@@ -641,7 +641,7 @@ class TestParseAuthArg:
         assert config["headers"]["X-API-Key"] == "xyz"
 
     def test_parse_invalid(self):
-        from lib.auth_scan import parse_auth_arg
+        from lib.auth_inject import parse_auth_arg
 
         config = parse_auth_arg(["invalid_no_equals"])
         assert config["type"] is None
@@ -652,7 +652,7 @@ class TestLoadAuthFile:
     """认证文件加载测试"""
 
     def test_load_structured_file(self):
-        from lib.auth_scan import load_auth_file
+        from lib.auth_inject import load_auth_file
 
         content = "type: cookie\nJSESSIONID: abc123\ntoken: xyz\n"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
@@ -667,7 +667,7 @@ class TestLoadAuthFile:
             os.unlink(path)
 
     def test_load_plain_cookie_string(self):
-        from lib.auth_scan import load_auth_file
+        from lib.auth_inject import load_auth_file
 
         content = "JSESSIONID=abc123; token=xyz"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
@@ -681,13 +681,13 @@ class TestLoadAuthFile:
             os.unlink(path)
 
     def test_load_file_not_found(self):
-        from lib.auth_scan import load_auth_file
+        from lib.auth_inject import load_auth_file
 
         with pytest.raises(FileNotFoundError):
             load_auth_file("/nonexistent/auth.txt")
 
     def test_load_bearer_file(self):
-        from lib.auth_scan import load_auth_file
+        from lib.auth_inject import load_auth_file
 
         content = "type: bearer\ntoken: eyJabc123\n"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
@@ -705,14 +705,14 @@ class TestParseLoginArg:
     """--auth-login 参数解析测试"""
 
     def test_parse_login(self):
-        from lib.auth_scan import parse_login_arg
+        from lib.auth_inject import parse_login_arg
 
         username, password = parse_login_arg("admin:password123")
         assert username == "admin"
         assert password == "password123"
 
     def test_parse_login_invalid(self):
-        from lib.auth_scan import parse_login_arg
+        from lib.auth_inject import parse_login_arg
 
         with pytest.raises(ValueError):
             parse_login_arg("invalid_no_colon")
@@ -723,7 +723,7 @@ class TestApplyAuthToSession:
 
     def test_apply_cookies(self):
         from core.session import SessionManager
-        from lib.auth_scan import apply_auth_to_session
+        from lib.auth_inject import apply_auth_to_session
 
         session = SessionManager()
         auth_config = {
@@ -736,7 +736,7 @@ class TestApplyAuthToSession:
 
     def test_apply_headers(self):
         from core.session import SessionManager
-        from lib.auth_scan import apply_auth_to_session
+        from lib.auth_inject import apply_auth_to_session
 
         session = SessionManager()
         auth_config = {
@@ -749,7 +749,7 @@ class TestApplyAuthToSession:
 
     def test_apply_empty_config(self):
         from core.session import SessionManager
-        from lib.auth_scan import apply_auth_to_session
+        from lib.auth_inject import apply_auth_to_session
 
         session = SessionManager()
         original_cookie = session.session.cookies.get("test", None)

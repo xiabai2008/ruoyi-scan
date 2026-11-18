@@ -74,7 +74,7 @@ jobs:
         run: python scripts/export_plugin_list.py --check
       - name: 框架注册完整性
         # JeecgBoot 接入时只做了扫描路径，配套清单全漏（--cms 拒绝该选项、
-        # --plugin-new/AI 生成拒绝该类别、export_plugins 导不出、API 归错类、
+        # --plugin-init/AI 生成拒绝该类别、export_plugins 导不出、API 归错类、
         # nightly acceptance 不跑）——这批漏项 CI 全都不查，所以第 3 个框架会再漏一遍。
         # 本门禁把「哪些地方需要登记」固化成断言（v1.6 WP-R）。
         run: python scripts/check_framework_registration.py
@@ -257,7 +257,7 @@ jobs:
       - name: Install dependencies (含 D8 可选依赖)
         run: pip install -r requirements-dev.txt
       - name: D8 单元测试（dedup + PDF + Word + Excel + CLI 集成）
-        run: python -m pytest tests/test_dedup.py tests/test_report_pdf.py tests/test_report_docx.py tests/test_report_xlsx.py tests/test_d8_cli.py -v --timeout-method=signal
+        run: python -m pytest tests/test_dedup.py tests/test_report_pdf.py tests/test_report_docx.py tests/test_report_xlsx.py tests/test_cli_reports.py -v --timeout-method=signal
       - name: 全格式生成冒烟（render_all formats=all → 7 文件）
         run: |
           python -c "
@@ -292,7 +292,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: D7 全量测试（tamper + bypass + origin + engine + plugins + acceptance + stats）
-        run: python -m pytest tests/test_tamper.py tests/test_waf_bypass.py tests/test_origin_finder.py tests/test_d7_engine.py tests/test_d7_plugins.py tests/test_d7_acceptance.py tests/test_d7_stats.py -v --timeout-method=signal
+        run: python -m pytest tests/test_tamper.py tests/test_waf_bypass.py tests/test_origin_finder.py tests/test_engine_contract.py tests/test_plugin_contracts.py tests/test_waf_bypass_acceptance.py tests/test_waf_stats.py -v --timeout-method=signal
 
   # ── D9 Web API 验收：FastAPI + WebSocket + 编排器 ──────────────────
   web-api:

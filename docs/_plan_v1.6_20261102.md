@@ -187,7 +187,7 @@ NVD 11 条命中全是「Quake3/Android 游戏」类噪声。
 
 | 文件 | Jeecg 增量 | 耦合性质 |
 |---|---|---|
-| `core/auth_chain.py` | +183 行 | 含 `_login_v5_jeecg()` 42 行专属逻辑 |
+| `core/login_chain.py` | +183 行 | 含 `_login_v5_jeecg()` 42 行专属逻辑 |
 | `core/fingerprint.py` | +146 行 | `_cms_from_doc_title()` 只认 jeecg/ruoyi 两 token |
 | `core/basepath.py` | +70 行 | `_looks_like_jeecg_api()`、`_JEECG_BASES` |
 

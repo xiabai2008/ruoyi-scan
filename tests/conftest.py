@@ -67,7 +67,7 @@ def _quiet_reporter():
     （误报基线测试单次执行 51 插件 × 多条语料，此前会倾倒约 2 MB 文本）。
     这里统一切到静默模式；需要观察进度时设 RUOYI_SCAN_TEST_VERBOSE=1。
     """
-    from lib.reporter import set_quiet
+    from lib.output import set_quiet
 
     verbose = _os.environ.get("RUOYI_SCAN_TEST_VERBOSE") == "1"
     set_quiet(not verbose)

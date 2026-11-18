@@ -8,7 +8,7 @@ from common.models import STATUS_UNKNOWN, ScanResult
 from config import settings
 from core.http import join_url
 from lib.colors import GREEN, RED, RESET, YELLOW
-from lib.reporter import emit
+from lib.output import emit
 from lib.soft404 import Soft404Baseline
 from plugins.base import PluginBase
 

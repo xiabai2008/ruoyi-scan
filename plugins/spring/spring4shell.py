@@ -14,7 +14,7 @@ from urllib.parse import urljoin, urlparse
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
-from lib.reporter import emit
+from lib.output import emit
 from plugins.base import PluginBase
 
 # 漏洞命中签名（与 lab/spring_server.py vuln 模式一致；仅用于对拍，非真实利用输出）

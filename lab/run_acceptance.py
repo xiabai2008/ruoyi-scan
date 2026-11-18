@@ -55,7 +55,7 @@ def scan_target(url: str, scan_mode: str = "u", auth_login: str = "", surface_ac
         user, _, pwd = auth_login.partition(":")
         # 走认证链拿真实会话（含验证码 OCR），而不是手工塞 cookie
         try:
-            from core.auth_chain import login_with_password
+            from core.login_chain import login_with_password
 
             ok, _reason, cfg = login_with_password(url, user, pwd)
             if ok:

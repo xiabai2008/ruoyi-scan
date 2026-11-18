@@ -9,7 +9,7 @@
 #   - 步骤 1 失败 → abort（SQL 注入是链路起点，失败则整链无意义）
 #   - 步骤 2 失败 → continue（配置读取失败不影响 RCE 验证）
 #   - 步骤 3 失败 → continue（RCE 验证失败不影响前两步的已得信息）
-from core.chain import ChainDef, ChainStep
+from chains.engine import ChainDef, ChainStep
 from plugins.chain.sql_to_rce_steps import ConfigReadPlugin, JobRCEVerifyPlugin, SQLInjectExtractPlugin
 
 # 变量名 CHAIN 是 registry 的注册契约（链定义模块须导出同名变量），改名会破坏惰性加载

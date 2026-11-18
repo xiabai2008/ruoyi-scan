@@ -123,6 +123,10 @@ plugins:
 
 nav:
   - 首页: index.md
+  - 接手必读:
+      - 核心概念地图: CONCEPTS.md
+      - 阅读路径: READING_PATH.md
+      - 命名规范: NAMING.md
   - 快速上手: quickstart.md
   - 用户指南:
       - 用户手册: usage.md
