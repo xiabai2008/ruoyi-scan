@@ -66,9 +66,24 @@
 - **帮助文本改由 `build_parser()` 自动生成**，删除 108 行手写参数表，消除双事实源。
 - **测试文件按行为命名**：38 个 `test_d*/f*` 工单号文件改为行为名（如
   `test_d7_engine` → `test_engine_contract`），CI 引用同步更新。
-- 新增接手文档：[docs/CONCEPTS.md](../docs/CONCEPTS.md)、[docs/READING_PATH.md](../docs/READING_PATH.md)、
-  [docs/NAMING.md](../docs/NAMING.md)，并接入文档站导航。
+- 新增接手文档：[CONCEPTS.md](docs/CONCEPTS.md)、[READING_PATH.md](docs/READING_PATH.md)、
+  [NAMING.md](docs/NAMING.md)，并接入文档站导航。
 - 关键模块补统一文件头（职责 / 层 / 上下游 / 先读链接）。
+
+### Changed（可读性重构 · 第二批）
+- **编排层拆函数**：`ScanOrchestrator._run` 从 **812 行降到 282 行**，抽出
+  `_stage_portscan` / `_stage_recon` / `_stage_session` / `_stage_reachability` /
+  `_stage_fingerprint` / `_stage_capabilities` / `_stage_load_plugins`
+  （含 `_load_routed_plugins` / `_load_extension_plugins`）/ `_stage_degrade` /
+  `_stage_report`。事件顺序、异常路径与 finally 关闭会话的语义保持不变。
+- **CLI 命令归属**：`--plugin-export/manifest/update` 移到 `cli/plugin_runner.py`，
+  `--nuclei-validate` 移到 `cli/tool_runner.py`；`dispatcher` 直接从归属模块导入，
+  删除 `cli/runner.py` 的门面重导出（`__all__` 只保留扫描主流程）。
+- **`run_mode` 从 332 行降到 202 行**：报告生成与后处理抽到 `cli/reporting.py`
+  （`run_cli_report` + `_run_report_postprocess`），CLI 与 API 的报告分工更明确。
+- **新增架构门禁** `tests/test_architecture.py`：
+  依赖方向（common 不依赖上层；core/lib/plugins/chains 不反向依赖 cli/api）、
+  新增函数 ≤150 行（存量巨函数白名单，只减不增）、`--help` 必须覆盖全部长选项。
 
 ### Fixed
 - 过期注释与文档引用：`core/models.py`（文件早已迁至 `common/models.py`）、

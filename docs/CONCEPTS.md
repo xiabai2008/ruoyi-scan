@@ -162,6 +162,6 @@
 | 扫描阶段 | category（插件属性） | phase（暂未统一，见 NAMING） |
 | 输出桥 | lib.output | reporter |
 | 登录链 | login_chain | auth_chain |
-| 利用链 | chains.engine + chains/definitions | core.chain |
+| 利用链 | chains.engine + chains/*.py 定义 | core.chain |
 | 攻击面清单 | surface_inventory | surface |
 | 扫描预设 | scan_profiles | scan_templates |

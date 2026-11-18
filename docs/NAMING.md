@@ -17,9 +17,9 @@
 | 凭据注入 | **auth_inject** | `--auth` 系列解析 | auth_scan |
 | 登录后盘点 | **auth_surface** | 资产清单 + 越权矩阵 | surface（单独使用） |
 | 攻击面清单 | **surface_inventory** | `session.surface` 的数据结构 | surface.py |
-| 利用链 | **chains** | 引擎 `chains/engine.py`，定义 `chains/definitions/`，步骤 `plugins/chain/` | core.chain |
+| 利用链 | **chains** | 引擎 `chains/engine.py`，定义 `chains/*.py`，步骤 `plugins/chain/` | core.chain |
 | 扫描预设 | **scan_profiles** | quick/deep/compliance/dengbao | scan_templates |
-| 报告渲染 | **report** | `core/report/`（渲染）与 `lib/report_docx_template.py`（模板） | reporter |
+| 报告渲染 | **report** | `core/report.py`（渲染）与 `lib/report_docx_template.py`（模板） | reporter |
 | 插件生命周期 | **plugin_*** | base（契约）/ sdk（脚手架）/ repo（分发）/ loader（发现）/ router（选择） | 混用 |
 
 ---

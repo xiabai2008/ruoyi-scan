@@ -135,3 +135,24 @@ def run_wiki_mode(args: Namespace) -> None:
     for p in paths:
         print(f"    {p}")
     print(f"{YELLOW}[*]用浏览器打开 HTML 文件查看{RESET}")
+
+
+def run_nuclei_validate_mode(path: str) -> None:
+    """校验 nuclei 模板（输出校验结果，不扫描）"""
+    from lib.nuclei_loader import discover_nuclei_files, validate_template
+
+    files = discover_nuclei_files(path)
+    if not files:
+        print(f"{RED}[!]未找到模板文件: {path}{RESET}")
+        return
+    total_ok = 0
+    for f in files:
+        errors = validate_template(f)
+        if errors:
+            print(f"{RED}[!]{f}{RESET}")
+            for e in errors:
+                print(f"{RED}    - {e}{RESET}")
+        else:
+            total_ok += 1
+            print(f"{GREEN}[*]校验通过: {f}{RESET}")
+    print(f"{YELLOW}[*]校验完成：{total_ok}/{len(files)} 个模板通过{RESET}")

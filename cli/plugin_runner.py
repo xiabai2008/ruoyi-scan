@@ -96,3 +96,83 @@ def run_plugin_list_mode(_args: Optional[Namespace] = None) -> None:
             f"{has_fix:<4} {has_reproduce:<4}"
         )
     print(f"{SEPARATOR}")
+
+
+def run_plugin_export_mode(out_dir: str) -> None:
+    """导出插件源码与元信息到目录（模板仓库）"""
+    from lib.plugin_repo import export_plugins
+
+    try:
+        hashes = export_plugins(out_dir)
+        print(f"{GREEN}[*]导出完成: {out_dir}（{len(hashes)} 个文件）{RESET}")
+        print(f"{YELLOW}[*]下一步: --plugin-manifest {out_dir} 生成 manifest.json{RESET}")
+    except Exception as e:
+        print(f"{RED}[!]导出失败: {e}{RESET}")
+
+
+def run_plugin_manifest_mode(out_dir: str) -> None:
+    """生成/校验 manifest.json（Ed25519 签名，cryptography 可选）"""
+    from lib.plugin_repo import build_manifest, verify_manifest
+
+    try:
+        import json
+        import os
+
+        manifest_path = os.path.join(out_dir, "manifest.json")
+        if os.path.isfile(manifest_path):
+            # 校验模式
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            errors = verify_manifest(manifest, out_dir)
+            if errors:
+                print(f"{RED}[!]manifest 校验失败:{RESET}")
+                for e in errors:
+                    print(f"{RED}    - {e}{RESET}")
+            else:
+                print(f"{GREEN}[*]manifest 校验通过: {manifest_path}{RESET}")
+                if manifest.get("signature"):
+                    print(f"{GREEN}[*]签名验证通过（Ed25519）{RESET}")
+                else:
+                    print(f"{YELLOW}[*]manifest 未签名（需 cryptography + 私钥才可签名）{RESET}")
+        else:
+            manifest = build_manifest(out_dir)
+            print(f"{GREEN}[*]manifest 已生成: {manifest_path}（{len(manifest['files'])} 个文件）{RESET}")
+            if manifest.get("signature"):
+                print(f"{GREEN}[*]已签名（Ed25519）{RESET}")
+            else:
+                print(
+                    f"{YELLOW}[*]未签名（仅摘要校验；生成私钥: cryptography 库 + --plugin-manifest 重复执行自动创建签名密钥）{RESET}"
+                )
+    except Exception as e:
+        print(f"{RED}[!]manifest 处理失败: {e}{RESET}")
+
+
+def run_plugin_update_mode(url: str) -> None:
+    """从模板仓库更新插件（下载 → 强制验签 → 安装到 ~/.ruoyi-scan/plugins/）
+
+    供应链安全：远程安装强制 Ed25519 验签（fail-closed）。公钥默认取自
+    ~/.ruoyi-scan/signing.pub（首次可通过 --plugin-manifest 生成并人工确认指纹）。
+    """
+    from config import settings
+    from lib.plugin_repo import download_and_install
+
+    # "default" 关键字回退到配置的默认仓库地址；未配置时直接拒绝（fail-closed）
+    if url == "default":
+        url = settings.PLUGIN_REPO_URL
+    if not url:
+        print(f"{RED}[!]未配置插件仓库地址（config/settings.py PLUGIN_REPO_URL）{RESET}")
+        return
+    print(f"{YELLOW}[*]插件仓库更新: {url} ...{RESET}")
+    try:
+        installed = download_and_install(url)
+        print(f"{GREEN}[*]更新完成：安装 {len(installed)} 个文件到 ~/.ruoyi-scan/plugins/{RESET}")
+        for rel in installed:
+            print(f"{GREEN}  [*] {rel}{RESET}")
+    # 验签/校验失败抛 ValueError 且不安装任何文件：远程插件更新默认失败关闭
+    except ValueError as e:
+        print(f"{RED}[!]更新失败（已拒绝安装）: {e}{RESET}")
+        print(f"{YELLOW}[*]安全提示：远程插件安装要求 Ed25519 签名 + cryptography 库{RESET}")
+        print(
+            f"{YELLOW}[*]请安装依赖并确认可信公钥：pip install cryptography；"
+            f"并用 --plugin-manifest 生成/校验 manifest 后人工确认 ~/.ruoyi-scan/signing.pub 指纹{RESET}"
+        )

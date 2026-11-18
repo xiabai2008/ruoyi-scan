@@ -650,464 +650,39 @@ class ScanOrchestrator:
                 )
 
             # 1. 端口扫描（可选）
-            if req.portscan:
-                from core.portscan import DEFAULT_PORTS, PortScanner
-
-                host = self._host_of(target)
-                ports = self._parse_ports(req.ports, DEFAULT_PORTS)
-                scanner = PortScanner(timeout=req.timeout, threads=req.threads)
-                port_results = scanner.scan(host, ports)
-                _emit(
-                    "portscan",
-                    {
-                        "host": host,
-                        "open_count": len(port_results),
-                        "total": len(ports),
-                        "ports": [{"port": p.port, "service": p.service, "banner": p.banner} for p in port_results],
-                        "task_id": task.task_id,
-                    },
-                )
+            self._stage_portscan(req, target, _emit, task.task_id)
 
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
-            recon_info: Dict[str, Any] = {}
-            if req.crawl or req.subdomain or req.js_extract:
-                recon_info = self._run_recon(req, target, _emit, task.task_id, limiter=limiter, proxy_pool=proxy_pool)
-                if recon_info.get("subdomains"):
-                    _emit(
-                        "recon",
-                        {
-                            "type": "subdomain",
-                            "subdomains": recon_info["subdomains"],
-                            "count": len(recon_info["subdomains"]),
-                            "task_id": task.task_id,
-                        },
-                    )
-                if recon_info.get("crawled_urls"):
-                    _emit(
-                        "recon",
-                        {
-                            "type": "crawl",
-                            "urls": recon_info["crawled_urls"],
-                            "count": len(recon_info["crawled_urls"]),
-                            "task_id": task.task_id,
-                        },
-                    )
-                if recon_info.get("js_endpoints"):
-                    _emit(
-                        "recon",
-                        {
-                            "type": "js_extract",
-                            "endpoints": recon_info["js_endpoints"],
-                            "count": len(recon_info["js_endpoints"]),
-                            "task_id": task.task_id,
-                        },
-                    )
+            recon_info = self._stage_recon(req, target, _emit, task.task_id, limiter, proxy_pool)
 
-            # 2. 会话创建
-            # 连接池尺寸必须与线程数挂钩（性能 P0）：旧实现不传 pool_size，session.py 里
-            # _pool = max(pool_size or settings.THREADS or 10, 10)，而 settings.THREADS=1
-            # 且从不被 --threads 写回 → 连接池恒为 10（pool_maxsize=20）。--threads 50 时
-            # 引擎开 50 线程但池只有 20，30 个线程每次请求都新建 TCP 连接，keep-alive
-            # 复用率崩掉。这里显式把 pool_size 设为线程数，使池与并发匹配。
-            session = SessionManager(
-                proxy=req.proxy or None,
-                proxy_pool=proxy_pool,
-                debug=req.debug,
-                timeout=req.timeout,
-                pool_size=req.threads,
-                rate=req.rate,
-                rate_scope=req.rate_scope,
-                limiter=limiter,
+            # 2. 会话 + 引擎（攻击面注入 / 认证注入 / 字典 / 低权账号）
+            session, engine = self._stage_session(req, task.task_id, _emit, limiter, proxy_pool, recon_info)
+
+            # 3.5-3.6 全站拦截 + 登录墙探测
+            block_info, auth_wall = self._stage_reachability(session, target, _emit, task.task_id)
+
+            # 4. 指纹识别（routes: 是否按 cms/variant/version 过滤插件）
+            router, fp_result, fp_cache, all_plugins = self._stage_fingerprint(
+                req, target, session, _emit, task.task_id
             )
-            # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
-            session.exploit = req.exploit
-            # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
-            # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
-            # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
-            inv = recon_info.get("surface") if recon_info else None
-            if inv is not None and inv.endpoints:
-                session.surface = inv
-                _emit(
-                    "surface",
-                    {
-                        "endpoints": len(inv.endpoints),
-                        "pages": len(inv.pages),
-                        "js_endpoints": len(inv.js_endpoints),
-                        "truncated": inv.truncated,
-                        "task_id": task.task_id,
-                    },
-                )
-            self._raise_if_cancelled(task.task_id)
-            engine = ScanEngine(
-                threads=req.threads,
-                # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
-                rate=0 if req.rate_scope == "request" else req.rate,
-                deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
-            )
-            # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
-            # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
-            session.deadline = engine.deadline
-
-            # D26：认证扫描增强（将 auth 配置注入 session）
-            if req.auth:
-                from lib.auth_inject import apply_auth_to_session
-
-                apply_auth_to_session(session, req.auth)
-                auth_summary = []
-                if req.auth.get("cookies"):
-                    auth_summary.append(f"{len(req.auth['cookies'])} 个 Cookie")
-                if req.auth.get("headers"):
-                    auth_summary.append(f"{len(req.auth['headers'])} 个自定义头")
-                _emit(
-                    "auth",
-                    {
-                        "summary": " + ".join(auth_summary),
-                        "cookies": len(req.auth.get("cookies", {})),
-                        "headers": len(req.auth.get("headers", {})),
-                        "task_id": task.task_id,
-                    },
-                )
-
-            # 本次扫描是否真正拿到了高权会话：供 file_upload 的「登录后上传」维度判断。
-            session.authenticated = req.auth_status == "ok"
-
-            # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
-            # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
-            # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
-            selected_password_dict = settings.PASSWORD_DICT
-            if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
-                selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
-            session.password_dict = selected_password_dict
-
-            # 3.1 显式低权账号：只挂在本次扫描的会话上（不写进程级 settings），
-            # 供越权对照插件读取；未提供时插件必须返回 UNKNOWN。
-            if req.surface_account:
-                from core.lowpriv import parse_account
-
-                for item in req.surface_account:
-                    parsed = parse_account(item)
-                    if parsed:
-                        session.surface_account = parsed
-                        break
-
-            # 3.5 全站拦截探测（WAF / 网关 / 认证墙）
-            # 站点被统一拒绝时，每个插件拿到的都是同一个 403，按插件自身逻辑会落到
-            # 「没命中 = 不存在」，报告会写出「N 项确认不存在」——比漏报更危险的假安全感。
-            # 这里先识别拦截状态，插件跑完后再把 SAFE 统一降级为 UNKNOWN。
-            from lib.reachability import detect_blocked
-
-            block_info = detect_blocked(session, target)
-            self.last_block_info = block_info
-            if block_info["blocked"]:
-                _emit("blocked", dict(block_info, task_id=task.task_id))
-
-            # 3.6 登录墙探测（应用自身认证要求，与 WAF 拦截不同）
-            # 真实 RuoYi 未认证访问受保护接口是 302 -> /login（跟随后 200 登录页），
-            # 不是 401。插件只看到 200 登录页就会把「没测到」写成 SAFE。
-            from lib.reachability import detect_auth_wall
-
-            auth_wall = detect_auth_wall(session, target)
-            self.last_auth_wall = auth_wall
-            if auth_wall["wall"]:
-                _emit("auth_wall", dict(auth_wall, task_id=task.task_id))
-
-            # 4. 指纹识别
-            # 性能（P1-C）：自建 FingerprintCache 交给 detect_cms，事后复用给 detect_waf，
-            # 使根路径响应在两者间共享（旧实现 detect_waf 会对根路径重发一次请求，
-            # 单目标至少 3 次根路径请求）。req.cms 手动指定时无 detect_cms，缓存不建。
-            router = Router()
-            fp_cache: Optional[FingerprintCache] = None
-            if req.cms:
-                fp_result = FingerprintResult(cms=req.cms, version="", confidence=1.0, matched=["manual"])
-                all_plugins = router.resolve_by_name(req.cms)
-            else:
-                fp_cache = FingerprintCache(session)
-                fp_result = detect_cms(target, session, cache=fp_cache)
-                all_plugins = router.resolve(fp_result)
-
             task.fingerprint = fp_result
-            _emit(
-                "fingerprint",
-                {
-                    "cms": fp_result.cms,
-                    "version": fp_result.version,
-                    "variant": getattr(fp_result, "variant", ""),
-                    "confidence": fp_result.confidence,
-                    "matched": fp_result.matched,
-                    "task_id": task.task_id,
-                },
-            )
 
-            # 5. WAF 探测 + 绕过协调器
-            # 传入 fp_cache 复用 detect_cms 已缓存的根响应（未命中才发请求，向后兼容）
-            waf_result = detect_waf(target, session, cache=fp_cache)
+            # 5. 环境能力：WAF / 组件检测 / 绕过协调器 / API 前缀
+            (
+                waf_result,
+                component_results,
+                waf_bypass_coordinator,
+                plugin_target,
+            ) = self._stage_capabilities(req, target, session, fp_result, fp_cache, _emit, task.task_id)
             task.waf_info = waf_result
-            _emit(
-                "waf",
-                {
-                    "waf": waf_result.get("waf", ""),
-                    "display": waf_result.get("display", ""),
-                    "bypass_hint": waf_result.get("bypass_hint", ""),
-                    "task_id": task.task_id,
-                },
+
+            # 6. 插件加载 + 过滤 + 分组
+            all_plugins, plugins_by_cat, categories = self._stage_load_plugins(
+                req, fp_result, all_plugins, _emit, task.task_id
             )
-
-            # E2：组件版本检测（--components 启用）
-            component_results = []
-            if req.components:
-                from lib.component_detect import ComponentDetector, to_scan_result
-
-                try:
-                    detector = ComponentDetector()
-                    component_results = detector.detect_all(target, session, ruoyi_version=fp_result.version)
-                    for cr in component_results:
-                        _emit(
-                            "component",
-                            {
-                                "component": cr.component,
-                                "status": cr.status,
-                                "cve": cr.cve,
-                                "detected_version": cr.detected_version,
-                                "evidence": cr.evidence,
-                                "task_id": task.task_id,
-                            },
-                        )
-                except Exception as e:
-                    logger.debug("组件检测失败", exc_info=True)
-                    _emit("component", {"error": str(e), "task_id": task.task_id})
-
-            waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
-
-            # WAF 绕过状态事件（CLI 打印绕过模式信息）
-            bypass_mode = req.bypass_waf or "auto"
-            if waf_bypass_coordinator:
-                _emit(
-                    "waf_bypass",
-                    {
-                        "mode": bypass_mode,
-                        "enabled": True,
-                        "origin_ip": getattr(waf_bypass_coordinator, "origin_ip", ""),
-                        "task_id": task.task_id,
-                    },
-                )
-
-            # 5.5 API 前缀探测（前后端分离部署）
-            # 分离版标准 nginx 只反代 /prod-api/，根路径下所有后端路径都会落到 SPA 的
-            # index.html（200 HTML）→ 按根路径拼 URL 的插件拿不到后端真实响应，
-            # 该报的 Druid/Actuator/默认口令/定时任务全部落空 = 系统性漏报。
-            # 实测 2026-10-29 R7（严格只反代 /prod-api/）：除宿主级 Redis 外无任何命中。
-            # 根路径已直连后端（单机版）时 detect_api_base 返回空串，行为不变。
-            # v1.5.6 WP1：候选表写死 → 自定义 context-path（如二开的 /portal）永远识别不出。
-            # 现改为：显式 --base-path 优先 → 被动提取（Set-Cookie/Location/JS baseURL）
-            # → 写死候选兜底。抽出的前缀仍要过「真图片/真 JSON」判据才采纳，判定不放松。
-            plugin_target = target
-            api_base = ""
-            try:
-                from core.basepath import detect_api_base
-
-                api_base = detect_api_base(target, session, extra_hints=req.base_paths)
-            except Exception:
-                logger.debug("API 前缀探测失败", exc_info=True)
-            if api_base:
-                # JeecgBoot 的插件路径自带 /jeecg-boot context-path，helper 会避免双前缀
-                from core.basepath import plugin_target_for
-
-                plugin_target = plugin_target_for(target, api_base)
-                _emit(
-                    "basepath",
-                    {"base": api_base, "plugin_target": plugin_target, "task_id": task.task_id},
-                )
-
-            # 6. 插件加载 + 路由
-            #
-            # 三层策略：
-            #   a) cms 未识别      → 回退 ruoyi + spring（F7-1）
-            #   b) cms 弱证据命中  → 在原包基础上补加载 ruoyi + spring + jeecgboot
-            #   c) cms 强证据命中  → 只加载该 CMS 的包（正常路径）
-            #
-            # b 是为了修「弱指纹排他导致整包漏扫」（2026-11-01 盲测 v2 发现）：
-            # 根路径返回 Spring Boot 默认错误 JSON 就把 cms 判成 spring，
-            # 于是一整类 CMS 的专项插件全不跑。C4-4/C4-5 实测 0 CONFIRMED 即此因。
-            if not all_plugins:
-                all_plugins, fallback_packages = _load_fallback_plugins()
-                _emit(
-                    "plugin_fallback",
-                    {
-                        "plugin": fp_result.cms or req.cms or "auto",
-                        "reason": "未匹配专用插件包，回退加载默认 ruoyi + spring 包",
-                        "packages": fallback_packages,
-                        "total_count": len(all_plugins),
-                        "task_id": task.task_id,
-                    },
-                )
-            elif _is_weak_fingerprint(fp_result):
-                # 弱证据：保留原判定的包，再补上其它可能同时成立的包。
-                # 不丢弃原包 —— 用户看到 cms=spring 时仍应看到 spring 插件结果。
-                base_cms = getattr(fp_result, "cms", "") or ""
-                merged_packages = [f"plugins.{base_cms}"]
-                for pkg in _EXPANDED_PACKAGES:
-                    if pkg not in merged_packages:
-                        merged_packages.append(pkg)
-                expanded, expand_detail = _load_plugins_from(tuple(merged_packages))
-                if expanded:
-                    all_plugins = expanded
-                    _emit(
-                        "plugin_fallback",
-                        {
-                            "plugin": base_cms,
-                            "reason": (
-                                f"指纹为弱证据（{base_cms} 置信度 "
-                                f"{getattr(fp_result, 'confidence', 0):.2f} ≤ {_WEAK_FINGERPRINT_CONFIDENCE}），"
-                                "补加载 ruoyi/spring/jeecgboot，避免整包漏扫"
-                            ),
-                            "packages": expand_detail,
-                            "total_count": len(all_plugins),
-                            "task_id": task.task_id,
-                        },
-                    )
-
-            # 通用漏洞检测包
-            # ⚠ 旧实现只记 debug（生产默认 WARNING 级不可见）：plugins.common 加载失败时
-            # 用户只看到「已加载 N 个插件」，少掉的十几个通用 POC 无从得知 → 升为 warning。
-            try:
-                common_plugins = load_plugins("plugins.common")
-                all_plugins = all_plugins + common_plugins
-                _emit(
-                    "plugins_loaded",
-                    {"common_count": len(common_plugins), "total_count": len(all_plugins), "task_id": task.task_id},
-                )
-            except Exception as e:
-                logger.warning("通用插件包 plugins.common 加载失败：%s", e, exc_info=True)
-
-            # P0: 外部插件加载（--plugin-path）
-            if req.plugin_paths:
-                from core.loader import load_external_plugins
-
-                external_plugins = load_external_plugins(req.plugin_paths)
-                if external_plugins:
-                    all_plugins = all_plugins + external_plugins
-                    _emit(
-                        "plugins_loaded",
-                        {
-                            "external_count": len(external_plugins),
-                            "total_count": len(all_plugins),
-                            "task_id": task.task_id,
-                        },
-                    )
-
-            # E5: 用户安装目录插件（~/.ruoyi-scan/plugins/，--plugin-update 安装）
-            try:
-                from lib.plugin_repo import load_user_installed_plugins
-
-                user_plugins = load_user_installed_plugins()
-                if user_plugins:
-                    all_plugins = all_plugins + user_plugins
-                    _emit(
-                        "plugins_loaded",
-                        {
-                            "user_plugin_count": len(user_plugins),
-                            "total_count": len(all_plugins),
-                            "task_id": task.task_id,
-                        },
-                    )
-            except Exception as e:
-                # 用户安装插件（~/.ruoyi-scan/plugins/）加载失败升为 warning：用户装完插件
-                # 却看不到 POC，唯一线索就是这条日志，debug 级不可见。
-                logger.warning("用户安装插件目录加载失败（~/.ruoyi-scan/plugins/）：%s", e, exc_info=True)
-
-            # P1: entry_points 注册的第三方插件（pip install 自动发现）
-            try:
-                from core.loader import load_entry_point_plugins
-
-                ep_plugins = load_entry_point_plugins()
-                if ep_plugins:
-                    all_plugins = all_plugins + ep_plugins
-                    _emit(
-                        "plugins_loaded",
-                        {
-                            "entry_point_count": len(ep_plugins),
-                            "total_count": len(all_plugins),
-                            "task_id": task.task_id,
-                        },
-                    )
-            except Exception as e:
-                # entry_points 注册的第三方插件加载失败升为 warning（pip 安装的插件包
-                # 依赖/入口配置错误时用户需可见，否则静默少了整批插件）。
-                logger.warning("entry_points 第三方插件加载失败：%s", e, exc_info=True)
-
-            # E4: nuclei YAML 模板（--nuclei）
-            if req.nuclei_paths:
-                from lib.nuclei_loader import load_nuclei_templates
-
-                try:
-                    nuclei_plugins = load_nuclei_templates(
-                        req.nuclei_paths,
-                        tags=req.nuclei_tags,
-                        severities=req.nuclei_severity,
-                        exclude_tags=req.nuclei_exclude_tags,
-                    )
-                    if nuclei_plugins:
-                        all_plugins = all_plugins + nuclei_plugins
-                        _emit(
-                            "plugins_loaded",
-                            {
-                                "nuclei_count": len(nuclei_plugins),
-                                "total_count": len(all_plugins),
-                                "task_id": task.task_id,
-                            },
-                        )
-                except Exception as e:
-                    # nuclei 模板加载失败升为 warning 并带上路径：用户指定了 --nuclei 却
-                    # 一个模板没跑时，需能从日志看出是路径/模板语法问题。事件仍照发。
-                    logger.warning("nuclei 模板加载失败（路径=%s）：%s", req.nuclei_paths, e, exc_info=True)
-                    _emit("nuclei_error", {"error": str(e), "task_id": task.task_id})
-
-            # 指定插件过滤（API 可指定插件子集）
-            if req.plugins:
-                all_plugins = [cls for cls in all_plugins if getattr(cls, "name", "") in req.plugins]
-
-            # D19：扫描模板过滤插件
-            template_obj = None
-            if req.template:
-                from lib.scan_profiles import filter_plugins, get_template
-
-                template_obj = get_template(req.template)
-                if template_obj:
-                    before_count = len(all_plugins)
-                    all_plugins = filter_plugins(all_plugins, template_obj)
-                    after_count = len(all_plugins)
-                    _emit(
-                        "template",
-                        {
-                            "name": template_obj.display_name,
-                            "before": before_count,
-                            "after": after_count,
-                            "task_id": task.task_id,
-                        },
-                    )
-
-            # 时序盲注默认不执行：一轮 20-25s，只有 --time-based 显式开启才保留。
-            # 按模块路径过滤（name 是中文文案，改一个字就失效）。
-            if not req.time_based:
-                all_plugins = [
-                    cls for cls in all_plugins if not getattr(cls, "__module__", "").endswith("sql_blind_time")
-                ]
-
-            # 按 category 分组（对应 MODE_CATEGORIES）
-            mode_categories = {
-                "u": ["recon", "vuln", "brute"],
-                "m": ["recon"],
-                "p": ["vuln"],
-                "l": ["brute"],
-            }
-            plugins_by_cat: Dict[str, List[type]] = {}
-            for cls in all_plugins:
-                cat = getattr(cls, "category", "")
-                plugins_by_cat.setdefault(cat, []).append(cls)
 
             # 7. 引擎执行
             # （all_results 已在 try 外初始化：异常路径可返回已收集的部分结果）
-            categories = mode_categories.get(req.mode, ["vuln"])
             total_plugins = sum(len(plugins_by_cat.get(c, [])) for c in categories)
             done_count = [0]  # 闭包可变
             # 需要高权会话才能给出 CONFIRMED/SAFE 的插件名集合：auth_status != ok 时统一降级
@@ -1167,87 +742,18 @@ class ScanOrchestrator:
 
             task.results = all_results
             task.request_count = session.request_count
-            # E2：组件检测结果并入任务结果（报告统计口径：vuln 类 CONFIRMED 计入）
-            for cr in component_results:
-                all_results.append(to_scan_result(cr))
-            # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
-            from lib.attribution import annotate as annotate_attribution
-            from lib.reachability import (
-                downgrade_auth_wall_safe,
-                downgrade_evidence_less_safe,
-                downgrade_safe_results,
-                upgrade_denied_safe_to_unknown,
+            # 7.1 三态降级 / 归属标注 / UNKNOWN 原因码
+            self._stage_degrade(
+                req,
+                target,
+                all_results,
+                component_results,
+                auth_wall,
+                block_info,
+                auth_required_names,
+                _emit,
+                task.task_id,
             )
-
-            # 单接口被拒（401/403/429）：只有该接口没测到，不是"漏洞不存在"
-            denied = upgrade_denied_safe_to_unknown(all_results)
-            if denied:
-                _emit("denied_downgrade", {"count": denied, "task_id": task.task_id})
-
-            # SAFE 必须带证据：空证据的 SAFE 没有可复核性，不能宣称"确认不存在"
-            no_evidence = downgrade_evidence_less_safe(all_results)
-            if no_evidence:
-                _emit("evidence_downgrade", {"count": no_evidence, "task_id": task.task_id})
-
-            # 登录墙：拿到 200 登录页的 SAFE 同样是"没测到"，降级为 UNKNOWN
-            wall_downgraded = downgrade_auth_wall_safe(all_results, auth_wall)
-            if wall_downgraded:
-                _emit(
-                    "auth_wall_downgrade",
-                    {
-                        "count": wall_downgraded,
-                        "reason": auth_wall.get("reason", ""),
-                        "task_id": task.task_id,
-                    },
-                )
-
-            downgraded = downgrade_safe_results(all_results, block_info)
-            if downgraded:
-                _emit(
-                    "blocked_downgrade",
-                    {
-                        "count": downgraded,
-                        "status": block_info.get("status", 0),
-                        "reason": block_info.get("reason", ""),
-                        "task_id": task.task_id,
-                    },
-                )
-
-            # 归属标注：中间件插件探的是「目标主机的另一个端口」，发现的资产属于
-            # 这台主机而不是这个站点。不标注的话，批量扫描时同一个宿主 Redis 会在
-            # N 份站点报告里各报一次（2026-11-02 实测：R1 单机版根本不带 Redis，
-            # 却因宿主 C4-1 的 16379 无认证而报「R1 存在 Redis 未授权」）。
-            # 只标注不降级：端口确实无认证，归属是另一个正交维度。
-            attribution_stats = annotate_attribution(all_results, target)
-            if attribution_stats["host_level"]:
-                _emit(
-                    "attribution",
-                    {
-                        "host_level": attribution_stats["host_level"],
-                        "site_level": attribution_stats["site_level"],
-                        "task_id": task.task_id,
-                    },
-                )
-
-            # 认证纪律：auth_status != ok 时，需会话插件的 CONFIRMED/SAFE 一律降级为 UNKNOWN。
-            # 这不是「降低误报」，而是把「没拿到会话」如实表达出来；低权对照插件不在此列
-            # （它们自己解析显式 --surface-account，缺凭证时已返回 UNKNOWN）。
-            auth_downgraded = downgrade_auth_required_results(all_results, req.auth_status, auth_required_names)
-            if auth_downgraded:
-                _emit(
-                    "auth_downgrade",
-                    {
-                        "count": auth_downgraded,
-                        "auth_status": req.auth_status,
-                        "task_id": task.task_id,
-                    },
-                )
-
-            # v1.7 WP-1：三态降级全部完成后统一补齐 UNKNOWN 原因码（只填空值）。
-            # 必须在报告生成与落盘之前：缺少原因码的 UNKNOWN 对用户不可解释。
-            _filled, _unclassified = fill_unknown_reasons(all_results)
-            if _unclassified:
-                logger.debug("UNKNOWN 原因码仍为 unclassified：%d 条", _unclassified)
 
             task.results = all_results
             # 三态降级全部完成后再落一次完整快照（增量落盘只覆盖到第 25n 条）
@@ -1255,44 +761,8 @@ class ScanOrchestrator:
             self._raise_if_cancelled(task.task_id)
             # session 关闭统一放到 finally（成功/失败路径共用，避免泄漏）
 
-            # 8. 报告生成（可选）
-            if req.report_dir:
-                # E3：版本对照矩阵（检测版本 vs 各插件适用性）——与 CLI 共用同一实现，
-                # 避免两处逻辑漂移（CLI 传 report_dir="" 自行出报告，走 cli/runner.py 的补算）
-                from core.ruoyi_versions import build_version_matrix
-
-                # 用「未按版本过滤」的候选集——否则 applicable 恒为真，对照表失去意义
-                version_matrix = build_version_matrix(fp_result.version, router.candidates(fp_result))
-                summary = {
-                    "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(task.started_at)),
-                    "duration": time.time() - task.started_at,
-                    "request_count": session.request_count,
-                    "mode": req.mode,
-                    "fingerprint": {
-                        "cms": fp_result.cms,
-                        "variant": getattr(fp_result, "variant", ""),
-                        "version": fp_result.version,
-                        "confidence": fp_result.confidence,
-                        "matched": fp_result.matched,
-                    },
-                    "version_matrix": version_matrix,
-                    "blocked": block_info,
-                    "auth_status": {
-                        "admin": req.auth_status,
-                        "surface": req.surface_auth_status,
-                    },
-                }
-                builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
-                formats = self._parse_formats(req.report_format)
-                paths = builder.render_all(req.report_dir, formats=formats, stem=task.task_id)
-                task.report_paths = paths
-                _emit(
-                    "report",
-                    {
-                        "paths": paths,
-                        "task_id": task.task_id,
-                    },
-                )
+            # 8. 报告生成（可选；仅 API/嵌入式路径传 report_dir）
+            self._stage_report(req, task, target, session, all_results, fp_result, router, block_info, _emit)
 
             # 9. 完成
             task.status = "done"
@@ -1368,6 +838,690 @@ class ScanOrchestrator:
                     session.close()
                 except Exception:
                     logger.debug("会话关闭失败", exc_info=True)
+
+    def _stage_portscan(self, req: ScanRequest, target: str, emit: Callable[..., None], task_id: str) -> None:
+        """步骤 1：可选端口扫描，只发事件（结果不进入插件流水线）。"""
+        if not req.portscan:
+            return
+        from core.portscan import DEFAULT_PORTS, PortScanner
+
+        host = self._host_of(target)
+        ports = self._parse_ports(req.ports, DEFAULT_PORTS)
+        scanner = PortScanner(timeout=req.timeout, threads=req.threads)
+        port_results = scanner.scan(host, ports)
+        emit(
+            "portscan",
+            {
+                "host": host,
+                "open_count": len(port_results),
+                "total": len(ports),
+                "ports": [{"port": p.port, "service": p.service, "banner": p.banner} for p in port_results],
+                "task_id": task_id,
+            },
+        )
+
+    def _stage_recon(
+        self,
+        req: ScanRequest,
+        target: str,
+        emit: Callable[..., None],
+        task_id: str,
+        limiter: Optional[Any],
+        proxy_pool: Optional[Any],
+    ) -> Dict[str, Any]:
+        """步骤 1′：可选的主动信息收集（爬虫 / 子域名 / JS 端点），返回侦察结果。"""
+        if not (req.crawl or req.subdomain or req.js_extract):
+            return {}
+        recon_info = self._run_recon(req, target, emit, task_id, limiter=limiter, proxy_pool=proxy_pool)
+        for key, event_type, payload_key in (
+            ("subdomains", "subdomain", "subdomains"),
+            ("crawled_urls", "crawl", "urls"),
+            ("js_endpoints", "js_extract", "endpoints"),
+        ):
+            values = recon_info.get(key)
+            if values:
+                emit(
+                    "recon",
+                    {
+                        "type": event_type,
+                        payload_key: values,
+                        "count": len(values),
+                        "task_id": task_id,
+                    },
+                )
+        return recon_info
+
+    def _stage_session(
+        self,
+        req: ScanRequest,
+        task_id: str,
+        emit: Callable[..., None],
+        limiter: Optional[Any],
+        proxy_pool: Optional[Any],
+        recon_info: Dict[str, Any],
+    ) -> Tuple[SessionManager, ScanEngine]:
+        """步骤 2–3.1：建会话/引擎，注入攻击面、认证、字典与低权账号。"""
+        # 2. 会话创建
+        # 连接池尺寸必须与线程数挂钩（性能 P0）：旧实现不传 pool_size，session.py 里
+        # _pool = max(pool_size or settings.THREADS or 10, 10)，而 settings.THREADS=1
+        # 且从不被 --threads 写回 → 连接池恒为 10（pool_maxsize=20）。--threads 50 时
+        # 引擎开 50 线程但池只有 20，30 个线程每次请求都新建 TCP 连接，keep-alive
+        # 复用率崩掉。这里显式把 pool_size 设为线程数，使池与并发匹配。
+        session = SessionManager(
+            proxy=req.proxy or None,
+            proxy_pool=proxy_pool,
+            debug=req.debug,
+            timeout=req.timeout,
+            pool_size=req.threads,
+            rate=req.rate,
+            rate_scope=req.rate_scope,
+            limiter=limiter,
+        )
+        # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
+        session.exploit = req.exploit
+        # D14 回流：把侦察到的攻击面写入扫描级共享对象，供 consumes_surface
+        # 插件消费。未启用 --crawl/--js-extract（或清单为空）时保持 None——
+        # 引擎据此把消费方的 CONFIRMED/SAFE 降级为 UNKNOWN。
+        inv = recon_info.get("surface") if recon_info else None
+        if inv is not None and inv.endpoints:
+            session.surface = inv
+            emit(
+                "surface",
+                {
+                    "endpoints": len(inv.endpoints),
+                    "pages": len(inv.pages),
+                    "js_endpoints": len(inv.js_endpoints),
+                    "truncated": inv.truncated,
+                    "task_id": task_id,
+                },
+            )
+        self._raise_if_cancelled(task_id)
+        engine = ScanEngine(
+            threads=req.threads,
+            # request 作用域由会话层限速，引擎必须传 0，避免双重限速把 QPS 压成 1/N
+            rate=0 if req.rate_scope == "request" else req.rate,
+            deadline=(time.monotonic() + req.time_budget) if req.time_budget > 0 else None,
+        )
+        # 时序盲注插件在花 20 秒之前要先问预算：把引擎的截止点交给会话，
+        # 插件用 getattr(session, "deadline", None) 读取（哑对象 session 不会炸）
+        session.deadline = engine.deadline
+
+        # D26：认证扫描增强（将 auth 配置注入 session）
+        if req.auth:
+            from lib.auth_inject import apply_auth_to_session
+
+            apply_auth_to_session(session, req.auth)
+            auth_summary = []
+            if req.auth.get("cookies"):
+                auth_summary.append(f"{len(req.auth['cookies'])} 个 Cookie")
+            if req.auth.get("headers"):
+                auth_summary.append(f"{len(req.auth['headers'])} 个自定义头")
+            emit(
+                "auth",
+                {
+                    "summary": " + ".join(auth_summary),
+                    "cookies": len(req.auth.get("cookies", {})),
+                    "headers": len(req.auth.get("headers", {})),
+                    "task_id": task_id,
+                },
+            )
+
+        # 本次扫描是否真正拿到了高权会话：供 file_upload 的「登录后上传」维度判断。
+        session.authenticated = req.auth_status == "ok"
+
+        # 3. 口令字典分级：只解析本次扫描的字典路径并注入当前 session，不改写进程级
+        # settings.PASSWORD_DICT——API 并发扫描下不同 pass_level 的任务会互相覆盖字典
+        # （爆破类插件优先读取 session.password_dict，回退进程级默认值）
+        selected_password_dict = settings.PASSWORD_DICT
+        if req.pass_level != "full" and req.pass_level in settings.PASSWORD_DICT_BY_LEVEL:
+            selected_password_dict = settings.PASSWORD_DICT_BY_LEVEL[req.pass_level]
+        session.password_dict = selected_password_dict
+
+        # 3.1 显式低权账号：只挂在本次扫描的会话上（不写进程级 settings），
+        # 供越权对照插件读取；未提供时插件必须返回 UNKNOWN。
+        if req.surface_account:
+            from core.lowpriv import parse_account
+
+            for item in req.surface_account:
+                parsed = parse_account(item)
+                if parsed:
+                    session.surface_account = parsed
+                    break
+
+        return session, engine
+
+    def _stage_reachability(
+        self, session: SessionManager, target: str, emit: Callable[..., None], task_id: str
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """步骤 3.5-3.6：识别全站拦截与登录墙，供后续 SAFE 降级使用。"""
+        # 3.5 全站拦截探测（WAF / 网关 / 认证墙）
+        # 站点被统一拒绝时，每个插件拿到的都是同一个 403，按插件自身逻辑会落到
+        # 「没命中 = 不存在」，报告会写出「N 项确认不存在」——比漏报更危险的假安全感。
+        # 这里先识别拦截状态，插件跑完后再把 SAFE 统一降级为 UNKNOWN。
+        from lib.reachability import detect_blocked
+
+        block_info = detect_blocked(session, target)
+        self.last_block_info = block_info
+        if block_info["blocked"]:
+            emit("blocked", dict(block_info, task_id=task_id))
+
+        # 3.6 登录墙探测（应用自身认证要求，与 WAF 拦截不同）
+        # 真实 RuoYi 未认证访问受保护接口是 302 -> /login（跟随后 200 登录页），
+        # 不是 401。插件只看到 200 登录页就会把「没测到」写成 SAFE。
+        from lib.reachability import detect_auth_wall
+
+        auth_wall = detect_auth_wall(session, target)
+        self.last_auth_wall = auth_wall
+        if auth_wall["wall"]:
+            emit("auth_wall", dict(auth_wall, task_id=task_id))
+
+        return block_info, auth_wall
+
+    def _stage_fingerprint(
+        self, req: ScanRequest, target: str, session: SessionManager, emit: Callable[..., None], task_id: str
+    ) -> Tuple[Any, Any, Optional[Any], List[type]]:
+        """步骤 4：指纹识别（手动 --cms 优先），返回路由器与候选插件。"""
+        # 4. 指纹识别
+        # 性能（P1-C）：自建 FingerprintCache 交给 detect_cms，事后复用给 detect_waf，
+        # 使根路径响应在两者间共享（旧实现 detect_waf 会对根路径重发一次请求，
+        # 单目标至少 3 次根路径请求）。req.cms 手动指定时无 detect_cms，缓存不建。
+        router = Router()
+        fp_cache: Optional[FingerprintCache] = None
+        if req.cms:
+            fp_result = FingerprintResult(cms=req.cms, version="", confidence=1.0, matched=["manual"])
+            all_plugins = router.resolve_by_name(req.cms)
+        else:
+            fp_cache = FingerprintCache(session)
+            fp_result = detect_cms(target, session, cache=fp_cache)
+            all_plugins = router.resolve(fp_result)
+
+        emit(
+            "fingerprint",
+            {
+                "cms": fp_result.cms,
+                "version": fp_result.version,
+                "variant": getattr(fp_result, "variant", ""),
+                "confidence": fp_result.confidence,
+                "matched": fp_result.matched,
+                "task_id": task_id,
+            },
+        )
+
+        return router, fp_result, fp_cache, all_plugins
+
+    def _stage_capabilities(
+        self,
+        req: ScanRequest,
+        target: str,
+        session: SessionManager,
+        fp_result: Any,
+        fp_cache: Optional[Any],
+        emit: Callable[..., None],
+        task_id: str,
+    ) -> Tuple[Dict[str, Any], List[Any], Optional[Any], str]:
+        """步骤 5-5.5：WAF/组件/绕过协调器/API 前缀，返回探测结果与插件基准 target。"""
+        # 5. WAF 探测 + 绕过协调器
+        # 传入 fp_cache 复用 detect_cms 已缓存的根响应（未命中才发请求，向后兼容）
+        waf_result = detect_waf(target, session, cache=fp_cache)
+        emit(
+            "waf",
+            {
+                "waf": waf_result.get("waf", ""),
+                "display": waf_result.get("display", ""),
+                "bypass_hint": waf_result.get("bypass_hint", ""),
+                "task_id": task_id,
+            },
+        )
+
+        # E2：组件版本检测（--components 启用）
+        component_results = []
+        if req.components:
+            from lib.component_detect import ComponentDetector
+
+            try:
+                detector = ComponentDetector()
+                component_results = detector.detect_all(target, session, ruoyi_version=fp_result.version)
+                for cr in component_results:
+                    emit(
+                        "component",
+                        {
+                            "component": cr.component,
+                            "status": cr.status,
+                            "cve": cr.cve,
+                            "detected_version": cr.detected_version,
+                            "evidence": cr.evidence,
+                            "task_id": task_id,
+                        },
+                    )
+            except Exception as e:
+                logger.debug("组件检测失败", exc_info=True)
+                emit("component", {"error": str(e), "task_id": task_id})
+
+        waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
+
+        # WAF 绕过状态事件（CLI 打印绕过模式信息）
+        bypass_mode = req.bypass_waf or "auto"
+        if waf_bypass_coordinator:
+            emit(
+                "waf_bypass",
+                {
+                    "mode": bypass_mode,
+                    "enabled": True,
+                    "origin_ip": getattr(waf_bypass_coordinator, "origin_ip", ""),
+                    "task_id": task_id,
+                },
+            )
+
+        # 5.5 API 前缀探测（前后端分离部署）
+        # 分离版标准 nginx 只反代 /prod-api/，根路径下所有后端路径都会落到 SPA 的
+        # index.html（200 HTML）→ 按根路径拼 URL 的插件拿不到后端真实响应，
+        # 该报的 Druid/Actuator/默认口令/定时任务全部落空 = 系统性漏报。
+        # 实测 2026-10-29 R7（严格只反代 /prod-api/）：除宿主级 Redis 外无任何命中。
+        # 根路径已直连后端（单机版）时 detect_api_base 返回空串，行为不变。
+        # v1.5.6 WP1：候选表写死 → 自定义 context-path（如二开的 /portal）永远识别不出。
+        # 现改为：显式 --base-path 优先 → 被动提取（Set-Cookie/Location/JS baseURL）
+        # → 写死候选兜底。抽出的前缀仍要过「真图片/真 JSON」判据才采纳，判定不放松。
+        plugin_target = target
+        api_base = ""
+        try:
+            from core.basepath import detect_api_base
+
+            api_base = detect_api_base(target, session, extra_hints=req.base_paths)
+        except Exception:
+            logger.debug("API 前缀探测失败", exc_info=True)
+        if api_base:
+            # JeecgBoot 的插件路径自带 /jeecg-boot context-path，helper 会避免双前缀
+            from core.basepath import plugin_target_for
+
+            plugin_target = plugin_target_for(target, api_base)
+            emit(
+                "basepath",
+                {"base": api_base, "plugin_target": plugin_target, "task_id": task_id},
+            )
+
+        return waf_result, component_results, waf_bypass_coordinator, plugin_target
+
+    def _stage_load_plugins(
+        self,
+        req: ScanRequest,
+        fp_result: Any,
+        all_plugins: List[type],
+        emit: Callable[..., None],
+        task_id: str,
+    ) -> Tuple[List[type], Dict[str, List[type]], List[str]]:
+        """步骤 6：加载候选插件 → 过滤 → 按 category 分组。"""
+        all_plugins = self._load_plugin_candidates(req, fp_result, all_plugins, emit, task_id)
+        return self._filter_and_group_plugins(req, all_plugins, emit, task_id)
+
+    def _stage_degrade(
+        self,
+        req: ScanRequest,
+        target: str,
+        all_results: List[ScanResult],
+        component_results: List[Any],
+        auth_wall: Dict[str, Any],
+        block_info: Dict[str, Any],
+        auth_required_names: set,
+        emit: Callable[..., None],
+        task_id: str,
+    ) -> None:
+        """步骤 7.1：组件并入、SAFE→UNKNOWN 降级、归属标注、原因码补齐。"""
+        # E2：组件检测结果并入任务结果（报告统计口径：vuln 类 CONFIRMED 计入）
+        from lib.component_detect import to_scan_result
+
+        for cr in component_results:
+            all_results.append(to_scan_result(cr))
+        # SAFE → UNKNOWN：全站拦截时没有任何一条「确认不存在」成立（三态铁律）
+        from lib.attribution import annotate as annotate_attribution
+        from lib.reachability import (
+            downgrade_auth_wall_safe,
+            downgrade_evidence_less_safe,
+            downgrade_safe_results,
+            upgrade_denied_safe_to_unknown,
+        )
+
+        # 单接口被拒（401/403/429）：只有该接口没测到，不是"漏洞不存在"
+        denied = upgrade_denied_safe_to_unknown(all_results)
+        if denied:
+            emit("denied_downgrade", {"count": denied, "task_id": task_id})
+
+        # SAFE 必须带证据：空证据的 SAFE 没有可复核性，不能宣称"确认不存在"
+        no_evidence = downgrade_evidence_less_safe(all_results)
+        if no_evidence:
+            emit("evidence_downgrade", {"count": no_evidence, "task_id": task_id})
+
+        # 登录墙：拿到 200 登录页的 SAFE 同样是"没测到"，降级为 UNKNOWN
+        wall_downgraded = downgrade_auth_wall_safe(all_results, auth_wall)
+        if wall_downgraded:
+            emit(
+                "auth_wall_downgrade",
+                {
+                    "count": wall_downgraded,
+                    "reason": auth_wall.get("reason", ""),
+                    "task_id": task_id,
+                },
+            )
+
+        downgraded = downgrade_safe_results(all_results, block_info)
+        if downgraded:
+            emit(
+                "blocked_downgrade",
+                {
+                    "count": downgraded,
+                    "status": block_info.get("status", 0),
+                    "reason": block_info.get("reason", ""),
+                    "task_id": task_id,
+                },
+            )
+
+        # 归属标注：中间件插件探的是「目标主机的另一个端口」，发现的资产属于
+        # 这台主机而不是这个站点。不标注的话，批量扫描时同一个宿主 Redis 会在
+        # N 份站点报告里各报一次（2026-11-02 实测：R1 单机版根本不带 Redis，
+        # 却因宿主 C4-1 的 16379 无认证而报「R1 存在 Redis 未授权」）。
+        # 只标注不降级：端口确实无认证，归属是另一个正交维度。
+        attribution_stats = annotate_attribution(all_results, target)
+        if attribution_stats["host_level"]:
+            emit(
+                "attribution",
+                {
+                    "host_level": attribution_stats["host_level"],
+                    "site_level": attribution_stats["site_level"],
+                    "task_id": task_id,
+                },
+            )
+
+        # 认证纪律：auth_status != ok 时，需会话插件的 CONFIRMED/SAFE 一律降级为 UNKNOWN。
+        # 这不是「降低误报」，而是把「没拿到会话」如实表达出来；低权对照插件不在此列
+        # （它们自己解析显式 --surface-account，缺凭证时已返回 UNKNOWN）。
+        auth_downgraded = downgrade_auth_required_results(all_results, req.auth_status, auth_required_names)
+        if auth_downgraded:
+            emit(
+                "auth_downgrade",
+                {
+                    "count": auth_downgraded,
+                    "auth_status": req.auth_status,
+                    "task_id": task_id,
+                },
+            )
+
+        # v1.7 WP-1：三态降级全部完成后统一补齐 UNKNOWN 原因码（只填空值）。
+        # 必须在报告生成与落盘之前：缺少原因码的 UNKNOWN 对用户不可解释。
+        _filled, _unclassified = fill_unknown_reasons(all_results)
+        if _unclassified:
+            logger.debug("UNKNOWN 原因码仍为 unclassified：%d 条", _unclassified)
+
+    def _stage_report(
+        self,
+        req: ScanRequest,
+        task: ScanTask,
+        target: str,
+        session: SessionManager,
+        all_results: List[ScanResult],
+        fp_result: Any,
+        router: Any,
+        block_info: Dict[str, Any],
+        emit: Callable[..., None],
+    ) -> None:
+        """步骤 8：按 report_dir 生成报告（CLI 不走此路径）。"""
+        # 8. 报告生成（可选）
+        if req.report_dir:
+            # E3：版本对照矩阵（检测版本 vs 各插件适用性）——与 CLI 共用同一实现，
+            # 避免两处逻辑漂移（CLI 传 report_dir="" 自行出报告，走 cli/runner.py 的补算）
+            from core.ruoyi_versions import build_version_matrix
+
+            # 用「未按版本过滤」的候选集——否则 applicable 恒为真，对照表失去意义
+            version_matrix = build_version_matrix(fp_result.version, router.candidates(fp_result))
+            summary = {
+                "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(task.started_at)),
+                "duration": time.time() - task.started_at,
+                "request_count": session.request_count,
+                "mode": req.mode,
+                "fingerprint": {
+                    "cms": fp_result.cms,
+                    "variant": getattr(fp_result, "variant", ""),
+                    "version": fp_result.version,
+                    "confidence": fp_result.confidence,
+                    "matched": fp_result.matched,
+                },
+                "version_matrix": version_matrix,
+                "blocked": block_info,
+                "auth_status": {
+                    "admin": req.auth_status,
+                    "surface": req.surface_auth_status,
+                },
+            }
+            builder = ReportBuilder(results=all_results, target=target, summary=summary, dedup=not req.no_dedup)
+            formats = self._parse_formats(req.report_format)
+            paths = builder.render_all(req.report_dir, formats=formats, stem=task.task_id)
+            task.report_paths = paths
+            emit(
+                "report",
+                {
+                    "paths": paths,
+                    "task_id": task.task_id,
+                },
+            )
+
+    def _load_plugin_candidates(
+        self,
+        req: ScanRequest,
+        fp_result: Any,
+        all_plugins: List[type],
+        emit: Callable[..., None],
+        task_id: str,
+    ) -> List[type]:
+        """按五条来源加载插件（路由包 + 扩展来源）。"""
+        all_plugins = self._load_routed_plugins(req, fp_result, all_plugins, emit, task_id)
+        return self._load_extension_plugins(req, all_plugins, emit, task_id)
+
+    def _filter_and_group_plugins(
+        self, req: ScanRequest, all_plugins: List[type], emit: Callable[..., None], task_id: str
+    ) -> Tuple[List[type], Dict[str, List[type]], List[str]]:
+        """按 --plugins/--template/--time-based 过滤，并按 category 分组。"""
+        # 指定插件过滤（API 可指定插件子集）
+        if req.plugins:
+            all_plugins = [cls for cls in all_plugins if getattr(cls, "name", "") in req.plugins]
+
+        # D19：扫描模板过滤插件
+        template_obj = None
+        if req.template:
+            from lib.scan_profiles import filter_plugins, get_template
+
+            template_obj = get_template(req.template)
+            if template_obj:
+                before_count = len(all_plugins)
+                all_plugins = filter_plugins(all_plugins, template_obj)
+                after_count = len(all_plugins)
+                emit(
+                    "template",
+                    {
+                        "name": template_obj.display_name,
+                        "before": before_count,
+                        "after": after_count,
+                        "task_id": task_id,
+                    },
+                )
+
+        # 时序盲注默认不执行：一轮 20-25s，只有 --time-based 显式开启才保留。
+        # 按模块路径过滤（name 是中文文案，改一个字就失效）。
+        if not req.time_based:
+            all_plugins = [cls for cls in all_plugins if not getattr(cls, "__module__", "").endswith("sql_blind_time")]
+
+        # 按 category 分组（对应 MODE_CATEGORIES）
+        mode_categories = {
+            "u": ["recon", "vuln", "brute"],
+            "m": ["recon"],
+            "p": ["vuln"],
+            "l": ["brute"],
+        }
+        plugins_by_cat: Dict[str, List[type]] = {}
+        for cls in all_plugins:
+            cat = getattr(cls, "category", "")
+            plugins_by_cat.setdefault(cat, []).append(cls)
+
+        categories = mode_categories.get(req.mode, ["vuln"])
+        return all_plugins, plugins_by_cat, categories
+
+    def _load_routed_plugins(
+        self,
+        req: ScanRequest,
+        fp_result: Any,
+        all_plugins: List[type],
+        emit: Callable[..., None],
+        task_id: str,
+    ) -> List[type]:
+        """步骤 6a：按指纹路由加载专项包（含弱证据扩展）。"""
+        # 6. 插件加载 + 路由
+        #
+        # 三层策略：
+        #   a) cms 未识别      → 回退 ruoyi + spring（F7-1）
+        #   b) cms 弱证据命中  → 在原包基础上补加载 ruoyi + spring + jeecgboot
+        #   c) cms 强证据命中  → 只加载该 CMS 的包（正常路径）
+        #
+        # b 是为了修「弱指纹排他导致整包漏扫」（2026-11-01 盲测 v2 发现）：
+        # 根路径返回 Spring Boot 默认错误 JSON 就把 cms 判成 spring，
+        # 于是一整类 CMS 的专项插件全不跑。C4-4/C4-5 实测 0 CONFIRMED 即此因。
+        if not all_plugins:
+            all_plugins, fallback_packages = _load_fallback_plugins()
+            emit(
+                "plugin_fallback",
+                {
+                    "plugin": fp_result.cms or req.cms or "auto",
+                    "reason": "未匹配专用插件包，回退加载默认 ruoyi + spring 包",
+                    "packages": fallback_packages,
+                    "total_count": len(all_plugins),
+                    "task_id": task_id,
+                },
+            )
+        elif _is_weak_fingerprint(fp_result):
+            # 弱证据：保留原判定的包，再补上其它可能同时成立的包。
+            # 不丢弃原包 —— 用户看到 cms=spring 时仍应看到 spring 插件结果。
+            base_cms = getattr(fp_result, "cms", "") or ""
+            merged_packages = [f"plugins.{base_cms}"]
+            for pkg in _EXPANDED_PACKAGES:
+                if pkg not in merged_packages:
+                    merged_packages.append(pkg)
+            expanded, expand_detail = _load_plugins_from(tuple(merged_packages))
+            if expanded:
+                all_plugins = expanded
+                emit(
+                    "plugin_fallback",
+                    {
+                        "plugin": base_cms,
+                        "reason": (
+                            f"指纹为弱证据（{base_cms} 置信度 "
+                            f"{getattr(fp_result, 'confidence', 0):.2f} ≤ {_WEAK_FINGERPRINT_CONFIDENCE}），"
+                            "补加载 ruoyi/spring/jeecgboot，避免整包漏扫"
+                        ),
+                        "packages": expand_detail,
+                        "total_count": len(all_plugins),
+                        "task_id": task_id,
+                    },
+                )
+
+        return all_plugins
+
+    def _load_extension_plugins(
+        self, req: ScanRequest, all_plugins: List[type], emit: Callable[..., None], task_id: str
+    ) -> List[type]:
+        """步骤 6b：通用/外部/用户/entry_points/nuclei 来源。"""
+        # 通用漏洞检测包
+        # ⚠ 旧实现只记 debug（生产默认 WARNING 级不可见）：plugins.common 加载失败时
+        # 用户只看到「已加载 N 个插件」，少掉的十几个通用 POC 无从得知 → 升为 warning。
+        try:
+            common_plugins = load_plugins("plugins.common")
+            all_plugins = all_plugins + common_plugins
+            emit(
+                "plugins_loaded",
+                {"common_count": len(common_plugins), "total_count": len(all_plugins), "task_id": task_id},
+            )
+        except Exception as e:
+            logger.warning("通用插件包 plugins.common 加载失败：%s", e, exc_info=True)
+
+        # P0: 外部插件加载（--plugin-path）
+        if req.plugin_paths:
+            from core.loader import load_external_plugins
+
+            external_plugins = load_external_plugins(req.plugin_paths)
+            if external_plugins:
+                all_plugins = all_plugins + external_plugins
+                emit(
+                    "plugins_loaded",
+                    {
+                        "external_count": len(external_plugins),
+                        "total_count": len(all_plugins),
+                        "task_id": task_id,
+                    },
+                )
+
+        # E5: 用户安装目录插件（~/.ruoyi-scan/plugins/，--plugin-update 安装）
+        try:
+            from lib.plugin_repo import load_user_installed_plugins
+
+            user_plugins = load_user_installed_plugins()
+            if user_plugins:
+                all_plugins = all_plugins + user_plugins
+                emit(
+                    "plugins_loaded",
+                    {
+                        "user_plugin_count": len(user_plugins),
+                        "total_count": len(all_plugins),
+                        "task_id": task_id,
+                    },
+                )
+        except Exception as e:
+            # 用户安装插件（~/.ruoyi-scan/plugins/）加载失败升为 warning：用户装完插件
+            # 却看不到 POC，唯一线索就是这条日志，debug 级不可见。
+            logger.warning("用户安装插件目录加载失败（~/.ruoyi-scan/plugins/）：%s", e, exc_info=True)
+
+        # P1: entry_points 注册的第三方插件（pip install 自动发现）
+        try:
+            from core.loader import load_entry_point_plugins
+
+            ep_plugins = load_entry_point_plugins()
+            if ep_plugins:
+                all_plugins = all_plugins + ep_plugins
+                emit(
+                    "plugins_loaded",
+                    {
+                        "entry_point_count": len(ep_plugins),
+                        "total_count": len(all_plugins),
+                        "task_id": task_id,
+                    },
+                )
+        except Exception as e:
+            # entry_points 注册的第三方插件加载失败升为 warning（pip 安装的插件包
+            # 依赖/入口配置错误时用户需可见，否则静默少了整批插件）。
+            logger.warning("entry_points 第三方插件加载失败：%s", e, exc_info=True)
+
+        # E4: nuclei YAML 模板（--nuclei）
+        if req.nuclei_paths:
+            from lib.nuclei_loader import load_nuclei_templates
+
+            try:
+                nuclei_plugins = load_nuclei_templates(
+                    req.nuclei_paths,
+                    tags=req.nuclei_tags,
+                    severities=req.nuclei_severity,
+                    exclude_tags=req.nuclei_exclude_tags,
+                )
+                if nuclei_plugins:
+                    all_plugins = all_plugins + nuclei_plugins
+                    emit(
+                        "plugins_loaded",
+                        {
+                            "nuclei_count": len(nuclei_plugins),
+                            "total_count": len(all_plugins),
+                            "task_id": task_id,
+                        },
+                    )
+            except Exception as e:
+                # nuclei 模板加载失败升为 warning 并带上路径：用户指定了 --nuclei 却
+                # 一个模板没跑时，需能从日志看出是路径/模板语法问题。事件仍照发。
+                logger.warning("nuclei 模板加载失败（路径=%s）：%s", req.nuclei_paths, e, exc_info=True)
+                emit("nuclei_error", {"error": str(e), "task_id": task_id})
+
+        return all_plugins
 
     def _build_waf_bypass(
         self, req: ScanRequest, waf_result: Dict[str, Any], target: str, session: SessionManager

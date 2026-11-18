@@ -103,15 +103,11 @@ class TestE2EFullFlow(unittest.TestCase):
         self.assertEqual(args.u, "http://example.com/")
 
     def test_runner_imports(self):
-        """验证 cli/runner.py 所有公开函数可导入"""
-        from cli.runner import (
-            final_prompt,
-            run_chain_mode,
-            run_mode,
-            run_mode_batch,
-            run_passive_mode,
-            run_serve_mode,
-        )
+        """命令处理器从各自归属模块导入（runner 不再做门面重导出）"""
+        from cli.chain_runner import run_chain_mode
+        from cli.passive_runner import run_passive_mode
+        from cli.runner import final_prompt, run_mode, run_mode_batch
+        from cli.serve_runner import run_serve_mode
 
         self.assertTrue(callable(run_mode))
         self.assertTrue(callable(run_chain_mode))

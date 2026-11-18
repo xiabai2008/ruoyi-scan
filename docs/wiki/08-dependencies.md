@@ -136,7 +136,7 @@ if args.ai_validate: from lib.ai_validate import run_ai_validate_mode
 if args.ai_generate: from lib.ai_generator import run_ai_generate_mode
 ```
 
-**代价的诚实记录**：`core/report.py` 是唯一一处模块级 `core → lib` 导入（为了 `REPO_URL` 常量）。它之所以没造成环，是因为 `lib.star_cta` 是纯常量模块、不反向依赖 `core`。
+**代价的诚实记录**：`core → lib` 的**模块级**导入有 5 处（`core/engine.py` 的 rate_limit/attribution、`core/session.py` 的 rate_limit/proxy_pool、`core/report.py` 的 attribution/star_cta），另有 20+ 处函数内延迟导入（大多在 orchestrator，用于可选能力降级）。这些模块都不反向依赖 `core`，因此没有形成环。
 
 ---
 

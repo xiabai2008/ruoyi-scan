@@ -18,6 +18,7 @@ from argparse import Namespace
 from typing import Any, List, Optional
 
 from cli.preflight import EXIT_PARTIAL, EXIT_UNREACHABLE, preflight_target
+from cli.reporting import run_cli_report
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, ScanResult
 from config import settings
@@ -577,148 +578,18 @@ def run_mode(
 
     # ── 报告生成 + 后处理（CLI 专属，orchestrator 不涉及）──
     if args.report:
-        started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        report_label = label
-        if req.template:
-            from lib.scan_profiles import get_template
-
-            template_obj = get_template(req.template)
-            if template_obj and template_obj.report_label:
-                report_label = template_obj.report_label
-        # E3：版本对照矩阵（检测版本 vs 各插件适用性）
-        # CLI 传 report_dir="" 由自己出报告，orchestrator 的矩阵分支被整体跳过——
-        # 若不在此补算，报告的 version_matrix 恒为空、版本对照表不显示（2026-09-19 修复）。
-        version_matrix = []
-        try:
-            fp_cms = req.cms or detected_fingerprint.get("cms", "")
-            fp_version = detected_fingerprint.get("version", "")
-            if fp_cms and fp_version:
-                from common.models import FingerprintResult
-                from core.loader import load_plugins
-                from core.router import Router
-                from core.ruoyi_versions import build_version_matrix
-
-                fp_obj = FingerprintResult(
-                    cms=fp_cms,
-                    version=fp_version,
-                    confidence=detected_fingerprint.get("confidence", 0.0),
-                    matched=list(detected_fingerprint.get("matched", [])),
-                    variant=detected_fingerprint.get("variant", ""),
-                )
-                # 用未过滤候选集：矩阵要展示「哪些插件因版本被跳过」
-                cands = Router().candidates(fp_obj) or load_plugins("plugins.ruoyi")
-                version_matrix = build_version_matrix(fp_version, cands)
-        except Exception:
-            version_matrix = []  # 矩阵生成失败不影响报告主体
-
-        summary = {
-            "started_at": started_at,
-            "duration": duration,
-            "request_count": getattr(orch, "last_request_count", 0),
-            "blocked": getattr(orch, "last_block_info", {}),
-            "mode": report_label,
-            "auth_status": {
-                "admin": req.auth_status,
-                "surface": surface_status,
-            },
-            "version_matrix": version_matrix,
-            "fingerprint": {
-                "cms": req.cms or detected_fingerprint.get("cms", ""),
-                "version": detected_fingerprint.get("version", ""),
-                "variant": detected_fingerprint.get("variant", ""),
-                "confidence": 1.0 if req.cms else detected_fingerprint.get("confidence", 0.0),
-                "matched": ["manual"] if req.cms else detected_fingerprint.get("matched", []),
-            },
-        }
-        builder = ReportBuilder(results=all_results, target=target_normalized, summary=summary, dedup=not args.no_dedup)
-        paths = builder.render_all(args.report, formats=_parse_report_formats(args.report_format))
-        dist = builder.risk_distribution()
-        print(SEPARATOR)
-        print(
-            f"{YELLOW}[*]扫描摘要：耗时 {duration:.2f}s "
-            f"风险分布 高{dist['high']}/中{dist['medium']}/低{dist['low']} "
-            f"合计 {dist['total']} 个漏洞{RESET}"
+        run_cli_report(
+            args,
+            req,
+            all_results,
+            target_normalized,
+            label,
+            duration,
+            detected_fingerprint,
+            orch,
+            surface_status,
+            _parse_report_formats(args.report_format),
         )
-        dr = builder.dedup_report()
-        if dr and not args.no_dedup and dr.merged_groups > 0:
-            print(
-                f"{YELLOW}[*]去重统计：原始 {dr.original_count} 条 → 聚合后 {dr.aggregated_count} 条"
-                f"（{dr.merged_groups} 组合并）{RESET}"
-            )
-        for p in paths:
-            print(f"{GREEN}[*]报告已生成：{p}{RESET}")
-
-        # G5：合规报告模板渲染（安服交付物定制）
-        if getattr(args, "report_template", None):
-            from lib.report_docx_template import render_docx_template
-
-            tpl_out = os.path.join(args.report, "report_custom.docx")
-            tpl_path = render_docx_template(args.report_template, builder, tpl_out)
-            if tpl_path:
-                print(f"{GREEN}[*]模板报告已生成：{tpl_path}{RESET}")
-
-        # G5：整改复测工作流（--remediation 基线对比 → 整改验证报告）
-        if getattr(args, "remediation", None):
-            from lib.remediation import run_remediation
-
-            rem_paths = run_remediation(args, builder)
-            for rp in rem_paths:
-                print(f"{GREEN}[*]整改验证报告已生成：{rp}{RESET}")
-
-        # G3：UNKNOWN 智能降噪（--ai-triage 聚类分流，三态纪律不受影响）
-        if getattr(args, "ai_triage", False):
-            from lib.ai_triage import run_ai_triage_mode
-
-            run_ai_triage_mode(args, builder=builder)
-
-        # D20：保存基线 / 差异对比
-        if getattr(args, "save_baseline", False):
-            from lib.diff_scan import save_baseline
-
-            baseline_path = os.path.join(args.report, "baseline.json")
-            save_baseline(builder.to_dict(), baseline_path)
-            print(f"{GREEN}[*]基线已保存：{baseline_path}{RESET}")
-        if getattr(args, "diff", None):
-            from lib.diff_scan import diff_reports, load_report, render_diff_report
-
-            try:
-                old_report = load_report(args.diff)
-                diff = diff_reports(old_report, builder.to_dict())
-                print(f"{SEPARATOR}")
-                print(f"{YELLOW}[*]差异对比结果（vs {args.diff}）{RESET}")
-                print(f"    {GREEN}🆕 新增: {diff.total_new} 个{RESET}")
-                print(f"    {GREEN}✅ 已修复: {diff.total_fixed} 个{RESET}")
-                print(f"    {YELLOW}⚠️ 状态变化: {diff.total_changed} 个{RESET}")
-                print(f"    {YELLOW}⏳ 未变: {diff.total_persisted} 个{RESET}")
-                diff_paths = render_diff_report(diff, os.path.join(args.report, "diff"))
-                for dp in diff_paths:
-                    print(f"{GREEN}[*]差异报告：{dp}{RESET}")
-            except FileNotFoundError as e:
-                print(f"{RED}[!]差异对比失败: {e}{RESET}")
-            except Exception as e:
-                print(f"{RED}[!]差异对比异常: {e}{RESET}")
-
-        # D21：告警通知
-        if getattr(args, "notify", None):
-            from lib.notifier import parse_notify_arg, send_notifications
-
-            notifications = parse_notify_arg(args.notify)
-            if notifications:
-                send_notifications(notifications, builder, verbose=True)
-
-        # E8：AI 报告解读（--ai-report zh|en）
-        if getattr(args, "ai_report", None):
-            from lib.ai_report import run_ai_report_mode
-
-            lang = args.ai_report
-            if lang not in ("zh", "en"):
-                lang = "zh"
-            print(f"{YELLOW}[*]AI 漏洞分析生成中（%s）...{RESET}" % lang)
-            try:
-                analysis_path = run_ai_report_mode(args.report, builder.to_dict(), lang=lang)
-                print(f"{GREEN}[*]AI 分析已生成：{analysis_path}{RESET}")
-            except Exception as e:
-                print(f"{RED}[!]AI 分析生成失败: {e}{RESET}")
 
     # D31：业务逻辑漏洞扫描
     if getattr(args, "logic_scan", False):
@@ -1063,141 +934,8 @@ def final_prompt(no_pause: bool = False) -> None:
         logger.debug("用户输入读取失败", exc_info=True)
 
 
-# ── P1 子模块重导出（保持向后兼容）──
-# noqa: E402 �?底部导入以避免循环依�?
-from cli.chain_runner import run_chain_mode  # noqa: E402
-from cli.passive_runner import run_passive_mode  # noqa: E402
-from cli.plugin_runner import (  # noqa: E402
-    run_plugin_check_mode,
-    run_plugin_init_mode,
-    run_plugin_list_mode,
-)
-from cli.serve_runner import run_serve_mode  # noqa: E402
-from cli.tool_runner import run_ci_init_mode, run_diff_only_mode, run_template_list_mode, run_wiki_mode  # noqa: E402
-
-# E4：nuclei 模板校验模式（--nuclei-validate，不扫描）
-
-
-def run_nuclei_validate_mode(path: str) -> None:
-    """校验 nuclei 模板（输出校验结果，不扫描）"""
-    from lib.nuclei_loader import discover_nuclei_files, validate_template
-
-    files = discover_nuclei_files(path)
-    if not files:
-        print(f"{RED}[!]未找到模板文件: {path}{RESET}")
-        return
-    total_ok = 0
-    for f in files:
-        errors = validate_template(f)
-        if errors:
-            print(f"{RED}[!]{f}{RESET}")
-            for e in errors:
-                print(f"{RED}    - {e}{RESET}")
-        else:
-            total_ok += 1
-            print(f"{GREEN}[*]校验通过: {f}{RESET}")
-    print(f"{YELLOW}[*]校验完成：{total_ok}/{len(files)} 个模板通过{RESET}")
-
-
-# E5：插件模板仓库模式（导出/清单/更新）
-
-
-def run_plugin_export_mode(out_dir: str) -> None:
-    """导出插件源码与元信息到目录（模板仓库）"""
-    from lib.plugin_repo import export_plugins
-
-    try:
-        hashes = export_plugins(out_dir)
-        print(f"{GREEN}[*]导出完成: {out_dir}（{len(hashes)} 个文件）{RESET}")
-        print(f"{YELLOW}[*]下一步: --plugin-manifest {out_dir} 生成 manifest.json{RESET}")
-    except Exception as e:
-        print(f"{RED}[!]导出失败: {e}{RESET}")
-
-
-def run_plugin_manifest_mode(out_dir: str) -> None:
-    """生成/校验 manifest.json（Ed25519 签名，cryptography 可选）"""
-    from lib.plugin_repo import build_manifest, verify_manifest
-
-    try:
-        import json
-        import os
-
-        manifest_path = os.path.join(out_dir, "manifest.json")
-        if os.path.isfile(manifest_path):
-            # 校验模式
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-            errors = verify_manifest(manifest, out_dir)
-            if errors:
-                print(f"{RED}[!]manifest 校验失败:{RESET}")
-                for e in errors:
-                    print(f"{RED}    - {e}{RESET}")
-            else:
-                print(f"{GREEN}[*]manifest 校验通过: {manifest_path}{RESET}")
-                if manifest.get("signature"):
-                    print(f"{GREEN}[*]签名验证通过（Ed25519）{RESET}")
-                else:
-                    print(f"{YELLOW}[*]manifest 未签名（需 cryptography + 私钥才可签名）{RESET}")
-        else:
-            manifest = build_manifest(out_dir)
-            print(f"{GREEN}[*]manifest 已生成: {manifest_path}（{len(manifest['files'])} 个文件）{RESET}")
-            if manifest.get("signature"):
-                print(f"{GREEN}[*]已签名（Ed25519）{RESET}")
-            else:
-                print(
-                    f"{YELLOW}[*]未签名（仅摘要校验；生成私钥: cryptography 库 + --plugin-manifest 重复执行自动创建签名密钥）{RESET}"
-                )
-    except Exception as e:
-        print(f"{RED}[!]manifest 处理失败: {e}{RESET}")
-
-
-def run_plugin_update_mode(url: str) -> None:
-    """从模板仓库更新插件（下载 → 强制验签 → 安装到 ~/.ruoyi-scan/plugins/）
-
-    供应链安全：远程安装强制 Ed25519 验签（fail-closed）。公钥默认取自
-    ~/.ruoyi-scan/signing.pub（首次可通过 --plugin-manifest 生成并人工确认指纹）。
-    """
-    from config import settings
-    from lib.plugin_repo import download_and_install
-
-    # "default" 关键字回退到配置的默认仓库地址；未配置时直接拒绝（fail-closed）
-    if url == "default":
-        url = settings.PLUGIN_REPO_URL
-    if not url:
-        print(f"{RED}[!]未配置插件仓库地址（config/settings.py PLUGIN_REPO_URL）{RESET}")
-        return
-    print(f"{YELLOW}[*]插件仓库更新: {url} ...{RESET}")
-    try:
-        installed = download_and_install(url)
-        print(f"{GREEN}[*]更新完成：安装 {len(installed)} 个文件到 ~/.ruoyi-scan/plugins/{RESET}")
-        for rel in installed:
-            print(f"{GREEN}  [*] {rel}{RESET}")
-    # 验签/校验失败抛 ValueError 且不安装任何文件：远程插件更新默认失败关闭
-    except ValueError as e:
-        print(f"{RED}[!]更新失败（已拒绝安装）: {e}{RESET}")
-        print(f"{YELLOW}[*]安全提示：远程插件安装要求 Ed25519 签名 + cryptography 库{RESET}")
-        print(
-            f"{YELLOW}[*]请安装依赖并确认可信公钥：pip install cryptography；"
-            f"并用 --plugin-manifest 生成/校验 manifest 后人工确认 ~/.ruoyi-scan/signing.pub 指纹{RESET}"
-        )
-
-
 __all__ = [
     "run_mode",
     "run_mode_batch",
     "final_prompt",
-    "run_chain_mode",
-    "run_serve_mode",
-    "run_passive_mode",
-    "run_plugin_init_mode",
-    "run_plugin_check_mode",
-    "run_plugin_list_mode",
-    "run_plugin_export_mode",
-    "run_plugin_manifest_mode",
-    "run_plugin_update_mode",
-    "run_template_list_mode",
-    "run_diff_only_mode",
-    "run_ci_init_mode",
-    "run_wiki_mode",
-    "run_nuclei_validate_mode",
 ]
