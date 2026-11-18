@@ -94,8 +94,9 @@
 - **`--ai` 的框架选择静默失效**：`lib/ai_generator.py` 仍读旧 dest `args.category`，
   `--ai x --framework jeecgboot` 会回退到 ruoyi；已改读 `args.framework`，并加
   `getattr(args, ...)` 字面量与 parser dest 的一致性门禁。
-- **隔离登录会话绕过代理**：`core/login_chain.isolated_auth_session` 现在继承父会话的
-  `proxy` / `proxy_pool`，`--proxy` 下的登录与取证请求不再直连。
+- **隔离/匿名会话绕过代理**：`core/login_chain.isolated_auth_session` 现在继承父会话的
+  `proxy` / `proxy_pool`；部门树越权插件的匿名基线改用 `session.anonymous()`，
+  `--proxy` 下的登录、取证与匿名探测请求不再直连。
 - **会话初始化异常泄漏连接池**：`_stage_session` 在建会话后、返回前若抛异常会先
   `close()` 再抛出；补回归用例。
 - **fingerprint / waf 事件快照时序**：`task.fingerprint` / `task.waf_info` 在事件发出前

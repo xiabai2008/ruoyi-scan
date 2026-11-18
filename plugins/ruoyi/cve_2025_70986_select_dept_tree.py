@@ -59,7 +59,6 @@ from config import settings
 from core.http import join_url
 from core.login_chain import isolated_auth_session
 from core.lowpriv import resolve_surface_account
-from core.session import SessionManager
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page
 from lib.output import emit
@@ -172,7 +171,8 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             url_page = join_url(target, "/system/dept/selectDeptTree/0")
 
             # 未认证基线：接口应要求登录（若匿名也能拿到部门数据，属更严重问题，记入证据）
-            anon = SessionManager(timeout=settings.RuoYiAuth.TIMEOUT)
+            # 复用父会话的代理/限速配置，但 cookie 为空；避免 --proxy 下匿名基线直连
+            anon = session.anonymous()
             anon_bodies = []
             try:
                 # 两条请求分开捕获：一条失败不得丢弃另一条的结果；失败须留痕，

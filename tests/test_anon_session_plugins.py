@@ -186,7 +186,8 @@ def _patch_isolation(monkeypatch, bodies, login_ok=True):
         yield (LowSess() if login_ok else None, login_ok, "" if login_ok else "captcha")
 
     monkeypatch.setattr(mod, "isolated_auth_session", fake_isolation)
-    monkeypatch.setattr(mod, "SessionManager", _FakeAnonSession)
+    # 插件改用 session.anonymous() 继承代理/限速；测试让克隆返回固定的匿名响应
+    monkeypatch.setattr(FakeSession, "anonymous", lambda self: _FakeAnonSession())
 
 
 def test_dept_tree_missing_resource_is_unknown(monkeypatch):
