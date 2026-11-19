@@ -265,6 +265,10 @@ def _looks_like_api_json(ct: str, body: str) -> bool:
     # 路径不存在（500）——任何框架都可能，不证明该路径有接口
     if '"code":500' in body or "'code':500" in body:
         return False
+    # 404 错误页（路径不存在）同样不能证明接口存在；R9 的 /prod-api/captchaImage
+    # 返回 {"code":404,"msg":"请求地址不存在"}，曾把 Plus 误判成 ruoyi-vue3。
+    if '"code":404' in body or "'code':404" in body:
+        return False
     # 未认证（401）：**通用 401 不算证据，但带框架专有文案的算**。
     #
     # 为什么不能一刀切排除 401（2026-11-03 实测）：
@@ -393,6 +397,10 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
 
     best_variant = ""
     best_hits = 0
+    best_priority = 0
+    # 语义优先级：Plus/Cloud-Plus 的认证接口比通用 Vue3 前缀更具体，
+    # 同命中时不能被注册顺序（vue3 在前）抢走；R9 实测过这个排序问题。
+    _variant_priority = {"ruoyi-plus": 3, "ruoyi-cloud-plus": 3, "ruoyi-app": 2, "ruoyi-vue3": 1}
     # 软404/通配 200 基线：根路径响应体。cache 场景下根路径已被指纹探测抓取，
     # 此处只是缓存读取（不会新增请求）；直接调用时仅多 1 次基线请求。
     root_ok = False
@@ -445,7 +453,9 @@ def detect_variant(target: str, session: SessionManager, cache: Any = None) -> s
                 hits += 1
             except Exception:
                 continue
-        if hits > 0 and hits > best_hits:
+        priority = _variant_priority.get(variant, 0)
+        if hits > 0 and (priority, hits) > (best_priority, best_hits):
+            best_priority = priority
             best_hits = hits
             best_variant = variant
     return best_variant
@@ -548,6 +558,43 @@ def detect_cms(target: str, session: SessionManager, cache: Any = None) -> Finge
     return best
 
 
+def _behavioral_waf_probe(target: str, session: SessionManager) -> Dict[str, Any]:
+    """用无害的“攻击形态”查询串做行为探测，识别无签名的自定义 WAF。
+
+    只在静态特征全未命中时调用（最多 3 个请求）。典型目标：R12/R13 的自定义
+    Nginx 网关——根路径正常，但对 union select / 路径穿越返回 403 自定义页。
+    不发送真实攻击载荷，不修改目标状态。
+    """
+    base = target.rstrip("/") + "/"
+    benign_url = base + "?__rsp_waf_probe=benign"
+    try:
+        benign = session.get(benign_url, timeout=min(float(getattr(session, "timeout", 5) or 5), 3.0))
+        benign_status = int(getattr(benign, "status_code", 0) or 0)
+        benign_body = str(getattr(benign, "text", "") or "")
+    except Exception:
+        return {}
+    if benign_status in (0, 403, 406, 429):
+        return {}
+    probes = (
+        ("union", "?id=1%20union%20select%201,2,3"),
+        ("traversal", "?file=..%2F..%2Fetc%2Fpasswd"),
+    )
+    for _kind, query in probes:
+        try:
+            resp = session.get(base + query, timeout=min(float(getattr(session, "timeout", 5) or 5), 3.0))
+        except Exception:
+            continue
+        status = int(getattr(resp, "status_code", 0) or 0)
+        body = str(getattr(resp, "text", "") or "")
+        if status in (403, 406, 501) and status != benign_status and body != benign_body:
+            return {
+                "waf": "generic-http-filter",
+                "display": "通用 WAF/网关拦截（行为识别）",
+                "bypass_hint": "检测到请求特征拦截；可尝试 --bypass-waf 或降低速率",
+            }
+    return {}
+
+
 def detect_waf(target: str, session: SessionManager, cache: Any = None) -> Dict[str, Any]:
     """WAF 指纹识别：检测目标是否部署了 Web 应用防火墙（P1-C）
 
@@ -594,4 +641,5 @@ def detect_waf(target: str, session: SessionManager, cache: Any = None) -> Dict[
             if ck.lower() in cookie:
                 return {"waf": waf_key, "display": f["display"], "bypass_hint": f.get("bypass_hint", "")}
 
-    return {"waf": "", "display": "", "bypass_hint": ""}
+    # 静态特征未命中：做一次无害的行为探测，覆盖自定义/无签名 WAF（R12/R13）
+    return _behavioral_waf_probe(target, session) or {"waf": "", "display": "", "bypass_hint": ""}

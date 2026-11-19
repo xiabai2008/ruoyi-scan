@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 # 若依版本指纹正则（匹配 X.Y.Z 格式，X/Y/Z 为数字）
 # 真实若依 /login 页面含 "4.7.8" 两次（footer + JS 变量）
 # 主版本限定 4/5：避免误命中页面中其他形如 x.y.z 的无关版本号（JS 库、构建号等）
-VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d+)\.(\d+)\b")
+VERSION_PATTERN = re.compile(r"\b(4|5)\.(\d{1,2})\.(\d{1,2})\b")
 
 # 版本号上下文锚点（按优先级排列）：优先取若依相关字样、「version/版本」关键字
 # 附近的版本号。裸用 VERSION_PATTERN 取「页面中第一个 4.x.y/5.x.y」会把先出现的
@@ -85,7 +85,7 @@ def extract_version(text: str) -> str:
         return ""
     for pat in _VERSION_CONTEXT_PATTERNS:
         m = pat.search(text)
-        if m:
+        if m and VERSION_PATTERN.fullmatch(m.group(1)):
             return m.group(1)
     m = VERSION_PATTERN.search(text)
     if m:

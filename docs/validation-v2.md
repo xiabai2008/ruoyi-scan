@@ -13,10 +13,10 @@
 | R3 | 1,434 | 16.2 | 5 | ruoyi / 4.7.8 | CVE 对 + 上传/默认口令/目录遍历，符合主要预期 |
 | R4 | 925 | 13.0 | 4 | ruoyi / 4.8.0 | CVE 对 + 上传/默认口令；部门树越权 UNKNOWN（FN） |
 | R5 | 1,390 | 20.8 | 1 | ruoyi / 4.8.3 | **靶场造错**：DB 实际 admin/admin123，设计写 Admin@2026；扫描器正确发现真实弱口令，不是 FP |
-| R6 | 886 | 17.1 | 4 | ruoyi / 3.9.2 / 变体空 | 变体识别失败（期望 ruoyi-vue/ruoyi-vue3）；上传 UNKNOWN、匿名注册未覆盖 |
-| R7 | 889 | 22.8 | 7 | ruoyi / 3.8.9 / 变体空 | Actuator/备份/SCM 命中；**sourcemap 缺失**；变体空 |
-| R8 | 1,418 | 18.7 | 8 | 指纹空（Cloud 能力命中） | Gateway 路由泄露/Nacos 默认口令/Actuator 均 TP；Cloud 指纹为空 |
-| R9 | 1,419 | 29.6 | 2 | 指纹空（Plus 能力命中） | 变体识别失败（期望 ruoyi-plus）；CORS/Plus 认证命中 |
+| R6 | 886 | 17.1 | 4 | ruoyi / 3.9.2 / ruoyi-vue3（复测） | 变体已修复；上传 UNKNOWN、匿名注册未覆盖 |
+| R7 | 889 | 22.8 | 7 | ruoyi / 3.8.9 / ruoyi-vue3（复测） | Actuator/备份/SCM 命中；sourcemap 已修复并确认 |
+| R8 | 1,418 | 18.7 | 8 | ruoyi-cloud（复测） | Gateway 路由泄露/Nacos 默认口令/Actuator 均 TP；Cloud 指纹已修复 |
+| R9 | 1,419 | 29.6 | 2 | ruoyi / 5.6.2 / ruoyi-plus（复测） | 变体已修复；CORS/Plus 认证命中 |
 | R10 | 1,450 | 8.9 | 0 | jeecgboot / 3.6.3 | 负样本正确，无若依误报 |
 | R11 | 927 | 11.1 | 0 | spring | 负样本正确，无若依误报；请求数达标 |
 | R12 | 935 | 12.7 | 5 | ruoyi / 4.6.2 | WAF 未识别；业务面仍报出 R2 真实问题（非攻击 payload）；`-p` 0 命中、16 UNKNOWN |
@@ -41,7 +41,20 @@
 | A2 | 1,386 | 11.8 | 0 | ruoyi / 4.6.2 | MFA 正确降级 UNKNOWN，0 误报 |
 | Y1 | 1,444 | 11.6 | 6 | yudao | 租户未授权/Druid/CORS/Swagger TP |
 
-## 二、P0 结论
+## 二、修复进展（2026-11-19 晚）
+
+| 缺口 | 修复 | 复测 |
+|---|---|---|
+| R6/R7 变体为空 | 为 ruoyi-vue3 / ruoyi-plus 增加 /prod-api/captchaImage、/prod-api/auth/code 等强特征；Plus 语义优先于通用 Vue3 | R6/R7 → ruoyi-vue3；R9 → ruoyi-plus + 5.6.2 |
+| R7 sourcemap 缺失 | 新增 plugins/common/sourcemap_leak.py（严格校验 version=3/sources/mappings） | R7 已 CONFIRMED；SPA 兜底 HTML 判 SAFE |
+| R12/R13 WAF 未识别 | detect_waf 增加无签名行为探测（union select/路径穿越返回 403 且正常请求未被拒） | R13 waf=generic-http-filter，-p 仍 0 CONFIRMED / 17 UNKNOWN |
+| R8 Cloud 指纹 | 增加 /prod-api/actuator/gateway/routes、env 强特征 | R8 复测 cms=ruoyi-cloud（unit test 亦覆盖） |
+| R4 部门树 UNKNOWN | 未降低判定（空 data 不能证明越权）；需复核 R4 低权账号/数据 | 仍为 UNKNOWN，优先作为靶场/数据问题处理 |
+| R1/R2 组成差异 | 核对靶场：R1 无 .svn/.git 实体、备份在 /docs/*.sql；R2 设计项需再核对 | 判定为靶场构造差异，暂不通过放宽插件“修” |
+
+插件数 63（common 16）；SSOT/export/mkdocs/ruff 全部通过。
+
+## 三、P0 结论
 
 ### 1. 爆破安全策略通过验证
 

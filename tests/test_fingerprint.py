@@ -76,6 +76,19 @@ def test_ruoyi_prod_api_json():
     print("PASS test_ruoyi_prod_api_json: cms=%s conf=%.2f matched=%s" % (res.cms, res.confidence, res.matched))
 
 
+def test_ruoyi_cloud_from_gateway_routes():
+    """Cloud 指纹：/prod-api/actuator/gateway/routes 路由表可作为强特征（R8 实测）"""
+    body = '[{"route_id":"ruoyi-auth","predicates":[{"name":"Path","args":{"pattern":"/auth/**"}}]}]'
+    sess = FakeSession(
+        {
+            "http://target/prod-api/actuator/gateway/routes": FakeResp(body, 200, {"Content-Type": "application/json"}),
+        }
+    )
+    res = detect_cms("http://target/", sess)
+    assert res.cms == "ruoyi-cloud", f"cms 应为 ruoyi-cloud，实际 {res.cms}"
+    assert any("gateway/routes" in m for m in res.matched), res.matched
+
+
 def test_ruoyi_favicon_strong():
     """favicon md5 命中特征库 → 强特征命中，置信度提升至上限（阶段二强特征落库验证）"""
     content = b"FAKE_RUOYI_FAVICON_BYTES_FOR_TEST"

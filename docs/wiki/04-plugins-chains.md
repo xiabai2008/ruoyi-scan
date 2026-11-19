@@ -20,7 +20,7 @@
 2. 插件的元信息（CVE/CVSS/修复建议/复现命令）与检测逻辑同居一处，不会漂移；
 3. `--plugin-list`、报告、API `/api/plugins` 都能直接从类属性生成，无需额外元数据表。
 
-代价是文件数量：62 个已注册插件对应 62 个插件文件 + 5 个框架包 `__init__.py`（`plugins/chain/` 另计 3 个）。
+代价是文件数量：63 个已注册插件对应 63 个插件文件 + 5 个框架包 `__init__.py`（`plugins/chain/` 另计 3 个）。
 
 ---
 
@@ -201,7 +201,7 @@ plugin_list = [
 | 13 | `SpringBootAdmin` | `spring_boot_admin.py` | Boot Admin 暴露 |
 | 14 | `SpringDataRest` | `spring_data_rest.py` | Data REST 暴露 |
 
-### 4.3 `plugins/common` — 15 个（`plugin_list` 登记）
+### 4.3 `plugins/common` — 16 个（`plugin_list` 登记）
 
 | # | 类名 | 文件 | 覆盖点 |
 | --- | --- | --- | --- |
@@ -220,6 +220,7 @@ plugin_list = [
 | 13 | `SurfaceSweep` | `surface_sweep.py` | 爬取攻击面盘点 |
 | 14 | `BlindSsrf` | `blind_ssrf.py` | 盲 SSRF（需 `--oast`，回调确认） |
 | 15 | `BlindXxe` | `blind_xxe.py` | 盲 XXE（需 `--oast`，回调确认） |
+| 16 | `SourceMapLeak` | `sourcemap_leak.py` | 前端 SourceMap 源码泄露 |
 
 > `shiro_rememberme` 为**指纹类插件**（`category=recon`、`severity=low`、不挂 CVE）：
 > 只输出 `SAFE`（无 rememberMe 特征）或 `UNKNOWN`（检测到特征，密钥可利用性需人工验证），
@@ -255,17 +256,17 @@ plugin_list = [
 | --- | --- |
 | `plugins.ruoyi` | 23 |
 | `plugins.spring` | 14 |
-| `plugins.common` | 15 |
+| `plugins.common` | 16 |
 | `plugins.jeecgboot` | 8 |
 | `plugins.yudao` | 2 |
-| **合计** | **62** |
+| **合计** | **63** |
 
 > **插件数量有三个口径，勿混用**：
-> - **65** = `plugins/` 下插件源文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
-> - **62** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
+> - **66** = `plugins/` 下插件源文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
+> - **63** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
 > - 通用目标实际执行数会因变体过滤而不同；不要再使用固定的“54”口径。
 >
-> README 原先的「51 / 若依 18」即第三种口径，v1.8 已统一为 62 / 23 并保留 Plus 专属说明。
+> README 原先的「51 / 若依 18」即第三种口径，v1.8 已统一为 63 / 23 并保留 Plus 专属说明。
 
 ---
 

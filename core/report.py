@@ -256,6 +256,7 @@ class ReportBuilder:
             "version_matrix": self.summary.get("version_matrix", []),
             # 全站拦截标记：消费者（CI/看板/交付报告）据此判断"未知"是否来自拦截
             "blocked": self.summary.get("blocked", {}),
+            "waf": self.summary.get("waf", {}),
             "risk_distribution": dist,
             "vuln_count": dist["total"],
             # 宿主级确认项数（vuln_count 的子集，不是并列口径）：探的是目标主机的

@@ -1,7 +1,7 @@
 ﻿===============================================================================
  Ruoyi-Scan 插件清单（POC 覆盖范围）
- 版本：v1.8.0　共 62 个插件
- 高危 35　中危 20　低危 7　含 CVE 编号 14 个
+ 版本：v1.8.0　共 63 个插件
+ 高危 35　中危 21　低危 7　含 CVE 编号 14 个
  说明：本清单由 scripts/export_plugin_list.py 从插件源码导出，与运行时一致；
        装好后可用 ruoyi-scan --plugin-list 实时查看同一份数据。
 ===============================================================================
@@ -9,7 +9,7 @@
  按类别：
    ruoyi       若依专项         23 个
    spring      Spring 生态    14 个
-   common      通用 Web       15 个
+   common      通用 Web       16 个
    jeecgboot   JeecgBoot     8 个
    yudao       芋道            2 个
 
@@ -218,7 +218,7 @@
       修复：为 Repository 接口添加 @RepositoryRestResource(exported=false) 或设置方法级安全
 
 ===============================================================================
- 通用 Web（common）· 15 个
+ 通用 Web（common）· 16 个
 ===============================================================================
 
  038  高危  漏洞
@@ -272,26 +272,31 @@
       修复：禁止 Web 服务器对外提供 .svn/.hg/.idea/.vscode 等隐藏目录的访问，部署时清理这些目录
 
  048  中危  漏洞
+      名称：前端 SourceMap 源码泄露
+      说明：前端构建产物保留了 sourcemap，攻击者可下载 .map 还原完整前端源码、接口与注释
+      修复：生产构建关闭 sourcemap（webpack devtool=false / Vite build.sourcemap=false），并删除已部署的 .map 文件
+
+ 049  中危  漏洞
       名称：Swagger API 文档泄露
       说明：目标存在未授权的 API 文档界面，攻击者可了解全部 API 接口、参数及数据结构，辅助进一步攻击
       修复：为 Swagger/API 文档添加访问认证，或在生产环境中禁用 Swagger 端点
 
- 049  低危  信息
+ 050  低危  信息
       名称：目录遍历探测
       说明：目标服务器开启了目录列表功能，攻击者可浏览目录结构发现隐藏文件和敏感路径
       修复：在 Web 服务器配置中关闭目录列表功能（nginx: autoindex off; apache: Options -Indexes）
 
- 050  低危  信息
+ 051  低危  信息
       名称：Shiro 框架指纹（rememberMe）
       说明：站点使用 Apache Shiro 框架（响应含 rememberMe=deleteMe 特征）。Shiro 的 rememberMe Cookie 在默认配置下使用硬编码 AES 密钥，存在反序列化 RCE 风险（CVE-2016-4437），但**是否可利用需人工验证密钥**——本插件只确认框架存在。
       修复：确认 Shiro 版本 ≥1.2.5 且 rememberMe 密钥已更换（默认密钥 kPH+bIxk5D2deZiIxcaaaA== 必须替换）
 
- 051  低危  信息
+ 052  低危  信息
       名称：爬取攻击面盘点
       说明：消费 --crawl / --js-extract 产出的攻击面清单，逐个入口用匿名会话探测，输出端点清单与未认证可达状态（是否被登录墙拦截/明确拒绝/可读业务数据）
       修复：对爬取到的业务接口统一实施服务端鉴权，删除前端遗留的调试/测试入口
 
- 052  低危  信息
+ 053  低危  信息
       名称：HTTP 方法探测
       说明：通过 OPTIONS 请求探测目标支持的 HTTP 方法，检测 TRACE 方法是否开启（可被利用于跨站追踪攻击）
       修复：在 Web 服务器中禁用 TRACE/TRACK 方法；限制 Allow 头中仅暴露必要方法
@@ -300,42 +305,42 @@
  JeecgBoot（jeecgboot）· 8 个
 ===============================================================================
 
- 053  高危  漏洞  CNVD-2022-39817
+ 054  高危  漏洞  CNVD-2022-39817
       名称：JeecgBoot 任意文件读取
       说明：JeecgBoot /common/download 接口 fileName 参数目录穿越读取任意文件
       修复：升级 JeecgBoot 至 3.5.1+；download 接口增加路径白名单校验
 
- 054  高危  漏洞  CNVD-2021-27656
+ 055  高危  漏洞  CNVD-2021-27656
       名称：JeecgBoot jmreport 文件上传
       说明：JeecgBoot 报表模块 /jmreport/upload 存在未授权任意文件上传
       修复：升级 JeecgBoot 至 3.4.2+；报表接口强制鉴权
 
- 055  高危  漏洞
+ 056  高危  漏洞
       名称：JeecgBoot 报表 SSTI
       说明：JeecgBoot 报表模块 /jmreport/testConnection 存在 Freemarker 模板注入，可 RCE
       修复：升级 JeecgBoot 至 3.5.3+；限制报表模块访问权限
 
- 056  高危  漏洞  CNVD-2022-30348
+ 057  高危  漏洞  CNVD-2022-30348
       名称：JeecgBoot jmreport SQL注入
       说明：JeecgBoot 报表模块 /jmreport/queryFieldBySql 可执行任意 SQL（未授权）
       修复：升级 JeecgBoot 至 3.4.3+；报表接口强制鉴权
 
- 057  高危  漏洞  CVE-2022-44153
+ 058  高危  漏洞  CVE-2022-44153
       名称：JeecgBoot queryUserByDepId SQL注入
       说明：JeecgBoot /sys/user/queryUserByDepId 的 depId 参数存在报错型 SQL 注入
       修复：升级 JeecgBoot 至 3.4.4+；对 depId 参数做参数化查询
 
- 058  中危  爆破
+ 059  中危  爆破
       名称：JeecgBoot 默认口令
       说明：JeecgBoot 后台默认口令 admin/123456（未修改则可直接登录）
       修复：修改默认口令 admin/123456；启用强密码策略
 
- 059  中危  漏洞  CVE-2023-1454
+ 060  中危  漏洞  CVE-2023-1454
       名称：JeecgBoot 字典越权
       说明：JeecgBoot /sys/dict/list 未授权访问，泄露系统字典配置
       修复：升级 JeecgBoot；sys 接口强制鉴权
 
- 060  中危  漏洞  CVE-2023-1454
+ 061  中危  漏洞  CVE-2023-1454
       名称：JeecgBoot 报表未授权
       说明：JeecgBoot 报表模块 /jmreport/list 未授权访问，泄露报表列表与配置
       修复：升级 JeecgBoot；/jmreport/** 接口强制鉴权
@@ -344,12 +349,12 @@
  芋道（yudao）· 2 个
 ===============================================================================
 
- 061  高危  漏洞
+ 062  高危  漏洞
       名称：芋道 Druid 监控未授权
       说明：芋道默认把 Druid 监控页的 login-username/login-password 留空，导致 /druid/*.json 数据接口匿名可读——泄露数据源配置、真实 SQL 语句与全部访问 URI
       修复：为 Druid 控制台设置强口令，或直接在生产环境关闭 stat-view-servlet
 
- 062  中危  漏洞
+ 063  中危  漏洞
       名称：芋道租户列表未授权
       说明：芋道 yudao 的 /system/tenant/simple-list 接口匿名可读，泄露全部租户 ID 与名称——多租户隔离的起点情报，可用于定向攻击
       修复：为 /system/tenant/simple-list 增加鉴权，或只返回当前域名对应的单个租户

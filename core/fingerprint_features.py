@@ -26,6 +26,8 @@ CMS_FEATURES = {
         "favicon_hashes": {RUOYI_FAVICON_MD5},
         "strong_paths": [
             {"path": "/prod-api/", "expect": "json"},  # 若依前后端分离版 API 前缀
+            {"path": "/prod-api/captchaImage", "expect": "json"},  # Vue 版验证码 JSON（R6/R7）
+            {"path": "/prod-api/auth/code", "expect": "json"},  # Plus 验证码 JSON（R9）
             {"path": "/captcha/image", "expect": "image"},  # 若依验证码图片接口
             {"path": "/getInfo", "expect": "json"},  # 若依登录后用户信息接口
         ],
@@ -58,6 +60,8 @@ CMS_FEATURES = {
         "strong_paths": [
             {"path": "/nacos/", "expect": "any", "min_length": 20},  # Nacos 控制台
             {"path": "/gateway/", "expect": "any", "min_length": 20},  # Spring Gateway
+            {"path": "/prod-api/actuator/gateway/routes", "expect": "any", "min_length": 20},  # Gateway 路由表
+            {"path": "/prod-api/actuator/env", "expect": "any", "min_length": 20},  # Actuator env
         ],
         "login_keywords": ["RuoYi-Cloud", "若依微服务"],
         "weak_keywords": ["ruoyi-cloud", "RuoYiCloud", "nacos"],
@@ -122,6 +126,8 @@ VARIANT_FEATURES = {
         "display": "RuoYi-Vue3",
         "strong_paths": [
             {"path": "/prod-api/", "expect": "json"},
+            {"path": "/prod-api/captchaImage", "expect": "json"},
+            {"path": "/prod-api/getInfo", "expect": "json"},
         ],
         # Vue3 版前端打包产物含 vite 指纹（index-*.js），弱特征辅助
         "weak_keywords": ["vue3", "vite", "index-"],
@@ -144,6 +150,8 @@ VARIANT_FEATURES = {
         "display": "RuoYi-Vue-Plus",
         "strong_paths": [
             {"path": "/auth/login", "expect": "json"},  # Sa-Token 认证服务
+            {"path": "/prod-api/auth/login", "expect": "json"},  # Plus 分离部署登录
+            {"path": "/prod-api/auth/code", "expect": "json"},  # Plus 验证码接口
             {"path": "/auth/logout", "expect": "any"},
         ],
         "weak_keywords": ["RuoYi-Vue-Plus", "Sa-Token", "plus"],

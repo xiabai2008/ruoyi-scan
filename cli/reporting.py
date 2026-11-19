@@ -69,6 +69,7 @@ def run_cli_report(
         "request_count": getattr(orch, "last_request_count", 0),
         "plugin_metrics": list(getattr(orch, "last_plugin_metrics", [])),
         "blocked": getattr(orch, "last_block_info", {}),
+        "waf": getattr(orch, "last_waf_info", {}),
         "mode": report_label,
         "auth_status": {
             "admin": req.auth_status,

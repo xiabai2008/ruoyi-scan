@@ -79,7 +79,7 @@
     .\ruoyi-scan.exe -p http://127.0.0.1:8080/ --report .\reports\demo
     .\ruoyi-scan.exe -u http://127.0.0.1:8080/ --report .\reports\full
 
-    已内置的能力：62 个 POC、字典、组件 CVE 库、7 种报告格式、--serve Web API、
+    已内置的能力：63 个 POC、字典、组件 CVE 库、7 种报告格式、--serve Web API、
     --distributed（redis 客户端已带，需自备 Redis 服务）。
 
     注意：
@@ -121,7 +121,7 @@
 
     两者等价；会打印 5 个短参数和全部长参数。
 
-2.3 插件清单（确认 62 个 POC 已加载）
+2.3 插件清单（确认 63 个 POC 已加载）
 -------------------------------------------------------------------------------
     ruoyi-scan --plugin-list
 
@@ -714,7 +714,7 @@ Q11 -l 爆破把管理员账号锁了
 
 Q12 想扫若依之外的 Spring 站点
     ruoyi-scan -u http://target:8080/ --cms spring
-    62 个插件里含 14 个 Spring Boot 专项、15 个通用插件与 2 个芋道插件。
+    63 个插件里含 14 个 Spring Boot 专项、15 个通用插件与 2 个芋道插件。
 
 Q13 启动时提示「检测到顶层包名冲突」
     你的项目里可能也有 core / common / lib 等同名包，且排在 sys.path 前面，

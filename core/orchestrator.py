@@ -462,6 +462,8 @@ class ScanOrchestrator:
         self.last_block_info: Dict[str, Any] = {"blocked": False}
         # 最近一次 run_sync 的登录墙探测结果（报告与 CLI 提示用）
         self.last_auth_wall: Dict[str, Any] = {"wall": False}
+        # 最近一次 WAF 探测结果（报告 summary 用；R12/R13 曾因缺字段无法解释拦截）
+        self.last_waf_info: Dict[str, Any] = {"waf": "", "display": "", "bypass_hint": ""}
 
     def run_sync(self, req: ScanRequest, on_event: Optional[EventHandler] = None) -> List[ScanResult]:
         """同步执行扫描（CLI 模式）
@@ -1173,6 +1175,7 @@ class ScanOrchestrator:
         # 传入 fp_cache 复用 detect_cms 已缓存的根响应（未命中才发请求，向后兼容）
         waf_result = detect_waf(target, session, cache=fp_cache)
         task.waf_info = waf_result
+        self.last_waf_info = waf_result
         emit(
             "waf",
             {

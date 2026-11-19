@@ -34,7 +34,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | `cli/` | 8 | CLI 控制层（分发 + 各模式执行器） |
 | `common/` | 3 | 共享基础层（模型、日志、控制台） |
 | `config/` | 1 | 全局配置 |
-| `plugins/` | 62 个已注册插件 | 5 个框架包 + 1 个链专用包（详见 [04](04-plugins-chains.md)） |
+| `plugins/` | 63 个已注册插件 | 5 个框架包 + 1 个链专用包（详见 [04](04-plugins-chains.md)） |
 | `chains/` | 3 条利用链 | DAG 编排 |
 | `desktop/` | Tauri 2 + React 19 | 桌面端（含 Rust 壳与 Python 引擎） |
 | `tests/` | 67 个测试文件 | pytest + 回归脚本 |
@@ -64,7 +64,7 @@ Ruoyi-Scan 是一款**若依（RuoYi）专项漏洞扫描器**。核心差异点
 | [01 整体架构](01-architecture.md) | 分层结构、端到端数据流、扫描主流程 9 步、三态判定纪律、关键设计决策 | 项目怎么搭起来的？一次扫描发生什么？ |
 | [02 入口与 CLI](02-entrypoint-cli.md) | `main.py`、`cli/` 分发层、参数全景、预检、环境变量、运行方式 | 命令行怎么进来的？各模式怎么执行？ |
 | [03 核心引擎层](03-core.md) | `core/` 24 个模块逐模块说明（关键类/函数/依赖/设计要点） | 引擎、会话、指纹、路由、报告各自做什么？ |
-| [04 插件体系与利用链](04-plugins-chains.md) | `PluginBase` 契约、5 条插件发现路径、62 个插件清单、3 条链、`data/` 字典 | 插件怎么写、怎么被发现、怎么被路由？ |
+| [04 插件体系与利用链](04-plugins-chains.md) | `PluginBase` 契约、5 条插件发现路径、63 个插件清单、3 条链、`data/` 字典 | 插件怎么写、怎么被发现、怎么被路由？ |
 | [05 工具库层](05-lib.md) | `lib/` 模块按功能分组说明 | WAF 绕过、OAST、nuclei 兼容、AI 闭环怎么做？ |
 | [06 API 服务](06-api-web.md) | FastAPI 应用工厂、鉴权分级、全部 REST 端点、WebSocket 事件、定时扫描 | 服务端接口契约是什么？ |
 | [07 桌面端与部署](07-desktop-deploy.md) | Tauri 桌面端、靶场、Docker、监控、CI/Release、测试 | 怎么打包、部署、验收？ |

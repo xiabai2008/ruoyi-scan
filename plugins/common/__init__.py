@@ -13,6 +13,7 @@ from plugins.common.redis_unauth import RedisUnauthPlugin
 from plugins.common.rocketmq_unauth import RocketmqUnauthPlugin
 from plugins.common.shiro_rememberme import ShiroRemembermePlugin
 from plugins.common.source_leak import SourceLeakPlugin
+from plugins.common.sourcemap_leak import SourceMapLeakPlugin
 from plugins.common.surface_sweep import SurfaceSweepPlugin
 from plugins.common.swagger_leak import SwaggerLeakPlugin
 from plugins.common.trace_method import TraceMethodPlugin
@@ -22,6 +23,7 @@ plugin_list = [
     GitLeakPlugin,  # .git 源码泄露探测
     EnvLeakPlugin,  # .env 配置文件泄露
     BackupScanPlugin,  # 备份文件扫描
+    SourceMapLeakPlugin,  # 前端 sourcemap 源码泄露
     RedisUnauthPlugin,  # Redis 未授权（F7 中间件）
     # vuln：中危通用漏洞
     CorsMisconfigPlugin,  # CORS 跨域配置检测
