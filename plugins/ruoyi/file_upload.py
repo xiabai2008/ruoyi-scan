@@ -1,4 +1,6 @@
 # 任意文件上传：POST /common/upload 上传无害探针，按 JSON 响应判定接口可写
+from urllib.parse import urlparse, urlunparse
+
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
@@ -118,6 +120,34 @@ class FileUploadPlugin(PluginBase):
             auth_result.evidence = "登录后上传：" + auth_result.evidence
         return auth_result
 
+    @staticmethod
+    def _served_candidates(target: str, up_url: str) -> list:
+        """生成上传文件回读候选 URL。
+
+        后端返回的 url 可能是绝对地址（http://host/profile/...），而站点实际
+        通过 /prod-api/profile/... 暴露静态目录（R6）。依次尝试：原 URL、
+        target 的 context/API 前缀 + 文件 path。
+        """
+        first = up_url if up_url.startswith(("http://", "https://")) else join_url(target, up_url)
+        candidates = [first]
+        t = urlparse(target)
+        u = urlparse(first)
+        target_path = (t.path or "").rstrip("/")
+        if target_path and not u.path.startswith(target_path + "/"):
+            prefixed = urlunparse(
+                (
+                    u.scheme or t.scheme,
+                    u.netloc or t.netloc,
+                    target_path + (u.path or "/"),
+                    u.params,
+                    u.query,
+                    u.fragment,
+                )
+            )
+            if prefixed not in candidates:
+                candidates.append(prefixed)
+        return candidates
+
     def _probe_upload(self, target, url, probe, filename, content, content_type, dimension):
         """执行一次上传探针并判定；dimension=authenticated 时额外回读上传 URL。"""
         files = {"file": (filename, content, content_type)}
@@ -205,16 +235,23 @@ class FileUploadPlugin(PluginBase):
         code_ok = code is None or code in (0, 200, "0", "200")
         if (url_valid or name_valid) and code_ok:
             if dimension == "authenticated":
-                # 登录后上传必须回读：只有文件真的可访问，才能证明扩展名限制失效/可落地
+                # 登录后上传必须回读：只有文件真的可访问，才能证明扩展名限制失效/可落地。
+                # R6 实测：后端返回绝对 URL http://host/profile/upload/...，但该站点
+                # 实际静态目录挂在 /prod-api/profile/...；直接按返回 URL 回读会拿到
+                # SPA index（不含 marker），必须同时尝试 target 的 base-path 前缀。
                 served = False
                 served_url = ""
-                try:
-                    served_url = up_url if up_url.startswith(("http://", "https://")) else join_url(target, up_url)
-                    get_resp = probe.get(served_url)
-                    body = getattr(get_resp, "text", "") or ""
-                    served = getattr(get_resp, "status_code", 0) == 200 and self.AUTH_PROBE_MARKER in body
-                except Exception:
-                    logger.debug("登录后上传回读失败: %s", up_url, exc_info=True)
+                candidates = self._served_candidates(target, up_url)
+                for candidate in candidates:
+                    try:
+                        get_resp = probe.get(candidate)
+                        body = getattr(get_resp, "text", "") or ""
+                        if getattr(get_resp, "status_code", 0) == 200 and self.AUTH_PROBE_MARKER in body:
+                            served = True
+                            served_url = candidate
+                            break
+                    except Exception:
+                        logger.debug("登录后上传回读失败: %s", candidate, exc_info=True)
                 if not served:
                     emit(no("任意文件上传（登录后上传成功但文件不可访问）"))
                     return ScanResult(
@@ -223,7 +260,8 @@ class FileUploadPlugin(PluginBase):
                         status=STATUS_UNKNOWN,
                         url=url,
                         evidence=(
-                            f"登录后上传响应成功（code={code} url={up_url}），但回读文件失败/未命中标记，无法证明可访问"
+                            f"登录后上传响应成功（code={code} url={up_url}），但回读文件失败/未命中标记"
+                            f"（尝试 {len(candidates)} 个 URL，均不可访问），无法证明可落地"
                         ),
                         extra={"uploaded_url": up_url, "file_name": file_name, "dimension": "authenticated"},
                     )

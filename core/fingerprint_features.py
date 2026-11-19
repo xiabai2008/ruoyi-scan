@@ -28,6 +28,9 @@ CMS_FEATURES = {
             {"path": "/prod-api/", "expect": "json"},  # 若依前后端分离版 API 前缀
             {"path": "/prod-api/captchaImage", "expect": "json"},  # Vue 版验证码 JSON（R6/R7）
             {"path": "/prod-api/auth/code", "expect": "json"},  # Plus 验证码 JSON（R9）
+            {"path": "/ruoyi/css/ry-ui.css", "expect": "any", "min_length": 20},  # 自定义 context-path 的若依静态资源
+            {"path": "/ruoyi/js/ry-ui.js", "expect": "any", "min_length": 20},  # 同上（D1 /portal 实测）
+            {"path": "/tool/gen", "expect": "any", "min_length": 20},  # 代码生成组件靶场（C4-5）的若依强特征
             {"path": "/captcha/image", "expect": "image"},  # 若依验证码图片接口
             {"path": "/getInfo", "expect": "json"},  # 若依登录后用户信息接口
         ],

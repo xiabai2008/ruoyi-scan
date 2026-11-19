@@ -13,7 +13,7 @@
 | R3 | 1,434 | 16.2 | 5 | ruoyi / 4.7.8 | CVE 对 + 上传/默认口令/目录遍历，符合主要预期 |
 | R4 | 945 | 12.6 | 5 | ruoyi / 4.8.0 | 复测：CVE 对 + 上传/默认口令 + 部门树越权（空数据被数据权限过滤，业务层仍执行） |
 | R5 | 1,390 | 20.8 | 1 | ruoyi / 4.8.3 | **靶场造错**：DB 实际 admin/admin123，设计写 Admin@2026；扫描器正确发现真实弱口令，不是 FP |
-| R6 | 897 | 17.1 | 4 | ruoyi / 3.9.2 / ruoyi-vue3 | 变体已修复；上传 UNKNOWN、匿名注册未覆盖 |
+| R6 | 945 | 18.8 | 5 | ruoyi / 3.9.2 / ruoyi-vue3 | 变体/HTML 上传已修复；H2/Plus 误报已消除 |
 | R7 | 901 | 20.8 | 8 | ruoyi / 3.8.9 / ruoyi-vue3 | Actuator/备份/SCM/sourcemap 8 条命中 |
 | R8 | 1,418 | 18.7 | 7 | ruoyi-cloud | Gateway 路由泄露/Nacos 默认口令/Actuator 均 TP；本次默认口令未复现（令牌不能为空） |
 | R9 | 1,442 | 26.0 | 2 | ruoyi / 5.6.2 / ruoyi-plus | 变体已修复；CORS/Plus 认证命中 |
@@ -34,10 +34,10 @@
 | C4-2 | 919 | 7.4 | 1 | 空 | MinIO 未授权 TP |
 | C4-3 | 920 | 6.8 | 1 | 空 | RocketMQ Dashboard 未授权 TP |
 | C4-4 | 926 | 6.8 | 1 | spring | jmreport SSTI TP |
-| C4-5 | 926 | 6.7 | 0 | spring | 代码生成 SSTI 未命中，待复核是否为鉴权前置 |
+| C4-5 | 926 | 5.4 | 1 | ruoyi | 代码生成 SSTI 差分成立；已去掉错误的 requires_auth 降级 |
 | C4-6 | 890 | 6.1 | 1 | ruoyi-cloud | Thymeleaf/SpEL TP |
 | C5 | 920 | 5.6 | 0 | 空 | 401 全拦，0 CONFIRMED，正确 |
-| D1 | 932 | 10.0 | 2 | 指纹空 | 默认口令/Druid TP；context-path 指纹未识别 |
+| D1 | 1,013 | 12.4 | 4 | ruoyi / 4.6.2（context:/portal） | context-path 指纹已修复；默认口令/Druid/重置密码/部门树 TP |
 | A2 | 1,386 | 11.8 | 0 | ruoyi / 4.6.2 | MFA 正确降级 UNKNOWN，0 误报 |
 | Y1 | 1,444 | 11.6 | 6 | yudao | 租户未授权/Druid/CORS/Swagger TP |
 
@@ -50,6 +50,10 @@
 | R12/R13 WAF 未识别 | detect_waf 增加无签名行为探测（union select/路径穿越返回 403 且正常请求未被拒） | R13 waf=generic-http-filter，-p 仍 0 CONFIRMED / 17 UNKNOWN |
 | R8 Cloud 指纹 | 增加 /prod-api/actuator/gateway/routes、env 强特征 | R8 复测 cms=ruoyi-cloud（unit test 亦覆盖） |
 | R4 部门树 UNKNOWN | 修正正向证据：treeData 返回合法 JSON（含 []）或 selectDeptTree 在无权限下 500 NPE，均证明业务层执行；数据行不再是必要条件 | R4 复测 CONFIRMED（5 条） |
+| D1 context-path 指纹为空 | cms 为空时用 detect_api_base 探测自定义前缀，再以 {target}/{prefix}/ 重指纹；新增 /ruoyi/css/ry-ui.css 等强特征 | D1 复测 ruoyi / 4.6.2 / context:/portal，4 条 CONFIRMED |
+| R6 登录后上传回读失败 | 回读 URL 同时尝试原地址与 target 的 base-path 前缀（/prod-api/profile/...） | R6 上传 CONFIRMED，证据包含可回读 URL |
+| C4-5 代码生成 SSTI 0 命中 | 代码生成组件增加 /tool/gen 指纹；去掉错误的 requires_auth（匿名差分已能证明模板求值） | C4-5 复测 CONFIRMED |
+| R6 H2/Plus 认证误报 | H2 matcher 不再把路径名当特征；Plus 认证排除 "No static resource"/认证失败 JSON | R6 H2/Plus 误报消失，R9 Plus 认证保持 |
 | R1/R2 组成差异 | 核对靶场：R1 无 .svn/.git 实体、备份在 /docs/*.sql；R2 设计项需再核对 | 判定为靶场构造差异，暂不通过放宽插件“修” |
 
 插件数 63（common 16）；SSOT/export/mkdocs/ruff 全部通过。
@@ -79,4 +83,4 @@
 
 ### 3. 不能发布的判断
 
-当前**仍未达到 2.0 发布条件**：本轮已修复 R4 越权、R6/R7/R8/R9 指纹变体、R7 sourcemap、R12/R13 WAF 四类 P0；剩余需收口的是 D1 context-path 指纹、R6 登录后上传 UNKNOWN、C4-5 代码生成 SSTI，以及 R1/R2 靶场与设计文档对账。R1/R2 的差异目前证据指向靶场构造（R1 无 .svn/.git、R2 Swagger 是登录后 200），不应通过放宽插件判定来“修”。
+本轮已修复全部此前列出的 P0/P1 代码缺口：R4 越权、R6/R7/R8/R9 指纹变体、R7 sourcemap、R12/R13 WAF、D1 context-path、R6 登录后上传、C4-5 代码生成 SSTI；同时消除 R6 H2/Plus 认证误报。剩余工作不再是检测代码：R1/R2 的差异已定性为靶场/设计文档对账（R1 无 .svn/.git、R2 Swagger 是登录后 200），下一步进入 2.0 发布工程（版本、安装包、迁移说明、最终全量验收）。

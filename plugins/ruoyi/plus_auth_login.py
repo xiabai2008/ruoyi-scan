@@ -8,6 +8,7 @@ import json
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
 from core.http import join_url
 from lib.colors import no, ok
+from lib.matcher import is_missing_resource_page
 from lib.output import emit
 from plugins.base import PluginBase
 
@@ -111,6 +112,30 @@ class PlusAuthLoginProbePlugin(PluginBase):
                 body = json.loads(resp.text or "")
             except Exception:
                 body = None
+        if isinstance(body, dict):
+            # 排除通用登录墙/认证失败 JSON：R6（RuoYi-Vue）的未知路径
+            # /prod-api/auth/login 返回 "No static resource auth/login"（code=500），
+            # 旧实现只看 code/msg 键存在，把它误报成 Plus 认证服务。
+            msg = str(body.get("msg", "") or "")
+            if is_missing_resource_page(resp.text or ""):
+                emit(no("未探测到 RuoYi-Plus 认证服务（响应为资源不存在错误页）"))
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_SAFE,
+                    url=url,
+                    evidence=f"响应为资源不存在错误页（code={body.get('code')}, msg={msg[:100]}）",
+                )
+            auth_failure_markers = ("认证失败", "无法访问系统资源", "账号未登录", "令牌不能为空", "未登录")
+            if body.get("code") in (401, 403) or any(m in msg for m in auth_failure_markers):
+                emit(no("未探测到 RuoYi-Plus 认证服务（命中通用认证失败 JSON）"))
+                return ScanResult(
+                    kind="info",
+                    name=self.name,
+                    status=STATUS_SAFE,
+                    url=url,
+                    evidence=f"响应为通用登录墙 JSON（code={body.get('code')}, msg={msg[:100]}），非独立 Plus 认证服务",
+                )
         if isinstance(body, dict) and "code" in body and "msg" in body:
             emit(ok("确认 RuoYi-Plus 认证服务（建议人工验证登录风控）"))
             return ScanResult(

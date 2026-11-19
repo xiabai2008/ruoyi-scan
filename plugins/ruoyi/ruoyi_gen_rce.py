@@ -22,8 +22,11 @@ class RuoyiGenRcePlugin(PluginBase):
     cve = "N/A"
     severity = SEVERITY_HIGH
     category = "vuln"
-    # 代码生成模块入口需要登录后才会渲染；未取得会话时不能把「登录墙/不存在」判成 SAFE
-    requires_auth = True
+    # 代码生成模块入口在真实若依中通常要登录；但本插件用「基线 vs 49 差分」
+    # 独立证明模板求值，若匿名即可执行则本身就是更严重的未授权 SSTI。
+    # 不能声明 requires_auth：否则 C4-5 这类匿名代码生成靶场的 CONFIRMED 会被
+    # 引擎统一降级为 UNKNOWN(no_session)，把已证实的模板执行又藏起来。
+    requires_auth = False
     description = "RuoYi 代码生成模块中的模板引擎可能存在 SSTI 漏洞，攻击者可通过模板注入实现 RCE"
     fix = "升级 RuoYi 至最新版本，对模板变量进行严格过滤"
     fix_detail = (

@@ -1143,6 +1143,25 @@ class ScanOrchestrator:
         else:
             fp_cache = FingerprintCache(session)
             fp_result = detect_cms(target, session, cache=fp_cache)
+            # 自定义 context-path 兜底（D1 实测 /portal）：根路径 302 到
+            # /portal/auth/signin，页面已品牌化，拿不到 RuoYi 关键字/favicon。
+            # 只在 cms 为空时探测一次前缀，再用 {target}/{context}/ 重新指纹。
+            # /prod-api、/admin-api 等前后端分离前缀不重复套一层（那由 basepath
+            # 阶段处理），避免把 /prod-api 再拼成 /prod-api/。
+            if not fp_result.cms:
+                try:
+                    from core.basepath import detect_api_base
+
+                    api_base = detect_api_base(target, session)
+                    proxy_prefixes = ("/prod-api", "/admin-api", "/jeecg-boot", "/api", "/nacos", "/gateway")
+                    if api_base and not any(api_base == p or api_base.startswith(p + "/") for p in proxy_prefixes):
+                        ctx_target = target.rstrip("/") + api_base + "/"
+                        ctx_fp = detect_cms(ctx_target, session)
+                        if ctx_fp.cms:
+                            ctx_fp.matched.append("context:%s" % api_base)
+                            fp_result = ctx_fp
+                except Exception:
+                    logger.debug("context-path 指纹兜底失败", exc_info=True)
             all_plugins = router.resolve(fp_result)
 
         task.fingerprint = fp_result

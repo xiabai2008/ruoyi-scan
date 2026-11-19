@@ -555,12 +555,13 @@ def match_h2_console(text):
     """
     if not text:
         return False
+    # 注意：不能把 "h2-console" 路径名当特征。若依登录墙的认证失败 JSON 会回显
+    # {"msg":"请求访问：/h2-console，认证失败..."}，R6 实测导致 H2 误报。
     h2_features = [
         "<title>H2 Console</title>",  # H2 Console 页面标题
         "H2 Console",  # H2 Console 文本
         "Generic H2",  # H2 驱动选项
         "org.h2.Driver",  # H2 JDBC 驱动类
-        "h2-console",  # H2 Console 路径
     ]
     return any(f in text for f in h2_features)
 
