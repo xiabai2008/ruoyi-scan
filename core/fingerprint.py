@@ -160,6 +160,11 @@ class FeatureBasedFingerprint(Fingerprint):
                 # 通配路由/网关兜底会把任意路径都回 200+0 字节，路径存在性没有意义。
                 if len(body) < item.get("min_length", 0):
                     continue
+                # 可选正文特征：强路径返回 200 还不够（R6 的 SPA/Actuator 通用端点
+                # 曾把 Gateway routes 误命中，导致 RuoYi-Vue 被判成 ruoyi-cloud）。
+                body_contains = item.get("body_contains", [])
+                if body_contains and not all(token in body for token in body_contains):
+                    continue
                 if expect == "json":
                     json_keys = item.get("json_keys", [])
                     ok = _json_has_keys(ct, body, json_keys) if json_keys else _looks_like_api_json(ct, body)

@@ -60,8 +60,12 @@ CMS_FEATURES = {
         "strong_paths": [
             {"path": "/nacos/", "expect": "any", "min_length": 20},  # Nacos 控制台
             {"path": "/gateway/", "expect": "any", "min_length": 20},  # Spring Gateway
-            {"path": "/prod-api/actuator/gateway/routes", "expect": "any", "min_length": 20},  # Gateway 路由表
-            {"path": "/prod-api/actuator/env", "expect": "any", "min_length": 20},  # Actuator env
+            {
+                "path": "/prod-api/actuator/gateway/routes",
+                "expect": "any",
+                "min_length": 20,
+                "body_contains": ["route_id"],
+            },  # Gateway 路由表（必须有 route_id，避免普通 Actuator/SPA 误判）
         ],
         "login_keywords": ["RuoYi-Cloud", "若依微服务"],
         "weak_keywords": ["ruoyi-cloud", "RuoYiCloud", "nacos"],

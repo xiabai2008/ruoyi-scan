@@ -29,7 +29,7 @@ LEGACY_LONG_FUNCTIONS = {
     "cli/runner.py:_cli_event_handler": 194,
     "cli/runner.py:run_mode": 219,
     "cli/runner.py:run_mode_batch": 153,
-    "plugins/ruoyi/cve_2025_70986_select_dept_tree.py:Cve202570986SelectDeptTreePlugin.verify": 202,
+    "plugins/ruoyi/cve_2025_70986_select_dept_tree.py:Cve202570986SelectDeptTreePlugin.verify": 209,
     "plugins/ruoyi/default_password.py:DefaultPasswordPlugin.verify": 228,
     "plugins/ruoyi/job_invoke_target.py:JobInvokeTargetPlugin.verify": 158,
     "plugins/ruoyi/job_rce.py:JobRcePlugin.verify": 207,

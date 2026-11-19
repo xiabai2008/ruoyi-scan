@@ -289,6 +289,13 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             # 全部未命中权限门 ⇒ 业务层在无权限下执行 ⇒ 缺少权限注解
             leaked = self._extract_leaked_depts(bodies["treeData"])
             tree_name = self._rendered_dept_name(bodies["selectDeptTree"])
+            select_status = int(getattr(r_page, "status_code", 0) or 0)
+            # 业务层执行的正向证据：treeData 返回合法 JSON，或 selectDeptTree
+            # 在无权限下抛出 500（R4 实测：treeData=[]、selectDeptTree=500 JSON NPE）。
+            # 后者是模块 docstring 记录的「漏洞版业务层执行后 NPE」签名，不是端点缺失。
+            business_executed = self._is_json_body(bodies["treeData"]) or (
+                select_status == 500 and self._is_json_body(bodies["selectDeptTree"])
+            )
             if leaked:
                 detail = f"泄露 {len(leaked)} 个部门，样例：" + "、".join(str(n) for _, n in leaked[:3])
             elif tree_name:
@@ -296,24 +303,24 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
             else:
                 detail = (
                     f"业务层在无权限下仍执行（treeData 返回 {len(bodies['treeData'])} 字节 JSON、"
-                    f"selectDeptTree 返回 {len(bodies['selectDeptTree'])} 字节），但未能取到具体部门条目"
+                    f"selectDeptTree 返回 HTTP {select_status} {len(bodies['selectDeptTree'])} 字节）"
                 )
             extra_note = "；未认证请求同样可读取（匿名暴露，更严重）" if anon_open else ""
-            # P1-0b：必须拿到真实部门数据行才叫「越权」。
-            # treeData 返回 [] / 页面没有 treeName 时，只能证明业务层执行了，
-            # 不能证明低权拿到了本不该拿到的数据——空列表一律 UNKNOWN。
-            if not leaked and not tree_name and not anon_open:
-                emit(no("部门树越权访问（无数据返回，不能证明越权）"))
+            # P1-0b 修订：数据行不是必要条件。CVE-2025-70986 的本质是「接口缺少
+            # 权限注解、业务层被执行」；低权账号被数据权限过滤后返回 [] 同样成立
+            # （R4 实测 treeData=[] + selectDeptTree=500 NPE）。只有两个探针都没有
+            # 业务执行形态时才退回 UNKNOWN，避免把「无数据」误判成 SAFE。
+            if not business_executed:
+                emit(no("部门树越权访问（无业务执行形态，不能证明越权）"))
                 return ScanResult(
                     kind="info",
                     name=self.name,
                     status=STATUS_UNKNOWN,
                     url=url_data,
                     evidence=(
-                        f"低权账号 {low_user} 登录成功；业务层在无权限下执行"
-                        f"（treeData 返回 {len(bodies['treeData'])} 字节、"
-                        f"selectDeptTree 返回 {len(bodies['selectDeptTree'])} 字节），"
-                        "但未返回任何部门数据行；空列表/空页面不能证明越权，不予判定"
+                        f"低权账号 {low_user} 登录成功，但两个探针均无业务执行形态"
+                        f"（treeData {len(bodies['treeData'])} 字节、"
+                        f"selectDeptTree HTTP {select_status} {len(bodies['selectDeptTree'])} 字节）"
                     ),
                     unknown_reason=UnknownReason.INSUFFICIENT_EVIDENCE.value,
                 )

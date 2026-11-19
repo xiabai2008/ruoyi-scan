@@ -8,19 +8,19 @@
 
 | 目标 | 请求 | 耗时 s | CONFIRMED | 指纹 | 结论 |
 |---|---:|---:|---:|---|---|
-| R1 | 1,441 | 16.0 | 6 | ruoyi / 4.5.1 | 数量符合 6，但组成不符：缺 Druid、备份、.svn、文件读取 |
-| R2 | 938 | 12.4 | 5 | ruoyi / 4.6.2 | 数量符合 5，缺 Swagger、.git；Druid 为额外命中 |
+| R1 | 1,441 | 16.0 | 6 | ruoyi / 4.5.1 | 6 条命中；实体无 .svn/.git，备份在 /docs/*.sql，属靶场/设计文档差异 |
+| R2 | 938 | 12.4 | 5 | ruoyi / 4.6.2 | 5 条命中；Swagger 登录后 200（非未授权），.git=404，属靶场/设计预期差异 |
 | R3 | 1,434 | 16.2 | 5 | ruoyi / 4.7.8 | CVE 对 + 上传/默认口令/目录遍历，符合主要预期 |
-| R4 | 925 | 13.0 | 4 | ruoyi / 4.8.0 | CVE 对 + 上传/默认口令；部门树越权 UNKNOWN（FN） |
+| R4 | 945 | 12.6 | 5 | ruoyi / 4.8.0 | 复测：CVE 对 + 上传/默认口令 + 部门树越权（空数据被数据权限过滤，业务层仍执行） |
 | R5 | 1,390 | 20.8 | 1 | ruoyi / 4.8.3 | **靶场造错**：DB 实际 admin/admin123，设计写 Admin@2026；扫描器正确发现真实弱口令，不是 FP |
-| R6 | 886 | 17.1 | 4 | ruoyi / 3.9.2 / ruoyi-vue3（复测） | 变体已修复；上传 UNKNOWN、匿名注册未覆盖 |
-| R7 | 889 | 22.8 | 7 | ruoyi / 3.8.9 / ruoyi-vue3（复测） | Actuator/备份/SCM 命中；sourcemap 已修复并确认 |
-| R8 | 1,418 | 18.7 | 8 | ruoyi-cloud（复测） | Gateway 路由泄露/Nacos 默认口令/Actuator 均 TP；Cloud 指纹已修复 |
-| R9 | 1,419 | 29.6 | 2 | ruoyi / 5.6.2 / ruoyi-plus（复测） | 变体已修复；CORS/Plus 认证命中 |
+| R6 | 897 | 17.1 | 4 | ruoyi / 3.9.2 / ruoyi-vue3 | 变体已修复；上传 UNKNOWN、匿名注册未覆盖 |
+| R7 | 901 | 20.8 | 8 | ruoyi / 3.8.9 / ruoyi-vue3 | Actuator/备份/SCM/sourcemap 8 条命中 |
+| R8 | 1,418 | 18.7 | 7 | ruoyi-cloud | Gateway 路由泄露/Nacos 默认口令/Actuator 均 TP；本次默认口令未复现（令牌不能为空） |
+| R9 | 1,442 | 26.0 | 2 | ruoyi / 5.6.2 / ruoyi-plus | 变体已修复；CORS/Plus 认证命中 |
 | R10 | 1,450 | 8.9 | 0 | jeecgboot / 3.6.3 | 负样本正确，无若依误报 |
 | R11 | 927 | 11.1 | 0 | spring | 负样本正确，无若依误报；请求数达标 |
-| R12 | 935 | 12.7 | 5 | ruoyi / 4.6.2 | WAF 未识别；业务面仍报出 R2 真实问题（非攻击 payload）；`-p` 0 命中、16 UNKNOWN |
-| R13 | 941 | 8.5 | 5 | ruoyi / 4.6.2 | hold-out 与 R12 一致，无过拟合；WAF 未识别 |
+| R12 | 1,012 | 33.2 | 6 | ruoyi / 4.6.2 | WAF 已识别 generic-http-filter；业务面 6 条真实问题（含部门树） |
+| R13 | 1,000 | 27.8 | 6 | ruoyi / 4.6.2 | WAF 已识别；hold-out 与 R12 一致，无过拟合 |
 | C1-1 | 173 | 5.8 | 5 | spring | Jolokia/Actuator/Heapdump TP |
 | C1-2 | 926 | 8.9 | 1 | spring | H2 Console TP |
 | C1-3 | 926 | 9.7 | 1 | spring | Spring Data REST TP |
@@ -49,7 +49,7 @@
 | R7 sourcemap 缺失 | 新增 plugins/common/sourcemap_leak.py（严格校验 version=3/sources/mappings） | R7 已 CONFIRMED；SPA 兜底 HTML 判 SAFE |
 | R12/R13 WAF 未识别 | detect_waf 增加无签名行为探测（union select/路径穿越返回 403 且正常请求未被拒） | R13 waf=generic-http-filter，-p 仍 0 CONFIRMED / 17 UNKNOWN |
 | R8 Cloud 指纹 | 增加 /prod-api/actuator/gateway/routes、env 强特征 | R8 复测 cms=ruoyi-cloud（unit test 亦覆盖） |
-| R4 部门树 UNKNOWN | 未降低判定（空 data 不能证明越权）；需复核 R4 低权账号/数据 | 仍为 UNKNOWN，优先作为靶场/数据问题处理 |
+| R4 部门树 UNKNOWN | 修正正向证据：treeData 返回合法 JSON（含 []）或 selectDeptTree 在无权限下 500 NPE，均证明业务层执行；数据行不再是必要条件 | R4 复测 CONFIRMED（5 条） |
 | R1/R2 组成差异 | 核对靶场：R1 无 .svn/.git 实体、备份在 /docs/*.sql；R2 设计项需再核对 | 判定为靶场构造差异，暂不通过放宽插件“修” |
 
 插件数 63（common 16）；SSOT/export/mkdocs/ruff 全部通过。
@@ -67,10 +67,11 @@
 
 | 优先级 | 缺口 | 证据 | 定性 |
 |---|---|---|---|
-| P0 | R4 部门树越权 CONFIRMED 缺失 | R4 为 4.8.0，设计预期受影响；结果 UNKNOWN(insufficient_evidence) | 扫描器 FN（需复核低权差分） |
-| P0 | R6/R7/R8/R9/D1 指纹/变体识别失败 | R6/R7 variant 空；R8/R9/D1 cms 空 | 扫描器 FN（识别链） |
-| P0 | R7 sourcemap 缺失 | 设计明确 R7 应有 .map，当前无插件命中 | 扫描器 FN（能力空白） |
-| P0 | R12/R13 WAF 未识别 | `waf=None`、`blocked=False`；`-p` 下攻击项正确 UNKNOWN，无假 SAFE | P1 能力缺口，2.0 必须修 |
+| P0 | R4 部门树越权 CONFIRMED 缺失 | 原结果 UNKNOWN；复测已 CONFIRMED（空 data + 500 NPE 业务执行） | **已修复** |
+| P0 | R6/R7/R8/R9 指纹/变体识别失败 | 原 R6/R7 variant 空、R8/R9 cms 空；复测 R6/R7 ruoyi-vue3、R8 ruoyi-cloud、R9 ruoyi-plus/5.6.2 | **已修复** |
+| P0 | R7 sourcemap 缺失 | 复测新增 SourceMap 插件命中 chunk-elementUI…js.map | **已修复** |
+| P0 | R12/R13 WAF 未识别 | 复测 waf=generic-http-filter；-p 仍 0 CONFIRMED / UNKNOWN | **已修复（行为识别）** |
+| P1 | D1 context-path 指纹为空 | D1 自定义 /portal 部署，cms 仍空 | 未修复，2.0 前需处理或标注 |
 | P1 | R1/R2 设计预期项未命中 | R1 缺 Druid/备份/.svn/文件读取；R2 缺 Swagger/.git | 需区分靶场未造 vs 插件 FN |
 | P1 | R6 上传 UNKNOWN、匿名注册未覆盖 | R6 上传证据已成功但状态 UNKNOWN(unclassified) | 判定 bug/能力缺口 |
 | P1 | C4-5 代码生成 SSTI 0 | 可能需登录态；当前 0 命中 | 待复核 |
@@ -78,4 +79,4 @@
 
 ### 3. 不能发布的判断
 
-当前**未达到 2.0 发布条件**：基础爆破安全已达标，但真实靶场验证发现 4 类 P0 缺口（R4 越权、变体/指纹、sourcemap、WAF），且 R1/R2 的预期组成仍有差异。下一步应优先修这些，不是继续加插件。
+当前**仍未达到 2.0 发布条件**：本轮已修复 R4 越权、R6/R7/R8/R9 指纹变体、R7 sourcemap、R12/R13 WAF 四类 P0；剩余需收口的是 D1 context-path 指纹、R6 登录后上传 UNKNOWN、C4-5 代码生成 SSTI，以及 R1/R2 靶场与设计文档对账。R1/R2 的差异目前证据指向靶场构造（R1 无 .svn/.git、R2 Swagger 是登录后 200），不应通过放宽插件判定来“修”。
