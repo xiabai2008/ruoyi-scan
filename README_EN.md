@@ -83,7 +83,7 @@ mapping (MLPS clause + OWASP category).
 | POC check | `-p <url>` | Vulnerability verification only; fast, low request count |
 | Full scan | `-u <url>` | Fingerprint → directory scan → POC → weak-password brute force |
 | Directory scan | `-m <url>` | Sensitive paths, admin panels, actuator endpoints |
-| Login brute force | `-l <url>` | Druid / default admin credentials (`--pass-level top100` to narrow) |
+| Login brute force | `-l <url>` | Druid / default admin credentials (default `--pass-level top100`; use `full` explicitly) |
 
 Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage.md](docs/usage.md).
 

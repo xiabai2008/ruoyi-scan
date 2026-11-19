@@ -1,7 +1,8 @@
 # Druid 弱口令爆破：6 用户 × password.txt 字典，POST /druid/submitLogin，判定 'success' in t
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
 from config import settings
 from core.http import join_url
+from lib.brute_safety import BruteGuard
 from lib.colors import no, ok
 from lib.output import emit
 from plugins.base import PluginBase
@@ -93,6 +94,7 @@ class DruidBrutePlugin(PluginBase):
             )
 
         got_response = False  # 是否至少收到一次响应（避免全网络异常误判 SAFE）
+        guard = BruteGuard()  # 锁定/429/验证码检测：命中即停止，不能把"没跑完"判成 SAFE
         for user in user_list:
             for password in password_list:
                 data = {"loginUsername": user, "loginPassword": password}
@@ -115,6 +117,21 @@ class DruidBrutePlugin(PluginBase):
                     # 必须整体相等：HTML 错误页/WAF 页仅包含该字面量时不得判成功
                     low = login_response.text.lower().strip()
                     success_ok = low in ("success", '{"success":true}', '{"success": true}')
+                # 先看是否触发锁定/限流/验证码：命中后继续爆破既伤目标，
+                # 也会把后续失败误读成"全部口令错误"。
+                if guard.observe(login_response):
+                    emit(no(f"Druid 爆破已停止：{guard.stop_reason}"))
+                    return ScanResult(
+                        kind="brute",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        unknown_reason=UnknownReason.BRUTE_BLOCKED.value,
+                        evidence=(
+                            f"{guard.stop_reason}；已尝试 {guard.attempts} 次，未完成全部字典，不能判定口令不存在"
+                        ),
+                        extra={"attempts": guard.attempts, "blocked": guard.blocks},
+                    )
                 if success_ok:
                     # 成功=绿色（对齐原脚本成功配色）
                     emit(ok(f"登录成功,用户名:{user},密码:{password}"))

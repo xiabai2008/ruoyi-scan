@@ -21,7 +21,7 @@
 ## 2. UNKNOWN 原因码（unknown_reason）
 
 **规则**：写 UNKNOWN 时必须说明原因（`auth_wall` / `denied` / `unreachable` /
-`insufficient_evidence` / `budget_exceeded` / `oast_no_callback` / `no_login_page` …）。原因由产生点写入，报告只展示。
+`insufficient_evidence` / `budget_exceeded` / `oast_no_callback` / `no_login_page` / `brute_blocked` …）。原因由产生点写入，报告只展示。
 
 **为什么**：v1.6 复盘发现"按证据文本猜原因"会把正确的登录墙降级误判成误降级。
 

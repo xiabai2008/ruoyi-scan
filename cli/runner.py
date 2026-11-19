@@ -222,7 +222,7 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         report_dir="",  # CLI 自行处理报告（含基线/差异/通知等后处理）
         report_format=getattr(args, "report_format", "all") or "all",
         no_dedup=getattr(args, "no_dedup", False),
-        pass_level=getattr(args, "pass_level", "full"),
+        pass_level=getattr(args, "pass_level", "top100"),
         portscan=getattr(args, "portscan", False),
         ports=getattr(args, "ports", "") or "",
         bypass_waf=getattr(args, "bypass_waf", "auto"),

@@ -38,6 +38,7 @@
   （全成功 / 部分失败 / 全失败），不再以"删了实现也删了测试"收尾。
 
 ### Added
+- **爆破安全默认值**：`--pass-level` 默认从 `full` 改为 `top100`，完整字典需显式开启；Druid 爆破检测 429/账号锁定/验证码并主动停止，返回 `UNKNOWN(brute_blocked)` 而不是误判 SAFE；R1/R2 带认证扫描结果集不变（6/5 CONFIRMED）。
 - **性能：无登录页跳过 brute + 插件级成本归因 + request_count 修正**：
   - 登录页探测（根/登录/认证/Druid 路径）明确为无登录页时，引擎跳过 `requires_login_page` 爆破插件；
     R11 类 Spring API 负样本的 `-u` 请求从 **7,185 → 927**，墙钟 41.6s → 8.2s，结果集逐项不变；

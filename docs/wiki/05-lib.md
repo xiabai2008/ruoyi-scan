@@ -236,6 +236,8 @@ to_scan_result(ComponentVersionResult)   # 转成标准 ScanResult（category='c
   共用计数器；报告 `request_count` 是全部会话总和（旧实现只统计主会话，R11 实测少 88 条）。
 - **插件级埋点**：引擎在插件执行线程记录 `{plugin, duration_ms, requests}`，写入报告
   `plugin_metrics`，并发事件 `plugin_metric`；匿名/隔离会话的请求也归因到发起插件。
+- **爆破安全默认值**：`--pass-level` 默认 `top100`，Druid 检测锁定/429/验证码后停止并返回
+  `UNKNOWN(brute_blocked)`；完整字典需显式 `--pass-level full`。
 - **无登录页跳过 brute**：`-u/-l` 做低成本登录页探测；明确无登录页时跳过
   `requires_login_page` 插件（Druid 保持 SAFE、默认口令保持 UNKNOWN(no_login_page)），
   R11 API 负样本 `-u` 请求 7,185 → 927，结果逐项不变。

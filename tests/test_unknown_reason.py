@@ -35,6 +35,7 @@ def test_unknown_reason_enum_is_stable():
         "unreachable",
         "oast_no_callback",
         "no_login_page",
+        "brute_blocked",
         "no_evidence",
         "blocked",
         "budget_exceeded",

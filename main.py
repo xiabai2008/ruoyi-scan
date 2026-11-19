@@ -141,7 +141,11 @@ def build_parser():
         "--cms", default=None, choices=_known_categories(), metavar="CMS", help="手动指定 CMS（默认自动识别）"
     )
     group.add_argument(
-        "--pass-level", default="full", choices=["top100", "top1000", "full"], metavar="LEVEL", help="口令字典级别"
+        "--pass-level",
+        default="top100",
+        choices=["top100", "top1000", "full"],
+        metavar="LEVEL",
+        help="口令字典级别（默认 top100；full 需显式开启）",
     )
     group.add_argument("--no-cta", action="store_true", default=False, help="关闭扫描结尾的仓库引导提示")
     group.add_argument(

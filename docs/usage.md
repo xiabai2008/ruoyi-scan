@@ -1909,6 +1909,8 @@ python -m venv .venv
   不再对 API-only 目标喷 6×1000 字典。
 - **插件级 requests/duration**：报告 JSON 的 `plugin_metrics` 与 WebSocket `plugin_metric` 事件
   逐插件给出实际请求数、耗时；便于定位“哪个插件最贵”。
+- **爆破安全默认值**：`--pass-level` 默认 `top100`，完整字典需显式 `--pass-level full`；
+  Druid 收到 429/账号锁定/验证码要求时立即停止并返回 `UNKNOWN(brute_blocked)`，不把"没跑完"判成 SAFE。
 - **request_count**：主会话、recon、`anonymous()`、`isolated_auth_session` 共用计数器，
   报告请求数与网关/服务端日志一致；批量报告也使用真实请求数/耗时，不再用结果条数冒充。
 

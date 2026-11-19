@@ -289,7 +289,7 @@ v1.7 起改用带 Ground Truth 的标准指标（自建靶场、匿名视角，*
 | 被动代理 | HTTP/HTTPS 代理，捕获流量自动扫描 |
 | OAST 带外验证 | `--oast` 扫描侧接线：Log4j JNDI / 盲 SSRF / 盲 XXE；HTTP + 按需 TCP 回调，回调命中才 CONFIRMED |
 | Cloud 能力包 | Gateway 路由表泄露 / Nacos 控制台默认口令（8080/8848 探测）/ job·gen Cloud 路由别名 |
-| 性能与成本归因 | 无登录页自动跳过 brute 字典；插件级 requests/duration 埋点；request_count 统计主/匿名/隔离/recon 全部会话 |
+| 性能与成本归因 | 无登录页自动跳过 brute 字典；默认 top100 + 锁定/429 自动停止；插件级 requests/duration 埋点；request_count 统计全部会话 |
 | 业务逻辑检测 | IDOR / 越权 / 参数篡改 / 竞争条件 4 类检测器 |
 | 认证后深度扫描 | `--auth-surface` 登录态接口资产盘点 + 越权矩阵（匿名重放判未授权 / 低权重放判垂直越权） |
 | CVE 同步 | NVD + GHSA 双源回退 + 24h TTL 缓存 + CWE→OWASP/等保 合规映射 |
@@ -482,7 +482,7 @@ docker compose down
 | `-l <url>` | 登录爆破 |
 | `-f <file>` | 批量扫描（从文件读取目标列表） |
 | `--cms <ruoyi\|spring>` | 手动指定 CMS（跳过指纹识别） |
-| `--pass-level <lvl>` | 口令字典级别 top100/top1000/full |
+| `--pass-level <lvl>` | 口令字典级别 top100/top1000/full（默认 top100；full 需显式开启） |
 | `--template <name>` | 扫描模板（quick/deep/compliance/dengbao） |
 | `--template-list` | 列出所有可用模板 |
 | `--config <path>` | YAML 配置文件（CLI 参数优先级高于配置） |

@@ -20,7 +20,7 @@ class ScanCreateRequest(BaseModel):
     timeout: int = Field(10, ge=1, le=120, description="请求超时秒数")
     report_format: str = Field("all", description="报告格式：html/json/csv/pdf/docx/xlsx，逗号分隔；all=全部")
     no_dedup: bool = Field(False, description="关闭结果去重聚合")
-    pass_level: str = Field("full", description="口令字典级别：top100/top1000/full")
+    pass_level: str = Field("top100", description="口令字典级别：top100/top1000/full（默认 top100，full 显式开启）")
     portscan: bool = Field(False, description="扫描前执行端口扫描")
     ports: str = Field("", description="自定义端口（逗号分隔，如 80,443,8080）")
     bypass_waf: str = Field("auto", description="WAF 绕过：auto=自动/on=强制/off=禁用")

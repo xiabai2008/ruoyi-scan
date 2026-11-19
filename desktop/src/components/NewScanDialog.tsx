@@ -30,7 +30,7 @@ export function NewScanDialog() {
   const [threads, setThreads] = useState(8);
   const [rate, setRate] = useState(0);
   const [timeout, setTimeoutV] = useState(10);
-  const [passLevel, setPassLevel] = useState<"top100" | "top1000" | "full">("full");
+  const [passLevel, setPassLevel] = useState<"top100" | "top1000" | "full">("top100");
   const [bypassWaf, setBypassWaf] = useState<"auto" | "on" | "off">("auto");
   const [portscan, setPortscan] = useState(false);
   const [ports, setPorts] = useState("");

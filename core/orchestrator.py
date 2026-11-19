@@ -277,7 +277,7 @@ class ScanRequest:
     report_dir: str = ""  # 报告输出目录（空=不生成报告）
     report_format: str = "all"  # 报告格式
     no_dedup: bool = False  # 关闭去重
-    pass_level: str = "full"  # 口令字典级别
+    pass_level: str = "top100"  # 口令字典级别（安全默认：完整字典需显式 --pass-level full）
     portscan: bool = False  # 端口扫描
     ports: str = ""  # 自定义端口
     bypass_waf: str = "auto"  # WAF 绕过模式 auto/on/off

@@ -207,7 +207,7 @@
     ruoyi-scan -l http://127.0.0.1:8080/ --pass-level top1000
 
 说明：
-    --pass-level 三档：top100 / top1000 / full（默认 full）。
+    --pass-level 三档：top100 / top1000 / full（默认 top100；完整字典需显式 full）。
     内置 6 个 Druid 用户名 + 若依默认口令字典。
     对生产环境请务必先确认账号锁定策略，避免锁死管理员账号。
 
@@ -405,7 +405,7 @@
 
     --pass-level top100     只跑前 100 条，最快
     --pass-level top1000    前 1000 条
-    --pass-level full       全量（默认）
+    --pass-level full       全量（默认 top100，full 需显式开启）
 
     建议顺序：top100 摸底 -> 有线索再 top1000 -> 确认无锁定策略后才 full。
 

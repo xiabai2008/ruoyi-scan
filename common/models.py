@@ -28,6 +28,7 @@ class UnknownReason(str, Enum):
     UNREACHABLE = "unreachable"  # 网络异常/超时
     OAST_NO_CALLBACK = "oast_no_callback"  # 带外 payload 已发出但未收到回调（不能判不存在）
     NO_LOGIN_PAGE = "no_login_page"  # 目标无登录页，爆破类未执行（避免无意义字典请求）
+    BRUTE_BLOCKED = "brute_blocked"  # 爆破触发锁定/限流/验证码，已主动停止（不是"口令不存在"）
     NO_EVIDENCE = "no_evidence"  # SAFE 缺判定证据被降级
     BLOCKED = "blocked"  # 全站 WAF 拦截
     BUDGET_EXCEEDED = "budget_exceeded"  # 超出 --time-budget，本项未执行
@@ -47,6 +48,7 @@ UNKNOWN_REASON_LABELS: Dict[str, str] = {
     UnknownReason.UNREACHABLE.value: "目标不可达",
     UnknownReason.OAST_NO_CALLBACK.value: "带外未回调",
     UnknownReason.NO_LOGIN_PAGE.value: "无登录页跳过爆破",
+    UnknownReason.BRUTE_BLOCKED.value: "爆破被锁定/风控中止",
     UnknownReason.NO_EVIDENCE.value: "缺少判定证据",
     UnknownReason.BLOCKED.value: "全站 WAF 拦截",
     UnknownReason.BUDGET_EXCEEDED.value: "超出时间预算",
@@ -64,6 +66,7 @@ UNKNOWN_REASON_HINTS: Dict[str, str] = {
     UnknownReason.UNREACHABLE.value: "检查目标连通性/代理后重试",
     UnknownReason.OAST_NO_CALLBACK.value: "确认 --oast-host 目标是可达的；无回调不能判不存在",
     UnknownReason.NO_LOGIN_PAGE.value: "目标无登录页，无需跑口令字典",
+    UnknownReason.BRUTE_BLOCKED.value: "目标出现锁定/限流/验证码，已主动停止；请人工复核，勿继续爆破",
     UnknownReason.NO_EVIDENCE.value: "插件判定缺少可复核证据，需人工复核",
     UnknownReason.BLOCKED.value: "尝试 --bypass-waf 或降低速率后重扫",
     UnknownReason.BUDGET_EXCEEDED.value: "调大 --time-budget",
