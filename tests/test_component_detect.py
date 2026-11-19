@@ -179,26 +179,42 @@ def test_detect_log4j_requires_oast():
     print("PASS test_detect_log4j_requires_oast")
 
 
+class FakeOastInteraction:
+    def __init__(self, hit):
+        self._hit = hit
+
+    def jndi_url(self, protocol="ldap"):
+        return "%s://127.0.0.1:1389/abc123" % protocol
+
+    def wait(self, timeout=None):
+        return self._hit
+
+    def callbacks(self):
+        return [{"from": "127.0.0.1", "port": 53100, "bytes": 32}] if self._hit else []
+
+    def close(self):
+        pass
+
+
 class FakeOastClient:
     """mock OAST 客户端（不真实请求）"""
+
+    timeout = 1.0
 
     def __init__(self, hit=False):
         self.hit = hit
 
-    def get_payload(self, vuln_type):
-        return "interact.example.com/abc123"
-
-    def wait_callback(self, interaction_id=None, timeout=0):
-        return self.hit
+    def new_tcp_interaction(self):
+        return FakeOastInteraction(self.hit)
 
 
 def test_detect_log4j_with_oast_hit():
-    """OAST 回调命中 → UNKNOWN + 人工复核提示（不自动 CONFIRMED）"""
+    """OAST TCP 回调命中 → CONFIRMED（带外确认，不加载远程类）"""
     sess = FakeSession({})
     res = detect_log4j("http://target/", sess, oast_client=FakeOastClient(hit=True))
-    assert res.status == STATUS_UNKNOWN, res.status
+    assert res.status == STATUS_CONFIRMED, res.status
     assert res.cve == "CVE-2021-44228"
-    assert "人工复核" in res.evidence
+    assert "TCP 回调" in res.evidence
     print("PASS test_detect_log4j_with_oast_hit")
 
 

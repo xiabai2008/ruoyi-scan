@@ -1,7 +1,10 @@
 # 定时任务 RCE：未授权访问 /monitor/job/edit 接口存在性判定（不执行实际 RCE）
+from typing import Optional
+
 from common.logger import get_logger
-from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
 from core.http import join_url
+from lib.cloud_routes import cloud_candidate_paths, discover_cloud_profile
 from lib.colors import no, ok
 from lib.matcher import is_missing_resource_page, match_positive
 from lib.output import emit
@@ -93,6 +96,110 @@ class JobRcePlugin(PluginBase):
         "cronExpression",
     ]
 
+    def _probe_cloud_alias(self, target, session) -> Optional[ScanResult]:
+        """单机路径不存在时，按 Cloud 网关路由别名再探一次（R8 现场）。
+
+        Cloud 的 job controller 是 RESTful 形态：
+          PUT /prod-api/schedule/job  （网关 StripPrefix=1 → /job）
+        而不是单机版的 POST /monitor/job/edit。这里只发不存在的 jobId，
+        不创建/修改任务；鉴权拦截返回 UNKNOWN(denied)，绝不冒充 SAFE。
+        """
+        profile = getattr(session, "cloud_profile", None)
+        if not profile:
+            profile = discover_cloud_profile(session, target)
+        if not profile:
+            return None
+        candidates = cloud_candidate_paths("/monitor/job", profile)
+        if len(candidates) <= 1:
+            return None
+        data = {
+            "jobId": "99999",
+            "jobName": "ruoyi_scan_probe",
+            "jobGroup": "DEFAULT",
+            "invokeTarget": "ryTask.ryNoParams",
+            "cronExpression": "0/10 * * * * ?",
+            "misfirePolicy": "1",
+            "concurrent": "1",
+            "status": "1",
+        }
+        anon = getattr(session, "anonymous", None)
+        probe = anon() if callable(anon) else session
+        tried = []
+        try:
+            for path in candidates[1:]:
+                url = join_url(target, path)
+                try:
+                    resp = probe.request(
+                        "PUT",
+                        url,
+                        json=data,
+                        timeout=min(float(getattr(probe, "timeout", 10) or 10), 5.0),
+                    )
+                except Exception:
+                    tried.append(f"{path}=网络异常")
+                    continue
+                code = getattr(resp, "status_code", 0)
+                text = resp.text or ""
+                tried.append(f"{path}=HTTP {code}")
+                if is_missing_resource_page(text):
+                    continue
+                wall = login_wall_reason(resp)
+                if wall:
+                    return ScanResult(
+                        kind="info",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        unknown_reason=UnknownReason.AUTH_WALL.value,
+                        evidence="Cloud 别名 %s 被登录墙拦截：%s" % (path, login_wall_evidence(wall, "接口是否未鉴权")),
+                    )
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = None
+                if isinstance(body, dict):
+                    r_code = body.get("code")
+                    msg = str(body.get("msg", ""))
+                    if code in (401, 403) or r_code in (401, 403):
+                        emit(no("定时任务 RCE：Cloud 别名存在但鉴权拒绝"))
+                        return ScanResult(
+                            kind="info",
+                            name=self.name,
+                            status=STATUS_UNKNOWN,
+                            url=url,
+                            unknown_reason=UnknownReason.DENIED.value,
+                            evidence="Cloud 别名 %s 可达但鉴权拒绝（HTTP %s, code=%s, msg=%s）"
+                            % (path, code, r_code, msg[:120]),
+                        )
+                    if r_code in (200, 500) and "code" in body and "msg" in body:
+                        task_specific = match_positive(msg, self.JOB_SPECIFIC_KEYWORDS) or ("jobId" in body)
+                        if task_specific:
+                            emit(ok("存在定时任务 RCE 漏洞（Cloud 别名未授权访问）"))
+                            return ScanResult(
+                                kind="vuln",
+                                name=self.name,
+                                severity=self.severity,
+                                status=STATUS_CONFIRMED,
+                                url=url,
+                                evidence="Cloud 别名 %s 未鉴权进入业务层：code=%s msg=%s" % (path, r_code, msg),
+                                extra={"cloud_alias": path, "code": r_code, "msg": msg},
+                                fix=self.fix,
+                            )
+                if code in (401, 403):
+                    return ScanResult(
+                        kind="info",
+                        name=self.name,
+                        status=STATUS_UNKNOWN,
+                        url=url,
+                        unknown_reason=UnknownReason.DENIED.value,
+                        evidence="Cloud 别名 %s 可达但鉴权拒绝（HTTP %s）" % (path, code),
+                    )
+        finally:
+            if probe is not session:
+                probe.close()
+        emit(no("定时任务 RCE：Cloud 别名均未返回可判定证据（%s）" % ", ".join(tried)))
+        return None
+
     def verify(self, target, session):
         """探测 /monitor/job/edit 是否未授权可访问（仅存在性判定，不修改任务、不触发 RCE）
 
@@ -152,7 +259,10 @@ class JobRcePlugin(PluginBase):
         #    旧逻辑据此判 CONFIRMED（假阳性）。Cloud 的定时任务路由与单机版不同，
         #    该探测路径在网关下根本不存在，故只能 UNKNOWN（不能宣称已绕过鉴权，
         #    也不能宣称接口已加固）。
-        if is_missing_resource_page(text):
+        if is_missing_resource_page(text) or code in (404, 405):
+            cloud_result = self._probe_cloud_alias(target, session)
+            if cloud_result is not None:
+                return cloud_result
             emit(no("定时任务 RCE：探测路径不存在（资源不存在包装页），无法判定"))
             return ScanResult(
                 kind="info",

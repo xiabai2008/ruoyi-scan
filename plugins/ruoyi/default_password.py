@@ -21,6 +21,19 @@ class DefaultPasswordPlugin(PluginBase):
     cve = "N/A"
     severity = "high"
     category = "brute"
+    requires_login_page = True
+
+    @classmethod
+    def no_login_page_result(cls) -> ScanResult:
+        """无登录页：保持历史 UNKNOWN(info) 结果形态，不执行任何登录请求。"""
+        return ScanResult(
+            kind="brute",
+            name=cls.name,
+            status=STATUS_UNKNOWN,
+            unknown_reason="no_login_page",
+            evidence="目标未发现登录页，默认口令探测未执行（无字典请求）",
+        )
+
     description = (
         "若依后台默认口令 admin/admin123：POST /login 不带验证码尝试登录，"
         "响应含 token 或 code:200 即默认口令未修改。验证码场景会显式标记 UNKNOWN"

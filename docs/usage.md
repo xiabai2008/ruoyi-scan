@@ -188,7 +188,7 @@ Ruoyi-Scan 提供 6 种扫描模式，覆盖从单点验证到全量攻防演练
 - 自动指纹识别（favicon hash + 特征路径 + 关键字）
 - 多版本适配（RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤）
 - 三态判定：CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定）
-- 56 个 POC：若依 20 个 + Spring Boot 14 个 + 通用 12 个 + JeecgBoot 8 个 + 芋道 2 个
+- 62 个 POC：若依 23 个 + Spring Boot 14 个 + 通用 15 个 + JeecgBoot 8 个 + 芋道 2 个
 
 **示例命令**：
 
@@ -213,6 +213,14 @@ ruoyi-scan -p http://target:8080/ --bypass-waf auto
 ruoyi-scan -p http://target:8080/ --report ./reports --report-format all
 
 # 8. 启动 OAST 回调服务器（带外盲漏洞验证用，独立进程）
+# 扫描侧带外验证（Log4j/盲 SSRF/盲 XXE）
+ruoyi-scan -p http://target/ --oast --oast-host <目标可达IP> --oast-bind 0.0.0.0
+
+# 只启动独立回调服务器
+# 扫描侧带外验证（Log4j/盲 SSRF/盲 XXE）
+ruoyi-scan -p http://target/ --oast --oast-host <目标可达IP> --oast-bind 0.0.0.0
+
+# 只启动独立回调服务器
 ruoyi-scan --oast-server
 
 # 9. 启用业务逻辑检测（IDOR / 越权 / 参数篡改 / 竞争条件）
@@ -511,7 +519,12 @@ diff: old_report.json             # 与历史扫描对比
 save_baseline: false              # 保存为基线
 
 # ── OAST 带外检测 ──
-oast: false                       # 启用 OAST
+oast: false                       # 启用扫描侧带外验证（Log4j/盲 SSRF/盲 XXE）
+oast_host: 127.0.0.1               # 目标可达的回调地址
+oast_bind: ""                     # 监听地址（默认同 oast_host；远程常填 0.0.0.0）
+oast_port: 0                      # HTTP 回调端口，0=自动分配
+oast_tcp_port: 0                  # Log4j TCP 回调端口，0=自动；远程需固定并放行
+oast_timeout: 8.0                 # 单次回调等待秒数
 
 # ── 业务逻辑检测 ──
 logic_scan: false                 # 业务逻辑漏洞检测
@@ -1867,13 +1880,37 @@ python -m venv .venv
 > 详细的 API 端点说明、请求/响应示例、WebSocket 事件格式请参考 [API 使用指南](api.md)。
 > OpenAPI 3.0 规范可通过 `python scripts/export_openapi.py` 导出至 `docs/openapi.json`。
 
-### OAST 回调服务器（D30）
+### OAST 带外验证（D30）
 
 | 参数 | 说明 |
 |------|------|
-| `--oast-server` | 启动 OAST 回调服务器 |
-| `--oast-host <addr>` | OAST 服务器监听地址 |
-| `--oast-port <n>` | OAST 服务器监听端口 |
+| `--oast` | 扫描时启用带外验证（Log4j JNDI / 盲 SSRF / 盲 XXE） |
+| `--oast-host <addr>` | 写进 payload、目标可达的回调地址 |
+| `--oast-bind <addr>` | 回调监听地址（默认同 `--oast-host`；远程目标常填 0.0.0.0） |
+| `--oast-port <n>` | 回调 HTTP 端口（0=自动；`--oast-server` 默认 5555） |
+| `--oast-tcp-port <n>` | Log4j JNDI 的 TCP 回调端口（0=自动；远程需固定并放行） |
+| `--oast-timeout <s>` | 单次回调等待秒数（默认 8） |
+| `--oast-server` | 只启动独立 OAST 服务器，不扫描 |
+
+### Cloud 能力包（R8 / RuoYi-Cloud）
+
+| 能力 | 触发方式 | 说明 |
+|------|----------|------|
+| Gateway 路由表泄露 | 自动 | 匿名读取 `/prod-api/actuator/gateway/routes`，解析路由/服务名；返回真实路由数组才 CONFIRMED |
+| Nacos 控制台默认口令 | 自动 | 确认 Cloud 目标后探测同主机 `8080`（Nacos 3 控制台）/ `8848/nacos`（Nacos 2/3 API），`nacos/nacos` 登录成功才 CONFIRMED；端口未暴露写 UNKNOWN |
+| job / gen 路由别名 | 自动 | 单机路径不存在时回退 Cloud 路径：`/monitor/job → /schedule/job`、`/tool/gen → /code/gen`，并支持 `/ruoyi-gen/gen` 服务发现别名；鉴权拒绝写 UNKNOWN(denied) |
+
+> Nacos 探测属于宿主级资产：站点入口在 19108 时，控制台可能在同主机 8080/8848；报告会标注 host-level。
+
+### 性能与成本归因
+
+- **无登录页跳过 brute**：`-u` / `-l` 先做 3–5 个低成本登录页探测；明确无登录页时跳过
+  `requires_login_page` 的爆破插件（Druid 返回 SAFE、默认口令返回 UNKNOWN(no_login_page)），
+  不再对 API-only 目标喷 6×1000 字典。
+- **插件级 requests/duration**：报告 JSON 的 `plugin_metrics` 与 WebSocket `plugin_metric` 事件
+  逐插件给出实际请求数、耗时；便于定位“哪个插件最贵”。
+- **request_count**：主会话、recon、`anonymous()`、`isolated_auth_session` 共用计数器，
+  报告请求数与网关/服务端日志一致；批量报告也使用真实请求数/耗时，不再用结果条数冒充。
 
 ### 业务逻辑检测（D31）
 

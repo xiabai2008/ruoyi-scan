@@ -35,7 +35,9 @@
         "Nacos 未授权访问",
         "RuoYi-Cloud Nacos 配置泄露",
         "RuoYi Swagger 未授权访问",
-        "RuoYi 代码生成模块 SSTI"
+        "RuoYi 代码生成模块 SSTI",
+        "Gateway 路由表泄露（RuoYi-Cloud）",
+        "Nacos 控制台默认口令（RuoYi-Cloud）"
       ],
       "auth_login": "admin:admin123",
       "surface_account": "scanner_low:LowPriv_2026"

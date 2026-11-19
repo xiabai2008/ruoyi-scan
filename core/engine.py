@@ -7,6 +7,7 @@
 # 扫描引擎：并发编排 + 令牌桶限速
 from __future__ import annotations
 
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
@@ -65,6 +66,10 @@ class ScanEngine:
         self.deadline = deadline  # 单目标时间预算截止点（monotonic）
         # 令牌桶：rate<=0 时 acquire 自带短路，零额外开销
         self._bucket = TokenBucket(self.rate)
+        # 插件级成本归因：每个插件耗时/请求数，供报告、终端事件与性能基线使用
+        self.plugin_metrics: List[dict] = []
+        self._metrics_lock = threading.Lock()
+        self._on_metric: Optional[Callable[[dict], None]] = None
 
     def run(
         self,
@@ -75,6 +80,7 @@ class ScanEngine:
         waf_bypass_coordinator: Optional[Any] = None,
         should_stop: Optional[Callable[[], bool]] = None,
         root_target: str = "",
+        on_metric: Optional[Callable[[dict], None]] = None,
     ) -> List[ScanResult]:
         """运行插件集合
 
@@ -93,6 +99,7 @@ class ScanEngine:
         """
         results = []
         _root = root_target or target
+        self._on_metric = on_metric
 
         def _target_for(cls: type) -> str:
             """按插件的 path_scope 选择探测基准（F9 单一入口）。
@@ -117,6 +124,41 @@ class ScanEngine:
             return target
 
         def _exec(cls: type) -> Optional[ScanResult]:
+            """执行一个插件并记录耗时/请求数；无登录页时跳过爆破类。"""
+            plugin_name = getattr(cls, "name", getattr(cls, "__name__", ""))
+            started = time.monotonic()
+            begin = getattr(session, "begin_plugin_metric", None)
+            end = getattr(session, "end_plugin_metric", None)
+            if callable(begin):
+                begin()
+            try:
+                # 性能优化：登录页探测明确为 False 时，爆破类插件不执行。
+                # 结果由插件声明（默认 UNKNOWN，Druid 按历史语义 SAFE），
+                # 不发任何 HTTP 请求，保持结果集三态语义不变。
+                if (
+                    getattr(cls, "requires_login_page", False)
+                    and getattr(session, "login_page_available", None) is False
+                ):
+                    skip_factory = getattr(cls, "no_login_page_result", None)
+                    if callable(skip_factory):
+                        return cast(ScanResult, skip_factory())
+                return _exec_one(cls)
+            finally:
+                requests = int(end()) if callable(end) else 0
+                metric = {
+                    "plugin": plugin_name,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                    "requests": requests,
+                }
+                with self._metrics_lock:
+                    self.plugin_metrics.append(metric)
+                if self._on_metric is not None:
+                    try:
+                        self._on_metric(metric)
+                    except Exception:
+                        logger.debug("插件指标回调失败", exc_info=True)
+
+        def _exec_one(cls: type) -> Optional[ScanResult]:
             # 协作式取消：立即停止启动新插件。已启动的插件无法强杀（requests
             # 不支持中断），但会在自身 HTTP 超时内结束，不会无限占住线程。
             if should_stop is not None and should_stop():

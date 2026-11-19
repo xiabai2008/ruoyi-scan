@@ -295,7 +295,7 @@ def _resolve_vars(tpl: NucleiTemplate, target: str, session=None) -> NucleiTempl
 
     base = target.rstrip("/")
     hostname = urlparse(target).hostname or ""
-    oast_client = getattr(session, "_oast_client", None)
+    oast_client = getattr(session, "oast_client", None) or getattr(session, "_oast_client", None)
 
     resolved = NucleiTemplate(
         id=tpl.id,

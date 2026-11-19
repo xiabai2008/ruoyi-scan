@@ -86,8 +86,12 @@ def test_empty_cms_fallback_still_appends_common(monkeypatch):
     _run_empty_cms_scan(monkeypatch, captured)
 
     captured_set = set(captured)
-    missing_common = [cls for cls in common_package.plugin_list if cls not in captured_set]
+    # requires_oast 插件在未启用 --oast 时按设计过滤，不参与本次断言
+    expected_common = [cls for cls in common_package.plugin_list if not getattr(cls, "requires_oast", False)]
+    missing_common = [cls for cls in expected_common if cls not in captured_set]
     assert not missing_common, f"回退后 common 插件缺失：{[c.__name__ for c in missing_common]}"
+    filtered_oast = [cls for cls in common_package.plugin_list if getattr(cls, "requires_oast", False)]
+    assert all(cls not in captured_set for cls in filtered_oast), "未启用 OAST 时 requires_oast 插件不应加载"
 
 
 def test_fallback_dedupes_same_class_across_packages(monkeypatch):

@@ -7,15 +7,19 @@
 #   1. 自建回调服务器（--oast-server 127.0.0.1:5555）：本地监听 HTTP/DNS 回调
 #   2. 第三方服务（Interactsh）：通过 API 生成唯一交互域并查询回调记录
 #
-# 使用方式（当前仅暴露服务器模式）：
-#   python main.py --oast-server 127.0.0.1:5555
+# 使用方式：
+#   1. 扫描侧（--oast）：编排器自动启动回调服务器，插件通过 session.oast_client 取值；
+#   2. 独立服务器（--oast-server）：供外部工具/多进程扫描复用。
 #
-# 注意：扫描侧的 OAST 客户端（OASTClient）尚未接入扫描编排，CLI 不再暴露 --oast。
-# 服务器模式供外部工具或自研插件回调使用；插件若要集成，自行构造 OASTClient。
+# 扫描侧支持两类回调通道：
+#   HTTP（SSRF / XXE）：http://<host>:<port>/?id=<interaction>
+#   TCP （Log4j JNDI）：ldap://<host>:<port>/<interaction>（只记录 TCP 连接与原始字节，
+#                       不返回 LDAP 响应；JNDI lookup 的连接本身即可证明表达式被求值）
 #
 # 插件集成：
-#   在插件 verify() 中调用 oast.get_payload() 获取唯一回调 URL，
-#   将其注入 payload，发起请求后调用 oast.wait_callback() 等待回调。
+#   client = session.oast_client
+#   interaction = client.new_http_interaction()
+#   # 把 interaction.url 注入 payload，发请求，然后 interaction.wait(timeout)
 import datetime
 import socket
 import threading
@@ -194,6 +198,7 @@ class OASTServer:
         """
         self.host = host
         self.port = port
+        self.bound_port = port
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -207,6 +212,8 @@ class OASTServer:
         try:
             # ThreadingHTTPServer：每个回调请求独立线程处理，避免并发回调被串行阻塞
             self._server = ThreadingHTTPServer((self.host, self.port), CallbackHTTPHandler)
+            # port=0 时由系统分配，必须把实际端口记下来供 payload 构造
+            self.bound_port = int(self._server.server_address[1])
             # 使用 serve_forever 替代 handle_request 循环，确保请求被及时处理
             self._thread = threading.Thread(
                 target=self._server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True
@@ -233,8 +240,8 @@ class OASTServer:
         return self._running
 
     def url(self, interaction_id: str, path: str = "/") -> str:
-        """构建回调 URL"""
-        return build_payload_url(interaction_id, "http", self.host, self.port, path)
+        """构建回调 URL（使用实际绑定端口，支持 port=0 自动分配）。"""
+        return build_payload_url(interaction_id, "http", self.host, self.bound_port, path)
 
 
 # ============================================================
@@ -242,87 +249,261 @@ class OASTServer:
 # ============================================================
 
 
-class OASTClient:
-    """OAST 客户端：生成 payload + 等待回调
+class TCPCallbackServer:
+    """单次交互的 TCP 回调监听器（Log4j JNDI 用）。
 
-    供插件 verify() 调用：
-        client = OASTClient(server)  # 或 OASTClient(provider='interactsh')
-        payload_url = client.get_payload()
-        # 注入 payload_url 到漏洞请求
-        # session.get(f'{target}?url={payload_url}')
-        if client.wait_callback(timeout=5):
-            return ScanResult(status=STATUS_CONFIRMED, ...)
+    为什么不用共享端口：
+      JNDI LDAP/RMI 客户端在 bind 阶段不会携带 URL 里的 interaction id，无法像
+      HTTP 的 ?id= 一样在共享监听器上归因。每次探测绑定一个临时端口，端口本身
+      就是 correlation id——命中即证明该 probe 的 JNDI 表达式被求值。
+
+    只接受连接、读取首包、记录来源与原始字节后关闭；不实现完整 LDAP 协议。
+    对"确认 lookup 发生"这个目的足够，也不做任何反序列化/加载远程类。
     """
 
-    def __init__(self, server: Optional[OASTServer] = None, provider: str = "local", base_domain: str = "oast.local"):
-        """
-        Args:
-            server: 本地 OASTServer 实例（provider='local' 时必填）
-            provider: 'local' 或 'interactsh'
-            base_domain: DNS 回调基础域名
-        """
+    def __init__(self, host: str, interaction_id: str, port: int = 0):
+        self.host = host
+        self.interaction_id = interaction_id
+        self.bound_port = port
+        self._sock: Optional[socket.socket] = None
+        self._thread: Optional[threading.Thread] = None
+        self._running = False
+
+    def start(self) -> bool:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((self.host, self.bound_port))
+            sock.listen(16)
+            sock.settimeout(0.2)
+            self.bound_port = int(sock.getsockname()[1])
+            self._sock = sock
+            self._running = True
+            self._thread = threading.Thread(target=self._serve, daemon=True)
+            self._thread.start()
+            return True
+        except OSError:
+            self._running = False
+            return False
+
+    def _serve(self) -> None:
+        while self._running and self._sock is not None:
+            try:
+                conn, addr = self._sock.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            threading.Thread(target=self._handle, args=(conn, addr), daemon=True).start()
+
+    def _handle(self, conn: socket.socket, addr: Any) -> None:
+        raw = b""
+        try:
+            conn.settimeout(0.5)
+            try:
+                raw = conn.recv(4096)
+            except (socket.timeout, OSError):
+                raw = b""
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
+        _store.record(
+            self.interaction_id,
+            {
+                "protocol": "tcp",
+                "from": addr[0],
+                "port": addr[1],
+                "timestamp": datetime.datetime.now().isoformat(),
+                "bytes": len(raw),
+                "raw_hex": raw[:512].hex(),
+            },
+        )
+
+    def stop(self) -> None:
+        self._running = False
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+            self._thread = None
+
+
+class OASTInteraction:
+    """一次带外交互：唯一 id + 回调 URL/端口 + 等待与取证。"""
+
+    def __init__(
+        self,
+        interaction_id: str,
+        client: "OASTClient",
+        url: str = "",
+        host: str = "",
+        port: int = 0,
+        protocol: str = "http",
+    ):
+        self.interaction_id = interaction_id
+        self.client = client
+        self.url = url
+        self.host = host
+        self.port = port
+        self.protocol = protocol
+
+    def jndi_url(self, protocol: str = "ldap") -> str:
+        """构造 JNDI URL（host/port 来自 TCP 监听器，path 带 interaction id）。"""
+        return f"{protocol}://{self.host}:{self.port}/{self.interaction_id}"
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        return self.client.wait_for(self.interaction_id, timeout=timeout)
+
+    def callbacks(self) -> List[Dict[str, Any]]:
+        return _store.get(self.interaction_id)
+
+    def close(self) -> None:
+        self.client.close_interaction(self.interaction_id)
+
+
+class OASTClient:
+    """OAST 客户端：生成交互、等待回调、交给插件取证。
+
+    兼容旧接口（get_payload/wait_callback/get_callbacks），同时提供并发安全的
+    new_http_interaction()/new_tcp_interaction()；一个扫描的多个插件/多个 payload
+    不应共享一个 _interaction_id（旧实现会互相覆盖，导致回调归因错误）。
+    """
+
+    def __init__(
+        self,
+        server: Optional[OASTServer] = None,
+        provider: str = "local",
+        base_domain: str = "oast.local",
+        host: Optional[str] = None,
+        bind_host: Optional[str] = None,
+        timeout: float = 8.0,
+        tcp_port: int = 0,
+    ):
         self.server = server
         self.provider = provider
         self.base_domain = base_domain
+        # host 是写进 payload、目标实际访问的地址；bind_host 是本机监听地址。
+        # 远程目标场景：host=公网 IP，bind_host=0.0.0.0。
+        self.host = host or (server.host if server else "127.0.0.1")
+        self.bind_host = bind_host or (server.host if server else "127.0.0.1")
+        # Log4j JNDI 的 TCP 监听端口：0=每次探测临时端口（本地默认）；
+        # 远程目标被防火墙限制时指定固定端口并放行（同一时刻只跑一个 JNDI 探测）。
+        self.tcp_port = int(tcp_port or 0)
+        self.timeout = float(timeout)
         self._interaction_id: Optional[str] = None
         self._payload_url: Optional[str] = None
         self._payload_domain: Optional[str] = None
+        self._tcp_servers: Dict[str, TCPCallbackServer] = {}
 
-    def get_payload(self, path: str = "/") -> str:
-        """生成唯一回调 URL
-
-        Returns:
-            回调 URL，如 http://127.0.0.1:5555/?id=abc123
-        """
-        self._interaction_id = generate_interaction_id()
-        _store.register(self._interaction_id)
-
+    # ── 新接口：每个 payload 一个 interaction ──
+    def new_http_interaction(self, path: str = "/") -> OASTInteraction:
+        """创建 HTTP 回调交互（SSRF/XXE/任意可发起 HTTP 请求的漏洞）。"""
+        interaction_id = generate_interaction_id()
+        _store.register(interaction_id)
         if self.provider == "local" and self.server:
-            self._payload_url = self.server.url(self._interaction_id, path)
+            # 用客户端 host（目标可达地址）而非 server.host（可能只是 0.0.0.0）
+            url = build_payload_url(interaction_id, "http", self.host, self.server.bound_port, path)
         else:
-            # Interactsh 或无服务器模式：使用域名
-            self._payload_domain = build_payload_domain(self._interaction_id, self.base_domain)
-            self._payload_url = f"http://{self._payload_domain}{path}"
+            domain = build_payload_domain(interaction_id, self.base_domain)
+            url = f"http://{domain}{path}"
+            self._payload_domain = domain
+        return OASTInteraction(interaction_id, self, url=url, protocol="http")
 
-        return self._payload_url
+    def new_tcp_interaction(self, protocol: str = "ldap") -> OASTInteraction:
+        """创建 TCP 回调交互（Log4j JNDI：ldap/rmi 均可；只确认 lookup 发生）。"""
+        interaction_id = generate_interaction_id()
+        _store.register(interaction_id)
+        tcp_server = TCPCallbackServer(self.bind_host, interaction_id, port=self.tcp_port)
+        if not tcp_server.start():
+            raise OSError("OAST TCP 回调端口绑定失败（bind=%s）" % self.bind_host)
+        self._tcp_servers[interaction_id] = tcp_server
+        return OASTInteraction(
+            interaction_id,
+            self,
+            host=self.host,
+            port=tcp_server.bound_port,
+            protocol=protocol,
+        )
+
+    # ── 兼容旧接口 ──
+    def get_payload(self, path: str = "/") -> str:
+        """生成当前交互的回调 URL（旧 API；并发场景请用 new_http_interaction）。"""
+        interaction = self.new_http_interaction(path)
+        self._interaction_id = interaction.interaction_id
+        self._payload_url = interaction.url
+        return interaction.url
 
     def get_payload_domain(self) -> str:
-        """获取回调域名（用于 DNS 带外检测）"""
+        """获取回调域名（用于 DNS 带外检测）。"""
         if not self._interaction_id:
             self.get_payload()
         if self._payload_domain:
             return self._payload_domain
-        return build_payload_domain(self._interaction_id, self.base_domain)
+        return build_payload_domain(self._interaction_id or "", self.base_domain)
 
-    def wait_callback(self, timeout: float = 5.0, interval: float = 0.2) -> bool:
-        """等待回调
+    def wait_for(self, interaction_id: str, timeout: Optional[float] = None) -> bool:
+        """等待指定 interaction 的回调；timeout=None 用客户端默认值。"""
+        deadline = time.time() + (self.timeout if timeout is None else float(timeout))
+        while time.time() < deadline:
+            if _store.has_callback(interaction_id):
+                return True
+            time.sleep(0.2)
+        return _store.has_callback(interaction_id)
 
-        Args:
-            timeout: 最大等待秒数
-            interval: 轮询间隔
-
-        Returns:
-            True 表示收到回调（漏洞确认），False 表示超时
-        """
-        if not self._interaction_id:
+    def wait_callback(self, timeout: float = 5.0, interval: float = 0.2, interaction_id: Optional[str] = None) -> bool:
+        """兼容旧接口：等待当前/指定 interaction 的回调。"""
+        target_id = interaction_id or self._interaction_id
+        if not target_id:
             return False
-
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if _store.has_callback(self._interaction_id):
+            if _store.has_callback(target_id):
                 return True
             time.sleep(interval)
-        return False
+        return _store.has_callback(target_id)
 
-    def get_callbacks(self) -> List[Dict[str, Any]]:
-        """获取所有回调记录"""
-        if not self._interaction_id:
+    def wait_any(
+        self, interactions: List[OASTInteraction], timeout: Optional[float] = None
+    ) -> Optional[OASTInteraction]:
+        """并发发出多个 payload 后统一等待，返回第一个命中的 interaction。"""
+        deadline = time.time() + (self.timeout if timeout is None else float(timeout))
+        while time.time() < deadline:
+            for interaction in interactions:
+                if _store.has_callback(interaction.interaction_id):
+                    return interaction
+            time.sleep(0.2)
+        for interaction in interactions:
+            if _store.has_callback(interaction.interaction_id):
+                return interaction
+        return None
+
+    def get_callbacks(self, interaction_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """获取回调记录（默认当前交互）。"""
+        target_id = interaction_id or self._interaction_id
+        if not target_id:
             return []
-        return _store.get(self._interaction_id)
+        return _store.get(target_id)
+
+    def close_interaction(self, interaction_id: str) -> None:
+        server = self._tcp_servers.pop(interaction_id, None)
+        if server is not None:
+            server.stop()
+        _store.clear(interaction_id)
+
+    def close(self) -> None:
+        """关闭本客户端创建的所有 TCP 监听（HTTP server 由调用方关闭）。"""
+        for interaction_id in list(self._tcp_servers):
+            self.close_interaction(interaction_id)
 
     @property
     def interaction_id(self) -> Optional[str]:
-        """当前交互 ID（未生成时为 None）"""
+        """当前交互 ID（未生成时为 None；新接口请直接用 OASTInteraction）。"""
         return self._interaction_id
 
 
@@ -427,9 +608,10 @@ def run_oast_mode(args) -> int:
     用于独立启动 OAST 服务器，供其他扫描进程远程调用。
     """
     host = getattr(args, "oast_host", "127.0.0.1") or "127.0.0.1"
+    bind = getattr(args, "oast_bind", None) or host
     port = getattr(args, "oast_port", 5555) or 5555
 
-    server = OASTServer(host=host, port=port)
+    server = OASTServer(host=bind, port=port)
     if not server.start():
         emit(f"[!]OAST 服务器启动失败：端口 {port} 被占用")
         return 1

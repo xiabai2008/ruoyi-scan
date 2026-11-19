@@ -101,7 +101,7 @@ from cli.dispatcher import dispatch;  dispatch(args)
 | E8 AI 报告解读 | `--ai-report [zh\|en]` | E8 |
 | D28 CI/CD 集成 | `--ci` `--severity-threshold` `--ci-init` | D28 |
 | D29 漏洞知识库 | `--wiki` `--wiki-output` | D29 |
-| D30 OAST 回调服务器 | `--oast-server` `--oast-host` `--oast-port` | D30 |
+| D30 OAST 带外验证 | `--oast` `--oast-host` `--oast-bind` `--oast-port` `--oast-timeout` / `--oast-server` | D30 |
 | D31 业务逻辑检测 | `--logic-scan` `--logic-endpoints` `--logic-concurrency` | D31 |
 | G1 认证后深度扫描 | `--auth-surface` `--surface-account` `--surface-output` | G1 |
 | D32 CVE 同步 | `--cve-sync` `--cve-id` `--cve-offline` `--nvd-api-key` | D32 |

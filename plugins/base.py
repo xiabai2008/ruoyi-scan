@@ -9,7 +9,7 @@ import math
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from common.models import STATUS_CONFIRMED, ScanResult
+from common.models import STATUS_CONFIRMED, STATUS_UNKNOWN, ScanResult, UnknownReason
 
 if TYPE_CHECKING:
     from core.session import SessionManager
@@ -213,11 +213,19 @@ class PluginBase(ABC):
     # 否则会拼成 /prod-api/prod-api/... 的双前缀，请求落到登录墙 → 假阴性。
     # 空元组 = 路径里不含前缀（绝大多数插件）。
     self_prefixes: Tuple[str, ...] = ()
+    # 是否需要扫描级 OAST 带外客户端（session.oast_client）。为 True 时，未启用
+    # --oast 的扫描会在加载期过滤掉本插件（避免每个目标都产一条"未启用"的 UNKNOWN）。
+    # 插件内部仍必须判空：API/外部调用可能直接构造 session。
+    requires_oast = False
     # 是否依赖攻击面清单（session.surface）。为 True 时，引擎在清单缺失的情况下
     # 会把 CONFIRMED/SAFE 强制降级为 UNKNOWN(insufficient_evidence)——「没拿到清单」
     # 不等于「确认不存在」。声明必须与引擎实现同批落地，不得只写声明留 TODO
     # （anonymous_probe 曾因「只声明不实现」造成假 CONFIRMED，见上方注释）。
     consumes_surface = False
+    # 是否需要 Web 登录页才能执行（爆破/默认口令类）。
+    # 引擎在登录页探测明确为 False 时跳过验证，返回插件自声明的"未执行"结果；
+    # 这样无登录页的 API 服务不会白跑 6×1000 口令字典（R11 性能基线）。
+    requires_login_page = False
     description = ""  # 漏洞描述
     fix = ""  # 修复建议（一句话概要）
     # D18：修复详情（具体代码/配置 diff、升级版本号、操作步骤）
@@ -238,6 +246,22 @@ class PluginBase(ABC):
     vuln_type = ""  # 漏洞类型标识（sqli/xss/rce/file_read/auth），供绕过策略匹配
     supports_waf_bypass = False  # 是否支持 WAF 绕过（True 则引擎在 WAF 命中后调用 verify_with_bypass）
     bypass_max_attempts = 3  # 最大绕过尝试次数（每种策略算一次）
+
+    @classmethod
+    def no_login_page_result(cls) -> ScanResult:
+        """无登录页时的占位结果（不执行 verify，不发请求）。
+
+        默认 UNKNOWN：没测过不能判 SAFE。爆破插件按自身历史语义覆盖
+        （如 Druid 在无 Druid 登录页时本应判 SAFE，继续返回 SAFE）。
+        """
+        return ScanResult(
+            kind=getattr(cls, "category", "info"),
+            name=getattr(cls, "name", cls.__name__),
+            severity=getattr(cls, "severity", "low"),
+            status=STATUS_UNKNOWN,
+            unknown_reason=UnknownReason.NO_LOGIN_PAGE.value,
+            evidence="目标未发现登录页，口令爆破/默认口令未执行（无字典请求）",
+        )
 
     @abstractmethod
     def verify(self, target: str, session: "SessionManager") -> ScanResult:

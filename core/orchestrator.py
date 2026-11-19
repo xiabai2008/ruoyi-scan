@@ -38,7 +38,7 @@ from core.http import normalize_scan_target, normalize_target, preflight
 from core.loader import load_plugins
 from core.report import ReportBuilder
 from core.router import Router
-from core.session import SessionManager
+from core.session import RequestCounter, SessionManager
 
 
 class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
@@ -306,6 +306,16 @@ class ScanRequest:
     plugin_paths: Optional[List[str]] = None
     # E2：组件版本检测（--components 启用；默认关闭，向后兼容）
     components: bool = False
+    # OAST 带外验证（--oast 启用）：编排器启动本地 HTTP/TCP 回调监听，
+    # 插件通过 session.oast_client 取 interaction。host 是目标可达地址，
+    # bind 是本机监听地址（远程目标场景常为 0.0.0.0）；port=0 自动分配。
+    oast: bool = False
+    oast_host: str = "127.0.0.1"
+    oast_bind: str = ""
+    oast_port: int = 0
+    # Log4j TCP 回调端口：0=每次探测临时端口；远程目标需固定端口并放行
+    oast_tcp_port: int = 0
+    oast_timeout: float = 8.0
     # E4：nuclei YAML 模板（--nuclei 可多次指定路径/目录）
     nuclei_paths: Optional[List[str]] = None
     nuclei_tags: Optional[List[str]] = None
@@ -365,6 +375,8 @@ class ScanTask:
     finished_at: float = 0.0
     duration: float = 0.0
     request_count: int = 0
+    # 插件级成本归因：[{plugin, duration_ms, requests}, ...]
+    plugin_metrics: List[Dict[str, Any]] = field(default_factory=list)
     error: str = ""
     report_paths: List[str] = field(default_factory=list)
 
@@ -379,6 +391,7 @@ class ScanTask:
             "finished_at": self.finished_at,
             "duration": self.duration,
             "request_count": self.request_count,
+            "plugin_metrics": self.plugin_metrics,
             "result_count": len(self.results),
             "confirmed_count": sum(1 for r in self.results if r.status == STATUS_CONFIRMED),
             "safe_count": sum(1 for r in self.results if r.status == STATUS_SAFE),
@@ -443,6 +456,8 @@ class ScanOrchestrator:
         # 最近一次 run_sync 的实际请求数：session 在 _run 内部已关闭，调用方拿不到
         # session.request_count，报告里只能写 0。此处留一个只读快照供 CLI 出报告用。
         self.last_request_count: int = 0
+        # 最近一次扫描的插件级耗时/请求数（报告与性能基线用）
+        self.last_plugin_metrics: List[Dict[str, Any]] = []
         # 最近一次 run_sync 的全站拦截探测结果（CLI 出报告时写进 summary）
         self.last_block_info: Dict[str, Any] = {"blocked": False}
         # 最近一次 run_sync 的登录墙探测结果（报告与 CLI 提示用）
@@ -465,6 +480,7 @@ class ScanOrchestrator:
         )
         results = self._run(task, on_event)
         self.last_request_count = task.request_count
+        self.last_plugin_metrics = list(task.plugin_metrics)
         return results
 
     def submit(self, req: ScanRequest) -> str:
@@ -603,6 +619,11 @@ class ScanOrchestrator:
         # 永不关闭，连接池与 keep-alive socket 泄漏。这里提前置 None，由 finally 统一关闭
         # （finally 在本方法唯一出口处执行，覆盖正常返回与异常返回两条路径）。
         session: Optional[SessionManager] = None
+        # OAST 回调服务器生命周期与 session 同层：启动失败不阻断扫描，
+        # 只是不加载 requires_oast 插件；成功则 finally 统一停止。
+        oast_client: Optional[Any] = None
+        # 扫描级共享请求计数器；创建失败/目标不可达时可能保持 None
+        request_counter: Optional[RequestCounter] = None
 
         try:
             # 任务可能在排队期间就被取消：先检查，避免先广播 running 再 cancelled
@@ -649,14 +670,25 @@ class ScanOrchestrator:
                     },
                 )
 
+            # 扫描级共享请求计数：recon / 主会话 / 匿名会话 / 隔离登录会话共用，
+            # 否则报告 request_count 只统计主会话（R11 实测少 88 条）。
+            request_counter = RequestCounter()
+
             # 1. 端口扫描（可选）
             self._stage_portscan(req, target, _emit, task.task_id)
 
             # D14：主动信息收集（爬虫 + 子域名 + JS 提取）
-            recon_info = self._stage_recon(req, target, _emit, task.task_id, limiter, proxy_pool)
+            recon_info = self._stage_recon(req, target, _emit, task.task_id, limiter, proxy_pool, request_counter)
 
             # 2. 会话 + 引擎（攻击面注入 / 认证注入 / 字典 / 低权账号）
-            session, engine = self._stage_session(req, task.task_id, _emit, limiter, proxy_pool, recon_info)
+            session, engine = self._stage_session(
+                req, task.task_id, _emit, limiter, proxy_pool, recon_info, request_counter
+            )
+
+            # 2.9 扫描级 OAST 回调监听（仅在 --oast 时启动）
+            oast_client = self._stage_oast(req, _emit, task.task_id)
+            if oast_client is not None:
+                session.oast_client = oast_client
 
             # 3.5-3.6 全站拦截 + 登录墙探测
             block_info, auth_wall = self._stage_reachability(session, target, _emit, task.task_id)
@@ -674,13 +706,24 @@ class ScanOrchestrator:
 
             # 6. 插件加载 + 过滤 + 分组
             all_plugins, plugins_by_cat, categories = self._stage_load_plugins(
-                req, fp_result, all_plugins, _emit, task.task_id
+                req,
+                fp_result,
+                all_plugins,
+                _emit,
+                task.task_id,
+                oast_enabled=oast_client is not None,
             )
 
             # 7. 引擎执行
             # （all_results 已在 try 外初始化：异常路径可返回已收集的部分结果）
             total_plugins = sum(len(plugins_by_cat.get(c, [])) for c in categories)
             done_count = [0]  # 闭包可变
+
+            def _on_metric(metric: Dict[str, Any]) -> None:
+                """引擎回调：保存插件耗时/请求数，同时推送事件供 API/性能工具消费。"""
+                task.plugin_metrics.append(metric)
+                _emit("plugin_metric", {**metric, "task_id": task.task_id})
+
             # 需要高权会话才能给出 CONFIRMED/SAFE 的插件名集合：auth_status != ok 时统一降级
             auth_required_names = {
                 getattr(cls, "name", "") for cls in all_plugins if getattr(cls, "requires_auth", False)
@@ -734,10 +777,11 @@ class ScanOrchestrator:
                     # 加了 API 前缀必然探不到（实测 R7 根路径 .git/HEAD 200，
                     # 探 /prod-api/.git/HEAD 得 502，最终错误判 SAFE）。
                     root_target=target,
+                    on_metric=_on_metric,
                 )
 
             task.results = all_results
-            task.request_count = session.request_count
+            task.request_count = request_counter.value()
             # 7.1 三态降级 / 归属标注 / UNKNOWN 原因码
             self._stage_degrade(
                 req,
@@ -827,8 +871,18 @@ class ScanOrchestrator:
             return task.results
 
         finally:
+            # 无论成功/失败都刷新真实请求数：失败路径也应收录已发生的流量
+            if request_counter is not None:
+                task.request_count = request_counter.value()
             # 无论成功/失败都关闭会话（含认证注入、指纹、WAF、插件执行等中途异常）；
             # 口令字典已改为扫描级注入（session.password_dict），无需恢复进程级全局
+            if oast_client is not None:
+                try:
+                    oast_client.close()
+                    if oast_client.server is not None:
+                        oast_client.server.stop()
+                except Exception:
+                    logger.debug("OAST 服务器关闭失败", exc_info=True)
             if session is not None:
                 try:
                     session.close()
@@ -856,6 +910,46 @@ class ScanOrchestrator:
             },
         )
 
+    def _stage_oast(self, req: ScanRequest, emit: Callable[..., None], task_id: str) -> Optional[Any]:
+        """步骤 2.9：启用 --oast 时启动扫描级 OAST 回调监听（HTTP + 按需 TCP）。"""
+        if not req.oast:
+            return None
+        from lib.oast import OASTClient, OASTServer
+
+        host = req.oast_host or "127.0.0.1"
+        bind = req.oast_bind or host
+        server = OASTServer(bind, int(req.oast_port or 0))
+        if not server.start():
+            emit(
+                "oast",
+                {
+                    "enabled": False,
+                    "reason": "回调端口绑定失败（bind=%s:%s）" % (bind, req.oast_port),
+                    "task_id": task_id,
+                },
+            )
+            logger.warning("OAST 服务器启动失败，requires_oast 插件将被跳过（bind=%s:%s）", bind, req.oast_port)
+            return None
+        client = OASTClient(
+            server=server,
+            host=host,
+            bind_host=bind,
+            timeout=req.oast_timeout,
+            tcp_port=req.oast_tcp_port,
+        )
+        emit(
+            "oast",
+            {
+                "enabled": True,
+                "host": host,
+                "http_port": server.bound_port,
+                "tcp_port": req.oast_tcp_port,
+                "timeout": req.oast_timeout,
+                "task_id": task_id,
+            },
+        )
+        return client
+
     def _stage_recon(
         self,
         req: ScanRequest,
@@ -864,11 +958,20 @@ class ScanOrchestrator:
         task_id: str,
         limiter: Optional[Any],
         proxy_pool: Optional[Any],
+        request_counter: Optional[RequestCounter] = None,
     ) -> Dict[str, Any]:
         """步骤 1′：可选的主动信息收集（爬虫 / 子域名 / JS 端点），返回侦察结果。"""
         if not (req.crawl or req.subdomain or req.js_extract):
             return {}
-        recon_info = self._run_recon(req, target, emit, task_id, limiter=limiter, proxy_pool=proxy_pool)
+        recon_info = self._run_recon(
+            req,
+            target,
+            emit,
+            task_id,
+            limiter=limiter,
+            proxy_pool=proxy_pool,
+            request_counter=request_counter,
+        )
         for key, event_type, payload_key in (
             ("subdomains", "subdomain", "subdomains"),
             ("crawled_urls", "crawl", "urls"),
@@ -895,6 +998,7 @@ class ScanOrchestrator:
         limiter: Optional[Any],
         proxy_pool: Optional[Any],
         recon_info: Dict[str, Any],
+        request_counter: Optional[RequestCounter] = None,
     ) -> Tuple[SessionManager, ScanEngine]:
         """步骤 2–3.1：建会话/引擎，注入攻击面、认证、字典与低权账号。"""
         # 2. 会话创建
@@ -912,6 +1016,7 @@ class ScanOrchestrator:
             rate=req.rate,
             rate_scope=req.rate_scope,
             limiter=limiter,
+            request_counter=request_counter,
         )
         try:
             # F8：插件通过 session.exploit 读取真实利用开关，不直接依赖 CLI
@@ -1084,7 +1189,7 @@ class ScanOrchestrator:
             from lib.component_detect import ComponentDetector
 
             try:
-                detector = ComponentDetector()
+                detector = ComponentDetector(oast_client=getattr(session, "oast_client", None))
                 component_results = detector.detect_all(target, session, ruoyi_version=fp_result.version)
                 for cr in component_results:
                     emit(
@@ -1100,6 +1205,28 @@ class ScanOrchestrator:
                     )
             except Exception as e:
                 logger.debug("组件检测失败", exc_info=True)
+                emit("component", {"error": str(e), "task_id": task.task_id})
+
+        # --oast 但未开 --components 时，仍单独跑 Log4j JNDI（带外确认的独立类别）；
+        # 开了 --components 时 ComponentDetector 已包含 Log4j，避免重复。
+        if getattr(session, "oast_client", None) is not None and not req.components:
+            from lib.component_detect import detect_log4j
+
+            try:
+                log4j_result = detect_log4j(target, session, session.oast_client)
+                component_results.append(log4j_result)
+                emit(
+                    "component",
+                    {
+                        "component": log4j_result.component,
+                        "status": log4j_result.status,
+                        "cve": log4j_result.cve,
+                        "evidence": log4j_result.evidence,
+                        "task_id": task.task_id,
+                    },
+                )
+            except Exception as e:
+                logger.debug("Log4j OAST 探测失败", exc_info=True)
                 emit("component", {"error": str(e), "task_id": task.task_id})
 
         waf_bypass_coordinator = self._build_waf_bypass(req, waf_result, target, session)
@@ -1144,6 +1271,29 @@ class ScanOrchestrator:
                 {"base": api_base, "plugin_target": plugin_target, "task_id": task.task_id},
             )
 
+        # 5.6 低成本登录页探测：只对会执行 brute 的模式做；供引擎跳过无意义的
+        # 口令字典（R11 无登录页仍跑 6×1053 Druid 字典 = 6318 请求）。
+        # 探测失败（None）时保持旧行为（brute 继续跑），不因探测故障漏掉默认口令。
+        session.login_page_available = None  # type: ignore[attr-defined]
+        if req.mode in ("u", "l"):
+            try:
+                from lib.reachability import detect_login_page
+
+                login_probe = detect_login_page(session, target, plugin_target)
+                session.login_page_available = login_probe.get("available")
+                emit(
+                    "login_page",
+                    {
+                        "available": login_probe.get("available"),
+                        "url": login_probe.get("url", ""),
+                        "status": login_probe.get("status", 0),
+                        "reason": login_probe.get("reason", ""),
+                        "task_id": task.task_id,
+                    },
+                )
+            except Exception:
+                logger.debug("登录页探测失败，brute 插件保持执行", exc_info=True)
+
         return waf_result, component_results, waf_bypass_coordinator, plugin_target
 
     def _stage_load_plugins(
@@ -1153,9 +1303,26 @@ class ScanOrchestrator:
         all_plugins: List[type],
         emit: Callable[..., None],
         task_id: str,
+        oast_enabled: bool = True,
     ) -> Tuple[List[type], Dict[str, List[type]], List[str]]:
-        """步骤 6：加载候选插件 → 过滤 → 按 category 分组。"""
+        """步骤 6：加载候选插件 → 过滤 → 按 category 分组。
+
+        requires_oast 插件在未启用 --oast（或回调端口启动失败）时不加载：
+        否则每个目标都会产出一条"未启用 OAST"的 UNKNOWN，污染报告。
+        """
         all_plugins = self._load_plugin_candidates(req, fp_result, all_plugins, emit, task_id)
+        if not oast_enabled:
+            oast_plugins = [cls for cls in all_plugins if getattr(cls, "requires_oast", False)]
+            if oast_plugins:
+                all_plugins = [cls for cls in all_plugins if not getattr(cls, "requires_oast", False)]
+                emit(
+                    "oast_disabled",
+                    {
+                        "skipped_plugins": [getattr(cls, "name", "") for cls in oast_plugins],
+                        "count": len(oast_plugins),
+                        "task_id": task_id,
+                    },
+                )
         return self._filter_and_group_plugins(req, all_plugins, emit, task_id)
 
     def _stage_degrade(
@@ -1599,6 +1766,7 @@ class ScanOrchestrator:
         task_id: str,
         limiter: Optional[Any] = None,
         proxy_pool: Optional[Any] = None,
+        request_counter: Optional[RequestCounter] = None,
     ) -> Dict[str, Any]:
         """D14：执行主动信息收集（爬虫 + 子域名 + JS 提取）
 
@@ -1666,6 +1834,7 @@ class ScanOrchestrator:
                     rate=req.rate,
                     rate_scope=req.rate_scope,
                     limiter=limiter,
+                    request_counter=request_counter,
                 )
 
                 _emit(

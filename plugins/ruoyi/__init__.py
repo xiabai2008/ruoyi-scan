@@ -3,6 +3,8 @@
 # Step 5（专项补齐）：vuln 类追加 file_upload / job_rce / thymeleaf_ssti / unauth_batch；brute 类追加 default_password
 # Step 8（阶段八扩充）：vuln 类追加 file_read_path（high）/ nacos_unauth（medium）
 # plugin_list：插件注册表，扫描器按声明顺序逐条执行——新增插件须在此登记，排序即执行优先级
+from plugins.ruoyi.cloud_gateway_routes import CloudGatewayRoutesPlugin
+from plugins.ruoyi.cloud_nacos_default_password import CloudNacosDefaultPasswordPlugin
 from plugins.ruoyi.cve_2025_46174_resetpwd_scope import Cve202546174ResetPwdScopePlugin
 from plugins.ruoyi.cve_2025_70986_select_dept_tree import Cve202570986SelectDeptTreePlugin
 from plugins.ruoyi.default_password import DefaultPasswordPlugin
@@ -28,6 +30,8 @@ from plugins.ruoyi.unauth_batch import UnauthBatchPlugin
 plugin_list = [
     # recon：目录扫描（保持原 -u 综合扫描第一步）
     DirectoryScanPlugin,
+    # Cloud 能力包：先探测 gateway 路由表，供后续 Nacos/别名使用
+    CloudGatewayRoutesPlugin,
     # vuln：原有 4 POC（保持原 -p 漏洞检测顺序）
     FileReadPlugin,  # 任意文件读取
     JobInvokeTargetPlugin,  # 定时任务 invokeTarget 白名单缺失（high，<4.7）
@@ -45,6 +49,7 @@ plugin_list = [
     # brute：原有 Druid 爆破 + Step 5 新增默认口令
     DruidBrutePlugin,  # Druid 弱口令爆破
     DefaultPasswordPlugin,  # 后台默认口令 admin/admin123
+    CloudNacosDefaultPasswordPlugin,  # Nacos 控制台默认口令 nacos/nacos（Cloud 端口探测）
     # P1-F 新增（阶段扩充 +3，按危险度从高到低：两个 high 在前）
     RuoyiCloudNacosPlugin,  # RuoYi-Cloud Nacos 配置泄露（high）
     RuoyiGenRcePlugin,  # 代码生成模块 SSTI（high）

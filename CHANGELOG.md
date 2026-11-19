@@ -20,7 +20,6 @@
   连接 `/ws/scan`（现行路由为 `/ws/scan/{task_id}`）、停止任务走 `POST /api/scan/{id}/stop`
   （现行为 `DELETE /api/scan/{id}`），产物无托管方。
 - **`--no-components`**：与 `--components` 默认关闭的语义矛盾，且无任何消费方。
-- **`--oast`**：扫描侧 OAST 客户端从未接入编排；保留独立的 `--oast-server` 回调服务器。
 - **`[async]` extra 与 `async_http_get/post`**：aiohttp 仅被这两个零调用函数引用；
   `--async` 实际是批量模式的 ThreadPool 并发，单目标下现在会显式提示"仅 -f 生效"。
 - **`generate_plugin_template` 与 `--plugin-new`**：与 `init_plugin_file` /
@@ -39,6 +38,23 @@
   （全成功 / 部分失败 / 全失败），不再以"删了实现也删了测试"收尾。
 
 ### Added
+- **性能：无登录页跳过 brute + 插件级成本归因 + request_count 修正**：
+  - 登录页探测（根/登录/认证/Druid 路径）明确为无登录页时，引擎跳过 `requires_login_page` 爆破插件；
+    R11 类 Spring API 负样本的 `-u` 请求从 **7,185 → 927**，墙钟 41.6s → 8.2s，结果集逐项不变；
+  - `RequestCounter` 由主会话、recon、anonymous、isolated auth 会话共享，报告 request_count 不再漏计；
+  - 每个插件记录 `{plugin, duration_ms, requests}`，写入报告 `plugin_metrics` 与 `plugin_metric` 事件；
+  - 批量报告修正用 `len(results)` 冒充请求数的问题，改用真实摘要。
+- **Cloud 能力包（R8 / RuoYi-Cloud）**：
+  - `cloud_gateway_routes`：匿名读取 `/actuator/gateway/routes`，解析 11 条路由并缓存 Cloud profile；
+  - `cloud_nacos_default_password`：Cloud 目标探测同主机 8080/8848，验证 Nacos `nacos/nacos` 控制台默认口令；
+  - `lib/cloud_routes.py`：解析网关路由并生成单机→Cloud 路径别名，job/gen 插件在单机路径不存在时自动回退
+    `/schedule/job`、`/code/gen` 及 `/ruoyi-gen/gen` 服务发现别名。
+- **OAST 扫描侧接线（`--oast`）**：编排器自动启动 HTTP 回调监听与按需 TCP 监听，
+  插件通过 `session.oast_client` 获取唯一 interaction。
+  - Log4j JNDI：`${jndi:ldap://...}` 只触发 lookup，TCP 连接即 CONFIRMED，不加载远程类；
+  - 盲 SSRF / 盲 XXE：HTTP 回调命中才 CONFIRMED，未回调写 `UNKNOWN(oast_no_callback)`；
+  - 新增 `requires_oast` 插件能力声明：未启用 `--oast` 时加载期过滤，不产生噪声 UNKNOWN；
+  - 支持 `--oast-host` / `--oast-bind` / `--oast-port` / `--oast-timeout`，API 模型同步。
 - `tests/test_cli_flag_consumers.py`：AST 门禁——每个 `add_argument` 必须有 `args.<dest>`
   消费方（模式开关与 argparse 内建动作白名单），防止"开关在、功能无"的债复发。
 - 框架注册门禁新增 `--category` 派生检查（v1.6 WP-R 的漏网处，此前 `--plugin-init

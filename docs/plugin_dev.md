@@ -235,6 +235,12 @@ plugins/
 | `vuln_type` | `str` | `""` | 漏洞类型标识：`sqli` / `xss` / `rce` / `file_read` / `auth` / `info_leak` / `info` / `other`，供 WAF 绕过策略匹配 |
 | `supports_waf_bypass` | `bool` | `False` | 是否支持 WAF 绕过。`True` 时引擎在 WAF 命中后调用 `verify_with_bypass()` |
 | `bypass_max_attempts` | `int` | `3` | 最大绕过尝试次数（每种策略算一次） |
+| `requires_oast` | `bool` | `False` | 只在 `--oast` 下加载；插件从 `session.oast_client` 取 interaction，回调命中才判 CONFIRMED |
+| `requires_login_page` | `bool` | `False` | 爆破/默认口令类设为 True；登录页探测明确为 False 时引擎跳过 verify，默认返回 UNKNOWN(no_login_page) |
+
+**OAST 插件**：需要带外确认的插件声明 `requires_oast = True`，从 `session.oast_client` 取
+`new_http_interaction()` / `new_tcp_interaction()`；只有收到回调才返回 `CONFIRMED`，
+未收到返回 `UNKNOWN(oast_no_callback)`。未启用 `--oast` 时引擎在加载期过滤该插件。
 
 **必填项**（`check_plugin` 强制校验，见 `lib/plugin_sdk.py`）：`name` / `severity` / `category` / `description` / `fix`。
 

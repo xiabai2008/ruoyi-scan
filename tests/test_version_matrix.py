@@ -19,7 +19,7 @@ def _ruoyi_plugins():
 def test_all_ruoyi_plugins_have_versions():
     """17 个基础 ruoyi POC + 2 个 Plus 专属 + 1 个时间盲注（dept），全部携带 affected_versions"""
     plugins = _ruoyi_plugins()
-    assert len(plugins) == 21, f"应有 21 个若依插件（19 基础 + F6 Plus 专属 2），实际 {len(plugins)}"
+    assert len(plugins) == 23, f"应有 23 个若依插件（21 基础 + F6 Plus 专属 2），实际 {len(plugins)}"
     for cls in plugins:
         # 类属性必须存在（None 视为未定义 → 失败）
         assert hasattr(cls, "affected_versions"), f"{cls.__name__} 缺少 affected_versions"
@@ -62,7 +62,7 @@ def test_old_version_filter():
     """检测到 v4.5（旧版）→ 全部 POC 适用（在 >=4.0,<4.6 区间内）"""
     fp = FingerprintResult(cms="ruoyi", version="4.5.0", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp)
-    assert len(plugins) == 19, f"v4.5 通用扫描应 19 个插件（Plus 专属不执行），实际 {len(plugins)}"
+    assert len(plugins) == 21, f"v4.5 通用扫描应 21 个插件（Plus 专属不执行），实际 {len(plugins)}"
     print("PASS test_old_version_filter: v4.5 → %d 个插件" % len(plugins))
 
 

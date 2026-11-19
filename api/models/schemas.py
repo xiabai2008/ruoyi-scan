@@ -28,6 +28,12 @@ class ScanCreateRequest(BaseModel):
         False, description="启用对抗型传输层（Scrapling 指纹/隐身浏览器）绕过 CF/JS 挑战，需安装 [adversarial]"
     )
     plugins: Optional[List[str]] = Field(None, description="指定插件名列表（空=全部）")
+    oast: bool = Field(False, description="启用 OAST 带外验证（Log4j/盲 SSRF/盲 XXE）")
+    oast_host: str = Field("127.0.0.1", description="目标可达的回调地址（远程扫描填本机可达 IP）")
+    oast_bind: str = Field("", description="回调监听地址（默认同 oast_host；常填 0.0.0.0）")
+    oast_port: int = Field(0, ge=0, le=65535, description="回调 HTTP 端口（0=自动分配）")
+    oast_tcp_port: int = Field(0, ge=0, le=65535, description="Log4j JNDI TCP 回调端口（0=自动）")
+    oast_timeout: float = Field(8.0, ge=1, le=120, description="单次带外回调等待秒数")
 
     @field_validator("target")
     @classmethod
@@ -59,6 +65,7 @@ class ScanTaskDTO(BaseModel):
     finished_at: float = 0
     duration: float = 0
     request_count: int = 0
+    plugin_metrics: List[dict] = Field(default_factory=list)
     result_count: int = 0
     confirmed_count: int = 0
     safe_count: int = 0

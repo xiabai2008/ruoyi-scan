@@ -356,11 +356,47 @@ def build_parser():
     group.add_argument("--wiki", action="store_true", default=False, help="生成漏洞知识库")
     group.add_argument("--wiki-output", default=None, metavar="PATH", help="知识库输出路径")
 
-    # OAST 只保留独立回调服务器：扫描侧的 OAST 客户端尚未接线，故不暴露 --oast。
-    group = parser.add_argument_group("D30 OAST 回调服务器")
-    group.add_argument("--oast-server", action="store_true", default=False, help="OAST 回调服务器")
-    group.add_argument("--oast-host", default="127.0.0.1", help="OAST 监听地址")
-    group.add_argument("--oast-port", type=int, default=5555, help="OAST 监听端口")
+    group = parser.add_argument_group("D30 OAST 带外验证")
+    group.add_argument(
+        "--oast",
+        action="store_true",
+        default=False,
+        help="扫描时启用 OAST 带外验证（Log4j JNDI / 盲 SSRF / 盲 XXE）",
+    )
+    group.add_argument("--oast-server", action="store_true", default=False, help="独立 OAST 回调服务器")
+    group.add_argument(
+        "--oast-host",
+        default="127.0.0.1",
+        metavar="ADDR",
+        help="写进 payload、目标可达的回调地址（远程目标需填本机公网/内网地址）",
+    )
+    group.add_argument(
+        "--oast-bind",
+        default=None,
+        metavar="ADDR",
+        help="回调监听地址（默认同 --oast-host；远程目标常需 0.0.0.0）",
+    )
+    group.add_argument(
+        "--oast-port",
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="回调 HTTP 监听端口（0/不填=自动分配；--oast-server 默认 5555）",
+    )
+    group.add_argument(
+        "--oast-tcp-port",
+        type=int,
+        default=0,
+        metavar="PORT",
+        help="Log4j JNDI TCP 回调端口（0=自动；远程目标需固定端口并放行）",
+    )
+    group.add_argument(
+        "--oast-timeout",
+        type=float,
+        default=8.0,
+        metavar="SEC",
+        help="单次带外回调等待秒数（默认 8）",
+    )
 
     group = parser.add_argument_group("D31 业务逻辑检测")
     group.add_argument("--logic-scan", action="store_true", default=False, help="业务逻辑漏洞检测")

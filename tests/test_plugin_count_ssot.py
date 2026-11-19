@@ -6,7 +6,7 @@
 
 from scripts.check_plugin_count_ssot import _check_line
 
-RUNTIME = 58
+RUNTIME = 62
 PKG = {21, 14, 13, 8, 2}
 
 
@@ -28,7 +28,7 @@ def test_historical_phrase_inside_quote_is_allowed():
 
 
 def test_current_total_is_allowed():
-    assert _errors("引擎与 58 个 POC 全部编译进同一个可执行文件") == []
+    assert _errors("引擎与 62 个 POC 全部编译进同一个可执行文件") == []
 
 
 def test_package_level_counts_are_allowed():

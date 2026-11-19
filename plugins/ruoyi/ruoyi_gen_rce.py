@@ -1,8 +1,19 @@
 """RuoYi 代码生成模块（Velocity/Thymeleaf）SSTI 模板注入检测。"""
 
 # RuoYi 代码生成模块 SSTI 检测
-from common.models import SEVERITY_HIGH, STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult
+from typing import Optional
+
+from common.models import (
+    SEVERITY_HIGH,
+    STATUS_CONFIRMED,
+    STATUS_SAFE,
+    STATUS_UNKNOWN,
+    ScanResult,
+    UnknownReason,
+)
 from core.http import join_url
+from lib.cloud_routes import cloud_candidate_paths, discover_cloud_profile
+from lib.matcher import is_missing_resource_page
 from plugins.base import PluginBase
 
 
@@ -59,15 +70,15 @@ class RuoyiGenRcePlugin(PluginBase):
     EVAL_RESULT = "49"
     RAW_REFLECTION = "7*7"
 
-    def _probe_preview_ssti(self, target, session):
-        """对 /tool/gen/preview 做基线与注入的差分，返回证据或空串。
+    def _probe_preview_ssti(self, target, session, base: str = "/tool/gen"):
+        """对 <base>/preview 做基线与注入的差分，返回证据或空串。
 
         为什么必须差分：仅仅「响应里出现 49」会误报（页码、时间戳、行号里都有）。
         只有「基线没有、注入才有」才能证明求值真的发生了。
         """
         import re
 
-        preview = join_url(target, "/tool/gen/preview/1")
+        preview = join_url(target, base.rstrip("/") + "/preview/1")
         try:
             base = session.get(f"{preview}?tableName={self._BASELINE_TABLE}")
             base_text = base.text or ""
@@ -92,6 +103,84 @@ class RuoyiGenRcePlugin(PluginBase):
             f"注入 tableName=${{7*7}} 后响应出现独立数字 {self.EVAL_RESULT}（模板已求值）；"
             f"注入响应前 120 字节：{inj_text[:120]}"
         )
+
+    def _probe_cloud_alias(self, target, session) -> Optional[ScanResult]:
+        """单机路径不存在时，按 Cloud 网关路由别名再探（R8 现场）。
+
+        Cloud 外部路径为 /code/gen/**（网关 StripPrefix=1 → /gen/**），另有
+        Nacos 服务发现别名 /ruoyi-gen/gen/**。只做 GET 与既有差分探针，
+        不写入表配置、不触发生成。
+        """
+        profile = getattr(session, "cloud_profile", None)
+        if not profile:
+            profile = discover_cloud_profile(session, target)
+        if not profile:
+            return None
+        candidates = cloud_candidate_paths("/tool/gen", profile)
+        if len(candidates) <= 1:
+            return None
+        tried = []
+        for path in candidates[1:]:
+            evidence = self._probe_preview_ssti(target, session, path)
+            if evidence:
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_CONFIRMED,
+                    url=join_url(target, path.rstrip("/") + "/preview/1"),
+                    evidence="Cloud 路由别名 %s：%s" % (path, evidence),
+                    fix=self.fix,
+                )
+            list_url = join_url(target, path.rstrip("/") + "/list")
+            try:
+                resp = session.get(list_url)
+            except Exception:
+                tried.append(f"{path}/list=网络异常")
+                continue
+            code = getattr(resp, "status_code", 0)
+            text = resp.text or ""
+            tried.append(f"{path}/list=HTTP {code}")
+            if is_missing_resource_page(text):
+                continue
+            try:
+                body = resp.json()
+            except Exception:
+                body = None
+            r_code = body.get("code") if isinstance(body, dict) else None
+            if code in (401, 403) or r_code in (401, 403):
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_UNKNOWN,
+                    url=list_url,
+                    unknown_reason=UnknownReason.DENIED.value,
+                    evidence="Cloud 代码生成别名 %s 可达但鉴权拒绝（HTTP %s, code=%s）" % (path, code, r_code),
+                )
+            if code == 200 and isinstance(body, dict) and "code" in body:
+                return ScanResult(
+                    kind=self.category,
+                    name=self.name,
+                    severity=self.severity,
+                    status=STATUS_UNKNOWN,
+                    url=list_url,
+                    evidence=(
+                        "Cloud 代码生成别名 %s 可达（业务 JSON=%s），但 SSTI 差分未成立，需人工复核"
+                        % (path, str(body)[:120])
+                    ),
+                )
+        if tried:
+            return ScanResult(
+                kind=self.category,
+                name=self.name,
+                severity=self.severity,
+                status=STATUS_UNKNOWN,
+                url=target,
+                unknown_reason=UnknownReason.ENDPOINT_ABSENT.value,
+                evidence="Cloud 路由别名均未命中代码生成入口（%s）" % ", ".join(tried),
+            )
+        return None
 
     def verify(self, target, session) -> ScanResult:
         """访问代码生成编辑页，检测该模块是否可达并尝试 SSTI 特征判定。
@@ -123,6 +212,12 @@ class RuoyiGenRcePlugin(PluginBase):
                 url=url,
                 evidence=f"请求异常无法判定 SSTI（/tool/gen 可达={reachable}）：{primary_error}",
             )
+
+        # 单机路径在 Cloud 上不存在（网关资源不存在包装页）→ 尝试 Cloud 路由别名
+        if is_missing_resource_page(getattr(resp, "text", "") or ""):
+            cloud_result = self._probe_cloud_alias(target, session)
+            if cloud_result is not None:
+                return cloud_result
 
         # 【显式 lab 快速路径】签名头为测试环境注入的判定桩，仅在本地靶场命中
         if resp.headers.get("X-Ruoyi-Vuln") == "gen-ssti":

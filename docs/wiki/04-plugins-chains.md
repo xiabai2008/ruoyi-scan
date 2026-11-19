@@ -20,7 +20,7 @@
 2. 插件的元信息（CVE/CVSS/修复建议/复现命令）与检测逻辑同居一处，不会漂移；
 3. `--plugin-list`、报告、API `/api/plugins` 都能直接从类属性生成，无需额外元数据表。
 
-代价是文件数量：56 个已注册插件 = 56 个文件 + 5 个框架包 `__init__.py`（`plugins/chain/` 另计）。
+代价是文件数量：62 个已注册插件对应 62 个插件文件 + 5 个框架包 `__init__.py`（`plugins/chain/` 另计 3 个）。
 
 ---
 
@@ -152,7 +152,7 @@ plugin_list = [
 
 ## 4. 插件清单
 
-### 4.1 `plugins/ruoyi` — 20 个
+### 4.1 `plugins/ruoyi` — 23 个
 
 | # | 类名 | 文件 | 覆盖点 |
 | --- | --- | --- | --- |
@@ -176,8 +176,11 @@ plugin_list = [
 | 18 | `Cve202570986SelectDeptTreePlugin` | `cve_2025_70986_select_dept_tree.py` | `selectDeptTree` SQL 注入（CVE-2025-70986） |
 | 19 | `PlusAuthLoginProbePlugin` | `plus_auth_login.py` | Plus 版登录探测 |
 | 20 | `PlusJobUnauthPlugin` | `plus_job_unauth.py` | Plus 版定时任务未授权 |
+| 21 | `SqlBlindTimePlugin` | `sql_blind_time.py` | 时序盲注（需 `--time-based`） |
+| 22 | `CloudGatewayRoutesPlugin` | `cloud_gateway_routes.py` | Gateway 路由表泄露（Cloud） |
+| 23 | `CloudNacosDefaultPasswordPlugin` | `cloud_nacos_default_password.py` | Nacos 控制台默认口令（Cloud） |
 
-> 20 个文件全部登记进 `plugin_list`。
+> 23 个文件全部登记进 `plugin_list`。
 
 ### 4.2 `plugins/spring` — 14 个
 
@@ -198,7 +201,7 @@ plugin_list = [
 | 13 | `SpringBootAdmin` | `spring_boot_admin.py` | Boot Admin 暴露 |
 | 14 | `SpringDataRest` | `spring_data_rest.py` | Data REST 暴露 |
 
-### 4.3 `plugins/common` — 12 个（`plugin_list` 登记）
+### 4.3 `plugins/common` — 15 个（`plugin_list` 登记）
 
 | # | 类名 | 文件 | 覆盖点 |
 | --- | --- | --- | --- |
@@ -214,6 +217,9 @@ plugin_list = [
 | 10 | `ShiroRememberme` | `shiro_rememberme.py` | Shiro 框架指纹（rememberMe 特征，SAFE/UNKNOWN） |
 | 11 | `DirListing` | `dir_listing.py` | 目录列表 |
 | 12 | `TraceMethod` | `trace_method.py` | TRACE 方法 |
+| 13 | `SurfaceSweep` | `surface_sweep.py` | 爬取攻击面盘点 |
+| 14 | `BlindSsrf` | `blind_ssrf.py` | 盲 SSRF（需 `--oast`，回调确认） |
+| 15 | `BlindXxe` | `blind_xxe.py` | 盲 XXE（需 `--oast`，回调确认） |
 
 > `shiro_rememberme` 为**指纹类插件**（`category=recon`、`severity=low`、不挂 CVE）：
 > 只输出 `SAFE`（无 rememberMe 特征）或 `UNKNOWN`（检测到特征，密钥可利用性需人工验证），
@@ -247,19 +253,19 @@ plugin_list = [
 
 | 包 | 登记数 |
 | --- | --- |
-| `plugins.ruoyi` | 20 |
+| `plugins.ruoyi` | 23 |
 | `plugins.spring` | 14 |
-| `plugins.common` | 12 |
+| `plugins.common` | 15 |
 | `plugins.jeecgboot` | 8 |
 | `plugins.yudao` | 2 |
-| **合计** | **56** |
+| **合计** | **62** |
 
 > **插件数量有三个口径，勿混用**：
-> - **59** = `plugins/` 下插件文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
-> - **56** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
-> - **54** = 通用目标实际执行数（`Router().resolve()` 减去 2 个 RuoYi-Plus 变体专属插件，与 [tests/test_fingerprint.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/tests/test_fingerprint.py) 断言一致）。
+> - **65** = `plugins/` 下插件源文件总数（`scripts/verification_matrix.py` 按文件统计，含 `plugins/chain/` 的 3 个链步骤文件）；
+> - **62** = `plugin_list` 登记总数（上表合计，**本 Wiki 与 README 统一采用此口径**）；
+> - 通用目标实际执行数会因变体过滤而不同；不要再使用固定的“54”口径。
 >
-> README 原先的「51 / 若依 18」即第三种口径，v1.7 已统一为 56 / 20 并保留 Plus 专属说明。
+> README 原先的「51 / 若依 18」即第三种口径，v1.8 已统一为 62 / 23 并保留 Plus 专属说明。
 
 ---
 

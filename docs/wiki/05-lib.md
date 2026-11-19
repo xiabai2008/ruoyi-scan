@@ -187,16 +187,24 @@
 | --- | --- |
 | `CallbackStore` | 回调记录存储（按 `interaction_id` 索引） |
 | `CallbackHTTPHandler(BaseHTTPRequestHandler)` | 接收回调的 HTTP 处理器 |
-| `OASTServer` | 回调服务器（`--oast-server`，默认 `127.0.0.1:5555`） |
-| `OASTClient` | 探测端：生成 payload、发起请求、等待回调 |
+| `OASTServer` | HTTP 回调服务器（扫描时自动启动；`--oast-server` 可独立运行） |
+| `TCPCallbackServer` | 单次交互 TCP 监听（Log4j JNDI；只记录连接，不实现 LDAP/加载类） |
+| `OASTClient` | 探测端：`new_http_interaction()` / `new_tcp_interaction()` / 等待与取证 |
+| `OASTInteraction` | 一次交互：唯一 id、回调 URL/端口、`wait()`、`callbacks()` |
 | `generate_interaction_id()` | 生成唯一交互 ID |
 | `build_payload_domain` / `build_payload_url` / `build_payload` | 构造带外 payload |
 | `check_dns_callback` | DNS 回调检查 |
 | `generate_batch_payloads` | 批量构造 |
 
-带外检测的价值：**无回显漏洞（blind RCE / SSRF / Log4j JNDI）唯一可靠的确认手段**。目前只保留独立回调服务器模式；`OASTClient` 已实现但尚未接入扫描编排，`detect_log4j` 未收到 `oast_client` 时按三态纪律返回 UNKNOWN。
+带外检测的价值：**无回显漏洞（blind RCE / SSRF / Log4j JNDI）唯一可靠的确认手段**。
 
-**用标准库而非第三方 OAST 平台**的取舍：不需要外部网络与账号，内网可用；代价是需要目标能访问到扫描器的监听地址（因此有 `--oast-host` 参数）。
+扫描侧（`--oast`）接线：
+- 编排器启动 HTTP 监听（SSRF/XXE）和按需 TCP 监听（Log4j JNDI）；`session.oast_client` 传给插件；
+- HTTP 用 `?id=<interaction>` 归因，TCP 用**每次探测一个临时端口**归因（LDAP bind 不带 URL path）；
+- 插件只有收到回调才判 CONFIRMED；未收到写 `UNKNOWN(oast_no_callback)`，绝不冒充 SAFE；
+- `requires_oast` 插件在未启用 `--oast` 时加载期过滤，避免每个目标产一条“未启用”的 UNKNOWN。
+
+**用标准库而非第三方 OAST 平台**的取舍：不需要外部网络与账号，内网可用；代价是需要目标能访问到扫描器的监听地址（`--oast-host` / `--oast-bind`），且自建 DNS 场景不覆盖，需要 DNS 回调时仍应接 Interactsh 类服务。
 
 ---
 
@@ -218,9 +226,33 @@ to_scan_result(ComponentVersionResult)   # 转成标准 ScanResult（category='c
 2. **CVE 映射走数据文件**：`_load_cve_map()` 读 `data/component_cve_map.json`，`match_cve(component, version)` 做区间匹配。新增 CVE 只改 JSON。
 3. **探测失败给 `fallback_note`**：无法识别版本时返回说明性文字而非空字符串，让报告能解释"为什么这项是 UNKNOWN"。
 
-`detect_log4j` 接受可选 `oast_client`——只有带外回调才能确证 JNDI 注入；当前 CLI 未接线，故该项默认 UNKNOWN（不冒充 SAFE）。
+`detect_log4j` 在 `--oast` 下创建 TCP interaction：把 `${jndi:ldap://<oast-host>:<port>/<id>}` 注入 UA/XFF/Referer 与参数；收到 TCP 连接即 CONFIRMED（不加载远程类），未收到则 `UNKNOWN(oast_no_callback)`。
 
 **规格驱动扩展**：`_detect_by_spec` / `_make_spec_detector` 表明后来者可以用声明式规格（dict）定义新组件的探测方式，不必再写一个 `detect_*` 函数。
+
+### 5.1 性能与成本归因
+
+- **共享 RequestCounter**：主会话、recon 临时会话、`anonymous()`、`isolated_auth_session`
+  共用计数器；报告 `request_count` 是全部会话总和（旧实现只统计主会话，R11 实测少 88 条）。
+- **插件级埋点**：引擎在插件执行线程记录 `{plugin, duration_ms, requests}`，写入报告
+  `plugin_metrics`，并发事件 `plugin_metric`；匿名/隔离会话的请求也归因到发起插件。
+- **无登录页跳过 brute**：`-u/-l` 做低成本登录页探测；明确无登录页时跳过
+  `requires_login_page` 插件（Druid 保持 SAFE、默认口令保持 UNKNOWN(no_login_page)），
+  R11 API 负样本 `-u` 请求 7,185 → 927，结果逐项不变。
+
+### 5.2 Cloud 能力包（R8）
+
+RuoYi-Cloud 的入口只反代 `/prod-api/`，但 gateway actuator 与 Nacos 控制台在别的端口/路径上：
+
+- [cloud_routes.py](https://github.com/xiabai2008/Ruoyi-Scan/blob/main/lib/cloud_routes.py)
+  解析 `/actuator/gateway/routes` 的 JSON 数组，生成路由前缀/服务名/profile；同时维护单机→Cloud 别名：
+  `/monitor/job → /schedule/job`、`/tool/gen → /code/gen`，并从 `/ruoyi-gen/**` 服务发现路由生成
+  `/ruoyi-gen/gen` 等别名。
+- `CloudGatewayRoutesPlugin`：匿名读取路由表才判 CONFIRMED，并把 profile 缓存到 `session.cloud_profile`。
+- `CloudNacosDefaultPasswordPlugin`：Cloud 目标探测同主机 `8080`（Nacos 3 控制台）与 `8848/nacos`
+  （Nacos 2/3 API），只有登录返回非空 `accessToken` 才判 CONFIRMED；端口未暴露写 UNKNOWN。
+- job/gen 插件在原单机路径返回 404/405/资源不存在时，按 profile 尝试 Cloud 别名；鉴权拒绝写
+  `UNKNOWN(denied)`，不冒充 SAFE。
 
 ---
 

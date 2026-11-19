@@ -50,6 +50,19 @@ class JeecgDefaultPasswordPlugin(PluginBase):
     cve = "N/A"
     severity = "medium"
     category = "brute"
+    requires_login_page = True
+
+    @classmethod
+    def no_login_page_result(cls) -> ScanResult:
+        """无登录页：保持历史 UNKNOWN(info) 结果形态，不执行登录请求。"""
+        return ScanResult(
+            kind="info",
+            name=cls.name,
+            status=STATUS_UNKNOWN,
+            unknown_reason="no_login_page",
+            evidence="目标未发现登录页，JeecgBoot 默认口令探测未执行（无字典请求）",
+        )
+
     description = "JeecgBoot 后台默认口令 admin/123456（未修改则可直接登录）"
     fix = "修改默认口令 admin/123456；启用强密码策略"
     fix_detail = (

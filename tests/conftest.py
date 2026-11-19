@@ -118,10 +118,11 @@ def mock_network(mock_router):
         "core.orchestrator.load_plugins"
     ) as mock_load, patch("lib.plugin_repo.load_user_installed_plugins", return_value=[]), patch(
         "lib.reachability.detect_blocked", return_value={"blocked": False}
-    ), patch(
-        "lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}
-    ), patch(
+    ), patch("lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}), patch(
         "core.basepath.detect_api_base", return_value=""
+    ), patch(
+        "lib.reachability.detect_login_page",
+        return_value={"available": None, "url": "", "status": 0, "reason": "test"},
     ):
         mock_cms.return_value = FingerprintResult(cms="", version="", confidence=0, matched=[])
         mock_waf.return_value = {"waf": "", "display": "", "bypass_hint": ""}

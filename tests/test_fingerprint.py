@@ -130,7 +130,7 @@ def test_router_resolves_ruoyi():
 
     fp_result = FingerprintResult(cms="ruoyi", confidence=1.0, matched=["test"])
     plugins = Router().resolve(fp_result)
-    assert len(plugins) == 19, f"通用 ruoyi 应 19 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
+    assert len(plugins) == 21, f"通用 ruoyi 应 21 个插件（F6 Plus 专属 2 个仅 plus 变体执行），实际 {len(plugins)}"
     print("PASS test_router_resolves_ruoyi: %d 个插件" % len(plugins))
 
 

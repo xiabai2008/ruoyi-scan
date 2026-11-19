@@ -33,6 +33,8 @@ def test_unknown_reason_enum_is_stable():
         "no_lowpriv",
         "denied",
         "unreachable",
+        "oast_no_callback",
+        "no_login_page",
         "no_evidence",
         "blocked",
         "budget_exceeded",

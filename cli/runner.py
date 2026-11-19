@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 from argparse import Namespace
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from cli.preflight import EXIT_PARTIAL, EXIT_UNREACHABLE, preflight_target
 from cli.reporting import run_cli_report
@@ -244,6 +244,13 @@ def _build_scan_request(mode: str, target: str, args: Namespace) -> ScanRequest:
         plugin_paths=getattr(args, "plugin_path", None),
         # E2：组件版本检测（--components 启用；默认关闭，向后兼容）
         components=getattr(args, "components", False),
+        # D30：扫描侧 OAST（--oast）
+        oast=getattr(args, "oast", False),
+        oast_host=getattr(args, "oast_host", "127.0.0.1") or "127.0.0.1",
+        oast_bind=getattr(args, "oast_bind", "") or "",
+        oast_port=int(getattr(args, "oast_port", 0) or 0),
+        oast_tcp_port=int(getattr(args, "oast_tcp_port", 0) or 0),
+        oast_timeout=float(getattr(args, "oast_timeout", 8.0) or 8.0),
         # E4：nuclei YAML 模板
         nuclei_paths=getattr(args, "nuclei", None),
         nuclei_tags=[t.strip() for t in (args.nuclei_tags or "").split(",") if t.strip()],
@@ -455,7 +462,12 @@ def _cli_event_handler(event_type: str, payload):
 
 
 def run_mode(
-    mode: str, target: str, args: Namespace, show_cta: bool = True, exit_on_auth_failure: bool = True
+    mode: str,
+    target: str,
+    args: Namespace,
+    show_cta: bool = True,
+    exit_on_auth_failure: bool = True,
+    stats: Optional[Dict[str, Any]] = None,
 ) -> List[ScanResult]:
     """分发到各扫描模式：指纹→路由→插件 主流程
 
@@ -470,6 +482,8 @@ def run_mode(
             需传 False 避免刷屏，改由上层在汇总后统一输出一次。
         exit_on_auth_failure: 显式认证失败（含 MFA）时是否用 EXIT_PARTIAL 退出。
             单目标为 True（CI 才能感知覆盖不全）；批量由上层统一判定，传 False。
+        stats: 可选输出字典；扫描结束后写入真实 request_count / duration /
+            fingerprint / plugin_metrics，供批量报告使用（不再用 len(results) 冒充请求数）。
     """
     from core.orchestrator import ScanOrchestrator
 
@@ -652,6 +666,16 @@ def run_mode(
 
     # F6-3：显式要求认证但没拿到可用会话 → EXIT_PARTIAL（4），CI 才能感知
     # 「报告里的 UNKNOWN 是覆盖不全，而不是目标干净」。未传认证参数时保持 0。
+    if stats is not None:
+        stats.update(
+            {
+                "request_count": getattr(orch, "last_request_count", 0),
+                "duration": duration,
+                "fingerprint": dict(detected_fingerprint),
+                "plugin_metrics": list(getattr(orch, "last_plugin_metrics", [])),
+            }
+        )
+
     if exit_on_auth_failure and getattr(req, "auth_status", "not_attempted") in ("failed", "mfa_required"):
         sys.exit(EXIT_PARTIAL)
 
@@ -669,6 +693,7 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     # 每个目标的结果单独留存（按目标重建报告时与 scan_batch_targets 的返回值解耦，
     # 单目标失败也不影响其他目标的留存）
     results_by_target: dict = {}
+    stats_by_target: dict = {}
     results_lock = threading.Lock()
 
     # 批量模式报告统一在最后渲染：给每个目标一份 args 副本并清空 report，
@@ -683,12 +708,21 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     def _scan_single(target: str):
         """单目标扫描函数（供 AsyncScanEngine 调用）"""
         try:
-            results = run_mode(mode, target, scan_args, show_cta=False, exit_on_auth_failure=False)
+            target_stats: dict = {}
+            results = run_mode(
+                mode,
+                target,
+                scan_args,
+                show_cta=False,
+                exit_on_auth_failure=False,
+                stats=target_stats,
+            )
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             return []
         with results_lock:
             results_by_target[target] = results
+            stats_by_target[target] = target_stats
         return results
 
     total = len(targets)
@@ -711,15 +745,17 @@ def _run_batch_async(targets: list, mode: str, args: Namespace, label: str, max_
     for target in targets:
         results = results_by_target.get(target, [])
         if results:
+            target_stats = stats_by_target.get(target, {})
             builder = ReportBuilder(
                 results=results,
                 target=target,
                 summary={
                     "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "duration": 0,
-                    "request_count": len(results),
+                    "duration": target_stats.get("duration", 0),
+                    "request_count": target_stats.get("request_count", 0),
+                    "plugin_metrics": target_stats.get("plugin_metrics", []),
                     "mode": label,
-                    "fingerprint": {"cms": "", "confidence": 0},
+                    "fingerprint": target_stats.get("fingerprint", {"cms": "", "confidence": 0}),
                 },
                 dedup=not args.no_dedup,
             )
@@ -827,6 +863,8 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
     if batch_ci:
         scan_args.ci = False
 
+    target_stats_by_target: dict = {}
+
     for i, target in enumerate(targets, 1):
         print(f"\n{SEPARATOR}")
         print(f"{YELLOW}[*]进度 [{i}/{len(targets)}] 目标：{target}{RESET}")
@@ -836,22 +874,33 @@ def run_mode_batch(filepath: str, mode: str, args: Namespace) -> Optional[BatchR
             skipped.append(target)
             continue
         try:
-            results = run_mode(mode, target, scan_args, show_cta=False, exit_on_auth_failure=False)
+            target_stats: dict = {}
+            results = run_mode(
+                mode,
+                target,
+                scan_args,
+                show_cta=False,
+                exit_on_auth_failure=False,
+                stats=target_stats,
+            )
+            target_stats_by_target[target] = target_stats
         except Exception as e:
             print(f"{RED}[!]扫描异常 ({target})：{e}{RESET}")
             failed.append(target)
             continue
 
         all_results.extend(results)
+        target_stats = target_stats_by_target.get(target, {})
         builder = ReportBuilder(
             results=results,
             target=target,
             summary={
                 "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "duration": 0,
-                "request_count": len(results),
+                "duration": target_stats.get("duration", 0),
+                "request_count": target_stats.get("request_count", 0),
+                "plugin_metrics": target_stats.get("plugin_metrics", []),
                 "mode": label,
-                "fingerprint": {"cms": "", "confidence": 0},
+                "fingerprint": target_stats.get("fingerprint", {"cms": "", "confidence": 0}),
             },
             dedup=not args.no_dedup,
         )

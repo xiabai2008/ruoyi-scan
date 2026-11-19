@@ -138,7 +138,7 @@ baseline diff 已升级为完整交付闭环：
 
 | 指标 | 基线（2026-10） | 目标 |
 |------|----------------|------|
-| 检测插件数 | 58（ruoyi 21 / spring 14 / common 13 / jeecgboot 8 / yudao 2） | 100+ |
+| 检测插件数 | 62（ruoyi 23 / spring 14 / common 15 / jeecgboot 8 / yudao 2） | 100+ |
 | 组件 CVE 覆盖 | 20 组件 / NVD+GHSA 双源 | 30+ 组件 / CNVD 源 |
 | nightly 误报 / 漏报率 | acceptance 基线对拍 | 持续 ≤ 0（回归即阻断） |
 | 外部贡献者数 | 0 | 5+ |

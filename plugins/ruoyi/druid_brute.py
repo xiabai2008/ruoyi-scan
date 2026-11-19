@@ -12,6 +12,7 @@ class DruidBrutePlugin(PluginBase):
     cve = "N/A"
     severity = "high"
     category = "brute"
+    requires_login_page = True
     description = "对 /druid/submitLogin 用 6 个默认用户名 + password.txt 字典爆破，命中 success 即成功"
     fix = "修改 Druid 监控默认口令，限制访问来源 IP，关闭未授权的 /druid 路径"
     fix_detail = (
@@ -48,6 +49,16 @@ class DruidBrutePlugin(PluginBase):
     # D7: WAF 绕过支持
     vuln_type = "auth"
     supports_waf_bypass = True
+
+    @classmethod
+    def no_login_page_result(cls) -> ScanResult:
+        """无登录页目标：Druid 监控页同样不存在，按历史语义判 SAFE（不跑 6×1000 字典）。"""
+        return ScanResult(
+            kind="brute",
+            name=cls.name,
+            status=STATUS_SAFE,
+            evidence="目标未发现登录页，跳过 Druid 弱口令字典（未执行 6×字典组合）",
+        )
 
     def verify(self, target, session):
         """用 6 个默认用户名 × password.txt 字典对 /druid/submitLogin 组合爆破

@@ -281,6 +281,99 @@ _UNREACHABLE_RE = re.compile(
 _LOGIN_PAGE_MARKERS = ("/captcha/captchaImage", 'name="password"', "loginForm", "若依后台管理")
 
 
+# ── 低成本登录页探测（性能：无登录页目标跳过 brute 字典）──
+_LOGIN_PAGE_PATHS = (
+    "/login",
+    "/auth/login",
+    "/prod-api/login",
+    "/prod-api/auth/login",
+    "/jeecg-boot/sys/login",
+    "/druid/login.html",
+)
+_LOGIN_PAGE_MARKERS = (
+    'name="password"',
+    "name='password'",
+    "loginForm",
+    "password",
+    "登录",
+    "验证码",
+    "captcha",
+    "username",
+    'id="app"',
+    "id=app",
+)
+
+
+def detect_login_page(session: Any, root_target: str, plugin_target: str = "") -> Dict[str, Any]:
+    """低成本判断目标是否存在登录页（供无登录页时跳过 brute 字典）。
+
+    只做 GET（不提交账号），最多 5 个候选路径；命中 HTML 登录页/重定向即 True。
+    返回 available=None 表示网络异常无法判断——此时调用方应继续执行 brute
+    （宁可多花请求，也不因探测失败漏掉真实默认口令）。
+
+    背景（2026-11-19 性能基线）：R11 是 Spring Boot API 负样本，根路径与所有
+    登录路径均 404，但旧版 Druid 爆破仍跑 6 用户 × 1053 字典 = 6318 请求，
+    把 -u 总请求推到 7182。登录页探测用约 5 个请求即可安全跳过。
+
+    Returns:
+        {"available": bool | None, "url": str, "status": int, "reason": str}
+    """
+    from core.http import join_url
+
+    root = (root_target or "").rstrip("/")
+    candidates: List[str] = []
+    if root:
+        candidates.append(root)
+    bases = {root}
+    if plugin_target:
+        bases.add((plugin_target or "").rstrip("/"))
+    for base in bases:
+        if not base:
+            continue
+        for path in _LOGIN_PAGE_PATHS:
+            candidates.append(join_url(base, path))
+    seen = set()
+    unique = []
+    for url in candidates:
+        if url not in seen:
+            seen.add(url)
+            unique.append(url)
+
+    had_response = False
+    last_url = ""
+    last_status = 0
+    for url in unique:
+        try:
+            resp = session.get(url, allow_redirects=False)
+        except Exception:
+            continue
+        had_response = True
+        last_url = url
+        status = int(getattr(resp, "status_code", 0) or 0)
+        last_status = status
+        headers = getattr(resp, "headers", {}) or {}
+        location = str(headers.get("Location", "") or "")
+        if status in (301, 302, 303, 307, 308) and "login" in location.lower():
+            return {"available": True, "url": url, "status": status, "reason": "重定向到登录页"}
+        content_type = str(headers.get("Content-Type", "") or "").lower()
+        if status not in (200, 401, 403):
+            continue
+        if "html" not in content_type and "text/plain" not in content_type:
+            continue
+        text = str(getattr(resp, "text", "") or "")
+        if any(marker in text for marker in _LOGIN_PAGE_MARKERS):
+            return {"available": True, "url": url, "status": status, "reason": "HTML 登录页特征命中"}
+
+    if not had_response:
+        return {"available": None, "url": "", "status": 0, "reason": "登录页探测全部网络异常"}
+    return {
+        "available": False,
+        "url": last_url,
+        "status": last_status,
+        "reason": "所有候选登录路径均无登录页特征",
+    }
+
+
 def login_wall_evidence(reason: str, what: str = "", unlock_hint: str = "") -> str:
     """构造「因登录墙无法判定」的证据文本（插件内部返回 UNKNOWN 时统一使用）。
 

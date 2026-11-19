@@ -245,6 +245,7 @@ class ReportBuilder:
             "scan_time": self.summary.get("started_at", ""),
             "duration_sec": round(self.summary.get("duration", 0), 2),
             "request_count": self.summary.get("request_count", 0),
+            "plugin_metrics": self.summary.get("plugin_metrics", []),
             "mode": self.summary.get("mode", ""),
             # 认证状态按链路分开：admin（主扫描）/ surface（--auth-surface 独立会话）
             "meta": {

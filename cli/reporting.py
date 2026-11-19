@@ -67,6 +67,7 @@ def run_cli_report(
         "started_at": started_at,
         "duration": duration,
         "request_count": getattr(orch, "last_request_count", 0),
+        "plugin_metrics": list(getattr(orch, "last_plugin_metrics", [])),
         "blocked": getattr(orch, "last_block_info", {}),
         "mode": report_label,
         "auth_status": {

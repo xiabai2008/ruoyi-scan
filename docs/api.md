@@ -80,7 +80,13 @@ POST /api/scan
   "subdomain": false,
   "js_extract": false,
   "template": "",
-  "auth": null
+  "auth": null,
+  "oast": false,
+  "oast_host": "127.0.0.1",
+  "oast_bind": "",
+  "oast_port": 0,
+  "oast_tcp_port": 0,
+  "oast_timeout": 8.0
 }
 ```
 
@@ -102,6 +108,12 @@ POST /api/scan
 | js_extract | bool | false | JS 端点提取 |
 | template | string | "" | 扫描模板：quick/deep/compliance/dengbao |
 | auth | object | null | 认证配置 |
+| oast | bool | false | 启用 OAST 带外验证（Log4j/盲 SSRF/盲 XXE） |
+| oast_host | string | "127.0.0.1" | 目标可达的回调地址 |
+| oast_bind | string | "" | 回调监听地址（默认同 oast_host；远程常填 0.0.0.0） |
+| oast_port | int | 0 | 回调 HTTP 端口（0=自动） |
+| oast_tcp_port | int | 0 | Log4j JNDI TCP 回调端口（0=自动） |
+| oast_timeout | float | 8.0 | 单次回调等待秒数 |
 
 **auth 对象结构**：
 
@@ -161,6 +173,7 @@ GET /api/scan/{task_id}
   "finished_at": 1721480030.0,
   "duration": 30.5,
   "request_count": 152,
+  "plugin_metrics": [{"plugin": "目录扫描", "duration_ms": 860.0, "requests": 697}],
   "result_count": 18,
   "confirmed_count": 5,
   "error": "",

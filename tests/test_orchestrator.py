@@ -30,9 +30,7 @@ def _mock_router():
     """
     with patch("core.orchestrator.Router") as mock_router, patch(
         "lib.reachability.detect_blocked", return_value={"blocked": False}
-    ), patch(
-        "lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}
-    ), patch(
+    ), patch("lib.reachability.detect_auth_wall", return_value={"wall": False, "reason": "", "status": 0}), patch(
         "core.basepath.detect_api_base", return_value=""
     ):
         mock_router.return_value.resolve.return_value = []
@@ -441,6 +439,7 @@ if __name__ == "__main__":
     test_shutdown_closes_pool()
     print("All D9.1 orchestrator tests passed!")
 
+
 def test_stage_session_closes_when_engine_init_fails():
     """会话已创建但后续初始化失败时，必须关闭会话（连接池泄漏回归）。"""
     orch = ScanOrchestrator(registry=None)
@@ -456,8 +455,10 @@ def test_stage_session_closes_when_engine_init_fails():
     finally:
         orch.shutdown()
 
+
 def test_fingerprint_and_waf_snapshots_are_populated_before_registry_update():
     """fingerprint/waf 事件触发 registry 快照时，task 字段必须已赋值。"""
+
     class Reg:
         def __init__(self):
             self.dicts = []
@@ -481,3 +482,45 @@ def test_fingerprint_and_waf_snapshots_are_populated_before_registry_update():
 
     assert any(d.get("fingerprint") for d in reg.dicts), "fingerprint 事件快照缺少指纹"
     assert any(d.get("waf") for d in reg.dicts), "waf 事件快照缺少 WAF 信息"
+
+
+def test_oast_stage_starts_and_stops_client():
+    """--oast 启动 HttpServer/客户端，返回后可正常关闭。"""
+    from core.orchestrator import ScanOrchestrator, ScanRequest
+
+    orch = ScanOrchestrator(registry=None)
+    req = ScanRequest(target="http://example.com/", oast=True, oast_port=0, oast_timeout=1)
+    client = orch._stage_oast(req, lambda *a: None, "t-oast")
+    try:
+        assert client is not None
+        assert client.server is not None and client.server.is_running()
+        assert client.server.bound_port > 0
+    finally:
+        if client is not None:
+            client.close()
+            client.server.stop()
+        orch.shutdown()
+
+
+def test_oast_plugins_filtered_when_disabled():
+    """requires_oast 插件在未启用 OAST 时从加载结果中移除。"""
+    from types import SimpleNamespace
+
+    from core.orchestrator import ScanOrchestrator, ScanRequest
+    from plugins.common.blind_ssrf import BlindSsrfPlugin
+    from plugins.common.env_leak import EnvLeakPlugin
+
+    orch = ScanOrchestrator(registry=None)
+    try:
+        fp = SimpleNamespace(cms="ruoyi", version="", variant="", confidence=1.0)
+        req = ScanRequest(target="http://example.com/")
+        events = []
+        plugins, _groups, _cats = orch._stage_load_plugins(
+            req, fp, [BlindSsrfPlugin, EnvLeakPlugin], lambda *a: events.append(a), "t-filter", oast_enabled=False
+        )
+        names = {getattr(cls, "name", "") for cls in plugins}
+        assert BlindSsrfPlugin.name not in names
+        assert EnvLeakPlugin.name in names
+        assert any(a[0] == "oast_disabled" for a in events)
+    finally:
+        orch.shutdown()

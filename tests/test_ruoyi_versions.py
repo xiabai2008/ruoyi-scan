@@ -177,7 +177,7 @@ class TestRouterVersionFilter(unittest.TestCase):
         plugins = Router().resolve(fp)
         # 4.2.0 应跑全部 POC（所有 <4.6 和 <4.7 都满足，全版本的也满足）
         # v1.7：新增「时间盲注（dept）」（affected_versions=">=3.0"）→ 18 → 19
-        self.assertEqual(len(plugins), 19, f"4.2.0 应跑全部 19 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 21, f"4.2.0 应跑全部 21 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_7_8(self):
         """4.7.8：只过滤「定时任务调用目标未校验」这 1 个
@@ -190,13 +190,13 @@ class TestRouterVersionFilter(unittest.TestCase):
         """
         fp = FingerprintResult(cms="ruoyi", version="4.7.8", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 18, f"4.7.8 应过滤掉 1 个已修 POC，剩 18 个，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 20, f"4.7.8 应过滤掉 1 个已修 POC，剩 20 个，实际 {len(plugins)}")
 
     def test_filter_by_version_4_6_0(self):
         """4.6.0：全部 POC 适用（注入/上传/任务 RCE 已按源码复核取消上界）"""
         fp = FingerprintResult(cms="ruoyi", version="4.6.0", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 19, f"4.6.0 应跑全部 19 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 21, f"4.6.0 应跑全部 21 个 POC，实际 {len(plugins)}")
 
     def test_filter_by_version_4_8_3(self):
         """4.8.3：注入/上传/任务 RCE 仍适用，仅越权/任务调用目标类被过滤（16 个）
@@ -206,13 +206,13 @@ class TestRouterVersionFilter(unittest.TestCase):
         """
         fp = FingerprintResult(cms="ruoyi", version="4.8.3", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 16, f"4.8.3 应跑 16 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 18, f"4.8.3 应跑 18 个 POC，实际 {len(plugins)}")
 
     def test_no_version_runs_all(self):
         """版本未识别 → 跑全部 POC（保守策略）"""
         fp = FingerprintResult(cms="ruoyi", version="", confidence=1.0, matched=[])
         plugins = Router().resolve(fp)
-        self.assertEqual(len(plugins), 19, f"版本未识别应跑全部 19 个 POC，实际 {len(plugins)}")
+        self.assertEqual(len(plugins), 21, f"版本未识别应跑全部 21 个 POC，实际 {len(plugins)}")
 
     def test_filterd_out_plugins(self):
         """4.7.8 过滤掉的 POC 类名正确（sql_inject_role/dept 等）"""

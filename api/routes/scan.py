@@ -122,6 +122,12 @@ async def create_scan(
         bypass_waf=req.bypass_waf,
         adversarial_transport=getattr(req, "adversarial_transport", False),
         plugins=req.plugins,
+        oast=req.oast,
+        oast_host=req.oast_host,
+        oast_bind=req.oast_bind,
+        oast_port=req.oast_port,
+        oast_tcp_port=req.oast_tcp_port,
+        oast_timeout=req.oast_timeout,
     )
     task_id = orch.submit(scan_req)
     return ScanCreateResponse(task_id=task_id, status="pending")

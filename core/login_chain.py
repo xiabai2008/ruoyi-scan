@@ -102,7 +102,10 @@ def isolated_auth_session(
         rate=getattr(parent, "rate", 0),
         rate_scope=getattr(parent, "rate_scope", "request"),
         limiter=getattr(parent, "_limiter", None),
+        request_counter=getattr(parent, "_request_counter", None),
     )
+    # OAST 客户端跟随父会话：隔离会话里的插件仍能拿到同一套回调记录
+    own.oast_client = getattr(parent, "oast_client", None)
     try:
         chain = RuoYiAuthChain(target, own, username=username, password=password, timeout=timeout)
         ok, reason = chain.login(max_attempts=8)

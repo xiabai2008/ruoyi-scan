@@ -2,6 +2,8 @@
 # 不依赖 CMS 指纹识别，对任意 Web 站点生效，始终参与扫描
 # 与 CMS 插件包并行执行，不受路由过滤
 from plugins.common.backup_scan import BackupScanPlugin
+from plugins.common.blind_ssrf import BlindSsrfPlugin
+from plugins.common.blind_xxe import BlindXxePlugin
 from plugins.common.cors_misconfig import CorsMisconfigPlugin
 from plugins.common.dir_listing import DirListingPlugin
 from plugins.common.env_leak import EnvLeakPlugin
@@ -27,6 +29,8 @@ plugin_list = [
     SourceLeakPlugin,  # IDE/SCM 残留文件泄露
     MinioUnauthPlugin,  # MinIO 未授权（F7 中间件）
     RocketmqUnauthPlugin,  # RocketMQ Dashboard 未授权（F7 中间件）
+    BlindSsrfPlugin,  # 盲 SSRF（需 --oast，回调确认）
+    BlindXxePlugin,  # 盲 XXE（需 --oast，回调确认）
     ShiroRemembermePlugin,  # Shiro 框架指纹（rememberMe 特征；只到 SAFE/UNKNOWN，需人工验密钥）
     # recon：信息收集
     DirListingPlugin,  # 目录遍历探测

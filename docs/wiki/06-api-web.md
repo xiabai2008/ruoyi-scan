@@ -242,6 +242,8 @@ WS_SUBPROTOCOL = "ruoyi-scan-api-key"
 | `recon` / `surface` / `component` / `auth` | 侦察、攻击面、组件、认证注入 |
 | `template` / `plugins_loaded` / `plugin_fallback` / `nuclei_error` | 插件装载与模板 |
 | `blocked` / `auth_wall` / `waf_bypass` | 拦截、登录墙、绕过 |
+| `oast` / `oast_disabled` | 带外监听启动/失败；requires_oast 插件被过滤 |
+| `login_page` / `plugin_metric` | 登录页探测结果；插件级耗时/请求数归因 |
 | `denied_downgrade` / `evidence_downgrade` / `auth_wall_downgrade` / `blocked_downgrade` / `auth_downgrade` / `attribution` | 三态降级与归属 |
 
 上表是主要事件，不是穷举；新增事件时同步补在这里。
