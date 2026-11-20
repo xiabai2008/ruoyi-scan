@@ -35,8 +35,17 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/xiabai2008/RuoYi-Scan/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAzQTk2ODcxNTcwMEEyN0EKUldSNm9nQlhjV2lwQTU5MzVUR1B3Yi9XZnZRTEtuU0VXTVZzSnRhV2dNWXZiQ2ZKM0ZZTm50VEcK"
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "nsis"
     ],

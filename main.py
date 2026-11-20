@@ -323,6 +323,21 @@ def build_parser():
         help="从模板仓库更新插件（默认官方仓库；强制 Ed25519 验签，需 cryptography + 可信公钥）",
     )
 
+    group = parser.add_argument_group("F1 在线更新")
+    group.add_argument("--check-update", action="store_true", default=False, help="检查是否有新版本（不安装）")
+    group.add_argument(
+        "--self-update",
+        action="store_true",
+        default=False,
+        help="检查并升级到最新版本（pip 版走 pip，单文件 exe 自动替换并重启）",
+    )
+    group.add_argument(
+        "--update-url",
+        default=None,
+        metavar="URL",
+        help="覆盖更新清单地址（默认 GitHub Release latest/version.json）",
+    )
+
     group = parser.add_argument_group("E7 AI 插件生成")
     group.add_argument("--ai", default=None, metavar="DESC", help="AI 生成插件（漏洞描述）")
     group.add_argument(
@@ -610,6 +625,8 @@ def main(argv=None):
             args.ci_init,
             args.wiki,
             args.oast_server,
+            args.check_update,
+            args.self_update,
             args.cve_sync,
             args.cve_id,
             args.cve_offline is not None,

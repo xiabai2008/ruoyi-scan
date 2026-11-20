@@ -2002,6 +2002,16 @@ python -m venv .venv
 | `--plugin-manifest <dir>` | 生成/校验 manifest.json（Ed25519 签名） |
 | `--plugin-update [url]` | 从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥） |
 
+### 在线更新（F1）
+
+| 参数 | 说明 |
+|------|------|
+| `--check-update` | 检查新版本，不修改当前安装 |
+| `--self-update` | 检查并升级（pip 版走 pip；Windows 单文件 exe 自动替换并重启） |
+| `--update-url <url>` | 覆盖更新清单地址（默认 GitHub Release latest/version.json） |
+
+详见 [在线更新](updates.md)。
+
 ### CI/CD 集成（D28）
 
 | 参数 | 说明 |

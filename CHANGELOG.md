@@ -40,6 +40,13 @@
   （全成功 / 部分失败 / 全失败），不再以"删了实现也删了测试"收尾。
 
 ### Added
+- **在线更新（桌面端 + CLI）**：
+  - 桌面端接入 Tauri updater，启动后自动检查 GitHub Release `latest.json`，设置页可手动检查/下载安装；
+    更新包使用编译期内置 Ed25519 公钥验签，安装完成自动重启；
+  - CLI 新增 `--check-update` / `--self-update`：pip 安装版走当前解释器 pip 升级，
+    Windows 单文件 exe 下载后校验 sha256、延迟替换并重启；支持 `--update-url` 镜像地址；
+  - 发布流程新增 `version.json` 与 `latest.json` 生成、Tauri 签名产物上传；
+    签名私钥通过 CI Secret `TAURI_SIGNING_PRIVATE_KEY` 注入，不入库。
 - **爆破安全默认值**：`--pass-level` 默认从 `full` 改为 `top100`，完整字典需显式开启；Druid 爆破检测 429/账号锁定/验证码并主动停止，返回 `UNKNOWN(brute_blocked)` 而不是误判 SAFE；R1/R2 带认证扫描结果集不变（6/5 CONFIRMED）。
 - **性能：无登录页跳过 brute + 插件级成本归因 + request_count 修正**：
   - 登录页探测（根/登录/认证/Druid 路径）明确为无登录页时，引擎跳过 `requires_login_page` 爆破插件；

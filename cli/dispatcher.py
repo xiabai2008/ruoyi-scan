@@ -27,6 +27,7 @@ from cli.tool_runner import (
     run_diff_only_mode,
     run_nuclei_validate_mode,
     run_template_list_mode,
+    run_update_mode,
     run_wiki_mode,
 )
 
@@ -80,6 +81,12 @@ def dispatch(args: Namespace) -> None:
     # E4：nuclei 模板校验（不扫描）
     if args.nuclei_validate:
         run_nuclei_validate_mode(args.nuclei_validate)
+        return
+    # F1：在线更新（不扫描，必须在目标校验之前）
+    if getattr(args, "check_update", False) or getattr(args, "self_update", False):
+        code = run_update_mode(args)
+        if code:
+            sys.exit(code)
         return
     # E5：插件模板仓库（导出/清单/更新）
     if args.plugin_export:

@@ -87,7 +87,7 @@ describe("NewScanDialog", () => {
     expect(payload.threads).toBe(8);
     expect(payload.rate).toBe(0);
     expect(payload.timeout).toBe(10);
-    expect(payload.pass_level).toBe("full");
+    expect(payload.pass_level).toBe("top100");
     expect(payload.bypass_waf).toBe("auto");
     expect(payload.portscan).toBe(false);
     expect(payload.report_format).toContain("json");

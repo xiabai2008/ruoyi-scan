@@ -53,6 +53,18 @@
 亮点速览、行为变更提醒、安装/升级方式。`release.yml` 会将其作为 GitHub Release 正文；
 未提供该文件时自动回退 GitHub 生成的变更说明。
 
+### 2.1 在线更新签名（v2.0+ 必配）
+
+桌面端在线更新使用 Tauri minisign 签名，仓库 Secrets 必须配置：
+
+- `TAURI_SIGNING_PRIVATE_KEY`：私钥内容（推荐）或 runner 上私钥文件路径；
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码；无密码 key 可留空。
+
+公钥在 `desktop/src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`。私钥绝不能入库；
+本地构建可放 `.secrets/`（已 gitignore）。`desktop-release.yml` 会自动生成并上传
+`latest.json`（桌面更新）与 `version.json`（CLI 更新），同时保留 `.exe.sig` 供审计。
+详细协议见 [在线更新](updates.md)。
+
 ### 3. 提交 + 打 tag
 
 ```bash

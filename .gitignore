@@ -16,6 +16,9 @@ data/*.db-*
 # 保留 data 目录但排除 db 文件（用 .gitkeep 占位）
 !data/.gitkeep
 
+# 本地更新签名私钥（CI 用 TAURI_SIGNING_PRIVATE_KEY secret，绝不入库）
+.secrets/
+
 # 构建产物（锚定仓库根：嵌套 build/dist 不再被误忽略，桌面端产物见下方单独条目）
 /build/
 /dist/

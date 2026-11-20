@@ -77,7 +77,14 @@ ruoyi-scan -u http://target --pass-level full
   远程回调请显式使用 `--oast-bind` / `--oast-host`。
 - 不启用 `--oast` 时，`requires_oast` 插件会在加载期被过滤，不产生伪 UNKNOWN。
 
-### 6. 插件与检测声明
+### 6. 新增在线更新
+
+- 桌面端：启动自动检查，设置页可手动检查/下载安装；更新包 Ed25519 验签。
+- CLI：`--check-update` / `--self-update`；pip 版调用 pip，Windows 单文件 exe 自动替换并重启。
+- 更新清单默认指向 GitHub Release 的 `version.json` / `latest.json`；镜像可用 `--update-url` 覆盖。
+- 详见[在线更新](updates.md)。
+
+### 7. 插件与检测声明
 
 - 插件数从 1.8 的 62 增至 **63**（新增前端 SourceMap 源码泄露）；
 - 新增 Cloud 能力包、WAF 行为识别、Ruoyi-Plus/Cloud 指纹增强；

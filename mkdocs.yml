@@ -138,6 +138,7 @@ nav:
       - v1.7 三态对照实验: verdict_experiment_v1.7.md
       - v1.7 UNKNOWN 归因审计: unknown_audit_v1.7.md
   - 桌面端: desktop.md
+  - 在线更新: updates.md
   - 开发者:
       - 插件开发教程: plugin_dev.md
       - 插件模板仓库: template_repo.md

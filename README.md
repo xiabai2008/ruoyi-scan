@@ -147,6 +147,7 @@ pip install ruoyi-scan
 | 单文件分发 | PyInstaller 引擎在 cargo 编译期由 `build.rs` 嵌入壳二进制；运行时自解压到 `%LOCALAPPDATA%\Ruoyi-Scan\engine\`，按校验和版本戳自动覆盖升级 |
 | 进程回收 | 引擎子进程挂 Windows JobObject（`KILL_ON_JOB_CLOSE`），壳被强杀 / 崩溃时引擎树自动回收，不留孤儿进程 |
 | 卸载清理 | NSIS `installerHooks` 在卸载后清除运行时自解压缓存，避免残留约 30 MB 引擎文件 |
+| 在线更新 | 桌面端启动自动检查 + 设置页一键升级（Tauri updater / Ed25519 验签）；CLI `--check-update` / `--self-update`；清单与签名见[在线更新文档](docs/updates.md) |
 
 > 更多细节见[桌面端文档](docs/desktop.md)。
 
@@ -675,6 +676,14 @@ docker compose down
 | `--plugin-export <dir>` | 导出插件源码与元信息到目录（模板仓库） |
 | `--plugin-manifest <dir>` | 生成/校验 manifest.json（Ed25519 签名） |
 | `--plugin-update [url]` | 从模板仓库更新插件（强制 Ed25519 验签，需 cryptography + 可信公钥） |
+
+#### 在线更新（F1）
+
+| 参数 | 说明 |
+|------|------|
+| `--check-update` | 检查新版本，不修改当前安装 |
+| `--self-update` | 检查并升级（pip 版走 pip；Windows 单文件 exe 自动替换并重启） |
+| `--update-url <url>` | 覆盖更新清单地址 |
 
 #### CI/CD 集成（D28）
 

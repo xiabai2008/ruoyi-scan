@@ -14,6 +14,7 @@ import { playThemeTick } from "../state/personalize";
 import { getVisual, setVisual, type FontMode } from "../state/visual";
 import { loadWidgetPrefs, saveWidgetPrefs, DEFAULT_WIDGETS, type WidgetPrefs } from "../state/widgets";
 import { api, fetchMetrics, setApiBase, type MetricsSnapshot } from "../services/backend";
+import { checkForUpdate, installPendingUpdate, isTauriRuntime, type UpdateInfo } from "../services/updater";
 
 const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: "Ctrl + Enter", desc: "提交扫描" },
@@ -55,6 +56,62 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
   const [callsignDraft, setCallsignDraft] = useState(operator.callsign);
   const [greetDraft, setGreetDraft] = useState(operator.greet);
   const [customHint, setCustomHint] = useState("");
+
+  /* 在线更新（Tauri updater） */
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updateErr, setUpdateErr] = useState("");
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const tauriRuntime = isTauriRuntime();
+
+  const runUpdateCheck = async (auto = false) => {
+    if (!tauriRuntime || updateBusy) return;
+    setUpdateBusy(true);
+    setUpdateErr("");
+    setUpdateMsg(auto ? "正在后台检查更新…" : "正在检查更新…");
+    try {
+      const found = await checkForUpdate();
+      setUpdateInfo(found);
+      setUpdateMsg(found ? "发现新版本 v" + found.version : "当前已是最新版本");
+    } catch (err) {
+      setUpdateInfo(null);
+      setUpdateMsg("");
+      // 后台自动检查失败不打扰用户；手动检查才显示错误
+      if (!auto) setUpdateErr(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const runUpdateInstall = async () => {
+    if (!updateInfo || updateBusy) return;
+    setUpdateBusy(true);
+    setUpdateErr("");
+    setUpdateMsg("正在下载更新…");
+    setUpdateProgress(0);
+    try {
+      await installPendingUpdate((percent) => {
+        setUpdateProgress(percent);
+        if (percent === null) setUpdateMsg("正在下载更新…");
+        else setUpdateMsg("正在下载更新… " + percent + "%");
+      });
+      setUpdateMsg("更新已安装，正在重启…");
+    } catch (err) {
+      setUpdateErr(err instanceof Error ? err.message : String(err));
+      setUpdateMsg("");
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!tauriRuntime) return;
+    const timer = window.setTimeout(() => { void runUpdateCheck(true); }, 1800);
+    return () => window.clearTimeout(timer);
+    // runUpdateCheck 依赖 state，但自动检查只应在挂载后触发一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tauriRuntime]);
 
   /* 主题编辑器 */
   const [draft, setDraft] = useState<CustomThemeDraft>(() => draftFromTheme(themeTokens(theme)));
@@ -532,6 +589,48 @@ export function Settings({ theme, onTheme }: { theme: ThemeName; onTheme: (t: Th
           </div>
           <p className="text-[9.5px] text-ink-3">
             开启后浮窗显示在窗口右上角，按住拖到任意位置；位置自动记忆，随窗口边缘自动回弹。
+          </p>
+        </Section>
+
+        {/* 在线更新 */}
+        <Section title="在线更新 / UPDATE" contentClass="gap-2">
+          <Row label="当前版本" value={engine ? "v" + engine.version : "—"} />
+          <Row label="运行环境" value={tauriRuntime ? "DESKTOP" : "BROWSER / CLI"} />
+          <div className="flex flex-wrap items-center gap-2 border-t pt-2" style={{ borderColor: "var(--c-border)" }}>
+            <button
+              onClick={() => { void runUpdateCheck(false); }}
+              disabled={!tauriRuntime || updateBusy}
+              className="h-[30px] rounded-sm border border-edge px-3 text-[10.5px] text-ink-2 hover:bg-cardsoft disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {updateBusy ? "检查中…" : "检查更新"}
+            </button>
+            {updateInfo ? (
+              <button
+                onClick={() => { void runUpdateInstall(); }}
+                disabled={updateBusy}
+                className="h-[30px] rounded-sm bg-accent px-3 text-[10.5px] font-semibold text-btntext disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                下载并安装 v{updateInfo.version}
+              </button>
+            ) : null}
+            {updateMsg ? <span className="font-mono text-[9.5px] text-ink-3">{updateMsg}</span> : null}
+          </div>
+          {updateProgress !== null ? (
+            <div className="h-1.5 w-full overflow-hidden rounded bg-cardsoft">
+              <div
+                className="h-full bg-accent transition-all"
+                style={{ width: updateProgress === null ? "0%" : String(updateProgress) + "%" }}
+              />
+            </div>
+          ) : null}
+          {updateErr ? <p className="text-[9.5px] text-[var(--c-sem-red)]">{updateErr}</p> : null}
+          {updateInfo?.body ? (
+            <p className="max-h-[84px] overflow-auto whitespace-pre-wrap text-[9.5px] leading-[15px] text-ink-3">{updateInfo.body}</p>
+          ) : null}
+          <p className="text-[9.5px] leading-[14px] text-ink-3">
+            {tauriRuntime
+              ? "更新包由 Tauri 使用内置 Ed25519 公钥验签后安装；下载完成后应用自动重启。"
+              : "在线更新仅在桌面端 Tauri 运行时可用；CLI 请使用 ruoyi-scan --check-update / --self-update。"}
           </p>
         </Section>
 

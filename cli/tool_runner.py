@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from argparse import Namespace
 
 from common.logger import get_logger
@@ -87,6 +88,58 @@ def run_diff_only_mode(old_path: str, new_path: str) -> None:
     for p in paths:
         print(f"    {p}")
     print(f"{SEPARATOR}")
+
+
+def run_update_mode(args: Namespace) -> int:
+    """检查/执行在线更新（F1）。
+
+    - `--check-update`：只读检查，不修改当前安装；
+    - `--self-update`：检查并升级；pip 版调用当前解释器 pip，单文件 exe 下载后
+      延迟替换并重启（Windows）。
+    """
+    from lib.updater import UpdateError, check_for_update, get_cli_asset, perform_update
+
+    url = getattr(args, "update_url", None) or ""
+    print(f"{SEPARATOR}")
+    print(f"{YELLOW}[*]检查在线更新{RESET}")
+    try:
+        info = check_for_update(url=url)
+    except UpdateError as exc:
+        print(f"{RED}[!]{exc}{RESET}")
+        return 1
+    print(f"    当前版本：{info.current}")
+    print(f"    最新版本：{info.latest}")
+    if info.pub_date:
+        print(f"    发布时间：{info.pub_date}")
+    if not info.available:
+        print(f"{GREEN}[+]已是最新版本{RESET}")
+        return 0
+
+    print(f"{YELLOW}[*]发现新版本 {info.latest}{RESET}")
+    if info.notes:
+        for line in info.notes.splitlines()[:8]:
+            print(f"    {line}")
+    if not getattr(args, "self_update", False):
+        print(f"{YELLOW}[*]执行安装：ruoyi-scan --self-update{RESET}")
+        return 0
+
+    print(f"{YELLOW}[*]开始升级到 {info.latest} ...{RESET}")
+    try:
+        if getattr(sys, "frozen", False):
+            # 提前校验资产字段，避免下载后再因清单缺字段留下半成品
+            get_cli_asset(info.manifest)
+        rc = perform_update(info)
+    except UpdateError as exc:
+        print(f"{RED}[!]{exc}{RESET}")
+        return 1
+    if rc:
+        print(f"{RED}[!]升级命令返回非 0（{rc}）{RESET}")
+        return rc
+    if getattr(sys, "frozen", False):
+        print(f"{GREEN}[+]更新包已校验，当前进程退出后自动替换并重启{RESET}")
+    else:
+        print(f"{GREEN}[+]pip 升级完成；重新运行 ruoyi-scan -V 确认版本{RESET}")
+    return 0
 
 
 def run_ci_init_mode(args: Namespace) -> None:
