@@ -118,7 +118,8 @@ def main(argv=None) -> int:
 
     if args.tag:
         tag_ver = args.tag.strip().lstrip("vV")
-        if tag_ver != base:
+        # RC/预发布 tag 允许 2.0.0-rc.1 这种后缀；正式 tag 仍须精确相等。
+        if tag_ver != base and not tag_ver.startswith(base + "-"):
             problems.append((f"git tag {args.tag}", f"与代码版本 {base} 不一致"))
 
     if problems:

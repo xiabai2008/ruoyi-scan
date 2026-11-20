@@ -130,6 +130,7 @@ nav:
   - 快速上手: quickstart.md
   - 用户指南:
       - 用户手册: usage.md
+      - 1.x→2.0 迁移: MIGRATION_2.0.md
       - 版本矩阵: version-matrix.md
       - 检出能力矩阵: verification-matrix.md
       - 安全报告说明: security_report.md

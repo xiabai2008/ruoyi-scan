@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-20
+
 ### Removed
 - **Web 控制台**（`web/index.html`、`--serve` 的静态挂载、桌面引擎打包条目）：它无法在
   `--api-key` 下完成 WebSocket 鉴权，且被 `pyproject.toml` 排除出 wheel——"源码可用、
