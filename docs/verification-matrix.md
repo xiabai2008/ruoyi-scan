@@ -3,7 +3,7 @@
 > 由 `scripts/verification_matrix.py` 自动生成（证据来自 lab 文档与测试源码，非人工填写）。
 > 级别定义：L3 真实软件双向验证 / L2 真实响应靶场（无 marker）/ L1 签名靶场 / none 无自动化验证。
 
-**总计 61 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 37 个，none 3 个
+**总计 66 个插件源码文件**（含 `plugins/chain/` 下 3 个链步骤类，`--plugin-list` 不计入）：L3 10 个，L2 11 个，L1 42 个，none 3 个
 
 | 级别 | 插件 | CVE | 严重度 | 测试引用 | 已知误报 | 文件 |
 |------|------|-----|--------|---------|---------|------|
@@ -12,6 +12,8 @@
 | none | JeecgBoot 报表未授权 | CVE-2023-1454 | medium | **否** | — | `plugins/jeecgboot/jmreport_list_unauth.py` |
 | L1 | Nacos未授权访问 | N/A | high | 是 | — | `plugins/chain/nacos_to_dbcreds_steps.py` |
 | L1 | 备份文件泄露 | N/A | medium | 是 | — | `plugins/common/backup_scan.py` |
+| L1 | 盲 SSRF（带外确认） | N/A | high | 是 | — | `plugins/common/blind_ssrf.py` |
+| L1 | 盲 XXE（带外确认） | N/A | high | 是 | — | `plugins/common/blind_xxe.py` |
 | L1 | CORS 跨域配置不当 | N/A | medium | 是 | — | `plugins/common/cors_misconfig.py` |
 | L1 | 目录遍历探测 | N/A | low | 是 | — | `plugins/common/dir_listing.py` |
 | L1 | .env 配置文件泄露 | N/A | high | 是 | — | `plugins/common/env_leak.py` |
@@ -21,6 +23,7 @@
 | L1 | RocketMQ Dashboard 未授权 | CVE-2023-33246 | medium | 是 | — | `plugins/common/rocketmq_unauth.py` |
 | L1 | Shiro 框架指纹（rememberMe） | N/A | low | 是 | — | `plugins/common/shiro_rememberme.py` |
 | L1 | IDE/SCM 残留文件泄露 | N/A | medium | 是 | — | `plugins/common/source_leak.py` |
+| L1 | 前端 SourceMap 源码泄露 | N/A | medium | 是 | — | `plugins/common/sourcemap_leak.py` |
 | L1 | 爬取攻击面盘点 | N/A | low | 是 | — | `plugins/common/surface_sweep.py` |
 | L1 | Swagger API 文档泄露 | N/A | medium | 是 | — | `plugins/common/swagger_leak.py` |
 | L1 | HTTP 方法探测 | N/A | low | 是 | — | `plugins/common/trace_method.py` |
@@ -31,6 +34,8 @@
 | L1 | JeecgBoot 报表 SSTI | N/A | high | 是 | — | `plugins/jeecgboot/freemarker_ssti.py` |
 | L1 | JeecgBoot jmreport SQL注入 | CNVD-2022-30348 | high | 是 | — | `plugins/jeecgboot/sql_inject_jmreport.py` |
 | L1 | JeecgBoot queryUserByDepId SQL注入 | CVE-2022-44153 | high | 是 | — | `plugins/jeecgboot/sql_inject_query_user.py` |
+| L1 | Gateway 路由表泄露（RuoYi-Cloud） | N/A | medium | 是 | — | `plugins/ruoyi/cloud_gateway_routes.py` |
+| L1 | Nacos 控制台默认口令（RuoYi-Cloud） | N/A | high | 是 | — | `plugins/ruoyi/cloud_nacos_default_password.py` |
 | L1 | 重置密码页数据权限绕过 | CVE-2025-46174 | high | 是 | — | `plugins/ruoyi/cve_2025_46174_resetpwd_scope.py` |
 | L1 | 部门树越权访问 | CVE-2025-70986 | medium | 是 | — | `plugins/ruoyi/cve_2025_70986_select_dept_tree.py` |
 | L1 | 后台默认口令（admin/admin123） | N/A | high | 是 | — | `plugins/ruoyi/default_password.py` |
