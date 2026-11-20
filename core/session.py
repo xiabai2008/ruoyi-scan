@@ -261,6 +261,8 @@ class SessionManager:
         self._count_lock = threading.Lock()  # 仅保护 short_circuited（历史字段）
         # 调试模式：打印每个请求的方法/URL/状态/响应大小到 stderr（不影响正常输出）
         self.debug = bool(debug)
+        # 登录页探测结果（orchestrator 写入；None=未探测/失败，True/False=可用/明确无登录页）
+        self.login_page_available: Optional[bool] = None
 
         # 请求级限速（v1.7.2）：默认 --rate 表示每秒 HTTP 请求数，令牌桶挂在统一请求
         # 出口 _send 上，单个插件内部连发的多个请求同样受约束（这正是现场触发 WAF

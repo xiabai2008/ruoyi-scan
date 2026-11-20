@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, cast
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, ScanResult, UnknownReason
@@ -67,9 +67,9 @@ class ScanEngine:
         # 令牌桶：rate<=0 时 acquire 自带短路，零额外开销
         self._bucket = TokenBucket(self.rate)
         # 插件级成本归因：每个插件耗时/请求数，供报告、终端事件与性能基线使用
-        self.plugin_metrics: List[dict] = []
+        self.plugin_metrics: List[Dict[str, Any]] = []
         self._metrics_lock = threading.Lock()
-        self._on_metric: Optional[Callable[[dict], None]] = None
+        self._on_metric: Optional[Callable[[Dict[str, Any]], None]] = None
 
     def run(
         self,
@@ -80,7 +80,7 @@ class ScanEngine:
         waf_bypass_coordinator: Optional[Any] = None,
         should_stop: Optional[Callable[[], bool]] = None,
         root_target: str = "",
-        on_metric: Optional[Callable[[dict], None]] = None,
+        on_metric: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> List[ScanResult]:
         """运行插件集合
 

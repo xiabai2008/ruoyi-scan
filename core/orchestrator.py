@@ -26,7 +26,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures.thread import _worker
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from common.logger import get_logger
 from common.models import STATUS_CONFIRMED, STATUS_SAFE, STATUS_UNKNOWN, FingerprintResult, ScanResult, UnknownReason
@@ -1296,7 +1296,7 @@ class ScanOrchestrator:
         # 5.6 低成本登录页探测：只对会执行 brute 的模式做；供引擎跳过无意义的
         # 口令字典（R11 无登录页仍跑 6×1053 Druid 字典 = 6318 请求）。
         # 探测失败（None）时保持旧行为（brute 继续跑），不因探测故障漏掉默认口令。
-        session.login_page_available = None  # type: ignore[attr-defined]
+        session.login_page_available = None
         if req.mode in ("u", "l"):
             try:
                 from lib.reachability import detect_login_page
@@ -1355,7 +1355,7 @@ class ScanOrchestrator:
         component_results: List[Any],
         auth_wall: Dict[str, Any],
         block_info: Dict[str, Any],
-        auth_required_names: set,
+        auth_required_names: Set[str],
         emit: Callable[..., None],
         task_id: str,
     ) -> None:
