@@ -46,6 +46,16 @@
 依赖：Python 3.8+；报告增强（PDF/Word/Excel）与 Web API 为可选依赖，缺失时自动降级
 （详见[用户手册 · 依赖要求](usage.md#依赖要求)）。
 
+### 在线更新
+
+```bash
+ruoyi-scan --check-update   # 只检查，不修改当前安装
+ruoyi-scan --self-update    # 下载并升级（pip 版走 pip；单文件 exe 校验后替换重启）
+```
+
+桌面端在启动时会自动检查，也可在「设置 → 在线更新」手动操作。更新包使用 Ed25519 验签，
+详见[在线更新](updates.md)。
+
 > 对抗型传输层（`--adversarial-transport`）为独立可选依赖：
 > `pip install "ruoyi-scan[adversarial]"`（含约 150MB+ 浏览器二进制，默认不安装）。
 
@@ -73,6 +83,12 @@ ruoyi-scan -u http://target:8080 --auth-login ruoyi:admin123 --auth-surface
 
 # WAF 环境强制绕过策略
 ruoyi-scan -u http://target:8080 --bypass-waf on
+
+# OAST 带外验证（Log4j / 盲 SSRF / 盲 XXE，回调命中才 CONFIRMED）
+ruoyi-scan -u http://target:8080 --oast
+
+# RuoYi-Cloud：Gateway 路由 / Nacos 控制台默认口令 / Cloud 路由别名（自动识别）
+ruoyi-scan -u http://cloud-target:8080
 
 # 对抗型传输层（Cloudflare / JS 挑战，需 [adversarial] 可选依赖）
 ruoyi-scan -u http://target:8080 --adversarial-transport

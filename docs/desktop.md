@@ -9,8 +9,8 @@
 
 | 文件 | 适用场景 |
 |------|---------|
-| `ruoyi-scan-desktop.exe`（~48 MB） | **推荐**：单文件版，放到任意目录双击即可 |
-| `ruoyi-scan.exe`（~38 MB） | 终端版：命令行使用，参数与 pip 版完全一致，免 Python（见[快速上手](quickstart.md)） |
+| `ruoyi-scan-desktop.exe`（~54 MB） | **推荐**：单文件版，放到任意目录双击即可 |
+| `ruoyi-scan.exe`（~39 MB） | 终端版：命令行使用，参数与 pip 版完全一致，免 Python（见[快速上手](quickstart.md)） |
 | `Ruoyi-Scan_<version>_x64-setup.exe` | 可选：NSIS 安装包（开始菜单 / 桌面快捷方式，currentUser 免管理员） |
 | `checksums-desktop.txt` | SHA256 校验（覆盖安装包 / 桌面端 / 终端版三个 exe） |
 
@@ -56,6 +56,17 @@ Ruoyi-Scan.exe                 ← WebView 壳（界面）
 卸载（安装包版）或删除单文件版 exe 即完成卸载；`%USERPROFILE%\Ruoyi-Scan\` 下的
 报告数据按需手动清理。
 
+## 在线更新
+
+桌面端从 v2.0 起支持在线升级：
+
+- 启动后自动检查 GitHub Release 的 `latest.json`；
+- 「设置 → 在线更新 / UPDATE」可手动检查、查看更新说明、下载安装；
+- 安装包使用编译期内置的 Ed25519 公钥验签，篡改/未签名包会被拒绝；
+- 安装完成后应用自动重启，引擎随新版壳重新释放。
+
+CLI 终端版使用 `--check-update` / `--self-update`，详见[在线更新](updates.md)。
+
 ## 桌面端特性
 
 - **人格系统**：11 预设操作员 + 自定义头像（`~/Ruoyi-Scan` 界面内选择）
@@ -85,7 +96,7 @@ Ruoyi-Scan.exe                 ← WebView 壳（界面）
 ```python
 import requests
 r = requests.get("http://127.0.0.1:8123/api/plugins")
-print(len(r.json()))  # 54
+print(len(r.json()))  # 63
 ```
 
 端点全表见 [API 文档](api.md)。

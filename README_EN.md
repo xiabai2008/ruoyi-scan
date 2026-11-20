@@ -16,7 +16,7 @@
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/report-overview.png" alt="Scan report: risk distribution + MLPS 2.0 / OWASP mapping" width="900" />
 </p>
 
-> Real HTML report from a single `-p` run (v1.5.2 against the bundled signature lab): risk distribution,
+> Real HTML report from a single `-p` run (v2.0.0 against the bundled signature lab): risk distribution,
 > MLPS 2.0 / OWASP clause hits, 20 confirmed findings — the report itself is the deliverable, in 7 formats
 > (HTML/JSON/CSV/PDF/Word/Excel/SARIF).
 
@@ -58,7 +58,7 @@ ruoyi-scan -u http://target:8080/                       # full scan: fingerprint
 ruoyi-scan -u http://target:8080/ --report ./reports --report-format all
 ```
 
-Real output (v1.5.2, against the bundled signature lab):
+Real output (v2.0.0, against the bundled signature lab):
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xiabai2008/ruoyi-scan/main/docs/images/cli-demo.png" alt="CLI output: green = confirmed, red = not vulnerable, yellow = undetermined" width="780" />
@@ -96,6 +96,12 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
   docx template engine, remediation re-test, SARIF for GitHub Code Scanning
 - **Engineering** — FastAPI + WebSocket API with RBAC and scheduled scans, single-exe desktop app, Docker,
   plugin SDK + community template repo with enforced Ed25519 signatures
+- **OAST** — `--oast` HTTP + on-demand TCP callback listener; Log4j JNDI / blind SSRF / blind XXE are
+  CONFIRMED only on a real callback
+- **RuoYi-Cloud** — Gateway route leak / Nacos console default credentials / Cloud job-gen route aliases
+- **Performance & cost attribution** — no-login-page brute skip, default `top100` dictionary,
+  per-plugin requests/duration metrics, real all-session `request_count`
+- **Online updates** — desktop auto-check + signed in-app update; CLI `--check-update` / `--self-update`
 - **Runnable labs** — signature lab / behaviour-level simulation (captcha + CSRF + diff-based verdicts) /
   adversarial network (WAF, rate limit, soft-404) / real Docker stack (RuoYi 4.7.8 + MySQL + nginx + ModSecurity).
   8 real-world usage scenarios are scripted in `scripts/scenario_audit.py`; see [lab/SCENARIO-AUDIT.md](lab/SCENARIO-AUDIT.md)
@@ -105,7 +111,7 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
 | Form | How | Notes |
 |---|---|---|
 | pip | `pip install -U ruoyi-scan` | Recommended; optional extras: `ruoyi-scan[report,serve]` |
-| Desktop | `ruoyi-scan-desktop.exe` from [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | ~49 MB, engine + 60 POCs embedded, no install |
+| Desktop | `ruoyi-scan-desktop.exe` from [Releases](https://github.com/xiabai2008/ruoyi-scan/releases/latest) | ~54 MB, engine + 63 POCs embedded, no install |
 | Docker | `docker build -t ruoyi-scan .` or `docker compose up -d` | Multi-stage, non-root; compose ships two signature labs |
 
 ## Desktop app
@@ -117,10 +123,19 @@ Batch: `ruoyi-scan -f targets.txt -p --report ./reports`. All flags: [docs/usage
 > Single-file Windows exe (Tauri + WebView2): engine and 63 POCs embedded; new scan, live results and report
 > archiving in one window. The engine subprocess is bound to a JobObject, so killing the app leaves no orphans.
 
+## Online updates
+
+- **Desktop**: checks `latest.json` on startup and in Settings; downloads, verifies the Ed25519 signature,
+  installs and restarts automatically.
+- **CLI**: `ruoyi-scan --check-update` / `ruoyi-scan --self-update`; pip installs use pip, the Windows
+  single-file exe verifies sha256 and replaces itself after exit.
+- Mirrors can override the manifest with `--update-url` or `RUOYI_SCAN_UPDATE_URL`.
+  See [Online updates](docs/updates.md).
+
 ## Documentation
 
 [Quick start](docs/quickstart.md) · [User manual](docs/usage.md) · [Plugin development](docs/plugin_dev.md) ·
-[Verification matrix](docs/verification-matrix.md) · [Desktop](docs/desktop.md) · [API](docs/api.md) ·
+[Verification matrix](docs/verification-matrix.md) · [Desktop](docs/desktop.md) · [Online updates](docs/updates.md) · [API](docs/api.md) ·
 [DevSecOps](docs/devsecops.md) · [Online docs](https://xiabai2008.github.io/ruoyi-scan/)
 
 ## Compliance

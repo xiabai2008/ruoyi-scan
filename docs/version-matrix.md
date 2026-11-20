@@ -1,11 +1,15 @@
 # RuoYi-Scan 若依版本兼容性矩阵
 
-> 生成日期：2026-09-07 | 工具版本：v1.2.4 | 维护者：XIABAI
+> 生成日期：2026-11-20 | 工具版本：v2.0.0 | 维护者：XIABAI
 
 ## 1. 概述
 
-本文档记录 Ruoyi-Scan v1.1 对各若依(RuoYi)框架版本的检测模块覆盖情况，
+本文档记录 Ruoyi-Scan v2.0 对各若依（RuoYi）框架版本的检测模块覆盖情况，
 帮助使用者快速评估对目标版本的检测能力，也为后续 POC 开发提供版本适配参考。
+
+> **v2.0 完整验证基线**：真实 32 目标回归（R1–R13 / C 系列 / D1 / A2 / Y1）的版本、指纹、
+> CONFIRMED / UNKNOWN 结果见 [validation-v2.md](validation-v2.md)。本页是版本适配总览，
+> 具体判定以实际扫描证据为准。
 
 ---
 
@@ -16,7 +20,7 @@
 | **4.2.0** | 首次发布含 `params[dataScope]` SQL 注入；`/common/upload` 扩展名校验弱 | SQL 注入 + 文件上传可利用 |
 | **4.6.0** | 修复 `params[dataScope]` SQL 注入；加强 `/common/upload` 扩展名校验 | SQL 注入修复，文件上传加固 |
 | **4.7.0** | 收紧 `/monitor/job/edit` 白名单；修复路径穿越 (`/common/download/resource`) | 定时任务 RCE + 文件读取修复 |
-| **4.7.8** | 当前最新单机稳定版（本工具靶场版本） | 仅剩 SSTI / 配置类漏洞 |
+| **4.7.8** | 常见单机稳定版（本工具长期靶场版本） | 仅剩 SSTI / 配置类漏洞 |
 | **5.0.0** | RuoYi-Vue 前后端分离，JWT 鉴权，接口前缀 `/prod-api/` | 传统 Cookie 认证链路失效 |
 | **Cloud** | RuoYi-Cloud 微服务版，Nacos + Gateway + 前后端分离 | 新攻击面：Nacos 配置泄露 |
 

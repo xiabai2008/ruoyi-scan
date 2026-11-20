@@ -337,7 +337,7 @@ ruoyi-scan -p http://target:8080/
 - **已有 Python、想离线装包**：下载最新 `.whl`，然后：
 
   ```bash
-  pip install ruoyi_scan-1.5.2-py3-none-any.whl
+  pip install ruoyi_scan-2.0.0-py3-none-any.whl
   ```
 
 ### 方式三：源码安装
@@ -728,7 +728,7 @@ python main.py -u http://target:8080/
 
 ```
 Ruoyi-Scan/
-├── main.py                  # CLI 入口（542 行，纯参数解析+分发）
+├── main.py                  # CLI 入口（651 行，纯参数解析+分发）
 ├── config/settings.py       # 全局配置
 ├── cli/                     # CLI 控制层
 │   ├── dispatcher.py        # 模式分发（工具/服务/扫描三段）
@@ -758,7 +758,7 @@ Ruoyi-Scan/
 ├── lib/                     # 工具库（按能力分组）
 ├── api/                     # Web API（FastAPI + WebSocket）
 ├── data/                    # 字典文件
-├── tests/                   # 67 个测试文件 / 1300+ 条用例
+├── tests/                   # 127 个测试文件 / 1798 条用例
 ├── lab/                     # 内置签名靶场（CI 用）；完整仿真靶场见 ruoyi-lab 仓库
 ├── monitoring/              # Grafana + Prometheus
 ├── desktop/                 # Tauri 桌面端（React 前端 + Rust 壳 + 内嵌引擎）

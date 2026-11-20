@@ -1,8 +1,8 @@
 # Ruoyi-Scan 用户指南
 
-> 版本：1.5.2 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
+> 版本：2.0.0 ｜ 作者：XIABAI ｜ 适用对象：安全工程师 / 渗透测试人员 / DevSecOps 工程师
 >
-> 本指南详细说明 Ruoyi-Scan 的安装、各扫描模式、配置、模板、WAF 绕过、利用链、报告输出、Web API、认证扫描、分布式扫描、CI/CD 集成与缓存性能优化等内容。所有示例命令均可直接复制运行。
+> 本指南详细说明 Ruoyi-Scan 的安装、各扫描模式、配置、模板、WAF 绕过、利用链、报告输出、Web API、认证扫描、分布式扫描、CI/CD 集成、OAST / Cloud 能力与在线更新等内容。所有示例命令均可直接复制运行。
 
 ---
 
@@ -188,7 +188,7 @@ Ruoyi-Scan 提供 6 种扫描模式，覆盖从单点验证到全量攻防演练
 - 自动指纹识别（favicon hash + 特征路径 + 关键字）
 - 多版本适配（RuoYi 4.2 / 4.7 / v5 版本感知 POC 过滤）
 - 三态判定：CONFIRMED（确认存在）/ SAFE（确认不存在）/ UNKNOWN（无法判定）
-- 62 个 POC：若依 23 个 + Spring Boot 14 个 + 通用 15 个 + JeecgBoot 8 个 + 芋道 2 个
+- 63 个 POC：若依 23 个 + Spring Boot 14 个 + 通用 16 个 + JeecgBoot 8 个 + 芋道 2 个
 
 **示例命令**：
 

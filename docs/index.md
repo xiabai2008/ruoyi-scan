@@ -53,6 +53,8 @@ Java 管理框架**，把指纹、变体、版本矩阵、利用链做透，并�
     - WAF 绕过 11 策略 + 三态保护矩阵
     - 漏洞利用链 DAG 编排（3 条内置链）
     - nuclei 模板兼容执行（http 协议子集）
+    - OAST 带外验证（Log4j JNDI / 盲 SSRF / 盲 XXE）
+    - RuoYi-Cloud 能力包（Gateway 路由泄露 / Nacos 默认口令 / job·gen 路由别名）
 
 === "交付"
 
@@ -67,6 +69,7 @@ Java 管理框架**，把指纹、变体、版本矩阵、利用链做透，并�
     - AI 闭环：POC 生成即验证 / UNKNOWN 智能降噪 / Ollama 本地模型
     - 插件模板仓库：Ed25519 强制验签分发
     - 桌面端单 exe：免安装双击即用（内嵌引擎）
+    - 桌面端 / CLI 在线更新：签名更新包 + 一键重启（v2.0+）
 
 </div>
 
@@ -97,7 +100,7 @@ ruoyi-scan -u http://target:8080
 | 分类 | 文档 |
 |------|------|
 | 使用 | [用户手册](usage.md) · [版本矩阵](version-matrix.md) · [安全报告说明](security_report.md) |
-| 桌面端 | [单 exe 发布](desktop.md) |
+| 桌面端 | [单 exe 发布](desktop.md) · [在线更新](updates.md) |
 | 开发 | [插件开发教程](plugin_dev.md) · [插件模板仓库](template_repo.md) · [API 文档](api.md) · [DevSecOps 集成](devsecops.md) |
 | 社区 | [社区总览](community.md)（贡献指南 / 变更日志 / 路线图） · [发布流程](release.md) |
 
