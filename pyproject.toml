@@ -102,7 +102,7 @@ dev = [
     # lint 工具固定版本（必须与 .github/workflows/ci.yml 完全一致）：
     # ruff format 输出随版本演进，不固定会造成 CI 与本地格式漂移。
     # 升级时必须同步修改本处与 ci.yml，并在本地重跑 ruff format --check 全仓。
-    "ruff==0.17.4",
+    "ruff==0.17.5",
     "mypy==2.4.1",
 ]
 
