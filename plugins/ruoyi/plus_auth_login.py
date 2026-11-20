@@ -126,8 +126,11 @@ class PlusAuthLoginProbePlugin(PluginBase):
                     url=url,
                     evidence=f"响应为资源不存在错误页（code={body.get('code')}, msg={msg[:100]}）",
                 )
+            # 仅按语义排除通用登录墙，不能看到 code=401 就排除：
+            # 真实 Plus/Sa-Token 的「用户名或密码错误」也可能用 401 业务码，
+            # 那种响应恰恰证明认证服务存在。
             auth_failure_markers = ("认证失败", "无法访问系统资源", "账号未登录", "令牌不能为空", "未登录")
-            if body.get("code") in (401, 403) or any(m in msg for m in auth_failure_markers):
+            if any(m in msg for m in auth_failure_markers):
                 emit(no("未探测到 RuoYi-Plus 认证服务（命中通用认证失败 JSON）"))
                 return ScanResult(
                     kind="info",

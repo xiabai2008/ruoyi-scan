@@ -1069,16 +1069,17 @@ class TestCve202570986SelectDeptTree(unittest.TestCase):
         self.assertIn("测试部门", result.evidence, "证据应点名泄露的部门名称")
 
     @requests_mock.Mocker()
-    def test_unknown_when_business_layer_executes_without_data(self, m):
-        """P1-0b：接口返回空数组、没有部门数据行 → UNKNOWN（空列表不是越权证据）
+    def test_confirmed_when_business_layer_executes_without_data(self, m):
+        """P1-0b（v2.0 修正）：无权限下业务层仍执行，即使 treeData=[] 也判 CONFIRMED。
 
-        旧行为把「未命中权限门」本身当 CONFIRMED；但空列表可能只是数据范围过滤，
-        不能证明低权拿到了本不该拿到的数据。只有真正泄露部门数据才判 CONFIRMED。
+        旧行为要求必须出现部门数据行；但 R4 实测低权账号拿到 treeData=[]、
+        selectDeptTree 返回 500 NPE，这正是「无权限但业务层执行」的漏洞签名。
+        数据行因数据权限过滤为空，不应否定已经证实的越权执行路径。
         """
         self._mock_login(m)
         self._mock_probes(m, "[]", self.JSON_500)
         result = Cve202570986SelectDeptTreePlugin().verify(MOCK_TARGET, mock_session())
-        self.assertEqual(result.status, STATUS_UNKNOWN, f"空数据应判 UNKNOWN，实际 {result.status}")
+        self.assertEqual(result.status, STATUS_CONFIRMED, f"业务层已执行应判 CONFIRMED，实际 {result.status}")
         self.assertIn("登录成功", result.evidence, "必须证明低权登录成功，不能把 captcha 失败当判据")
         self.assertNotIn("登录失败", result.evidence)
 

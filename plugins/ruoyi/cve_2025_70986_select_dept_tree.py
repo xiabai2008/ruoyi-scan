@@ -332,7 +332,7 @@ class Cve202570986SelectDeptTreePlugin(PluginBase):
                 status=STATUS_CONFIRMED,
                 url=url_data,
                 evidence=(
-                    f"无 system:dept:list 权限的账号 {low_user} 访问部门树接口"
+                    f"低权账号 {low_user} 登录成功；无 system:dept:list 权限访问部门树接口"
                     f"未被权限门拦截：{detail}；未认证基线则被重定向到登录页{extra_note}"
                     f"⇒ selectDeptTree/treeData 缺少权限注解"
                 ),
