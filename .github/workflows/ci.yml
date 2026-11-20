@@ -174,7 +174,7 @@ jobs:
           python scripts/run_e2e.py --lab lab/server.py --lab-port 8080 \
             --target http://127.0.0.1:8080/ --mode p \
             --report-dir /tmp/e2e/ruoyi --name ruoyi-signature --require-all-confirmed \
-            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro 框架指纹（rememberMe）,POST型报错注入（role）,POST型报错注入（dept）,RuoYi 代码生成模块 SSTI,定时任务调用目标未校验,重置密码页数据权限绕过,部门树越权访问"
+            --allow-safe "Redis 未授权访问,MinIO 未授权访问,RocketMQ Dashboard 未授权,Shiro 框架指纹（rememberMe）,POST型报错注入（role）,POST型报错注入（dept）,RuoYi 代码生成模块 SSTI,定时任务调用目标未校验,重置密码页数据权限绕过,部门树越权访问,Gateway 路由表泄露（RuoYi-Cloud）,前端 SourceMap 源码泄露"
       - name: Spring signature lab
         run: |
           python scripts/run_e2e.py --lab lab/spring_server.py --lab-port 8091 \

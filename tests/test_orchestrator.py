@@ -459,6 +459,9 @@ def test_stage_session_closes_when_engine_init_fails():
 def test_fingerprint_and_waf_snapshots_are_populated_before_registry_update():
     """fingerprint/waf 事件触发 registry 快照时，task 字段必须已赋值。"""
 
+    # detect_cms 为空时 orchestrator 会走 context-path 兜底，探测真实网络；
+    # 本用例只关心事件快照顺序，显式关闭兜底避免 example.com 超时。
+
     class Reg:
         def __init__(self):
             self.dicts = []
@@ -474,7 +477,7 @@ def test_fingerprint_and_waf_snapshots_are_populated_before_registry_update():
     req = ScanRequest(target="http://example.com/", mode="p")
     with patch("core.orchestrator.detect_cms") as mock_cms, patch("core.orchestrator.detect_waf") as mock_waf, patch(
         "core.orchestrator.load_plugins"
-    ) as mock_load:
+    ) as mock_load, patch("core.basepath.detect_api_base", return_value=""):
         mock_cms.return_value = MagicMock(cms="ruoyi", version="", confidence=0.9, matched=["test"])
         mock_waf.return_value = {"waf": "waf", "display": "WAF", "bypass_hint": ""}
         mock_load.return_value = []
